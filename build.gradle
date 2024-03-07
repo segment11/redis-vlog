@@ -1,0 +1,97 @@
+plugins {
+    id 'java'
+    id 'groovy'
+}
+
+group = 'com.montplex'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+sourceCompatibility = 21
+targetCompatibility = 21
+
+def activejVersion = '6.0-beta2'
+
+dependencies {
+    implementation group: 'org.slf4j', name: 'slf4j-api', version: '2.0.9'
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.20.0'
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.20.0'
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-slf4j2-impl', version: '2.20.0'
+
+    implementation group: 'io.activej', name: 'activej-types', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-common', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-bytebuf', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-datastream', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-csp', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-eventloop', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-net', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-http', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-inject', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-launcher', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-launchers-common', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-servicegraph', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-config', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-boot', version: activejVersion
+
+    implementation group: 'commons-io', name: 'commons-io', version: '2.15.1'
+    implementation group: 'org.apache.commons', name: 'commons-collections4', version: '4.4'
+    implementation group: 'org.apache.commons', name: 'commons-compress', version: '1.25.0'
+    implementation group: 'io.netty', name: 'netty-buffer', version: '4.1.100.Final'
+
+    implementation group: 'com.github.ben-manes.caffeine', name: 'caffeine', version: '3.1.8'
+
+    implementation group: 'com.google.guava', name: 'guava', version: '32.1.2-jre'
+
+    implementation group: 'com.github.jnr', name: 'jnr-posix', version: '3.1.19'
+    implementation group: 'com.github.jnr', name: 'jnr-ffi', version: '2.2.16'
+    implementation group: 'net.openhft', name: 'affinity', version: '3.23.3'
+    implementation group: 'net.openhft', name: 'posix', version: '2.25ea0'
+
+    implementation group: 'com.github.luben', name: 'zstd-jni', version: '1.5.5-10'
+    implementation group: 'org.lz4', name: 'lz4-java', version: '1.8.0'
+
+    implementation group: 'com.moilioncircle', name: 'redis-replicator', version: '3.8.1'
+
+    implementation group: 'org.openjdk.jmh', name: 'jmh-core', version: '1.35'
+    annotationProcessor group: 'org.openjdk.jmh', name: 'jmh-generator-annprocess', version: '1.35'
+
+    testImplementation group: 'org.openjdk.jol', name: 'jol-core', version: '0.17'
+    testImplementation group: 'org.apache.groovy', name: 'groovy', version: '4.0.12'
+    testImplementation group: 'com.github.kevinsawicki', name: 'http-request', version: '6.0'
+    testImplementation group: 'org.spockframework', name: 'spock-core', version: '2.3-groovy-4.0'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+/*
+~/.jdks/azul-21/bin/java \
+-Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=1g \
+-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:17379 \
+-jar redis-vlog-1.0.0.jar
+ */
+
+/*
+for debug
+-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:17379
+ */
+
+jar {
+    manifest {
+        attributes "Main-Class": 'redis.MultiWorkerServer'
+    }
+    from {
+        configurations.runtimeClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    zip64 true
+}
+
+tasks.withType(Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

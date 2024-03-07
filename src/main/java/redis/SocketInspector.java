@@ -1,0 +1,72 @@
+package redis;
+
+import io.activej.bytebuf.ByteBuf;
+import io.activej.net.socket.tcp.TcpSocket;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class SocketInspector implements TcpSocket.Inspector {
+    private final Logger log = LoggerFactory.getLogger(SocketInspector.class);
+
+    ConcurrentHashMap<InetSocketAddress, TcpSocket> socketMap = new ConcurrentHashMap<>();
+
+    @Override
+    public void onConnect(TcpSocket socket) {
+        var remoteAddress = socket.getRemoteAddress();
+        log.info("Connected to {}", remoteAddress);
+        socketMap.put(remoteAddress, socket);
+    }
+
+    @Override
+    public void onReadTimeout(TcpSocket socket) {
+
+    }
+
+    @Override
+    public void onRead(TcpSocket socket, ByteBuf buf) {
+
+    }
+
+    @Override
+    public void onReadEndOfStream(TcpSocket socket) {
+
+    }
+
+    @Override
+    public void onReadError(TcpSocket socket, IOException e) {
+
+    }
+
+    @Override
+    public void onWriteTimeout(TcpSocket socket) {
+
+    }
+
+    @Override
+    public void onWrite(TcpSocket socket, ByteBuf buf, int bytes) {
+
+    }
+
+    @Override
+    public void onWriteError(TcpSocket socket, IOException e) {
+
+    }
+
+    @Override
+    public void onDisconnect(TcpSocket socket) {
+        var remoteAddress = socket.getRemoteAddress();
+        log.info("Disconnected from {}", remoteAddress);
+        AuthHolder.flagBySocketAddress.remove(remoteAddress);
+        socketMap.remove(remoteAddress);
+    }
+
+    @Override
+    public <T extends TcpSocket.Inspector> @Nullable T lookup(Class<T> type) {
+        return null;
+    }
+}

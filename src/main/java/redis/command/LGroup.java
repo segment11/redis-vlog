@@ -1,0 +1,849 @@
+
+package redis.command;
+
+import com.moilioncircle.redis.replicator.RedisReplicator;
+import com.moilioncircle.redis.replicator.rdb.iterable.ValueIterableRdbVisitor;
+import io.activej.net.socket.tcp.ITcpSocket;
+import redis.BaseCommand;
+import redis.CompressedValue;
+import redis.reply.*;
+import redis.type.RedisList;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.LinkedList;
+
+import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
+
+public class LGroup extends BaseCommand {
+    public LGroup(String cmd, byte[][] data, ITcpSocket socket) {
+        super(cmd, data, socket);
+    }
+
+    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
+        if ("lindex".equals(cmd) || "linsert".equals(cmd)
+                || "llen".equals(cmd) || "lpop".equals(cmd) || "lpos".equals(cmd)
+                || "lpush".equals(cmd) || "lpushx".equals(cmd)
+                || "lrange".equals(cmd) || "lrem".equals(cmd)
+                || "lset".equals(cmd) || "ltrim".equals(cmd)) {
+            if (data.length < 2) {
+                return null;
+            }
+            var keyBytes = data[1];
+            return slot(keyBytes, slotNumber);
+        }
+
+        if ("lmove".equals(cmd)) {
+            if (data.length != 5) {
+                return null;
+            }
+            var dstKeyBytes = data[2];
+            return slot(dstKeyBytes, slotNumber);
+        }
+
+        return null;
+    }
+
+    public Reply handle() {
+        if ("lindex".equals(cmd)) {
+            return lindex();
+        }
+
+        if ("linsert".equals(cmd)) {
+            return linsert();
+        }
+
+        if ("llen".equals(cmd)) {
+            return llen();
+        }
+
+        if ("lmove".equals(cmd)) {
+            return lmove();
+        }
+
+        if ("lpop".equals(cmd)) {
+            return lpop(true);
+        }
+
+        if ("lpos".equals(cmd)) {
+            return lpos();
+        }
+
+        if ("lpush".equals(cmd)) {
+            return lpush(true, false);
+        }
+
+        if ("lpushx".equals(cmd)) {
+            return lpush(true, true);
+        }
+
+        if ("lrange".equals(cmd)) {
+            return lrange();
+        }
+
+        if ("lrem".equals(cmd)) {
+            return lrem();
+        }
+
+        if ("lset".equals(cmd)) {
+            return lset();
+        }
+
+        if ("ltrim".equals(cmd)) {
+            return ltrim();
+        }
+
+        if ("load-rdb".equals(cmd)) {
+            try {
+                return loadRdb();
+            } catch (Exception e) {
+                return new ErrorReply(e.getMessage());
+            }
+        }
+
+        return NilReply.INSTANCE;
+    }
+
+    private Reply lindex() {
+        if (data.length != 3) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        var indexBytes = data[2];
+
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
+        int index;
+        try {
+            index = Integer.parseInt(new String(indexBytes));
+        } catch (NumberFormatException e) {
+            return ErrorReply.NOT_INTEGER;
+        }
+        if (index >= RedisList.LIST_MAX_SIZE) {
+            return ErrorReply.LIST_SIZE_TO_LONG;
+        }
+
+        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        if (cv == null) {
+            // -1 or nil ? todo
+            return NilReply.INSTANCE;
+        }
+        if (!cv.isList()) {
+            return ErrorReply.WRONG_TYPE;
+        }
+
+        var encodedBytes = getValueBytesByCv(cv);
+        var rl = RedisList.decode(encodedBytes);
+        if (index >= rl.size()) {
+            return NilReply.INSTANCE;
+        }
+
+        if (index < 0) {
+            index = rl.size() + index;
+        }
+        if (index < 0) {
+            return NilReply.INSTANCE;
+        }
+
+        return new BulkReply(rl.get(index));
+    }
+
+    private Reply addToList(byte[] keyBytes, byte[][] valueBytesArr, boolean addFirst,
+                            boolean considerBeforeOrAfter, boolean isBefore, byte[] pivotBytes, boolean needKeyExist) {
+        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var cv = getCv(keyBytes, slotWithKeyHash);
+
+        // lpushx / rpushx
+        if (cv == null && needKeyExist) {
+            return IntegerReply.REPLY_0;
+        }
+
+        RedisList rl;
+        if (cv != null) {
+            if (!cv.isList()) {
+                return ErrorReply.WRONG_TYPE;
+            }
+
+            var encodedBytes = getValueBytesByCv(cv);
+            rl = RedisList.decode(encodedBytes);
+
+            if (rl.size() >= RedisList.LIST_MAX_SIZE) {
+                return ErrorReply.LIST_SIZE_TO_LONG;
+            }
+        } else {
+            if (considerBeforeOrAfter) {
+                return IntegerReply.REPLY_0;
+            }
+
+            rl = new RedisList();
+        }
+
+        if (considerBeforeOrAfter) {
+            // find pivot index
+            int pivotIndex = rl.indexOf(pivotBytes);
+            if (pivotIndex == -1) {
+                // -1 or size ? todo
+                return new IntegerReply(rl.size());
+            }
+
+            // only one
+            var valueBytes = valueBytesArr[0];
+            rl.addAt(isBefore ? pivotIndex : pivotIndex + 1, valueBytes);
+        } else {
+            if (addFirst) {
+                for (var valueBytes : valueBytesArr) {
+                    rl.addFirst(valueBytes);
+                }
+            } else {
+                for (var valueBytes : valueBytesArr) {
+                    rl.addLast(valueBytes);
+                }
+            }
+        }
+
+        var encodedBytes = rl.encode();
+        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
+
+        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        return new IntegerReply(rl.size());
+    }
+
+    private Reply linsert() {
+        if (data.length != 5) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        var beforeOrAfterBytes = data[2];
+        var pivotBytes = data[3];
+        var valueBytes = data[4];
+
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+        if (pivotBytes.length > CompressedValue.VALUE_MAX_LENGTH) {
+            return ErrorReply.VALUE_TOO_LONG;
+        }
+        if (valueBytes.length > CompressedValue.VALUE_MAX_LENGTH) {
+            return ErrorReply.VALUE_TOO_LONG;
+        }
+
+        var beforeOrAfter = new String(beforeOrAfterBytes).toLowerCase();
+        boolean isBefore = "before".equals(beforeOrAfter);
+        boolean isAfter = "after".equals(beforeOrAfter);
+        if (!isBefore && !isAfter) {
+            return ErrorReply.SYNTAX;
+        }
+
+        byte[][] valueBytesArr = {null};
+        valueBytesArr[0] = valueBytes;
+        return addToList(keyBytes, valueBytesArr, false, true, isBefore, pivotBytes, false);
+    }
+
+    private Reply llen() {
+        if (data.length != 2) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
+        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        if (cv == null) {
+            return IntegerReply.REPLY_0;
+        }
+        if (!cv.isList()) {
+            return ErrorReply.WRONG_TYPE;
+        }
+
+        byte[] encodedBytes;
+        if (!cv.isCompressed()) {
+            encodedBytes = cv.getCompressedData();
+        } else {
+            encodedBytes = getValueBytesByCv(cv);
+        }
+
+        // netty default is big endian
+        // first 2 bytes is list size, refer to RedisList.encode()
+        int size = ByteBuffer.wrap(encodedBytes).getShort();
+        return new IntegerReply(size);
+    }
+
+    private Reply lmove() {
+        if (data.length != 5) {
+            return ErrorReply.FORMAT;
+        }
+
+        var srcKeyBytes = data[1];
+        var dstKeyBytes = data[2];
+
+        if (srcKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+        if (dstKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
+        var srcLeftOrRightBytes = data[3];
+        var dstLeftOrRightBytes = data[4];
+
+        var srcLeftOrRight = new String(srcLeftOrRightBytes).toLowerCase();
+        boolean isSrcLeft = "left".equals(srcLeftOrRight);
+        boolean isSrcRight = "right".equals(srcLeftOrRight);
+        if (!isSrcLeft && !isSrcRight) {
+            return ErrorReply.SYNTAX;
+        }
+
+        var dstLeftOrRight = new String(dstLeftOrRightBytes).toLowerCase();
+        boolean isDstLeft = "left".equals(dstLeftOrRight);
+        boolean isDstRight = "right".equals(dstLeftOrRight);
+        if (!isDstLeft && !isDstRight) {
+            return ErrorReply.SYNTAX;
+        }
+
+        var rGroup = new RGroup(cmd, data, socket);
+        rGroup.from(this);
+
+        var valueBytes = rGroup.move(srcKeyBytes, dstKeyBytes, isSrcLeft, isDstLeft);
+        if (valueBytes == null) {
+            return NilReply.INSTANCE;
+        }
+        return new BulkReply(valueBytes);
+    }
+
+    Reply lpop(boolean popFirst) {
+        if (data.length != 2 && data.length != 3) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        var countBytes = data.length == 3 ? data[2] : null;
+
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
+        int count = 1;
+        if (countBytes != null) {
+            try {
+                count = Integer.parseInt(new String(countBytes));
+            } catch (NumberFormatException e) {
+                return ErrorReply.NOT_INTEGER;
+            }
+            if (count < 0) {
+                return ErrorReply.INVALID_INTEGER;
+            }
+        }
+
+        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var cv = getCv(keyBytes, slotWithKeyHash);
+        if (cv == null) {
+            return NilReply.INSTANCE;
+        }
+
+        if (!cv.isList()) {
+            return ErrorReply.WRONG_TYPE;
+        }
+
+        ArrayList<Reply> replies = new ArrayList<>();
+
+        var encodedBytesExist = getValueBytesByCv(cv);
+        var rl = RedisList.decode(encodedBytesExist);
+
+        int min = Math.min(count, rl.size());
+        for (int i = 0; i < min; i++) {
+            if (popFirst) {
+                replies.add(new BulkReply(rl.removeFirst()));
+            } else {
+                replies.add(new BulkReply(rl.removeLast()));
+            }
+        }
+
+        var encodedBytes = rl.encode();
+        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
+
+        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+
+        if (replies.isEmpty()) {
+            return NilReply.INSTANCE;
+        }
+
+        if (count == 1) {
+            return replies.get(0);
+        }
+
+        var arr = new Reply[replies.size()];
+        replies.toArray(arr);
+        return new MultiBulkReply(arr);
+    }
+
+    private Reply lpos() {
+        if (data.length < 3) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        var valueBytes = data[2];
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+        if (valueBytes.length > CompressedValue.VALUE_MAX_LENGTH) {
+            return ErrorReply.VALUE_TOO_LONG;
+        }
+
+        int rank = 1;
+        int count = 1;
+        // max compare times
+        int maxlen = 0;
+        for (int i = 3; i < data.length; i++) {
+            String arg = new String(data[i]).toLowerCase();
+            switch (arg) {
+                case "rank" -> {
+                    if (i + 1 >= data.length) {
+                        return ErrorReply.FORMAT;
+                    }
+                    try {
+                        rank = Integer.parseInt(new String(data[i + 1]));
+                    } catch (NumberFormatException e) {
+                        return ErrorReply.NOT_INTEGER;
+                    }
+                }
+                case "count" -> {
+                    if (i + 1 >= data.length) {
+                        return ErrorReply.FORMAT;
+                    }
+                    try {
+                        count = Integer.parseInt(new String(data[i + 1]));
+                    } catch (NumberFormatException e) {
+                        return ErrorReply.NOT_INTEGER;
+                    }
+                    if (count < 0) {
+                        return ErrorReply.INVALID_INTEGER;
+                    }
+                }
+                case "maxlen" -> {
+                    if (i + 1 >= data.length) {
+                        return ErrorReply.FORMAT;
+                    }
+                    try {
+                        maxlen = Integer.parseInt(new String(data[i + 1]));
+                    } catch (NumberFormatException e) {
+                        return ErrorReply.NOT_INTEGER;
+                    }
+                    if (maxlen < 0) {
+                        return ErrorReply.INVALID_INTEGER;
+                    }
+                }
+            }
+        }
+
+        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        if (cv == null) {
+            return NilReply.INSTANCE;
+        }
+
+        if (!cv.isList()) {
+            return ErrorReply.WRONG_TYPE;
+        }
+
+        var encodedBytes = getValueBytesByCv(cv);
+        var rl = RedisList.decode(encodedBytes);
+
+        LinkedList<byte[]> list = rl.getList();
+
+        Iterator<byte[]> it;
+        boolean isReverse = false;
+        if (rank < 0) {
+            rank = -rank;
+            it = list.descendingIterator();
+            isReverse = true;
+        } else {
+            it = list.iterator();
+        }
+
+        ArrayList<Integer> posList = new ArrayList<>();
+
+        int i = 0;
+        while (it.hasNext()) {
+            if (maxlen != 0 && i >= maxlen) {
+                break;
+            }
+
+            var e = it.next();
+            if (Arrays.equals(e, valueBytes)) {
+                if (rank <= 1) {
+                    posList.add(i);
+                    if (count != 0 && count <= posList.size()) {
+                        break;
+                    }
+                }
+                rank--;
+            }
+            i++;
+        }
+
+        if (posList.isEmpty()) {
+            if (count == 1) {
+                return NilReply.INSTANCE;
+            } else {
+                return MultiBulkReply.EMPTY;
+            }
+        }
+
+        int maxIndex = rl.size() - 1;
+
+        if (count == 1) {
+            var pos = posList.get(0);
+            if (isReverse) {
+                return new IntegerReply(maxIndex - pos);
+            } else {
+                return new IntegerReply(pos);
+            }
+        }
+
+        Reply[] arr = new Reply[posList.size()];
+        for (int j = 0; j < posList.size(); j++) {
+            var pos = posList.get(j);
+            arr[j] = isReverse ? new IntegerReply(maxIndex - pos) : new IntegerReply(pos);
+        }
+        return new MultiBulkReply(arr);
+    }
+
+    Reply lpush(boolean addFirst, boolean needKeyExist) {
+        if (data.length < 3) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
+        byte[][] valueBytesArr = new byte[data.length - 2][];
+        for (int i = 2; i < data.length; i++) {
+            valueBytesArr[i - 2] = data[i];
+
+            if (valueBytesArr[i - 2].length > CompressedValue.VALUE_MAX_LENGTH) {
+                return ErrorReply.VALUE_TOO_LONG;
+            }
+        }
+
+        return addToList(keyBytes, valueBytesArr, addFirst, false, false, null, needKeyExist);
+    }
+
+    private Reply lrange() {
+        if (data.length != 4) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        var startBytes = data[2];
+        var stopBytes = data[3];
+
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
+        int start;
+        int stop;
+        try {
+            start = Integer.parseInt(new String(startBytes));
+            stop = Integer.parseInt(new String(stopBytes));
+        } catch (NumberFormatException e) {
+            return ErrorReply.NOT_INTEGER;
+        }
+
+        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        if (cv == null) {
+            return MultiBulkReply.EMPTY;
+        }
+        if (!cv.isList()) {
+            return ErrorReply.WRONG_TYPE;
+        }
+
+        var encodedBytes = getValueBytesByCv(cv);
+        var rl = RedisList.decode(encodedBytes);
+
+        int size = rl.size();
+        if (start < 0) {
+            start = size + start;
+            if (start < 0) {
+                start = 0;
+            }
+        }
+        if (stop < 0) {
+            stop = size + stop;
+            if (stop < 0) {
+                return MultiBulkReply.EMPTY;
+            }
+        }
+        if (start >= size) {
+            return MultiBulkReply.EMPTY;
+        }
+        if (stop >= size) {
+            stop = size - 1;
+        }
+        if (start > stop) {
+            return MultiBulkReply.EMPTY;
+        }
+
+        var replies = new Reply[stop - start + 1];
+        for (int i = start; i <= stop; i++) {
+            replies[i - start] = new BulkReply(rl.get(i));
+        }
+        return new MultiBulkReply(replies);
+    }
+
+    private Reply lrem() {
+        if (data.length != 4) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        var countBytes = data[2];
+        var valueBytes = data[3];
+
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+        if (valueBytes.length > CompressedValue.VALUE_MAX_LENGTH) {
+            return ErrorReply.VALUE_TOO_LONG;
+        }
+
+        int count;
+        try {
+            count = Integer.parseInt(new String(countBytes));
+        } catch (NumberFormatException e) {
+            return ErrorReply.NOT_INTEGER;
+        }
+
+        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var cv = getCv(keyBytes, slotWithKeyHash);
+        if (cv == null) {
+            return IntegerReply.REPLY_0;
+        }
+
+        if (!cv.isList()) {
+            return ErrorReply.WRONG_TYPE;
+        }
+
+        var encodedBytesExist = getValueBytesByCv(cv);
+        var rl = RedisList.decode(encodedBytesExist);
+
+        LinkedList<byte[]> list = rl.getList();
+        var it = count < 0 ? list.descendingIterator() : list.iterator();
+
+        int absCount = count < 0 ? -count : count;
+        int removed = 0;
+
+        while (it.hasNext()) {
+            var e = it.next();
+            if (Arrays.equals(e, valueBytes)) {
+                it.remove();
+                removed++;
+                if (absCount != 0 && removed >= absCount) {
+                    break;
+                }
+            }
+        }
+
+        var encodedBytes = rl.encode();
+        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
+
+        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        return new IntegerReply(removed);
+    }
+
+    private Reply lset() {
+        if (data.length != 4) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        var indexBytes = data[2];
+        var valueBytes = data[3];
+
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+        if (valueBytes.length > CompressedValue.VALUE_MAX_LENGTH) {
+            return ErrorReply.VALUE_TOO_LONG;
+        }
+
+        int index;
+        try {
+            index = Integer.parseInt(new String(indexBytes));
+        } catch (NumberFormatException e) {
+            return ErrorReply.NOT_INTEGER;
+        }
+
+        if (index >= RedisList.LIST_MAX_SIZE) {
+            return ErrorReply.LIST_SIZE_TO_LONG;
+        }
+
+        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var cv = getCv(keyBytes, slotWithKeyHash);
+        if (cv == null) {
+            return ErrorReply.NO_SUCH_KEY;
+        }
+
+        if (!cv.isList()) {
+            return ErrorReply.WRONG_TYPE;
+        }
+
+        var encodedBytesExist = getValueBytesByCv(cv);
+        var rl = RedisList.decode(encodedBytesExist);
+
+        int size = rl.size();
+        if (index < 0) {
+            index = size + index;
+        }
+
+        if (index < 0 || index >= size) {
+            return ErrorReply.INDEX_OUT_OF_RANGE;
+        }
+
+        rl.setAt(index, valueBytes);
+
+        var encodedBytes = rl.encode();
+        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
+
+        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        return OKReply.INSTANCE;
+    }
+
+    private Reply ltrim() {
+        if (data.length != 4) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        var startBytes = data[2];
+        var stopBytes = data[3];
+
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
+        int start;
+        int stop;
+
+        try {
+            start = Integer.parseInt(new String(startBytes));
+            stop = Integer.parseInt(new String(stopBytes));
+        } catch (NumberFormatException e) {
+            return ErrorReply.NOT_INTEGER;
+        }
+
+        var key = new String(keyBytes);
+        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slot = slotWithKeyHash.slot();
+
+        var cv = getCv(keyBytes, slotWithKeyHash);
+        if (cv == null) {
+            // ErrorReply.NO_SUCH_KEY
+            return OKReply.INSTANCE;
+        }
+
+        if (!cv.isList()) {
+            return ErrorReply.WRONG_TYPE;
+        }
+
+        var encodedBytesExist = getValueBytesByCv(cv);
+        var rl = RedisList.decode(encodedBytesExist);
+
+        int size = rl.size();
+
+        if (start < 0) {
+            start = size + start;
+        }
+        if (stop < 0) {
+            stop = size + stop;
+        }
+
+        if (start < 0) {
+            start = 0;
+        }
+        if (stop < 0) {
+            stop = 0;
+        }
+
+        if (start > size || start > stop) {
+            var oneSlot = localPersist.oneSlot(slot);
+            oneSlot.removeDelay(workerId, key, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash(), cv.getSeq());
+            return OKReply.INSTANCE;
+        }
+
+        // keep index from start to stop
+        var list = rl.getList();
+        var it = list.iterator();
+        int i = 0;
+        while (it.hasNext()) {
+            it.next();
+            if (i < start || i > stop) {
+                it.remove();
+            }
+            i++;
+        }
+
+        var encodedBytes = rl.encode();
+        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
+
+        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        return OKReply.INSTANCE;
+    }
+
+    private Reply loadRdb() throws URISyntaxException, IOException {
+        if (data.length != 2 && data.length != 3) {
+            return ErrorReply.FORMAT;
+        }
+
+        var filePathBytes = data[1];
+        var filePath = new String(filePathBytes);
+        if (!filePath.startsWith("/") || !filePath.endsWith(".rdb")) {
+            return ErrorReply.INVALID_FILE;
+        }
+
+        var file = new File(filePath);
+        if (!file.exists()) {
+            return ErrorReply.NO_SUCH_FILE;
+        }
+
+        boolean onlyAnalysis = false;
+        if (data.length == 3) {
+            onlyAnalysis = "analysis".equals(new String(data[2]).toLowerCase());
+        }
+
+        var r = new RedisReplicator("redis://" + filePath);
+        r.setRdbVisitor(new ValueIterableRdbVisitor(r));
+
+        var eventListener = new MyRDBVisitorEventListener(this, onlyAnalysis);
+        r.addEventListener(eventListener);
+        r.open();
+
+        if (onlyAnalysis) {
+            int n = 10;
+            for (int i = 0; i < n; i++) {
+                eventListener.radixTree.sumIncrFromRoot(new int[i]);
+            }
+        }
+
+        return new IntegerReply(eventListener.keyCount);
+    }
+}
