@@ -44,17 +44,108 @@ public class SegmentBatch {
         this.compressStats = new CompressStats("w-" + workerId + "-s-" + slot);
     }
 
-    public record SegmentCompressedBytesWithIndex(byte[] compressedBytesWithLength, int segmentIndex) {
+    private record SegmentCompressedBytesWithIndex(byte[] compressedBytes, int segmentIndex) {
         @Override
         public String toString() {
             return "SegmentCompressedBytesWithIndex{" +
                     "segmentIndex=" + segmentIndex +
-                    ", c.length=" + compressedBytesWithLength.length +
+                    ", compressedBytes.length=" + compressedBytes.length +
                     '}';
         }
     }
 
-    public ArrayList<SegmentCompressedBytesWithIndex> split(ArrayList<Wal.V> list, int[] nextNSegmentIndex, ArrayList<PersistValueMeta> returnPvmList) {
+    public record SegmentTightBytesWithLengthAndSegmentIndex(byte[] tightBytesWithLength, int segmentIndex,
+                                                             byte blockNumber) {
+        @Override
+        public String toString() {
+            return "SegmentTightBytesWithLengthAndSegmentIndex{" +
+                    "segmentIndex=" + segmentIndex +
+                    ", blockNumber=" + blockNumber +
+                    ", tightBytesWithLength.length=" + tightBytesWithLength.length +
+                    '}';
+        }
+    }
+
+    // zstd compress ratio usually < 0.25, max 4 blocks tight to one segment
+    static final int MAX_BLOCK_NUMBER = 4;
+    // each sub block offset / length use one short, 4 bytes for total bytes length
+    private static final int HEADER_LENGTH = 4 + MAX_BLOCK_NUMBER * (2 + 2);
+
+    private SegmentTightBytesWithLengthAndSegmentIndex tightSegments(int afterTightSegmentIndex, ArrayList<SegmentCompressedBytesWithIndex> onceList, ArrayList<PersistValueMeta> returnPvmList) {
+        for (int j = 0; j < onceList.size(); j++) {
+            var subBlockIndex = (byte) j;
+            var s = onceList.get(j);
+
+            for (var pvm : returnPvmList) {
+                if (pvm.segmentIndex == s.segmentIndex) {
+                    pvm.subBlockIndex = subBlockIndex;
+                    pvm.segmentIndex = afterTightSegmentIndex;
+                }
+            }
+        }
+
+        var totalBytesN = HEADER_LENGTH;
+        for (var s : onceList) {
+            totalBytesN += s.compressedBytes.length;
+        }
+
+        // first 4 bytes is total bytes length
+        var tightBytesWithLength = new byte[totalBytesN];
+        var buffer = ByteBuffer.wrap(tightBytesWithLength);
+        buffer.putInt(totalBytesN);
+
+        int offset = HEADER_LENGTH;
+        for (int i = 0; i < onceList.size(); i++) {
+            var s = onceList.get(i);
+            var compressedBytes = s.compressedBytes;
+            var length = compressedBytes.length;
+
+            buffer.putShort((short) offset);
+            buffer.putShort((short) length);
+
+            buffer.mark();
+            buffer.position(offset).put(compressedBytes);
+            buffer.reset();
+
+            offset += length;
+        }
+
+        return new SegmentTightBytesWithLengthAndSegmentIndex(tightBytesWithLength, afterTightSegmentIndex, (byte) onceList.size());
+    }
+
+    private ArrayList<SegmentTightBytesWithLengthAndSegmentIndex> tight(ArrayList<SegmentCompressedBytesWithIndex> segments, ArrayList<PersistValueMeta> returnPvmList) {
+        ArrayList<SegmentTightBytesWithLengthAndSegmentIndex> r = new ArrayList<>(segments.size());
+
+        ArrayList<SegmentCompressedBytesWithIndex> onceList = new ArrayList<>(MAX_BLOCK_NUMBER);
+        int onceListBytesLength = 0;
+
+        int afterTightSegmentIndex = segments.get(0).segmentIndex;
+        for (int i = 0; i < segments.size(); i++) {
+            var segment = segments.get(i);
+            var compressedBytes = segment.compressedBytes;
+
+            if (onceList.size() == MAX_BLOCK_NUMBER || onceListBytesLength + compressedBytes.length > segmentLength - HEADER_LENGTH) {
+                var tightOne = tightSegments(afterTightSegmentIndex, onceList, returnPvmList);
+                r.add(tightOne);
+                afterTightSegmentIndex++;
+
+                onceList.clear();
+                onceListBytesLength = 0;
+            }
+
+            onceList.add(segment);
+            onceListBytesLength += compressedBytes.length;
+        }
+
+        if (!onceList.isEmpty()) {
+            var tightOne = tightSegments(afterTightSegmentIndex, onceList, returnPvmList);
+            r.add(tightOne);
+        }
+
+        return r;
+    }
+
+    public ArrayList<SegmentTightBytesWithLengthAndSegmentIndex> split(ArrayList<Wal.V> list, int[] nextNSegmentIndex, ArrayList<PersistValueMeta> returnPvmList) {
         ArrayList<SegmentCompressedBytesWithIndex> result = new ArrayList<>(100);
         ArrayList<Wal.V> onceList = new ArrayList<>(100);
 
@@ -91,7 +182,8 @@ public class SegmentBatch {
 
             result.add(compressAsSegment(onceList, nextNSegmentIndex[i], returnPvmList));
         }
-        return result;
+
+        return tight(result, returnPvmList);
     }
 
     private SegmentCompressedBytesWithIndex compressAsSegment(ArrayList<Wal.V> list, int segmentIndex, ArrayList<PersistValueMeta> returnPvmList) {
@@ -108,7 +200,6 @@ public class SegmentBatch {
         // temp write crc, then update
         buffer.putInt(0);
 
-        final long offsetThisSegment = (long) segmentIndex * segmentLength;
         int offsetInThisSegment = SEGMENT_HEADER_LENGTH;
 
         for (var v : list) {
@@ -131,8 +222,12 @@ public class SegmentBatch {
             pvm.workerId = workerId;
             pvm.slot = slot;
             pvm.batchIndex = batchIndex;
+            // tmp 0, then update
+            pvm.subBlockIndex = 0;
             pvm.length = length;
-            pvm.offset = offsetThisSegment + offsetInThisSegment;
+            // tmp current segment index, then update
+            pvm.segmentIndex = segmentIndex;
+            pvm.segmentOffset = offsetInThisSegment;
             pvm.expireAt = v.expireAt();
             returnPvmList.add(pvm);
 
@@ -166,10 +261,6 @@ public class SegmentBatch {
         buffer.clear();
         Arrays.fill(bytes, (byte) 0);
 
-        // copy again, perf bad
-        var compressedBytesWithLength = new byte[compressedBytes.length + 4];
-        ByteBuffer.wrap(compressedBytesWithLength).putInt(compressedBytes.length).put(compressedBytes);
-
-        return new SegmentCompressedBytesWithIndex(compressedBytesWithLength, segmentIndex);
+        return new SegmentCompressedBytesWithIndex(compressedBytes, segmentIndex);
     }
 }

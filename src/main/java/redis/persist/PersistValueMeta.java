@@ -5,9 +5,10 @@ import io.activej.bytebuf.ByteBuf;
 import static redis.CompressedValue.NO_EXPIRE;
 
 public class PersistValueMeta {
-    // worker id byte + slot byte  + batch index byte + skip 1 byte + length int + offset long + expire at long
+    // worker id byte + slot byte  + batch index byte + segment sub block index byte
+    // + length int + segment index int + segment offset int + expire at long
     // may add type or other metadata in the future
-    static final int ENCODED_LEN = 1 + 1 + 1 + 1 + 4 + 8 + 8;
+    static final int ENCODED_LEN = 1 + 1 + 1 + 1 + 4 + 4 + 4 + 8;
     // + key masked value int + bucket index int
     static final int ENCODED_LEN_WITH_KEY_MASKED_VALUE = ENCODED_LEN + 4 + 4;
 
@@ -21,8 +22,10 @@ public class PersistValueMeta {
     byte workerId;
     byte slot;
     byte batchIndex;
+    byte subBlockIndex;
     int length;
-    long offset;
+    int segmentIndex;
+    int segmentOffset;
     // need remove expired pvm in key loader to compress better, or reduce split
     long expireAt = NO_EXPIRE;
 
@@ -42,7 +45,9 @@ public class PersistValueMeta {
                 ", s=" + slot +
                 ", b=" + batchIndex +
                 ", l=" + length +
-                ", o=" + offset +
+                ", si=" + segmentIndex +
+                ", sbi=" + subBlockIndex +
+                ", so=" + segmentOffset +
                 ", e=" + expireAt +
                 '}';
     }
@@ -53,9 +58,10 @@ public class PersistValueMeta {
         buf.writeByte(workerId);
         buf.writeByte(slot);
         buf.writeByte(batchIndex);
-        buf.writeByte((byte) 0);
+        buf.writeByte(subBlockIndex);
         buf.writeInt(length);
-        buf.writeLong(offset);
+        buf.writeInt(segmentIndex);
+        buf.writeInt(segmentOffset);
         buf.writeLong(expireAt);
         return bytes;
     }
@@ -66,9 +72,10 @@ public class PersistValueMeta {
         pvm.workerId = buf.readByte();
         pvm.slot = buf.readByte();
         pvm.batchIndex = buf.readByte();
-        buf.readByte();
+        pvm.subBlockIndex = buf.readByte();
         pvm.length = buf.readInt();
-        pvm.offset = buf.readLong();
+        pvm.segmentIndex = buf.readInt();
+        pvm.segmentOffset = buf.readInt();
         pvm.expireAt = buf.readLong();
         return pvm;
     }

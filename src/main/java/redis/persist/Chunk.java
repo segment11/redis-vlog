@@ -25,7 +25,7 @@ import static redis.persist.LocalPersist.PROTECTION;
 public class Chunk implements OfStats {
     private final int maxSegmentNumberPerFd;
     private final byte maxFdPerChunk;
-    final long maxFdLength;
+    private final long maxFdLength;
     private final int maxSegmentIndex;
     private final int halfSegmentIndex;
 
@@ -197,7 +197,7 @@ public class Chunk implements OfStats {
 
     private long preadCount;
 
-    byte[] pread(int targetSegmentIndex) {
+    byte[] preadSegmentTightBytesWithLength(int targetSegmentIndex) {
         int fdIndex = targetFdIndex(targetSegmentIndex);
         int fd = fds[fdIndex];
         var readSegmentBuffer = readSegmentBuffers[fdIndex];
@@ -223,11 +223,11 @@ public class Chunk implements OfStats {
             preadCount++;
 
             // memory copy
-            // only need compressed bytes with compressed length, so the lru cache size is smaller
-            int compressedLength = readSegmentBuffer.getInt();
-            var bytes = new byte[4 + compressedLength];
-            readSegmentBuffer.position(0).get(bytes);
-            return bytes;
+            // only need multi sub block compressed bytes with length, so the lru cache size is smaller
+            int tightBytesLength = readSegmentBuffer.getInt();
+            var tightBytesWithLength = new byte[4 + tightBytesLength];
+            readSegmentBuffer.position(0).get(tightBytesWithLength);
+            return tightBytesWithLength;
         }
     }
 
@@ -400,7 +400,7 @@ public class Chunk implements OfStats {
         if (segments.size() < BATCH_SEGMENT_COUNT_FOR_PWRITE) {
             for (var segment : segments) {
                 writePageBuffer.clear();
-                writePageBuffer.put(segment.compressedBytesWithLength());
+                writePageBuffer.put(segment.tightBytesWithLength());
 
                 boolean isNewAppend = writeSegments(writePageBuffer, 1);
                 isNewAppendAfterBatch = isNewAppend;
@@ -420,12 +420,12 @@ public class Chunk implements OfStats {
                 writePageBufferB.clear();
                 for (int j = 0; j < BATCH_SEGMENT_COUNT_FOR_PWRITE; j++) {
                     var segment = segments.get(i * BATCH_SEGMENT_COUNT_FOR_PWRITE + j);
-                    var compressedBytesWithLength = segment.compressedBytesWithLength();
-                    writePageBufferB.put(compressedBytesWithLength);
+                    var tightBytesWithLength = segment.tightBytesWithLength();
+                    writePageBufferB.put(tightBytesWithLength);
 
                     // padding to segment length
-                    if (compressedBytesWithLength.length < segmentLength) {
-                        writePageBufferB.position(writePageBufferB.position() + segmentLength - compressedBytesWithLength.length);
+                    if (tightBytesWithLength.length < segmentLength) {
+                        writePageBufferB.position(writePageBufferB.position() + segmentLength - tightBytesWithLength.length);
                     }
                 }
 
@@ -442,7 +442,7 @@ public class Chunk implements OfStats {
             for (int i = 0; i < remainCount; i++) {
                 var segment = segments.get(batchCount * BATCH_SEGMENT_COUNT_FOR_PWRITE + i);
                 writePageBuffer.clear();
-                writePageBuffer.put(segment.compressedBytesWithLength());
+                writePageBuffer.put(segment.tightBytesWithLength());
 
                 boolean isNewAppend = writeSegments(writePageBuffer, 1);
                 isNewAppendAfterBatch = isNewAppend;
@@ -464,8 +464,7 @@ public class Chunk implements OfStats {
 
         if (!Debug.getInstance().perfSkipPvmUpdate) {
             for (var segment : segments) {
-                var compressedBytesWithLength = segment.compressedBytesWithLength();
-                oneSlot.refreshReadPersistedSegmentCache(workerId, batchIndex, segment.segmentIndex(), compressedBytesWithLength);
+                oneSlot.refreshReadPersistedSegmentCache(workerId, batchIndex, segment.segmentIndex(), segment.tightBytesWithLength());
 
                 if (segment.segmentIndex() % 10000 == 0 && slot == 0) {
                     log.info("Segment cache!, w={}, s={}, b={}, i={}", workerId, slot, batchIndex, segment.segmentIndex());

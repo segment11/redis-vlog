@@ -198,8 +198,6 @@ public class OneSlot implements OfStats {
     // first index is worker id, second index is batch index
     Chunk[][] chunksArray;
 
-    private long chunkMaxFdLength;
-
     private ChunkSegmentFlagMmapBuffer chunkSegmentFlagMmapBuffer;
     private ChunkSegmentIndexMmapBuffer chunkSegmentIndexMmapBuffer;
 
@@ -255,7 +253,7 @@ public class OneSlot implements OfStats {
 
     private final Function<SegmentCacheKey, @PolyNull byte[]> fnLoadPersistedSegmentBytes = (segmentCacheKey) -> {
         if (segmentCacheKey.batchIndex >= 0) {
-            return pread(segmentCacheKey.workerId, segmentCacheKey.batchIndex, segmentCacheKey.segmentIndex);
+            return preadSegmentTightBytesWithLength(segmentCacheKey.workerId, segmentCacheKey.batchIndex, segmentCacheKey.segmentIndex);
         }
 
         if (segmentCacheKey.batchIndex == SegmentCacheKey.BIG_STRING_BATCH_INDEX) {
@@ -278,9 +276,9 @@ public class OneSlot implements OfStats {
 
     private Cache<SegmentCacheKey, byte[]> readPersistedSegmentCache;
 
-    void refreshReadPersistedSegmentCache(byte workerId, byte batchIndex, int segmentIndex, byte[] compressedBytesWithLength) {
+    void refreshReadPersistedSegmentCache(byte workerId, byte batchIndex, int segmentIndex, byte[] tightBytesWithLength) {
         var k = new SegmentCacheKey(workerId, batchIndex, segmentIndex, 0);
-        readPersistedSegmentCache.put(k, compressedBytesWithLength);
+        readPersistedSegmentCache.put(k, tightBytesWithLength);
     }
 
     public ByteBuf get(byte[] keyBytes, int bucketIndex, long keyHash) {
@@ -359,38 +357,40 @@ public class OneSlot implements OfStats {
 
         // load from segment lru cache
         // one key value pair only store in one segment
-        int segmentIndex = (int) (pvm.offset / segmentLength);
-        byte[] compressedBytesWithLength;
+        byte[] tightBytesWithLength;
         if (!perfTestReadSegmentNoCache) {
-            var segmentCacheKey = new SegmentCacheKey(pvm.workerId, pvm.batchIndex, segmentIndex, 0);
-            compressedBytesWithLength = readPersistedSegmentCache.get(segmentCacheKey, fnLoadPersistedSegmentBytes);
+            var segmentCacheKey = new SegmentCacheKey(pvm.workerId, pvm.batchIndex, pvm.segmentIndex, 0);
+            tightBytesWithLength = readPersistedSegmentCache.get(segmentCacheKey, fnLoadPersistedSegmentBytes);
         } else {
             // ignore big string, just for no cache, ssd read performance test
-            compressedBytesWithLength = pread(pvm.workerId, pvm.batchIndex, segmentIndex);
+            tightBytesWithLength = preadSegmentTightBytesWithLength(pvm.workerId, pvm.batchIndex, pvm.segmentIndex);
         }
-        if (compressedBytesWithLength == null) {
+        if (tightBytesWithLength == null) {
             throw new IllegalStateException("Load persisted segment bytes error, pvm: " + pvm);
         }
 
+        var buffer = ByteBuffer.wrap(tightBytesWithLength);
+        // refer to SegmentBatch tight HEADER_LENGTH
+        buffer.position(4 + pvm.subBlockIndex * 4);
+        var subBlockOffset = buffer.getShort();
+        var subBlockLength = buffer.getShort();
+
         var uncompressedBytes = new byte[segmentLength];
         long begin = System.nanoTime();
-        // first 4 bytes is compressed length
         var d = Zstd.decompressByteArray(uncompressedBytes, 0, segmentLength,
-                compressedBytesWithLength, 4, compressedBytesWithLength.length - 4);
+                tightBytesWithLength, subBlockOffset, subBlockLength);
         long costT = System.nanoTime() - begin;
         if (d != segmentLength) {
             throw new IllegalStateException("Decompress error, w=" + pvm.workerId + ", s=" + pvm.slot +
-                    ", b=" + pvm.batchIndex + ", i=" + segmentIndex + ", d=" + d + ", segmentLength=" + segmentLength);
+                    ", b=" + pvm.batchIndex + ", i=" + pvm.segmentIndex + ", sbi=" + pvm.subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
         }
 
         // thread safe, need not long adder
         compressStats.decompressCount2.increment();
         compressStats.decompressCostTotalTimeNanos2.add(costT);
 
-        var fdOffset = pvm.offset % chunkMaxFdLength;
-
         var buf = Unpooled.wrappedBuffer(uncompressedBytes);
-        buf.readerIndex((int) (fdOffset % segmentLength));
+        buf.readerIndex(pvm.segmentOffset);
         return buf;
     }
 
@@ -575,8 +575,6 @@ public class OneSlot implements OfStats {
                 }
             }
         }
-
-        this.chunkMaxFdLength = chunksArray[0][0].maxFdLength;
     }
 
     private void initChunk(Chunk chunk) throws IOException {
@@ -627,9 +625,9 @@ public class OneSlot implements OfStats {
         return chunk.preadForMerge(segmentIndex, buffer, offset);
     }
 
-    public byte[] pread(byte workerId, byte batchIndex, int segmentIndex) {
+    public byte[] preadSegmentTightBytesWithLength(byte workerId, byte batchIndex, int segmentIndex) {
         var chunk = chunksArray[workerId][batchIndex];
-        return chunk.pread(segmentIndex);
+        return chunk.preadSegmentTightBytesWithLength(segmentIndex);
     }
 
     public void cleanUp() {

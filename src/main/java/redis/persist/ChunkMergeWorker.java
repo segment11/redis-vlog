@@ -362,18 +362,20 @@ public class ChunkMergeWorker implements OfStats {
             }
         }
 
-        private static class CvWithKeyAndOffset {
-            public CvWithKeyAndOffset(CompressedValue cv, String key, long offset, int segmentIndex) {
+        private static class CvWithKeyAndSegmentOffset {
+            public CvWithKeyAndSegmentOffset(CompressedValue cv, String key, int segmentOffset, int segmentIndex, byte subBlockIndex) {
                 this.cv = cv;
                 this.key = key;
-                this.offset = offset;
+                this.segmentOffset = segmentOffset;
                 this.segmentIndex = segmentIndex;
+                this.subBlockIndex = subBlockIndex;
             }
 
             CompressedValue cv;
-            String key;
-            long offset;
-            int segmentIndex;
+            final String key;
+            final long segmentOffset;
+            final int segmentIndex;
+            final byte subBlockIndex;
         }
 
         private static class ValidCvCountRecord {
@@ -468,7 +470,7 @@ public class ChunkMergeWorker implements OfStats {
 
             readForMergingBatchBuffer.rewind();
             // read all segments to memory
-            ArrayList<CvWithKeyAndOffset> cvList = new ArrayList<>(npagesMerge * 20);
+            ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(npagesMerge * 20);
 
             int i = 0;
             for (var segmentIndex : needMergeSegmentIndexList) {
@@ -486,63 +488,76 @@ public class ChunkMergeWorker implements OfStats {
                 }
 
                 // decompress
-                var compressLength = readForMergingBatchBuffer.getInt();
+                var tightBytesLength = readForMergingBatchBuffer.getInt();
                 // why? need check, todo
-                if (compressLength == 0) {
+                if (tightBytesLength == 0) {
                     i++;
                     readForMergingBatchBuffer.position(i * segmentLength);
                     continue;
                 }
 
-                var bytesCompressed = new byte[compressLength];
-                readForMergingBatchBuffer.get(bytesCompressed);
-                var bytesRaw = new byte[segmentLength];
-                var d = Zstd.decompress(bytesRaw, bytesCompressed);
-                if (d != segmentLength) {
-                    throw new IllegalStateException("Decompress error, w=" + workerId + ", s=" + slot +
-                            ", i=" + segmentIndex + ", d=" + d + ", segmentLength=" + segmentLength);
+                var tightBytesWithLength = new byte[4 + tightBytesLength];
+                readForMergingBatchBuffer.position(readForMergingBatchBuffer.position() - 4).get(tightBytesWithLength);
+
+                var buffer = ByteBuffer.wrap(tightBytesWithLength);
+                // sub blocks
+                // refer to SegmentBatch tight HEADER_LENGTH
+                for (int j = 0; j < SegmentBatch.MAX_BLOCK_NUMBER; j++) {
+                    buffer.position(4 + j * 4);
+                    var subBlockOffset = buffer.getShort();
+                    if (subBlockOffset == 0) {
+                        break;
+                    }
+
+                    var subBlockLength = buffer.getShort();
+
+                    var uncompressedBytes = new byte[segmentLength];
+                    var d = Zstd.decompressByteArray(uncompressedBytes, 0, segmentLength,
+                            tightBytesWithLength, subBlockOffset, subBlockLength);
+                    if (d != segmentLength) {
+                        throw new IllegalStateException("Decompress error, w=" + workerId + ", s=" + slot +
+                                ", b=" + batchIndex + ", i=" + segmentIndex + ", sbi=" + j + ", d=" + d + ", segmentLength=" + segmentLength);
+                    }
+
+                    var buf = Unpooled.wrappedBuffer(uncompressedBytes);
+                    buf.skipBytes(8 + 4 + 4);
+                    // check segment crc, todo
+//                long segmentSeq = buf.readLong();
+//                int cvCount = buf.readInt();
+//                int segmentMaskedValue = buf.readInt();
+
+                    int offsetInThisSegment = Chunk.SEGMENT_HEADER_LENGTH;
+                    while (true) {
+                        if (buf.readableBytes() < 2) {
+                            break;
+                        }
+
+                        var keyLength = buf.readByte();
+                        if (keyLength == 0) {
+                            break;
+                        }
+
+                        var keyBytes = new byte[keyLength];
+                        buf.readBytes(keyBytes);
+                        var key = new String(keyBytes);
+
+                        var cv = CompressedValue.decode(buf, keyBytes, 0, false);
+
+                        int offsetForThisCv = offsetInThisSegment;
+
+                        int lenKey = KEY_HEADER_LENGTH + keyLength;
+                        int lenValue = VALUE_HEADER_LENGTH + cv.compressedLength();
+                        int length = lenKey + lenValue;
+
+                        offsetInThisSegment += length;
+
+                        cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetForThisCv, segmentIndex, (byte) j));
+                    }
                 }
 
                 i++;
                 // move to next segment
                 readForMergingBatchBuffer.position(i * segmentLength);
-
-                var buf = Unpooled.wrappedBuffer(bytesRaw);
-                buf.skipBytes(8 + 4 + 4);
-                // check segment crc, todo
-//                long segmentSeq = buf.readLong();
-//                int cvCount = buf.readInt();
-//                int segmentMaskedValue = buf.readInt();
-
-                final int offsetThisSegment = segmentIndex * segmentLength;
-                int offsetInThisSegment = Chunk.SEGMENT_HEADER_LENGTH;
-
-                while (true) {
-                    if (buf.readableBytes() < 2) {
-                        break;
-                    }
-
-                    var keyLength = buf.readByte();
-                    if (keyLength == 0) {
-                        break;
-                    }
-
-                    var keyBytes = new byte[keyLength];
-                    buf.readBytes(keyBytes);
-                    var key = new String(keyBytes);
-
-                    var cv = CompressedValue.decode(buf, keyBytes, 0, false);
-
-                    int offsetForThisCv = offsetThisSegment + offsetInThisSegment;
-
-                    int lenKey = KEY_HEADER_LENGTH + keyLength;
-                    int lenValue = VALUE_HEADER_LENGTH + cv.compressedLength();
-                    int length = lenKey + lenValue;
-
-                    offsetInThisSegment += length;
-
-                    cvList.add(new CvWithKeyAndOffset(cv, key, offsetForThisCv, segmentIndex));
-                }
             }
 
             ArrayList<ValidCvCountRecord> validCvCountRecordList = new ArrayList<>(needMergeSegmentIndexList.size());
@@ -602,10 +617,10 @@ public class ChunkMergeWorker implements OfStats {
             mergeWorker.mergedSegmentCostTotalTimeNanos += costT;
         }
 
-        private void removeOld(OneSlot oneSlot, ArrayList<CvWithKeyAndOffset> cvList, ArrayList<ValidCvCountRecord> validCvCountRecordList) {
+        private void removeOld(OneSlot oneSlot, ArrayList<CvWithKeyAndSegmentOffset> cvList, ArrayList<ValidCvCountRecord> validCvCountRecordList) {
             var dictMap = DictMap.getInstance();
             var firstSegmentIndex = validCvCountRecordList.get(0).segmentIndex;
-            ArrayList<CvWithKeyAndOffset> toRemoveCvList = new ArrayList<>(cvList.size());
+            ArrayList<CvWithKeyAndSegmentOffset> toRemoveCvList = new ArrayList<>(cvList.size());
 
             var groupByBucketIndex = cvList.stream().collect(Collectors.groupingBy(one -> localPersist.bucketIndex(one.cv.getKeyHash())));
             for (var entry : groupByBucketIndex.entrySet()) {
@@ -617,8 +632,9 @@ public class ChunkMergeWorker implements OfStats {
                 for (var one : list) {
                     var key = one.key;
                     var cv = one.cv;
-                    var offset = one.offset;
+                    var segmentOffset = one.segmentOffset;
                     var segmentIndex = one.segmentIndex;
+                    var subBlockIndex = one.subBlockIndex;
 
                     var validCvCountRecord = validCvCountRecordList.get(segmentIndex - firstSegmentIndex);
 
@@ -675,7 +691,7 @@ public class ChunkMergeWorker implements OfStats {
                         // compare is worker id, slot, offset is same
                         var pvmCurrent = PersistValueMeta.decode(valueBytesCurrent);
                         if (pvmCurrent.isExpired() || pvmCurrent.workerId != workerId || pvmCurrent.batchIndex != batchIndex
-                                || pvmCurrent.offset != offset) {
+                                || pvmCurrent.segmentIndex != segmentIndex || pvmCurrent.subBlockIndex != subBlockIndex || pvmCurrent.segmentOffset != segmentOffset) {
                             // cv is old， discard
                             validCvCountRecord.invalidCvCount++;
                             toRemoveCvList.add(one);
