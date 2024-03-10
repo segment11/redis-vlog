@@ -66,8 +66,9 @@ public class OneSlot implements OfStats {
             if (!walSharedFileBatch.exists()) {
                 FileUtils.touch(walSharedFileBatch);
 
-                for (int j = 0; j < walGroupNumber; j++) {
-                    FileUtils.writeByteArrayToFile(walSharedFileBatch, Wal.M2, true);
+                var initTimes = walGroupNumber / Wal.INIT_M4_TIMES;
+                for (int j = 0; j < initTimes; j++) {
+                    FileUtils.writeByteArrayToFile(walSharedFileBatch, Wal.INIT_M4, true);
                 }
             }
             rafArray[i] = new RandomAccessFile(walSharedFileBatch, "rw");
@@ -76,8 +77,9 @@ public class OneSlot implements OfStats {
             if (!walSharedFileShortValueBatch.exists()) {
                 FileUtils.touch(walSharedFileShortValueBatch);
 
-                for (int j = 0; j < walGroupNumber; j++) {
-                    FileUtils.writeByteArrayToFile(walSharedFileShortValueBatch, Wal.M2, true);
+                var initTimes = walGroupNumber / Wal.INIT_M4_TIMES;
+                for (int j = 0; j < initTimes; j++) {
+                    FileUtils.writeByteArrayToFile(walSharedFileShortValueBatch, Wal.INIT_M4, true);
                 }
             }
             rafShortValueArray[i] = new RandomAccessFile(walSharedFileShortValueBatch, "rw");

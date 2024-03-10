@@ -136,12 +136,15 @@ public class Wal implements OfStats {
                 '}';
     }
 
-    // each bucket group use 2M in shared file
-    private static final int ONE_GROUP_SIZE = 1024 * 1024 * 2;
+    // each bucket group use 128K in shared file
+    // chunk batch write 4 segments, each segment has 3 or 4 sub blocks, each blocks may contain 10-40 keys, 128K is enough for 1 batch
+    private static final int ONE_GROUP_SIZE = 1024 * 128;
     // for prepend
-    public static final byte[] M2 = new byte[ONE_GROUP_SIZE];
-    // 1 file max 2GB, 2M * 1K = 2GB
-    public static final int MAX_WAL_GROUP_NUMBER = 1024;
+    public static final byte[] K128 = new byte[ONE_GROUP_SIZE];
+    public static final byte[] INIT_M4 = new byte[1024 * 1024 * 4];
+    public static final int INIT_M4_TIMES = 1024 * 4 / 128;
+    // 1 file max 2GB, 2GB / 128K = 16384
+    public static final int MAX_WAL_GROUP_NUMBER = 16384;
 
     // current wal group write position in target group of wal file
     private final int[] writePositionArray = new int[MAX_WAL_GROUP_NUMBER];
@@ -205,7 +208,7 @@ public class Wal implements OfStats {
         synchronized (raf) {
             try {
                 raf.seek(targetGroupBeginOffset);
-                raf.write(M2);
+                raf.write(K128);
 
                 // reset write position
                 positionArray[groupIndex] = 0;

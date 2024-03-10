@@ -66,7 +66,7 @@ public enum ConfForSlot {
     }
 
     public enum ConfBucket {
-        debugMode(4096), c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT), c10m(KeyBucket.MAX_BUCKETS_PER_SLOT), c100m(KeyBucket.MAX_BUCKETS_PER_SLOT);
+        debugMode(KeyBucket.DEFAULT_BUCKETS_PER_SLOT), c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT), c10m(KeyBucket.MAX_BUCKETS_PER_SLOT), c100m(KeyBucket.MAX_BUCKETS_PER_SLOT);
 
         ConfBucket(int bucketsPerSlot) {
             this.bucketsPerSlot = bucketsPerSlot;
@@ -135,10 +135,10 @@ public enum ConfForSlot {
     }
 
     public enum ConfWal {
-        debugMode(256, 2, 1000, 1000),
-        c1m(64, 2, 1000, 1000),
-        c10m(256, 4, 2000, 2000),
-        c100m(256, 4, 2000, 2000);
+        debugMode(16, 2, 1000, 1000),
+        c1m(16, 2, 1000, 1000),
+        c10m(32, 4, 2000, 2000),
+        c100m(32, 4, 2000, 2000);
 
         ConfWal(int oneChargeBucketNumber, int batchNumber, int valueSizeTrigger, int shortValueSizeTrigger) {
             this.oneChargeBucketNumber = oneChargeBucketNumber;
