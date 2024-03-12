@@ -28,13 +28,14 @@ public class KeyBucket {
     private static final int ONE_CELL_LENGTH = 60;
     private static final int HASH_VALUE_LENGTH = 8;
 
-    static final double HIGH_LOAD_FACTOR = 0.6;
+    static final double HIGH_LOAD_FACTOR = 0.8;
     static final double LOW_LOAD_FACTOR = 0.2;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final int capacity;
     int size;
+    int cellCost;
 
     long lastSplitCostNanos;
 
@@ -64,6 +65,7 @@ public class KeyBucket {
                 ", splitNumber=" + splitNumber +
                 ", capacity=" + capacity +
                 ", size=" + size +
+                ", cellCost=" + cellCost +
                 ", loadFactor=" + loadFactor() +
                 '}';
     }
@@ -88,6 +90,7 @@ public class KeyBucket {
         this.compressedData = compressedData;
         this.capacity = INIT_CAPACITY;
         this.size = 0;
+        this.cellCost = 0;
     }
 
     // for split
@@ -99,6 +102,7 @@ public class KeyBucket {
         this.compressedData = null;
         this.capacity = capacity;
         this.size = 0;
+        this.cellCost = 0;
 
         this.decompressBytes = new byte[capacity * HASH_VALUE_LENGTH + capacity * ONE_CELL_LENGTH];
         this.buffer = ByteBuffer.wrap(decompressBytes);
@@ -323,6 +327,7 @@ public class KeyBucket {
             }
             clearCell(i, cellCount);
             size--;
+            cellCost -= cellCount;
         }
 
         long costT = System.nanoTime() - begin;
@@ -397,7 +402,7 @@ public class KeyBucket {
                     + ", value length=" + valueBytes.length);
         }
 
-        var maxFindCellTimes = capacity / 3;
+        var maxFindCellTimes = capacity / 2;
 
         int beginCellIndex = (int) Math.abs(keyHash % capacity);
         boolean isUpdate = false;
@@ -450,6 +455,7 @@ public class KeyBucket {
         putTo(putCellIndex, cellCount, keyHash, keyBytes, valueBytes);
         if (!isUpdate) {
             size++;
+            cellCost += cellCount;
         }
 
         return true;
@@ -527,7 +533,7 @@ public class KeyBucket {
             return null;
         }
 
-        var maxFindCellTimes = capacity / 3;
+        var maxFindCellTimes = capacity / 2;
 
         int beginCellIndex = (int) Math.abs(keyHash % capacity);
         for (int i = 0; i < maxFindCellTimes; i++) {
@@ -598,7 +604,7 @@ public class KeyBucket {
     }
 
     public boolean del(byte[] keyBytes, long keyHash) {
-        var maxFindCellTimes = capacity / 3;
+        var maxFindCellTimes = capacity / 2;
 
         int beginCellIndex = (int) Math.abs(keyHash % capacity);
         for (int i = 0; i < maxFindCellTimes; i++) {
@@ -621,6 +627,7 @@ public class KeyBucket {
                 var cellCount = matchMeta.cellCount();
                 clearCell(targetCellIndex, cellCount);
                 size--;
+                cellCost -= cellCount;
                 return true;
             } else {
                 // key masked value conflict, need fix, todo
@@ -654,6 +661,7 @@ public class KeyBucket {
                 var cellCount = matchMeta.cellCount();
                 clearCell(targetCellIndex, cellCount);
                 size--;
+                cellCost -= cellCount;
                 return true;
             } else {
                 // key masked value conflict, need fix, todo
