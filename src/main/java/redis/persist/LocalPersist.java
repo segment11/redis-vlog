@@ -59,6 +59,10 @@ public class LocalPersist {
     private File persistDir;
     private OneSlot[] oneSlots;
 
+    public OneSlot[] oneSlots() {
+        return oneSlots;
+    }
+
     public OneSlot oneSlot(byte slot) {
         return oneSlots[slot];
     }
@@ -87,6 +91,12 @@ public class LocalPersist {
             var oneSlot = new OneSlot((byte) i, snowFlake, persistDir, persistConfig);
             oneSlots[i] = oneSlot;
             oneSlot.initChunks(libC, allWorkers, requestWorkers, mergeWorkers, topMergeWorkers);
+        }
+    }
+
+    public void debugMode() {
+        for (var oneSlot : oneSlots) {
+            oneSlot.debugMode();
         }
     }
 

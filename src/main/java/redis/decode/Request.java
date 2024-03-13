@@ -6,6 +6,7 @@ public class Request {
     private final byte[][] data;
 
     private final boolean isHttp;
+    private final boolean isRepl;
 
     public byte[][] getData() {
         return data;
@@ -15,9 +16,14 @@ public class Request {
         return isHttp;
     }
 
-    public Request(byte[][] data, boolean isHttp) {
+    public boolean isRepl() {
+        return isRepl;
+    }
+
+    public Request(byte[][] data, boolean isHttp, boolean isRepl) {
         this.data = data;
         this.isHttp = isHttp;
+        this.isRepl = isRepl;
     }
 
     private String cmd;

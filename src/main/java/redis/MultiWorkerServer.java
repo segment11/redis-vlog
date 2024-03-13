@@ -36,6 +36,7 @@ import redis.persist.Wal;
 import redis.reply.ErrorReply;
 import redis.reply.NilReply;
 import redis.reply.Reply;
+import redis.task.TaskRunnable;
 
 import java.io.File;
 import java.io.IOException;
@@ -76,13 +77,15 @@ public class MultiWorkerServer extends Launcher {
     @Inject
     Eventloop[] requestEventloopArray;
 
+    private Eventloop firstNetWorkerEventloop;
+
     private boolean reuseNetWorkers = false;
 
     @Inject
     SocketInspector socketInspector;
 
     File dirFile(Config config) {
-        var dir = config.get(ofString(), "dir", "/var/lib/redis-vlog");
+        var dir = config.get(ofString(), "dir", "/tmp/redis-vlog");
         var dirFile = new File(dir);
         if (!dirFile.exists()) {
             boolean isOk = dirFile.mkdirs();
@@ -118,12 +121,17 @@ public class MultiWorkerServer extends Launcher {
     NioReactor workerReactor(@WorkerId int workerId, OptionalDependency<ThrottlingController> throttlingController, Config config) {
         // default 10ms
         int idleMillis = config.get(toInt, "idleMillis", 10);
-        return Eventloop.builder()
+        var eventloop = Eventloop.builder()
                 .withThreadName("net-worker-" + workerId)
                 .withIdleInterval(Duration.ofMillis(idleMillis))
                 .initialize(ofEventloop(config.getChild("eventloop.worker")))
                 .withInspector(throttlingController.orElse(null))
                 .build();
+
+        if (firstNetWorkerEventloop == null) {
+            firstNetWorkerEventloop = eventloop;
+        }
+        return eventloop;
     }
 
     @Provides
@@ -272,6 +280,18 @@ public class MultiWorkerServer extends Launcher {
     @Inject
     Config configInject;
 
+    @Inject
+    TaskRunnable[] scheduleRunnableArray;
+
+    private void eventloopAsScheduler(Eventloop eventloop, int index) {
+        var taskRunnable = scheduleRunnableArray[index];
+        taskRunnable.chargeOneSlots(LocalPersist.getInstance().oneSlots());
+
+        taskRunnable.setEventloop(eventloop);
+        // interval 1s
+        eventloop.delay(1000L, taskRunnable);
+    }
+
     @Override
     protected void onStart() throws Exception {
         var localPersist = LocalPersist.getInstance();
@@ -285,11 +305,15 @@ public class MultiWorkerServer extends Launcher {
         if (requestHandlersArray.length == 1 && netWorkers == 1) {
             logger.warn("Net workers and request workers are both 1, no need to create request workers");
             reuseNetWorkers = true;
+
+            eventloopAsScheduler(firstNetWorkerEventloop, 0);
         } else {
             long[] threadIds = new long[requestEventloopArray.length];
 
             for (int i = 0; i < requestEventloopArray.length; i++) {
                 var eventloop = requestEventloopArray[i];
+                eventloopAsScheduler(eventloop, i);
+
                 var thread = requestWorkerThreadFactory.newThread(eventloop);
                 thread.start();
 
@@ -476,6 +500,12 @@ public class MultiWorkerServer extends Launcher {
                         // init local persist
                         LocalPersist.getInstance().init(allWorkers, (byte) requestWorkers, (byte) mergeWorkers, (byte) topMergeWorkers, (short) slotNumber,
                                 snowFlake, dirFile, config.getChild("persist"));
+
+                        boolean debugMode = config.get(ofBoolean(), "debugMode", false);
+                        if (debugMode) {
+                            LocalPersist.getInstance().debugMode();
+                        }
+
                         return 0;
                     }
 
@@ -509,6 +539,16 @@ public class MultiWorkerServer extends Launcher {
                             eventloop.keepAlive(true);
 
                             list[i] = eventloop;
+                        }
+                        return list;
+                    }
+
+                    @Provides
+                    TaskRunnable[] scheduleRunnableArray(Integer beforeCreateHandler, Config config) {
+                        int requestWorkers = config.get(toInt, "requestWorkers", 1);
+                        var list = new TaskRunnable[requestWorkers];
+                        for (int i = 0; i < requestWorkers; i++) {
+                            list[i] = new TaskRunnable((byte) i, (byte) requestWorkers);
                         }
                         return list;
                     }

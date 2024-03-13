@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import redis.*;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
+import redis.task.ITask;
+import redis.task.TaskChain;
 
 import java.io.File;
 import java.io.IOException;
@@ -132,6 +134,11 @@ public class OneSlot implements OfStats {
     private final Logger log = LoggerFactory.getLogger(OneSlot.class);
 
     private final byte slot;
+
+    public byte slot() {
+        return slot;
+    }
+
     private final int segmentLength;
     private final int batchNumber;
     private final SnowFlake snowFlake;
@@ -204,6 +211,43 @@ public class OneSlot implements OfStats {
     private ChunkSegmentIndexMmapBuffer chunkSegmentIndexMmapBuffer;
 
     private final CompressStats compressStats;
+
+    private final TaskChain taskChain = new TaskChain();
+
+    public void doTask(int loopCount) {
+        for (var t : taskChain.list) {
+            if (loopCount % t.executeOnceAfterLoopCount() == 0) {
+                t.setLoopCount(loopCount);
+                t.run();
+            }
+        }
+    }
+
+    void debugMode() {
+        taskChain.add(new ITask() {
+            private int loopCount = 0;
+
+            @Override
+            public String name() {
+                return "debug";
+            }
+
+            @Override
+            public void run() {
+                log.info("Debug task run, slot: {}, loop count: {}", slot, loopCount);
+            }
+
+            @Override
+            public void setLoopCount(int loopCount) {
+                this.loopCount = loopCount;
+            }
+
+            @Override
+            public int executeOnceAfterLoopCount() {
+                return 10;
+            }
+        });
+    }
 
     @Override
     public List<StatKV> stats() {

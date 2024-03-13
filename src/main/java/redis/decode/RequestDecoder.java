@@ -7,6 +7,8 @@ import io.netty.buffer.Unpooled;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.repl.Repl;
+import redis.repl.ReplConsts;
 
 import java.util.Arrays;
 
@@ -40,6 +42,8 @@ public class RequestDecoder implements ByteBufsDecoder<Request> {
         var isPut = Arrays.equals(first6, 0, 3, HttpHeaderBody.PUT, 0, 3);
         var isDelete = Arrays.equals(first6, 0, 6, HttpHeaderBody.DELETE, 0, 6);
         boolean isHttp = isGet || isPost || isPut || isDelete;
+
+        var isRepl = Arrays.equals(first6, 0, 6, ReplConsts.PROTOCOL_KEYWORD_BYTES, 0, 6);
 
         // set reader index back
         compositeByteBuf.readerIndex(head);
@@ -78,6 +82,8 @@ public class RequestDecoder implements ByteBufsDecoder<Request> {
                         data[i] = arr[i].getBytes();
                     }
                 }
+            } else if (isRepl) {
+                data = Repl.decode(compositeByteBuf);
             } else {
                 data = resp.decode(compositeByteBuf);
                 if (data == null) {
@@ -101,7 +107,7 @@ public class RequestDecoder implements ByteBufsDecoder<Request> {
             int consumedN = compositeByteBuf.readerIndex() - head;
             bufs.takeExactSize(consumedN);
 
-            return new Request(data, isHttp);
+            return new Request(data, isHttp, isRepl);
 //        } catch (IllegalArgumentException e) {
 //            throw new MalformedDataException("Malformed data: " + e.getMessage());
         } catch (Exception e) {
