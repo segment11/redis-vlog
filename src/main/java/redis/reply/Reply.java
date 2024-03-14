@@ -4,5 +4,8 @@ import io.activej.bytebuf.ByteBuf;
 
 public interface Reply {
     ByteBuf buffer();
-    ByteBuf bufferAsHttp();
+
+    default ByteBuf bufferAsHttp() {
+        return null;
+    }
 }

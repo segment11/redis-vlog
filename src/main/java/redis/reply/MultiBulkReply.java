@@ -43,9 +43,4 @@ public class MultiBulkReply implements Reply {
         }
         return ByteBuf.wrap(buf.array(), 0, buf.writerIndex());
     }
-
-    @Override
-    public ByteBuf bufferAsHttp() {
-        return buffer();
-    }
 }
