@@ -48,6 +48,9 @@ public class ChunkMergeWorker implements OfStats {
     byte lastMergedSlot = -1;
     int lastMergedSegmentIndex = -1;
 
+    long validCvCountTotal = 0;
+    long invalidCvCountTotal = 0;
+
     final Logger log = LoggerFactory.getLogger(getClass());
 
     private final LocalPersist localPersist = LocalPersist.getInstance();
@@ -300,9 +303,21 @@ public class ChunkMergeWorker implements OfStats {
 
         final String prefix = "chunk-merge-w-" + mergeWorkerId + " ";
         list.add(new StatKV(prefix + "merged segment count", mergedSegmentCount));
-        list.add(new StatKV(prefix + "merged segment cost total millis", (double) mergedSegmentCostTotalTimeNanos / 1000 / 1000));
-        double mergedSegmentCostTAvg = (double) mergedSegmentCostTotalTimeNanos / mergedSegmentCount / 1000;
-        list.add(new StatKV(prefix + "merged segment cost avg micros", mergedSegmentCostTAvg));
+
+        if (mergedSegmentCount > 0) {
+            list.add(new StatKV(prefix + "merged segment cost total millis", (double) mergedSegmentCostTotalTimeNanos / 1000 / 1000));
+            double mergedSegmentCostTAvg = (double) mergedSegmentCostTotalTimeNanos / mergedSegmentCount / 1000;
+            list.add(new StatKV(prefix + "merged segment cost avg micros", mergedSegmentCostTAvg));
+
+            list.add(new StatKV(prefix + "valid cv count total", validCvCountTotal));
+            list.add(new StatKV(prefix + "invalid cv count total", invalidCvCountTotal));
+            double validCvCountAvg = (double) validCvCountTotal / mergedSegmentCount;
+            list.add(new StatKV(prefix + "valid cv count avg", validCvCountAvg));
+
+            double validCvRate = (double) validCvCountTotal / (validCvCountTotal + invalidCvCountTotal);
+            // if valid cv rate is high > 0.5, need increase fdPerChunk in ConfForSlot
+            list.add(new StatKV(prefix + "valid cv rate", validCvRate));
+        }
 
         list.add(new StatKV(prefix + "last merged worker id", lastMergedWorkerId));
         list.add(new StatKV(prefix + "last merged slot", lastMergedSlot));
@@ -336,6 +351,7 @@ public class ChunkMergeWorker implements OfStats {
         ArrayList<Integer> needMergeSegmentIndexList;
         ChunkMergeWorker mergeWorker;
         int validCvCountAfterRun = 0;
+        int invalidCvCountAfterRun = 0;
 
         private final LocalPersist localPersist = LocalPersist.getInstance();
 
@@ -569,6 +585,7 @@ public class ChunkMergeWorker implements OfStats {
 
             for (var validCvCountRecord : validCvCountRecordList) {
                 validCvCountAfterRun += validCvCountRecord.validCvCount;
+                invalidCvCountAfterRun += validCvCountRecord.invalidCvCount;
             }
 
             HashSet<Integer> hasValidCvSegmentIndexSet = new HashSet<>();
@@ -615,6 +632,9 @@ public class ChunkMergeWorker implements OfStats {
 
             var costT = System.nanoTime() - beginT;
             mergeWorker.mergedSegmentCostTotalTimeNanos += costT;
+
+            mergeWorker.validCvCountTotal += validCvCountAfterRun;
+            mergeWorker.invalidCvCountTotal += invalidCvCountAfterRun;
         }
 
         private void removeOld(OneSlot oneSlot, ArrayList<CvWithKeyAndSegmentOffset> cvList, ArrayList<ValidCvCountRecord> validCvCountRecordList) {
