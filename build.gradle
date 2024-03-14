@@ -58,6 +58,8 @@ dependencies {
     implementation group: 'org.openjdk.jmh', name: 'jmh-core', version: '1.35'
     annotationProcessor group: 'org.openjdk.jmh', name: 'jmh-generator-annprocess', version: '1.35'
 
+    implementation group: 'redis.clients', name: 'jedis', version: '4.4.7'
+
     testImplementation group: 'org.openjdk.jol', name: 'jol-core', version: '0.17'
     testImplementation group: 'org.apache.groovy', name: 'groovy', version: '4.0.12'
     testImplementation group: 'com.github.kevinsawicki', name: 'http-request', version: '6.0'
