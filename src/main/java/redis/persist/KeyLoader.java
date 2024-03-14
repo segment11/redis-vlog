@@ -152,6 +152,13 @@ public class KeyLoader implements OfStats {
 
     // need thread safe
     private synchronized void initFdForSlot(byte splitNumber) {
+        // 4M
+        var batchN = KEY_BUCKET_ONE_COST_SIZE * 1024;
+        var batchCount = bucketsPerSlot / 1024;
+        var bytes0 = new byte[batchN];
+
+        long n = bucketsPerSlot * KEY_BUCKET_ONE_COST_SIZE;
+
         var m = MemoryIO.getInstance();
         for (int fdIndex = 0; fdIndex < splitNumber; fdIndex++) {
             var oneFile = new File(slotDir, "key-bucket-split-" + fdIndex + ".dat");
@@ -160,10 +167,6 @@ public class KeyLoader implements OfStats {
                     FileUtils.touch(oneFile);
 
                     // init 0
-                    var n = bucketsPerSlot * KEY_BUCKET_ONE_COST_SIZE;
-                    var batchN = 1024;
-                    var batchCount = n / batchN;
-                    var bytes0 = new byte[batchN];
                     for (int j = 0; j < batchCount; j++) {
                         FileUtils.writeByteArrayToFile(oneFile, bytes0, true);
                     }
