@@ -18,7 +18,7 @@ public class SocketInspector implements TcpSocket.Inspector {
     @Override
     public void onConnect(TcpSocket socket) {
         var remoteAddress = socket.getRemoteAddress();
-        log.info("Connected to {}", remoteAddress);
+        log.info("On connect, remote address: {}", remoteAddress);
         socketMap.put(remoteAddress, socket);
     }
 
@@ -60,7 +60,7 @@ public class SocketInspector implements TcpSocket.Inspector {
     @Override
     public void onDisconnect(TcpSocket socket) {
         var remoteAddress = socket.getRemoteAddress();
-        log.info("Disconnected from {}", remoteAddress);
+        log.info("On disconnect, remote address: {}", remoteAddress);
         AuthHolder.flagBySocketAddress.remove(remoteAddress);
         socketMap.remove(remoteAddress);
     }

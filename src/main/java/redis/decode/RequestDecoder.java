@@ -8,9 +8,10 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.repl.Repl;
-import redis.repl.ReplConsts;
 
 import java.util.Arrays;
+
+import static redis.repl.Repl.PROTOCOL_KEYWORD_BYTES;
 
 public class RequestDecoder implements ByteBufsDecoder<Request> {
     // in local thread
@@ -43,7 +44,7 @@ public class RequestDecoder implements ByteBufsDecoder<Request> {
         var isDelete = Arrays.equals(first6, 0, 6, HttpHeaderBody.DELETE, 0, 6);
         boolean isHttp = isGet || isPost || isPut || isDelete;
 
-        var isRepl = Arrays.equals(first6, 0, 6, ReplConsts.PROTOCOL_KEYWORD_BYTES, 0, 6);
+        var isRepl = Arrays.equals(first6, 0, 6, PROTOCOL_KEYWORD_BYTES, 0, 6);
 
         // set reader index back
         compositeByteBuf.readerIndex(head);

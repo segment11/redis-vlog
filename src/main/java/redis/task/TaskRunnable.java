@@ -1,6 +1,7 @@
 package redis.task;
 
 import io.activej.eventloop.Eventloop;
+import redis.RequestHandler;
 import redis.persist.OneSlot;
 
 import java.util.ArrayList;
@@ -20,6 +21,9 @@ public class TaskRunnable implements Runnable {
         for (var oneSlot : oneSlots) {
             if (oneSlot.slot() % requestWorkers == i) {
                 this.oneSlots.add(oneSlot);
+
+                oneSlot.setEventloop(eventloop);
+                oneSlot.setRequestHandler(requestHandler);
             }
         }
     }
@@ -28,6 +32,12 @@ public class TaskRunnable implements Runnable {
 
     public void setEventloop(Eventloop eventloop) {
         this.eventloop = eventloop;
+    }
+
+    private RequestHandler requestHandler;
+
+    public void setRequestHandler(RequestHandler requestHandler) {
+        this.requestHandler = requestHandler;
     }
 
     private int loopCount = 0;

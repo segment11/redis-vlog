@@ -3,7 +3,10 @@ package redis.persist;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.luben.zstd.Zstd;
+import io.activej.async.callback.AsyncComputation;
+import io.activej.common.function.SupplierEx;
 import io.activej.config.Config;
+import io.activej.eventloop.Eventloop;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import jnr.posix.LibC;
@@ -12,6 +15,7 @@ import org.checkerframework.checker.nullness.qual.PolyNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
+import redis.repl.ReplPair;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 import redis.task.ITask;
@@ -38,6 +42,7 @@ public class OneSlot implements OfStats {
 
         this.slot = slot;
         this.snowFlake = snowFlake;
+        this.masterUuid = snowFlake.nextId();
         this.persistConfig = persistConfig;
 
         this.slotDir = new File(persistDir, "slot-" + slot);
@@ -115,6 +120,7 @@ public class OneSlot implements OfStats {
         this.compressStats = new CompressStats("slot-" + slot);
 
         this.initSegmentCache();
+        this.initTasks();
     }
 
     private void initSegmentCache() {
@@ -132,6 +138,75 @@ public class OneSlot implements OfStats {
 
 
     private final Logger log = LoggerFactory.getLogger(OneSlot.class);
+
+    public long getMasterUuid() {
+        return masterUuid;
+    }
+
+    private final long masterUuid;
+    private final ArrayList<ReplPair> replPairs = new ArrayList<>();
+
+    // todo, both master - master, need change equal and init as master or slave
+    public void createReplPairAsSlave(String host, int port) {
+        var replPair = new ReplPair(slot, false, host, port);
+        replPair.setSlaveUuid(masterUuid);
+
+        for (var replPair1 : replPairs) {
+            if (replPair1.equals(replPair)) {
+                log.warn("Repl pair already exists, host: {}, port: {}, slot: {}", host, port, slot);
+                replPair1.initAsSlave(eventloop, requestHandler);
+                return;
+            }
+        }
+
+        replPair.initAsSlave(eventloop, requestHandler);
+        log.warn("Create repl pair as slave, host: {}, port: {}, slot: {}", host, port, slot);
+        replPairs.add(replPair);
+    }
+
+    public ReplPair getReplPair(long slaveUuid) {
+        for (var replPair : replPairs) {
+            if (replPair.isAsMaster() && replPair.getSlaveUuid() == slaveUuid) {
+                return replPair;
+            }
+        }
+        return null;
+    }
+
+    public ReplPair createIfNotExistReplPairAsMaster(long slaveUuid, String host, int port) {
+        var replPair = new ReplPair(slot, true, host, port);
+        replPair.setSlaveUuid(slaveUuid);
+        replPair.setMasterUuid(masterUuid);
+
+        for (var replPair1 : replPairs) {
+            if (replPair1.equals(replPair)) {
+                log.warn("Repl pair already exists, host: {}, port: {}, slot: {}", host, port, slot);
+                replPair1.initAsMaster(slaveUuid, eventloop, requestHandler);
+                return replPair1;
+            }
+        }
+
+        replPair.initAsMaster(slaveUuid, eventloop, requestHandler);
+        log.warn("Create repl pair as master, host: {}, port: {}, slot: {}", host, port, slot);
+        replPairs.add(replPair);
+        return replPair;
+    }
+
+    public void setEventloop(Eventloop eventloop) {
+        this.eventloop = eventloop;
+    }
+
+    private Eventloop eventloop;
+
+    public void setRequestHandler(RequestHandler requestHandler) {
+        this.requestHandler = requestHandler;
+    }
+
+    private RequestHandler requestHandler;
+
+    public <T> CompletableFuture<T> threadSafeHandle(SupplierEx<T> supplierEx) {
+        return eventloop.submit(AsyncComputation.of(supplierEx));
+    }
 
     private final byte slot;
 
@@ -218,9 +293,45 @@ public class OneSlot implements OfStats {
         for (var t : taskChain.list) {
             if (loopCount % t.executeOnceAfterLoopCount() == 0) {
                 t.setLoopCount(loopCount);
-                t.run();
+
+                try {
+                    t.run();
+                } catch (Exception e) {
+                    log.error("Task error, name: " + t.name(), e);
+                }
             }
         }
+    }
+
+    private void initTasks() {
+        taskChain.add(new ITask() {
+            private int loopCount = 0;
+
+            @Override
+            public String name() {
+                return "repl pair ping/pong";
+            }
+
+            @Override
+            public void run() {
+                for (var replPair : replPairs) {
+                    if (!replPair.isAsMaster()) {
+                        // only slave need send ping
+                        replPair.ping();
+                    }
+                }
+            }
+
+            @Override
+            public void setLoopCount(int loopCount) {
+                this.loopCount = loopCount;
+            }
+
+            @Override
+            public int executeOnceAfterLoopCount() {
+                return 1;
+            }
+        });
     }
 
     void debugMode() {
@@ -719,6 +830,10 @@ public class OneSlot implements OfStats {
         if (readPersistedSegmentCache != null) {
             readPersistedSegmentCache.cleanUp();
             System.out.println("Cleanup read persisted pages cache");
+        }
+
+        for (var replPair : replPairs) {
+            replPair.close();
         }
     }
 

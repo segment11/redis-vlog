@@ -221,6 +221,11 @@ public class MultiWorkerServer extends Launcher {
 
                                     var future = eventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
                                     var reply = future.get();
+                                    // repl handle may return null
+                                    if (reply == null) {
+                                        return null;
+                                    }
+
                                     if (request.isHttp()) {
                                         return wrapHttpResponse(reply);
                                     } else {
@@ -237,7 +242,7 @@ public class MultiWorkerServer extends Launcher {
         return Config.create()
                 .with("net.listenAddresses", Config.ofValue(ofInetSocketAddress(), new InetSocketAddress(PORT)))
                 .overrideWith(ofClassPathProperties(PROPERTIES_FILE, true))
-                .overrideWith(ofSystemProperties("config"));
+                .overrideWith(ofSystemProperties("redis-vlog-config"));
     }
 
     @Provides
@@ -285,9 +290,11 @@ public class MultiWorkerServer extends Launcher {
 
     private void eventloopAsScheduler(Eventloop eventloop, int index) {
         var taskRunnable = scheduleRunnableArray[index];
+        taskRunnable.setEventloop(eventloop);
+        taskRunnable.setRequestHandler(requestHandlersArray[index]);
+
         taskRunnable.chargeOneSlots(LocalPersist.getInstance().oneSlots());
 
-        taskRunnable.setEventloop(eventloop);
         // interval 1s
         eventloop.delay(1000L, taskRunnable);
     }
@@ -380,6 +387,8 @@ public class MultiWorkerServer extends Launcher {
                         var c = ConfForSlot.from(estimateKeyNumber);
                         ConfForSlot.global = c;
 
+                        c.netListenAddresses = config.get(ofString(), "net.listenAddresses");
+
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
                         if (debugMode) {
                             c.confBucket.bucketsPerSlot = ConfForSlot.ConfBucket.debugMode.bucketsPerSlot;
@@ -462,8 +471,8 @@ public class MultiWorkerServer extends Launcher {
                         if (slotNumber > LocalPersist.MAX_SLOT_NUMBER) {
                             throw new IllegalStateException("Slot number too large, slot number should be less than " + LocalPersist.MAX_SLOT_NUMBER);
                         }
-                        if (slotNumber % 2 != 0) {
-                            throw new IllegalStateException("Slot number should be even");
+                        if (slotNumber != 1 && slotNumber % 2 != 0) {
+                            throw new IllegalStateException("Slot number should be 1 or even");
                         }
 
                         int netWorkers = config.get(toInt, "netWorkers", 1);

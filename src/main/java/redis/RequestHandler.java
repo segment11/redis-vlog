@@ -184,6 +184,14 @@ public class RequestHandler implements OfStats {
         }
 
         var data = request.getData();
+
+        if (request.isRepl()) {
+            var xGroup = new XGroup(null, data, socket);
+            xGroup.init(this, request);
+
+            return xGroup.handleRepl();
+        }
+
         var cmd = request.cmd();
 
         if (cmd.equals(PING_COMMAND)) {

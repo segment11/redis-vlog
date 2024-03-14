@@ -8,6 +8,7 @@ public enum ConfForSlot {
     c1m(1_000_000L), c10m(10_000_000L), c100m(100_000_000L);
 
     public long estimateKeyNumber;
+    public String netListenAddresses;
 
     public final ConfBucket confBucket;
     public final ConfChunk confChunk;
@@ -66,7 +67,7 @@ public enum ConfForSlot {
     }
 
     public enum ConfBucket {
-        debugMode(KeyBucket.DEFAULT_BUCKETS_PER_SLOT), c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT), c10m(KeyBucket.MAX_BUCKETS_PER_SLOT), c100m(KeyBucket.MAX_BUCKETS_PER_SLOT);
+        debugMode(KeyBucket.DEFAULT_BUCKETS_PER_SLOT), c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT), c10m(65536), c100m(KeyBucket.MAX_BUCKETS_PER_SLOT);
 
         ConfBucket(int bucketsPerSlot) {
             this.bucketsPerSlot = bucketsPerSlot;
@@ -88,7 +89,7 @@ public enum ConfForSlot {
         debugMode(12, (byte) 1, PAGE_SIZE),
         c1m(16, (byte) 2, PAGE_SIZE),
         c10m(18, (byte) 4, PAGE_SIZE),
-        c100m(19, (byte) 16, PAGE_SIZE);
+        c100m(19, (byte) 8, PAGE_SIZE);
 
         ConfChunk(int segmentPower2, byte fdPerChunk, int segmentLength) {
             this.segmentPower2 = segmentPower2;
@@ -137,8 +138,8 @@ public enum ConfForSlot {
     public enum ConfWal {
         debugMode(16, 2, 1000, 1000),
         c1m(16, 2, 1000, 1000),
-        c10m(32, 4, 2000, 2000),
-        c100m(32, 4, 2000, 2000);
+        c10m(32, 2, 1000, 1000),
+        c100m(32, 2, 1000, 1000);
 
         ConfWal(int oneChargeBucketNumber, int batchNumber, int valueSizeTrigger, int shortValueSizeTrigger) {
             this.oneChargeBucketNumber = oneChargeBucketNumber;

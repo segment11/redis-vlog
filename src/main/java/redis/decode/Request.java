@@ -48,7 +48,12 @@ public class Request {
         this.slotWithKeyHash = slotWithKeyHash;
     }
 
-    public int getSlot() {
+    public byte getSlot() {
+        if (isRepl) {
+            // refer to Repl.decode
+            return data[1][0];
+        }
+
         if (slotWithKeyHash == null) {
             return -1;
         }

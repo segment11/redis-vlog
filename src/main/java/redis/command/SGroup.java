@@ -4,15 +4,18 @@ package redis.command;
 import io.activej.net.socket.tcp.ITcpSocket;
 import redis.BaseCommand;
 import redis.CompressedValue;
+import redis.clients.jedis.Jedis;
 import redis.reply.*;
 import redis.type.RedisHashKeys;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 
-import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 import static redis.CompressedValue.NO_EXPIRE;
+import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 public class SGroup extends BaseCommand {
     public SGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -172,7 +175,76 @@ public class SGroup extends BaseCommand {
             return sdiffstore(false, true);
         }
 
+        if ("slaveof".equals(cmd)) {
+            return slaveof();
+        }
+
         return NilReply.INSTANCE;
+    }
+
+    private static final String IPV4_REGEX =
+            "^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\." +
+                    "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\." +
+                    "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\." +
+                    "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
+
+    private static final Pattern IPv4_PATTERN = Pattern.compile(IPV4_REGEX);
+
+    // execute in a net thread
+    private Reply slaveof() {
+        if (data.length != 3) {
+            return ErrorReply.FORMAT;
+        }
+
+        var hostBytes = data[1];
+        var portBytes = data[2];
+
+        var host = new String(hostBytes);
+        // host valid check
+        var matcher = IPv4_PATTERN.matcher(host);
+        if (!matcher.matches()) {
+            return ErrorReply.SYNTAX;
+        }
+
+        int port;
+        try {
+            port = Integer.parseInt(new String(portBytes));
+        } catch (NumberFormatException e) {
+            return ErrorReply.NOT_INTEGER;
+        }
+        // port range check
+        if (port < 0 || port > 65535) {
+            return new ErrorReply("invalid port");
+        }
+
+        // connect check
+        Jedis jedis = null;
+        try {
+            jedis = new Jedis(host, port);
+            var pong = jedis.ping();
+            log.info("Slave of {}:{} pong: {}", host, port, pong);
+        } catch (Exception e) {
+            return new ErrorReply("connect failed");
+        } finally {
+            jedis.close();
+        }
+
+        CompletableFuture<Boolean>[] futures = new CompletableFuture[slotNumber];
+        for (int i = 0; i < slotNumber; i++) {
+            var oneSlot = localPersist.oneSlot((byte) i);
+            futures[i] = oneSlot.threadSafeHandle(() -> {
+                try {
+                    oneSlot.createReplPairAsSlave(host, port);
+                    return true;
+                } catch (Exception e) {
+                    log.error("Create repl pair as slave failed, slot: " + oneSlot.slot(), e);
+                    return false;
+                }
+            });
+        }
+        CompletableFuture.allOf(futures).join();
+
+        return OKReply.INSTANCE;
     }
 
     Reply set(byte[][] dd) {
