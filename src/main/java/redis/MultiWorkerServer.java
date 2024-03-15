@@ -356,12 +356,14 @@ public class MultiWorkerServer extends Launcher {
                 eventloop.breakEventloop();
             }
 
+            // need stop chunk merge threads first
+            chunkMerger.stop();
+
             // disconnect all clients
             // todo
 
             // close local persist
             LocalPersist.getInstance().cleanUp();
-            chunkMerger.stop();
             DictMap.getInstance().close();
         } catch (Exception e) {
             logger.error("Stop error", e);

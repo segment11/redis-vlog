@@ -217,7 +217,7 @@ public class ChunkMerger implements OfStats {
             topWorker.stop();
         }
 
-        mergeSelfScheduledExecutor.shutdown();
+        mergeSelfScheduledExecutor.shutdownNow();
         System.out.println("Shutdown top merge schedule worker");
 
         if (topChunkSegmentIndexMmapBuffer != null) {

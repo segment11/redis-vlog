@@ -282,7 +282,7 @@ public class ChunkMergeWorker implements OfStats {
 
     void stop() {
         for (var executor : executors) {
-            executor.shutdown();
+            executor.shutdownNow();
         }
         System.out.println("Stop chunk merge worker " + mergeWorkerId + " executor service");
     }
