@@ -49,6 +49,17 @@ public class TaskRunnable implements Runnable {
         }
         loopCount++;
 
+        if (isStopped) {
+            return;
+        }
+
         eventloop.delay(1000L, this);
+    }
+
+    private boolean isStopped = false;
+
+    public void stop() {
+        isStopped = true;
+        System.out.println("Task delay stopped. index: " + i);
     }
 }

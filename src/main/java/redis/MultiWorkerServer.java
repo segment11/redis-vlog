@@ -79,7 +79,7 @@ public class MultiWorkerServer extends Launcher {
 
     private Eventloop firstNetWorkerEventloop;
 
-    private boolean reuseNetWorkers = false;
+    private static boolean reuseNetWorkers = false;
 
     @Inject
     SocketInspector socketInspector;
@@ -308,11 +308,8 @@ public class MultiWorkerServer extends Launcher {
         chunkMerger.setCompressLevel(requestHandlersArray[0].compressLevel);
         chunkMerger.start();
 
-        int netWorkers = configInject.get(toInt, "netWorkers", 1);
-        if (requestHandlersArray.length == 1 && netWorkers == 1) {
+        if (reuseNetWorkers) {
             logger.warn("Net workers and request workers are both 1, no need to create request workers");
-            reuseNetWorkers = true;
-
             eventloopAsScheduler(firstNetWorkerEventloop, 0);
         } else {
             long[] threadIds = new long[requestEventloopArray.length];
@@ -339,9 +336,6 @@ public class MultiWorkerServer extends Launcher {
 
     @Override
     protected void run() throws Exception {
-        if (logger.isInfoEnabled()) {
-            logger.info("Net Server is listening on {}", PORT);
-        }
         awaitShutdown();
     }
 
@@ -350,6 +344,10 @@ public class MultiWorkerServer extends Launcher {
         try {
             for (var requestHandler : requestHandlersArray) {
                 requestHandler.stop();
+            }
+
+            for (var scheduleRunnable : scheduleRunnableArray) {
+                scheduleRunnable.stop();
             }
 
             for (var eventloop : requestEventloopArray) {
@@ -390,6 +388,7 @@ public class MultiWorkerServer extends Launcher {
                         ConfForSlot.global = c;
 
                         c.netListenAddresses = config.get(ofString(), "net.listenAddresses");
+                        logger.info("Net listen addresses: {}", c.netListenAddresses);
 
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
                         if (debugMode) {
@@ -495,6 +494,8 @@ public class MultiWorkerServer extends Launcher {
                             throw new IllegalStateException("Top merge workers too large, top merge workers should be less than " + ChunkMerger.MAX_TOP_MERGE_WORKERS);
                         }
 
+                        reuseNetWorkers = netWorkers == 1 && requestWorkers == 1;
+
                         // not include net workers
                         byte allWorkers = (byte) (requestWorkers + mergeWorkers + topMergeWorkers);
 
@@ -539,6 +540,10 @@ public class MultiWorkerServer extends Launcher {
 
                     @Provides
                     Eventloop[] requestEventloopArray(Integer beforeCreateHandler, Config config) {
+                        if (reuseNetWorkers) {
+                            return new Eventloop[0];
+                        }
+
                         int requestWorkers = config.get(toInt, "requestWorkers", 1);
                         var list = new Eventloop[requestWorkers];
                         for (int i = 0; i < requestWorkers; i++) {
