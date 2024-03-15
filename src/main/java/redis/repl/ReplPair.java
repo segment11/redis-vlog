@@ -18,16 +18,24 @@ public class ReplPair {
     private final String host;
     private final int port;
 
+    public byte getSlot() {
+        return slot;
+    }
+
+    public String getHost() {
+        return host;
+    }
+
+    public int getPort() {
+        return port;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         ReplPair replPair = (ReplPair) obj;
         return asMaster == replPair.asMaster && port == replPair.port && host.equals(replPair.host);
-    }
-
-    public enum Status {
-        up, down
     }
 
     public boolean isAsMaster() {
@@ -50,14 +58,6 @@ public class ReplPair {
         this.slaveUuid = slaveUuid;
     }
 
-    public Status getStatus() {
-        return status;
-    }
-
-    public void setStatus(Status status) {
-        this.status = status;
-    }
-
     public long getLastPingGetTimestamp() {
         return lastPingGetTimestamp;
     }
@@ -76,21 +76,30 @@ public class ReplPair {
 
     private long masterUuid;
     private long slaveUuid;
-    private Status status;
+
     // client side send ping, server side update timestamp
     private long lastPingGetTimestamp;
     // server side send pong, client side update timestamp
     private long lastPongGetTimestamp;
+
+    public boolean isLinkUp() {
+        if (asMaster) {
+            var isPingOk = System.currentTimeMillis() - lastPingGetTimestamp < 1000 * 3
+                    && tcpClient != null && tcpClient.isSocketConnected();
+            return isPingOk;
+        } else {
+            var isPongOk = System.currentTimeMillis() - lastPongGetTimestamp < 1000 * 3
+                    && tcpClient != null && tcpClient.isSocketConnected();
+            return isPongOk;
+        }
+    }
 
     private TcpClient tcpClient;
 
     public void initAsSlave(Eventloop eventloop, RequestHandler requestHandler) {
         if (System.currentTimeMillis() - lastPongGetTimestamp < 1000 * 3
                 && tcpClient != null && tcpClient.isSocketConnected()) {
-            status = Status.up;
         } else {
-            status = Status.down;
-
             if (tcpClient != null) {
                 tcpClient.close();
             }
@@ -105,10 +114,7 @@ public class ReplPair {
     public void initAsMaster(long slaveUuid, Eventloop eventloop, RequestHandler requestHandler) {
         if (System.currentTimeMillis() - lastPingGetTimestamp < 1000 * 3 && slaveUuid == this.slaveUuid
                 && tcpClient != null && tcpClient.isSocketConnected()) {
-            status = Status.up;
         } else {
-            status = Status.down;
-
             if (tcpClient != null) {
                 tcpClient.close();
             }
@@ -121,8 +127,22 @@ public class ReplPair {
     }
 
     public boolean ping() {
+        if (isSendBye) {
+            return false;
+        }
+
         if (tcpClient != null) {
             return tcpClient.ping();
+        }
+        return false;
+    }
+
+    private boolean isSendBye = false;
+
+    public boolean bye() {
+        if (tcpClient != null) {
+            isSendBye = true;
+            return tcpClient.bye();
         }
         return false;
     }

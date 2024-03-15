@@ -57,6 +57,11 @@ public class TcpClient {
         return write(ReplType.ping, new Ping(ConfForSlot.global.netListenAddresses));
     }
 
+    public boolean bye() {
+        System.out.println("Send bye to server: " + replPair.getHost() + ":" + replPair.getPort() + ", slot: " + slot);
+        return write(ReplType.bye, new Ping(ConfForSlot.global.netListenAddresses));
+    }
+
     public void connect(String host, int port, Callable<ByteBuf> callback) {
         TcpSocket.connect(eventloop, new InetSocketAddress(host, port))
                 .whenResult(socket -> {
@@ -91,6 +96,9 @@ public class TcpClient {
     public void close() {
         if (sock != null && !sock.isClosed()) {
             sock.close();
+            System.out.println("Closed socket");
+        } else {
+            System.out.println("Socket is already closed");
         }
     }
 }

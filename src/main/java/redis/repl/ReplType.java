@@ -7,6 +7,7 @@ public enum ReplType {
     hello(true, (byte) 0, (byte) 2),
     hi(true, (byte) 1, (byte) 3),
     ok(true, (byte) 1, (byte) 4),
+    bye(true, (byte) 0, (byte) 5),
 
     chunk_segment(false, (byte) 1, (byte) 10),
     chunk_merge_flag_mmap(false, (byte) 1, (byte) 11),

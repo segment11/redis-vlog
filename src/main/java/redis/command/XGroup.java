@@ -77,6 +77,16 @@ public class XGroup extends BaseCommand {
             case hello -> hello(slot, contentBytes);
             case hi -> hi(slot, contentBytes);
             case ok -> Repl.emptyReply();
+            case bye -> {
+                var netListenAddresses = new String(contentBytes);
+                var array = netListenAddresses.split(":");
+                var host = array[0];
+                var port = Integer.parseInt(array[1]);
+
+                log.warn("Repl handle bye: slave uuid={}, net listen addresses={}", slaveUuid, netListenAddresses);
+                oneSlot.closeAndRemoveReplPair(slaveUuid, host, port);
+                yield Repl.emptyReply();
+            }
             case chunk_segment -> chunk_segment(slot, contentBytes);
             case chunk_merge_flag_mmap -> chunk_merge_flag_mmap(slot, contentBytes);
             case chunk_segment_index_mmap -> chunk_segment_index_mmap(slot, contentBytes);

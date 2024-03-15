@@ -173,6 +173,23 @@ public class OneSlot implements OfStats {
         return null;
     }
 
+    public void closeAndRemoveReplPair(long slaveUuid, String host, int port) {
+        var it = replPairs.iterator();
+        while (it.hasNext()) {
+            var replPair = it.next();
+            if (replPair.getHost().equals(host) && replPair.getPort() == port) {
+                // should not happen
+                if (replPair.getSlaveUuid() != slaveUuid) {
+                    log.warn("Repl pair slave uuid not match, slave uuid: {}, host: {}, port: {}, slot: {}", slaveUuid, host, port, slot);
+                }
+
+                replPair.close();
+                it.remove();
+                return;
+            }
+        }
+    }
+
     public ReplPair createIfNotExistReplPairAsMaster(long slaveUuid, String host, int port) {
         var replPair = new ReplPair(slot, true, host, port);
         replPair.setSlaveUuid(slaveUuid);
@@ -398,6 +415,13 @@ public class OneSlot implements OfStats {
         list.add(new StatKV("wal-s-" + slot + " take wal count", takeWalCount));
         if (takeWalCount > 0) {
             list.add(new StatKV("wal-s-" + slot + " take wal cost avg nanos", (double) takeWalCostNanos / takeWalCount));
+        }
+
+        if (!replPairs.isEmpty()) {
+            list.add(StatKV.split);
+            for (var replPair : replPairs) {
+                list.add(new StatKV("repl pair link up to " + replPair.getHost() + ":" + replPair.getPort(), replPair.isLinkUp() ? 1 : 0));
+            }
         }
 
         list.add(StatKV.split);
@@ -844,6 +868,7 @@ public class OneSlot implements OfStats {
         }
 
         for (var replPair : replPairs) {
+            replPair.bye();
             replPair.close();
         }
     }
