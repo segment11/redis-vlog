@@ -205,6 +205,15 @@ public class OneSlot implements OfStats {
     private RequestHandler requestHandler;
 
     public <T> CompletableFuture<T> threadSafeHandle(SupplierEx<T> supplierEx) {
+        if (reuseNetWorkers) {
+            try {
+                var r = supplierEx.get();
+                return CompletableFuture.completedFuture(r);
+            } catch (Exception e) {
+                return CompletableFuture.failedFuture(e);
+            }
+        }
+
         return eventloop.submit(AsyncComputation.of(supplierEx));
     }
 
@@ -286,6 +295,8 @@ public class OneSlot implements OfStats {
     private ChunkSegmentIndexMmapBuffer chunkSegmentIndexMmapBuffer;
 
     private final CompressStats compressStats;
+
+    boolean reuseNetWorkers;
 
     private final TaskChain taskChain = new TaskChain();
 
