@@ -109,7 +109,7 @@ public class OneSlot implements OfStats {
             }
         }
 
-        this.keyLoader = new KeyLoader(slot, slotDir);
+        this.keyLoader = new KeyLoader(slot, slotDir, snowFlake);
 
         this.persistExecutors = new ExecutorService[batchNumber];
         for (int i = 0; i < batchNumber; i++) {

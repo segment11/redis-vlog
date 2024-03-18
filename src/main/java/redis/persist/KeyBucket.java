@@ -4,6 +4,7 @@ import com.github.luben.zstd.Zstd;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressStats;
+import redis.SnowFlake;
 
 import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
@@ -24,9 +25,12 @@ public class KeyBucket {
 
     // key length 1 + key length <= 32 + (pvm length 24 or short value case number 17 / string 19 ) < 60
     // if key length > 32, refer CompressedValue.KEY_MAX_LENGTH, one key may cost 2 cells
-    // 60 * (60 + 8) = 4080, in 4K page size
+    // 8 + 60 * (60 + 8) = 4088, in 4K page size
     private static final int ONE_CELL_LENGTH = 60;
     private static final int HASH_VALUE_LENGTH = 8;
+    private static final int SEQ_VALUE_LENGTH = 8;
+    // seq long + size int + uncompressed length int + compressed length int
+    private static final int AFTER_COMPRESS_PREPEND_LENGTH = SEQ_VALUE_LENGTH + 4 + 4 + 4;
 
     static final double HIGH_LOAD_FACTOR = 0.8;
     static final double LOW_LOAD_FACTOR = 0.2;
@@ -36,6 +40,10 @@ public class KeyBucket {
     private final int capacity;
     int size;
     int cellCost;
+
+    private long lastUpdateSeq;
+
+    private final SnowFlake snowFlake;
 
     long lastSplitCostNanos;
 
@@ -67,6 +75,7 @@ public class KeyBucket {
                 ", size=" + size +
                 ", cellCost=" + cellCost +
                 ", loadFactor=" + loadFactor() +
+                ", lastUpdateSeq=" + lastUpdateSeq +
                 '}';
     }
 
@@ -82,7 +91,7 @@ public class KeyBucket {
         this.init();
     }
 
-    public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] compressedData) {
+    public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] compressedData, SnowFlake snowFlake) {
         this.slot = slot;
         this.bucketIndex = bucketIndex;
         this.splitIndex = splitIndex;
@@ -91,10 +100,11 @@ public class KeyBucket {
         this.capacity = INIT_CAPACITY;
         this.size = 0;
         this.cellCost = 0;
+        this.snowFlake = snowFlake;
     }
 
     // for split
-    private KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, int capacity) {
+    private KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, int capacity, SnowFlake snowFlake) {
         this.slot = slot;
         this.bucketIndex = bucketIndex;
         this.splitIndex = splitIndex;
@@ -103,6 +113,7 @@ public class KeyBucket {
         this.capacity = capacity;
         this.size = 0;
         this.cellCost = 0;
+        this.snowFlake = snowFlake;
 
         this.decompressBytes = new byte[capacity * HASH_VALUE_LENGTH + capacity * ONE_CELL_LENGTH];
         this.buffer = ByteBuffer.wrap(decompressBytes);
@@ -169,7 +180,10 @@ public class KeyBucket {
             size = 0;
         } else {
             var bufferInner = ByteBuffer.wrap(compressedData);
-            // first 4 bytes is size
+            // first 8 bytes is seq
+            lastUpdateSeq = bufferInner.getLong();
+
+            // then 4 bytes is size
             size = bufferInner.getInt();
             compressStats.updateTmpBucketSize(slot, bucketIndex, splitIndex, size);
 
@@ -180,7 +194,7 @@ public class KeyBucket {
 
             long begin = System.nanoTime();
             Zstd.decompressByteArray(decompressBytes, 0, uncompressedLength,
-                    compressedData, 12, compressedData.length - 12);
+                    compressedData, AFTER_COMPRESS_PREPEND_LENGTH, compressedData.length - AFTER_COMPRESS_PREPEND_LENGTH);
             long costT = System.nanoTime() - begin;
 
             // stats
@@ -196,15 +210,20 @@ public class KeyBucket {
 
     public byte[] compress() {
         var maxDstSize = (int) Zstd.compressBound(decompressBytes.length);
-        var dst = new byte[maxDstSize + 12];
-        int compressedSize = (int) Zstd.compressByteArray(dst, 12, maxDstSize,
+        var dst = new byte[maxDstSize + AFTER_COMPRESS_PREPEND_LENGTH];
+        int compressedSize = (int) Zstd.compressByteArray(dst, AFTER_COMPRESS_PREPEND_LENGTH, maxDstSize,
                 decompressBytes, 0, decompressBytes.length, Zstd.defaultCompressionLevel());
+
+        int afterCompressPersistSize = compressedSize + AFTER_COMPRESS_PREPEND_LENGTH;
+        if (afterCompressPersistSize > KeyLoader.KEY_BUCKET_ONE_COST_SIZE) {
+            throw new IllegalStateException("Compressed size too large, compressed size=" + afterCompressPersistSize);
+        }
 
         // put to cache use minimize size
         // dst include too many 0
-        var r = Arrays.copyOfRange(dst, 0, compressedSize + 12);
+        var r = Arrays.copyOfRange(dst, 0, afterCompressPersistSize);
         var bufferInner = ByteBuffer.wrap(r);
-        bufferInner.putInt(size).putInt(decompressBytes.length).putInt(compressedSize);
+        bufferInner.putLong(lastUpdateSeq).putInt(size).putInt(decompressBytes.length).putInt(compressedSize);
 
         // stats
         compressStats.compressedValueSizeTotalCount2.add(size);
@@ -276,7 +295,7 @@ public class KeyBucket {
             // split others
             // split index change
             var splitKeyBucket = new KeyBucket(slot, bucketIndex, (byte) (splitIndex + i * oldSplitNumber),
-                    newSplitNumber, this.capacity);
+                    newSplitNumber, this.capacity, this.snowFlake);
             splitKeyBucket.compressStats = compressStats;
             keyBuckets[i] = splitKeyBucket;
         }
@@ -287,7 +306,7 @@ public class KeyBucket {
                 continue;
             }
 
-            var newSplitIndex = Math.abs(cellHashValue % newSplitNumber);
+            int newSplitIndex = (int) Math.abs(cellHashValue % newSplitNumber);
             boolean isStillInCurrentSplit = newSplitIndex == splitIndex;
             if (isStillInCurrentSplit) {
                 continue;
@@ -330,6 +349,10 @@ public class KeyBucket {
             cellCost -= cellCount;
         }
 
+        for (var splitKeyBucket : keyBuckets) {
+            splitKeyBucket.updateSeq();
+        }
+
         long costT = System.nanoTime() - begin;
         // reduce log
         if (slot == 0 && bucketIndex % 1024 == 0) {
@@ -343,6 +366,10 @@ public class KeyBucket {
 //            System.out.println(keyBuckets[i]);
 //        }
         return keyBuckets;
+    }
+
+    private void updateSeq() {
+        lastUpdateSeq = snowFlake.nextId();
     }
 
     private record CanPutResult(boolean flag, boolean isUpdate) {
@@ -382,6 +409,10 @@ public class KeyBucket {
                 if (newSplitIndex == keyBucket.splitIndex) {
                     isPut = true;
                     putResult = keyBucket.put(keyBytes, keyHash, valueBytes, null);
+                    if (putResult) {
+                        keyBucket.updateSeq();
+                    }
+
                     break;
                 }
             }
@@ -390,7 +421,6 @@ public class KeyBucket {
             }
             return putResult;
         }
-//        }
 
         int keyWithValueBytesLength = 1 + keyBytes.length + 2 + valueBytes.length;
         int cellCount = keyWithValueBytesLength / ONE_CELL_LENGTH;
@@ -423,7 +453,6 @@ public class KeyBucket {
         }
 
         if (putCellIndex == -1) {
-//            var beginCellIndex2 = Math.abs(Arrays.hashCode(keyBytes) % capacity);
             var beginCellIndex2 = beginCellIndex + capacity / 2;
             if (beginCellIndex2 >= capacity) {
                 beginCellIndex2 = beginCellIndex2 - capacity;
@@ -458,10 +487,11 @@ public class KeyBucket {
             cellCost += cellCount;
         }
 
+        updateSeq();
         return true;
     }
 
-    void putTo(int putCellIndex, int cellCount, long keyHash, byte[] keyBytes, byte[] valueBytes) {
+    private void putTo(int putCellIndex, int cellCount, long keyHash, byte[] keyBytes, byte[] valueBytes) {
         buffer.putLong(putCellIndex * HASH_VALUE_LENGTH, keyHash);
         for (int i = 1; i < cellCount; i++) {
             buffer.putLong((putCellIndex + i) * HASH_VALUE_LENGTH, PRE_KEY);
@@ -483,7 +513,7 @@ public class KeyBucket {
         buffer.put(valueBytes);
     }
 
-    CanPutResult canPut(byte[] keyBytes, long keyHash, int cellIndex, int cellCount) {
+    private CanPutResult canPut(byte[] keyBytes, long keyHash, int cellIndex, int cellCount) {
         // cell index already in range [0, capacity - ceilCount]
         var cellHashValue = buffer.getLong(cellIndex * HASH_VALUE_LENGTH);
         if (cellHashValue == NO_KEY) {
@@ -548,7 +578,6 @@ public class KeyBucket {
             }
         }
 
-//        var beginCellIndex2 = Math.abs(Arrays.hashCode(keyBytes) % capacity);
         var beginCellIndex2 = beginCellIndex + capacity / 2;
         if (beginCellIndex2 >= capacity) {
             beginCellIndex2 = beginCellIndex2 - capacity;
@@ -628,6 +657,7 @@ public class KeyBucket {
                 clearCell(targetCellIndex, cellCount);
                 size--;
                 cellCost -= cellCount;
+                updateSeq();
                 return true;
             } else {
                 // key masked value conflict, need fix, todo
@@ -636,7 +666,6 @@ public class KeyBucket {
             }
         }
 
-//        var beginCellIndex2 = Math.abs(keyBytes.hashCode() % INIT_CAPACITY);
         var beginCellIndex2 = beginCellIndex + capacity / 2;
         if (beginCellIndex2 >= capacity) {
             beginCellIndex2 = beginCellIndex2 - capacity;
@@ -662,6 +691,7 @@ public class KeyBucket {
                 clearCell(targetCellIndex, cellCount);
                 size--;
                 cellCost -= cellCount;
+                updateSeq();
                 return true;
             } else {
                 // key masked value conflict, need fix, todo

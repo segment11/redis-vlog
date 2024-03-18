@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressStats;
 import redis.ConfForSlot;
+import redis.SnowFlake;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 
@@ -35,16 +36,17 @@ import static redis.persist.LocalPersist.PROTECTION;
 
 public class KeyLoader implements OfStats {
     private static final int PAGE_NUMBER_PER_SEGMENT = 1;
-    private static final int KEY_BUCKET_ONE_COST_SIZE = PAGE_NUMBER_PER_SEGMENT * PAGE_SIZE;
+    static final int KEY_BUCKET_ONE_COST_SIZE = PAGE_NUMBER_PER_SEGMENT * PAGE_SIZE;
 
     // one split file max 2GB, 2 * 1024 * 1024 / 4 = 524288
     // one split index one file
     static final int KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
-    public KeyLoader(byte slot, File slotDir) {
+    public KeyLoader(byte slot, File slotDir, SnowFlake snowFlake) {
         this.slot = slot;
         this.bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
         this.slotDir = slotDir;
+        this.snowFlake = snowFlake;
 
         this.getKeyBucketCountArray = new byte[bucketsPerSlot][];
         for (int i = 0; i < bucketsPerSlot; i++) {
@@ -55,6 +57,7 @@ public class KeyLoader implements OfStats {
     private final byte slot;
     private final int bucketsPerSlot;
     private final File slotDir;
+    private final SnowFlake snowFlake;
 
     // need read write lock
     private KeyBucketSplitNumberMmapBuffer splitNumberMmapBuffer;
@@ -316,7 +319,7 @@ public class KeyLoader implements OfStats {
         if (bytes == null) {
             return null;
         }
-        var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes);
+        var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
         keyBucket.initWithCompressStats(compressStats);
 
         var count = getKeyBucketCountArray[bucketIndex][splitIndex];
@@ -368,7 +371,7 @@ public class KeyLoader implements OfStats {
                     keyBuckets.add(null);
                     continue;
                 }
-                var keyBucket = new KeyBucket(slot, bucketIndex, (byte) i, splitNumber, bytes);
+                var keyBucket = new KeyBucket(slot, bucketIndex, (byte) i, splitNumber, bytes, snowFlake);
                 keyBucket.initWithCompressStats(compressStats);
                 keyBuckets.add(keyBucket);
             }
@@ -448,14 +451,15 @@ public class KeyLoader implements OfStats {
             var splitNumber = splitNumberMmapBuffer.get(bucketIndex);
             ArrayList<KeyBucket> keyBuckets = new ArrayList<>(splitNumber);
 
+            var isSingleKeyUpdate = keyHash != 0;
             // just get one key bucket
-            if (keyHash != 0) {
+            if (isSingleKeyUpdate) {
                 int i = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
                 var keyBucketCacheKey = new KeyBucketCacheKey(bucketIndex, (byte) i);
                 var bytes = readPersistedKeyBucketCache.get(keyBucketCacheKey, fnLoadPersistedKeyBucketBytes);
 
                 // bytes can be null
-                var keyBucket = new KeyBucket(slot, bucketIndex, (byte) i, splitNumber, bytes);
+                var keyBucket = new KeyBucket(slot, bucketIndex, (byte) i, splitNumber, bytes, snowFlake);
                 keyBucket.initWithCompressStats(compressStats);
                 keyBuckets.add(keyBucket);
             } else {
@@ -464,7 +468,7 @@ public class KeyLoader implements OfStats {
                     var bytes = readPersistedKeyBucketCache.get(keyBucketCacheKey, fnLoadPersistedKeyBucketBytes);
 
                     // bytes can be null
-                    var keyBucket = new KeyBucket(slot, bucketIndex, (byte) i, splitNumber, bytes);
+                    var keyBucket = new KeyBucket(slot, bucketIndex, (byte) i, splitNumber, bytes, snowFlake);
                     keyBucket.initWithCompressStats(compressStats);
                     keyBuckets.add(keyBucket);
                 }
@@ -482,7 +486,8 @@ public class KeyLoader implements OfStats {
                 }
             }
 
-            if (sizeChanged) {
+            // key count for each key bucket, is not accurate
+            if (sizeChanged && !isSingleKeyUpdate) {
                 int keyCount = 0;
                 for (var keyBucket : keyBuckets) {
                     if (keyBucket != null) {
