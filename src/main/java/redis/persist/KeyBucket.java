@@ -192,9 +192,11 @@ public class KeyBucket {
             // fix this, Destination buffer is too small, todo
             decompressBytes = new byte[uncompressedLength];
 
+            int compressedSize = bufferInner.getInt();
+
             long begin = System.nanoTime();
             Zstd.decompressByteArray(decompressBytes, 0, uncompressedLength,
-                    compressedData, AFTER_COMPRESS_PREPEND_LENGTH, compressedData.length - AFTER_COMPRESS_PREPEND_LENGTH);
+                    compressedData, AFTER_COMPRESS_PREPEND_LENGTH, compressedSize);
             long costT = System.nanoTime() - begin;
 
             // stats
