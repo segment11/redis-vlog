@@ -1,5 +1,6 @@
 package redis.persist;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.luben.zstd.Zstd;
@@ -25,10 +26,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -42,7 +40,6 @@ public class OneSlot implements OfStats {
 
         this.slot = slot;
         this.snowFlake = snowFlake;
-        this.masterUuid = snowFlake.nextId();
         this.persistConfig = persistConfig;
 
         this.slotDir = new File(persistDir, "slot-" + slot);
@@ -52,11 +49,26 @@ public class OneSlot implements OfStats {
             }
         }
 
-        this.bigStringDir = new File(slotDir, "big-string");
+        this.bigStringDir = new File(slotDir, BIG_STRING_DIR_NAME);
         if (!bigStringDir.exists()) {
             if (!bigStringDir.mkdirs()) {
                 throw new IOException("Create big string dir error, slot: " + slot);
             }
+        }
+
+        var dynConfigFile = new File(slotDir, DYN_CONFIG_FILE_NAME);
+        if (!dynConfigFile.exists()) {
+            FileUtils.touch(dynConfigFile);
+            FileUtils.writeByteArrayToFile(dynConfigFile, "{}".getBytes());
+        }
+        this.dynConfig = new DynConfig(slot, dynConfigFile);
+
+        var masterUuidSaved = dynConfig.get("masterUuid");
+        if (masterUuidSaved != null) {
+            this.masterUuid = Long.parseLong(masterUuidSaved.toString());
+        } else {
+            this.masterUuid = snowFlake.nextId();
+            dynConfig.update("masterUuid", masterUuid);
         }
 
         int bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
@@ -109,7 +121,7 @@ public class OneSlot implements OfStats {
             }
         }
 
-        this.keyLoader = new KeyLoader(slot, slotDir, snowFlake);
+        this.keyLoader = new KeyLoader(slot, slotDir, snowFlake, ConfForSlot.global.confBucket.bucketsPerSlot);
 
         this.persistExecutors = new ExecutorService[batchNumber];
         for (int i = 0; i < batchNumber; i++) {
@@ -245,7 +257,43 @@ public class OneSlot implements OfStats {
     private final SnowFlake snowFlake;
     private final Config persistConfig;
     private final File slotDir;
+
+    private static final String BIG_STRING_DIR_NAME = "big-string";
     private final File bigStringDir;
+
+    private static final String DYN_CONFIG_FILE_NAME = "dyn-config.json";
+    private final DynConfig dynConfig;
+
+    static class DynConfig {
+        private final Logger log = LoggerFactory.getLogger(DynConfig.class);
+        private final byte slot;
+        private final File dynConfigFile;
+
+        private final HashMap<String, Object> data;
+
+        public Object get(String key) {
+            return data.get(key);
+        }
+
+        DynConfig(byte slot, File dynConfigFile) throws IOException {
+            this.slot = slot;
+            this.dynConfigFile = dynConfigFile;
+            // read json
+            var objectMapper = new ObjectMapper();
+            data = objectMapper.readValue(dynConfigFile, HashMap.class);
+
+            log.info("Init dyn config, data: {}, slot: {}", data, slot);
+        }
+
+        synchronized void update(String key, Object value) throws IOException {
+            data.put(key, value);
+            // write json
+            var objectMapper = new ObjectMapper();
+            objectMapper.writeValue(dynConfigFile, data);
+
+            log.info("Update dyn config, key: {}, value: {}, slot: {}", key, value, slot);
+        }
+    }
 
     public File getBigStringDir() {
         return bigStringDir;
@@ -701,6 +749,7 @@ public class OneSlot implements OfStats {
     }
 
     public void flush() {
+        // can truncate all batch for better perf, todo
         for (var wals : walsArray) {
             for (var wal : wals) {
                 wal.clear();

@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import redis.CompressStats;
 import redis.ConfForSlot;
 import redis.SnowFlake;
+import redis.repl.MetaKeyBucketSeq;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 
@@ -42,11 +43,12 @@ public class KeyLoader implements OfStats {
     // one split index one file
     static final int KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
-    public KeyLoader(byte slot, File slotDir, SnowFlake snowFlake) {
+    public KeyLoader(byte slot, File slotDir, SnowFlake snowFlake, int bucketsPerSlot) throws IOException {
         this.slot = slot;
-        this.bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
+        this.bucketsPerSlot = bucketsPerSlot;
         this.slotDir = slotDir;
         this.snowFlake = snowFlake;
+        this.metaKeyBucketSeq = new MetaKeyBucketSeq(slot, bucketsPerSlot, slotDir);
 
         this.getKeyBucketCountArray = new byte[bucketsPerSlot][];
         for (int i = 0; i < bucketsPerSlot; i++) {
@@ -58,6 +60,7 @@ public class KeyLoader implements OfStats {
     private final int bucketsPerSlot;
     private final File slotDir;
     private final SnowFlake snowFlake;
+    private final MetaKeyBucketSeq metaKeyBucketSeq;
 
     // need read write lock
     private KeyBucketSplitNumberMmapBuffer splitNumberMmapBuffer;
@@ -67,7 +70,7 @@ public class KeyLoader implements OfStats {
     // when 27, batch persist pvm, will slot lock and read all 27 key buckets for target bucket index, write perf bad
     // read perf ok, because only read one key bucket and lru cache
     // increase buckets per slot config value, then will split fewer times, but will cost more memory
-    static final byte MAX_SPLIT_NUMBER = 27;
+    public static final byte MAX_SPLIT_NUMBER = 27;
     static final int SPLIT_MULTI_STEP = 3;
 
     // index is bucket index
@@ -254,6 +257,10 @@ public class KeyLoader implements OfStats {
         if (keyBucketLastUpdateSizeMmapBuffer != null) {
             keyBucketLastUpdateSizeMmapBuffer.cleanUp();
         }
+
+        if (metaKeyBucketSeq != null) {
+            metaKeyBucketSeq.cleanUp();
+        }
     }
 
     private record KeyBucketCacheKey(int bucketIndex, byte splitIndex) {
@@ -422,6 +429,8 @@ public class KeyLoader implements OfStats {
             pwriteCostNanos += costT;
             pwriteCount++;
         }
+
+        metaKeyBucketSeq.writeSeq(bucketIndex, splitIndex, keyBucket.lastUpdateSeq);
     }
 
     public interface BucketLockCallback {

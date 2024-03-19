@@ -41,7 +41,7 @@ public class KeyBucket {
     int size;
     int cellCost;
 
-    private long lastUpdateSeq;
+    long lastUpdateSeq;
 
     private final SnowFlake snowFlake;
 
