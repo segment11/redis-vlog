@@ -76,7 +76,7 @@ public class DGroup extends BaseCommand {
             var keyHash = slotWithKeyHash.keyHash();
 
             var oneSlot = localPersist.oneSlot(slot);
-            var isRemoved = oneSlot.remove(bucketIndex, key, keyHash);
+            var isRemoved = oneSlot.remove(workerId, bucketIndex, key, keyHash);
             return isRemoved ? IntegerReply.REPLY_1 : IntegerReply.REPLY_0;
         }
 
@@ -95,7 +95,7 @@ public class DGroup extends BaseCommand {
             var oneSlot = localPersist.oneSlot(slot);
             var key = new String(keyBytes);
 
-            var isRemoved = oneSlot.remove(bucketIndex, key, keyHash);
+            var isRemoved = oneSlot.remove(workerId, bucketIndex, key, keyHash);
             if (isRemoved) {
                 nArr[0]++;
             }

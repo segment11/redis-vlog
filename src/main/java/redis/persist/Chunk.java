@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
+import redis.repl.MasterUpdateCallback;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 
@@ -96,6 +97,8 @@ public class Chunk implements OfStats {
     private int[] fdLengths;
     private ByteBuffer[] readSegmentBuffers;
     private long[] readSegmentBufferAddresses;
+
+    MasterUpdateCallback masterUpdateCallback;
 
     public Chunk(byte workerId, byte slot, byte batchIndex, byte requestWorkers,
                  SnowFlake snowFlake, File slotDir, OneSlot oneSlot, KeyLoader keyLoader) {
@@ -559,6 +562,7 @@ public class Chunk implements OfStats {
         int fd = fds[fdIndex];
 
         writeBuffer.rewind();
+        writeBuffer.mark();
 
         long offset = (long) segmentIndex * segmentLength;
         var fdOffset = (int) (offset % maxFdLength);
@@ -579,6 +583,13 @@ public class Chunk implements OfStats {
         if (fdLengths[fdIndex] < afterThisBatchOffset) {
             fdLengths[fdIndex] = afterThisBatchOffset;
             isNewAppend = true;
+        }
+
+        if (masterUpdateCallback != null) {
+            writeBuffer.reset();
+            var bytes = new byte[writeBuffer.remaining()];
+            writeBuffer.get(bytes);
+            masterUpdateCallback.onSegmentWrite(workerId, batchIndex, slot, segmentLength, segmentIndex, segmentCount, bytes, n);
         }
         return isNewAppend;
     }

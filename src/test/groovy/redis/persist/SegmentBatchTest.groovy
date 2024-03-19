@@ -20,7 +20,7 @@ class SegmentBatchTest extends Specification {
 
             def keyHash = KeyHash.hash(keyBytes)
 
-            list << new Wal.V((byte) 0, 0L, 0, keyHash, 0,
+            list << new Wal.V((byte) 0, 0L, 0, keyHash, 0, 0,
                     key, putValueBytes, putValueBytes.length)
         }
 

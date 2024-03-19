@@ -8,7 +8,10 @@ import redis.SnowFlake;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,8 +20,35 @@ import java.util.List;
 import static redis.CompressedValue.EXPIRE_NOW;
 
 public class Wal implements OfStats {
-    public record V(byte workerId, long seq, int bucketIndex, long keyHash, long expireAt, String key,
-                    byte[] cvEncoded, int cvEncodedLength) implements Serializable {
+    public static class V {
+        byte workerId;
+        long seq;
+        int bucketIndex;
+        long keyHash;
+        long expireAt;
+        // for repl async batch send to slave, if segment and key loader already persisted, ignore this batch wal values
+        long increasedBatchCount;
+        String key;
+        byte[] cvEncoded;
+        int cvEncodedLength;
+
+        public V(byte workerId, long seq, int bucketIndex, long keyHash, long expireAt, long increasedBatchCount,
+                 String key, byte[] cvEncoded, int cvEncodedLength) {
+            this.workerId = workerId;
+            this.seq = seq;
+            this.bucketIndex = bucketIndex;
+            this.keyHash = keyHash;
+            this.expireAt = expireAt;
+            this.increasedBatchCount = increasedBatchCount;
+            this.key = key;
+            this.cvEncoded = cvEncoded;
+            this.cvEncodedLength = cvEncodedLength;
+        }
+
+        int bucketIndex() {
+            return bucketIndex;
+        }
+
         @Override
         public String toString() {
             return "V{" +
@@ -27,6 +57,7 @@ public class Wal implements OfStats {
                     ", bucketIndex=" + bucketIndex +
                     ", key='" + key + '\'' +
                     ", expireAt=" + expireAt +
+                    ", increasedBatchCount=" + increasedBatchCount +
                     ", cvEncoded.length=" + cvEncoded.length +
                     '}';
         }
@@ -41,8 +72,8 @@ public class Wal implements OfStats {
             return 2 + key.length() + cvEncoded.length;
         }
 
-        // worker id + seq + bucket index + key hash + expire at long + key length + cv encoded length
-        private static final int ENCODED_HEADER_LENGTH = 1 + 8 + 4 + 8 + 8 + 1 + 2;
+        // worker id + seq + bucket index + key hash + expire at long + key length byte + cv encoded length short + increased batch count long
+        private static final int ENCODED_HEADER_LENGTH = 1 + 8 + 4 + 8 + 8 + 1 + 2 + 8;
 
         int encodeLength() {
             int vLength = ENCODED_HEADER_LENGTH + key.length() + cvEncoded.length;
@@ -61,6 +92,7 @@ public class Wal implements OfStats {
             buffer.putInt(bucketIndex);
             buffer.putLong(keyHash);
             buffer.putLong(expireAt);
+            buffer.putLong(increasedBatchCount);
             buffer.put((byte) key.length());
             buffer.put(key.getBytes());
             buffer.putShort((short) cvEncoded.length);
@@ -83,6 +115,7 @@ public class Wal implements OfStats {
             var bucketIndex = is.readInt();
             var keyHash = is.readLong();
             var expireAt = is.readLong();
+            var increasedBatchCount = is.readLong();
             var keyLength = is.readByte();
             var keyBytes = new byte[keyLength];
             is.read(keyBytes);
@@ -94,11 +127,11 @@ public class Wal implements OfStats {
                 throw new IllegalStateException("Invalid length: " + vLength);
             }
 
-            return new V(workerId, seq, bucketIndex, keyHash, expireAt, new String(keyBytes), cvEncoded, cvEncodedLength);
+            return new V(workerId, seq, bucketIndex, keyHash, expireAt, increasedBatchCount, new String(keyBytes), cvEncoded, cvEncodedLength);
         }
     }
 
-    public record PutResult(boolean needPersist, boolean isValueShort, V needPutV) {
+    record PutResult(boolean needPersist, boolean isValueShort, V needPutV, int offset) {
     }
 
     public Wal(byte slot, int groupIndex, byte batchIndex, RandomAccessFile walSharedFile, RandomAccessFile walSharedFileShortValue,
@@ -158,6 +191,8 @@ public class Wal implements OfStats {
     private final RandomAccessFile walSharedFile;
     private final RandomAccessFile walSharedFileShortValue;
     private final SnowFlake snowFlake;
+
+    long increasedBatchCount = 0;
 
     HashMap<String, V> delayToKeyBucketValues;
     HashMap<String, V> delayToKeyBucketShortValues;
@@ -265,17 +300,11 @@ public class Wal implements OfStats {
         return null;
     }
 
-    PutResult removeDelay(byte workerId, String key, int bucketIndex, long keyHash, long seq) {
+    PutResult removeDelay(byte workerId, String key, int bucketIndex, long keyHash) {
         byte[] encoded = {CompressedValue.SP_FLAG_DELETE_TMP};
-        var v = new V(workerId, snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, key, encoded, 1);
+        var v = new V(workerId, snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, increasedBatchCount, key, encoded, 1);
 
-        var old = delayToKeyBucketShortValues.put(key, v);
-        if (old != null && old.seq > seq) {
-            // ABA
-            delayToKeyBucketShortValues.put(key, old);
-            return new PutResult(false, true, null);
-        }
-        return new PutResult(delayToKeyBucketShortValues.size() >= ConfForSlot.global.confWal.shortValueSizeTrigger, true, null);
+        return put(true, key, v);
     }
 
     boolean remove(String key) {
@@ -293,11 +322,12 @@ public class Wal implements OfStats {
 
         var encodeLength = v.encodeLength();
 
+        int offset;
         synchronized (raf) {
             try {
-                var offset = positionArray[groupIndex];
+                offset = positionArray[groupIndex];
                 if (offset + encodeLength > ONE_GROUP_SIZE) {
-                    return new PutResult(true, isValueShort, v);
+                    return new PutResult(true, isValueShort, v, 0);
                 }
 
                 raf.seek(targetGroupBeginOffset + offset);
@@ -313,11 +343,13 @@ public class Wal implements OfStats {
             delayToKeyBucketShortValues.put(key, v);
             delayToKeyBucketValues.remove(key);
 
-            return new PutResult(delayToKeyBucketShortValues.size() >= ConfForSlot.global.confWal.shortValueSizeTrigger, true, null);
+            boolean needPersist = delayToKeyBucketShortValues.size() >= ConfForSlot.global.confWal.shortValueSizeTrigger;
+            return new PutResult(needPersist, true, null, needPersist ? 0 : offset);
         }
 
         delayToKeyBucketValues.put(key, v);
-        return new PutResult(delayToKeyBucketValues.size() >= ConfForSlot.global.confWal.valueSizeTrigger, false, null);
+        boolean needPersist = delayToKeyBucketValues.size() >= ConfForSlot.global.confWal.valueSizeTrigger;
+        return new PutResult(needPersist, false, null, needPersist ? 0 : offset);
     }
 
     @Override

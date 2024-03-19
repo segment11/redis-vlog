@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import redis.CompressStats;
 import redis.ConfForSlot;
 import redis.SnowFlake;
+import redis.repl.MasterUpdateCallback;
 import redis.repl.MetaKeyBucketSeq;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
@@ -108,6 +109,8 @@ public class KeyLoader implements OfStats {
     }
 
     private final Logger log = LoggerFactory.getLogger(KeyLoader.class);
+
+    MasterUpdateCallback masterUpdateCallback;
 
     public void init(LibC libC, Config persistConfig) throws IOException {
         this.libC = libC;
@@ -431,6 +434,9 @@ public class KeyLoader implements OfStats {
         }
 
         metaKeyBucketSeq.writeSeq(bucketIndex, splitIndex, keyBucket.lastUpdateSeq);
+        if (masterUpdateCallback != null) {
+            masterUpdateCallback.onKeyBucketUpdate(slot, bucketIndex, splitIndex, keyBucket.splitNumber, keyBucket.lastUpdateSeq, bytes);
+        }
     }
 
     public interface BucketLockCallback {
@@ -579,7 +585,7 @@ public class KeyLoader implements OfStats {
 
             for (int i = 0; i < shortValueList.size(); i++) {
                 var v = shortValueList.get(i);
-                int splitIndex = beforeSplitNumberArr[0] == 1 ? 0 : (int) Math.abs(v.keyHash() % beforeSplitNumberArr[0]);
+                int splitIndex = beforeSplitNumberArr[0] == 1 ? 0 : (int) Math.abs(v.keyHash % beforeSplitNumberArr[0]);
                 var keyBucket = beforeKeyBuckets.get(splitIndex);
 
                 boolean notSplit = beforeSplitNumberArr[0] == splitNumber;
@@ -587,7 +593,7 @@ public class KeyLoader implements OfStats {
 
                 // delete must not split
                 if (v.isDeleteFlag()) {
-                    if (keyBucket.del(v.key().getBytes(), v.keyHash()) && notSplit) {
+                    if (keyBucket.del(v.key.getBytes(), v.keyHash) && notSplit) {
                         putBackFlags[splitIndex] = true;
                     }
                     continue;
@@ -596,15 +602,16 @@ public class KeyLoader implements OfStats {
                 double loadFactor = keyBucket.loadFactor();
                 if (loadFactor > KeyBucket.HIGH_LOAD_FACTOR && afterPutKeyBuckets == null) {
                     // stop this batch, do next time
+                    // why ? I forget why I write this... sign, need test, todo
                     var leftShortValueList = new ArrayList<Wal.V>(shortValueList.size() - i);
                     leftShortValueList.addAll(shortValueList.subList(i, shortValueList.size()));
                     persistShortValueListBatch(bucketIndex, leftShortValueList);
                     break;
                 }
 
-                boolean isPut = keyBucket.put(v.key().getBytes(), v.keyHash(), v.cvEncoded(), afterPutKeyBuckets);
+                boolean isPut = keyBucket.put(v.key.getBytes(), v.keyHash, v.cvEncoded, afterPutKeyBuckets);
                 if (!isPut) {
-                    throw new IllegalStateException("Put short value error, key: " + v.key());
+                    throw new IllegalStateException("Put short value error, key: " + v.key);
                 }
 
                 splitOthersIfSplit(bucketIndex, keyBuckets, putBackFlags,

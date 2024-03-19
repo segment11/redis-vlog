@@ -100,7 +100,7 @@ public class ChunkMergeWorker implements OfStats {
             var key = cvWithKey.key;
 
             var bucketIndex = localPersist.bucketIndex(cv.getKeyHash());
-            list.add(new Wal.V(mergeWorkerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+            list.add(new Wal.V(mergeWorkerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(), 0,
                     key, cv.encode(), cv.compressedLength()));
 
             if (list.size() >= MERGING_CV_SIZE_THRESHOLD) {

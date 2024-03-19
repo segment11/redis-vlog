@@ -3,6 +3,7 @@ package redis;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.repl.MasterUpdateCallback;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 
@@ -24,6 +25,8 @@ public class DictMap implements OfStats {
     private DictMap() {
     }
 
+    MasterUpdateCallback masterUpdateCallback;
+
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     public Dict getDictBySeq(int seq) {
@@ -39,6 +42,10 @@ public class DictMap implements OfStats {
             fos.write(dict.encode(key));
         } catch (IOException e) {
             log.error("Write dict to file error", e);
+        }
+
+        if (masterUpdateCallback != null) {
+            masterUpdateCallback.onDictCreate(key, dict);
         }
 
         cacheDictBySeq.put(dict.seq, dict);

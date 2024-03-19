@@ -16,6 +16,7 @@ import org.checkerframework.checker.nullness.qual.PolyNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
+import redis.repl.MasterUpdateCallback;
 import redis.repl.ReplPair;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
@@ -314,6 +315,8 @@ public class OneSlot implements OfStats {
     private final RandomAccessFile[] rafShortValueArray;
 
     final KeyLoader keyLoader;
+
+    MasterUpdateCallback masterUpdateCallback;
 
     public long getKeyCount() {
         var r = keyLoader.getKeyCount();
@@ -634,29 +637,31 @@ public class OneSlot implements OfStats {
         return buf;
     }
 
-    public boolean remove(int bucketIndex, String key, long keyHash) {
+    public boolean remove(byte workerId, int bucketIndex, String key, long keyHash) {
         boolean[] isDeletedArr = {false};
         keyLoader.bucketLock(bucketIndex, () -> {
-            var isRemovedFromWal = removeFromWal(key, bucketIndex);
+            var isRemovedFromWal = removeFromWal(workerId, bucketIndex, key, keyHash);
             isDeletedArr[0] = isRemovedFromWal || keyLoader.remove(bucketIndex, key.getBytes(), keyHash);
         });
         return isDeletedArr[0];
     }
 
     public void removeDelay(byte workerId, String key, int bucketIndex, long keyHash) {
-        removeDelay(workerId, key, bucketIndex, keyHash, Long.MAX_VALUE);
-    }
-
-    public void removeDelay(byte workerId, String key, int bucketIndex, long keyHash, long seq) {
         var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
-        var putResult = currentWalArray[walGroupIndex].removeDelay(workerId, key, bucketIndex, keyHash, seq);
+        var currentWal = currentWalArray[walGroupIndex];
+        var putResult = currentWal.removeDelay(workerId, key, bucketIndex, keyHash);
 
         if (putResult.needPersist()) {
-            doPersist(walGroupIndex, key, putResult);
+            doPersist(walGroupIndex, key, bucketIndex, putResult);
+        } else {
+            if (masterUpdateCallback != null) {
+                masterUpdateCallback.onWalAppend(slot, bucketIndex, currentWal.batchIndex,
+                        putResult.isValueShort(), putResult.needPutV(), putResult.offset());
+            }
         }
     }
 
-    private boolean removeFromWal(String key, int bucketIndex) {
+    private boolean removeFromWal(byte workerId, int bucketIndex, String key, long keyHash) {
         var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
 
         boolean isRemoved = false;
@@ -665,6 +670,10 @@ public class OneSlot implements OfStats {
             if (isRemovedThisWal) {
                 isRemoved = true;
             }
+        }
+
+        if (isRemoved) {
+            removeDelay(workerId, key, bucketIndex, keyHash);
         }
         return isRemoved;
     }
@@ -679,6 +688,9 @@ public class OneSlot implements OfStats {
                     ", t=" + currentThreadId + ", t2=" + threadIdProtected);
         }
 
+        var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
+        var currentWal = currentWalArray[walGroupIndex];
+
         byte[] cvEncoded;
         boolean isValueShort = cv.noExpire() && (cv.isNumber() || cv.isShortString());
         if (isValueShort) {
@@ -690,39 +702,49 @@ public class OneSlot implements OfStats {
         } else {
             cvEncoded = cv.encode();
         }
-        var v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+        var v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(), currentWal.increasedBatchCount,
                 key, cvEncoded, cv.compressedLength());
 
         // for big string, use single file
         boolean isPersistLengthOverSegmentLength = v.persistLength() + SEGMENT_HEADER_LENGTH > segmentLength;
         if (isPersistLengthOverSegmentLength || key.startsWith("kerry-test-big-string-")) {
             var uuid = snowFlake.nextId();
+            var bytes = cv.getCompressedData();
+
             var uuidAsFileName = String.valueOf(uuid);
             var file = new File(bigStringDir, uuidAsFileName);
             try {
-                FileUtils.writeByteArrayToFile(file, cv.getCompressedData());
+                FileUtils.writeByteArrayToFile(file, bytes);
             } catch (IOException e) {
                 throw new RuntimeException("Write big string error, key=" + key, e);
             }
 
+            if (masterUpdateCallback != null) {
+                masterUpdateCallback.onBigStringFileWrite(slot, uuid, bytes);
+            }
+
             // encode again
             cvEncoded = cv.encodeAsBigStringMeta(uuid);
-            v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+            v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(), currentWal.increasedBatchCount,
                     key, cvEncoded, cv.compressedLength());
 
             isValueShort = true;
         }
 
-        var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
-        var putResult = currentWalArray[walGroupIndex].put(isValueShort, key, v);
+        var putResult = currentWal.put(isValueShort, key, v);
         if (!putResult.needPersist()) {
+            if (masterUpdateCallback != null) {
+                masterUpdateCallback.onWalAppend(slot, bucketIndex, currentWal.batchIndex,
+                        isValueShort, v, putResult.offset());
+            }
+
             return;
         }
 
-        doPersist(walGroupIndex, key, putResult);
+        doPersist(walGroupIndex, key, bucketIndex, putResult);
     }
 
-    private void doPersist(int walGroupIndex, String key, Wal.PutResult putResult) {
+    private void doPersist(int walGroupIndex, String key, int bucketIndex, Wal.PutResult putResult) {
         var beginT = System.nanoTime();
         try {
             var nextAvailableWal = walQueueArray[walGroupIndex].take();
@@ -736,8 +758,17 @@ public class OneSlot implements OfStats {
             } else {
                 nextAvailableWal.clearValues();
             }
-            if (putResult.needPutV() != null) {
-                nextAvailableWal.put(putResult.isValueShort(), key, putResult.needPutV());
+            nextAvailableWal.increasedBatchCount++;
+
+            var needPutV = putResult.needPutV();
+            if (needPutV != null) {
+                needPutV.increasedBatchCount = nextAvailableWal.increasedBatchCount;
+                nextAvailableWal.put(putResult.isValueShort(), key, needPutV);
+
+                if (masterUpdateCallback != null) {
+                    masterUpdateCallback.onWalAppend(slot, bucketIndex, nextAvailableWal.batchIndex,
+                            putResult.isValueShort(), needPutV, putResult.offset());
+                }
             }
 
             submitPersistTask(putResult.isValueShort(), walGroupIndex, currentWalArray[walGroupIndex]);
@@ -957,7 +988,7 @@ public class OneSlot implements OfStats {
                     list.sort(Comparator.comparingInt(Wal.V::bucketIndex));
 
                     var batchIndex = targetWal.batchIndex;
-                    var workerId = list.get(0).workerId();
+                    var workerId = list.get(0).workerId;
                     var chunk = chunksArray[workerId][batchIndex];
 
                     var needMergeSegmentIndexList = chunk.persist(list);
