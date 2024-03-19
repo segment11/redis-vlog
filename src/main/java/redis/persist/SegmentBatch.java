@@ -44,11 +44,12 @@ public class SegmentBatch {
         this.compressStats = new CompressStats("w-" + workerId + "-s-" + slot);
     }
 
-    private record SegmentCompressedBytesWithIndex(byte[] compressedBytes, int segmentIndex) {
+    private record SegmentCompressedBytesWithIndex(byte[] compressedBytes, int segmentIndex, long segmentSeq) {
         @Override
         public String toString() {
             return "SegmentCompressedBytesWithIndex{" +
                     "segmentIndex=" + segmentIndex +
+                    ", segmentSeq=" + segmentSeq +
                     ", compressedBytes.length=" + compressedBytes.length +
                     '}';
         }
@@ -145,7 +146,7 @@ public class SegmentBatch {
         return r;
     }
 
-    public ArrayList<SegmentTightBytesWithLengthAndSegmentIndex> split(ArrayList<Wal.V> list, int[] nextNSegmentIndex, ArrayList<PersistValueMeta> returnPvmList) {
+    public ArrayList<SegmentTightBytesWithLengthAndSegmentIndex> splitAndTight(ArrayList<Wal.V> list, int[] nextNSegmentIndex, ArrayList<PersistValueMeta> returnPvmList) {
         ArrayList<SegmentCompressedBytesWithIndex> result = new ArrayList<>(100);
         ArrayList<Wal.V> onceList = new ArrayList<>(100);
 
@@ -261,6 +262,6 @@ public class SegmentBatch {
         buffer.clear();
         Arrays.fill(bytes, (byte) 0);
 
-        return new SegmentCompressedBytesWithIndex(compressedBytes, segmentIndex);
+        return new SegmentCompressedBytesWithIndex(compressedBytes, segmentIndex, segmentSeq);
     }
 }

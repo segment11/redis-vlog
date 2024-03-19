@@ -389,7 +389,7 @@ public class Chunk implements OfStats {
         boolean isNewAppendAfterBatch = true;
 
         ArrayList<PersistValueMeta> pvmList = new ArrayList<>();
-        var segments = segmentBatch.split(list, nextNSegmentIndex, pvmList);
+        var segments = segmentBatch.splitAndTight(list, nextNSegmentIndex, pvmList);
         if (segments == null) {
             return null;
         }
