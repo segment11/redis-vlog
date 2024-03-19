@@ -7,13 +7,14 @@ import redis.ConfForSlot;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class ChunkSegmentFlagMmapBuffer {
     private final File file;
     private final byte allWorkers;
-    // flag byte + merge worker id byte
-    private static final int SEGMENT_FLAG_BYTES_LENGTH = 1 + 1;
+    // flag byte + merge worker id byte + segment seq long
+    static final int SEGMENT_FLAG_BYTES_LENGTH = 1 + 1 + 8;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -54,7 +55,7 @@ public class ChunkSegmentFlagMmapBuffer {
     }
 
     public interface IterateCallBack {
-        void call(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte flagWorkerId);
+        void call(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte mergeWorkerId, long segmentSeq);
     }
 
     public void iterate(IterateCallBack callBack) {
@@ -64,17 +65,22 @@ public class ChunkSegmentFlagMmapBuffer {
             var segmentIndex = (i % oneBatchCapacity) / SEGMENT_FLAG_BYTES_LENGTH;
 
             var flag = mmapBuffer.getByte(i);
-            var flagWorkerId = mmapBuffer.getByte(i + 1);
+            var mergeWorkerId = mmapBuffer.getByte(i + 1);
+            var segmentSeq = mmapBuffer.getLong(i + 2);
 
-            callBack.call(workerId, (byte) batchIndex, segmentIndex, flag, flagWorkerId);
+            callBack.call(workerId, (byte) batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
         }
     }
 
-    public void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte mergeWorkerId) {
+    public void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte mergeWorkerId, long segmentSeq) {
         var offset = workerId * oneWorkerCapacity +
                 batchIndex * oneBatchCapacity +
                 segmentIndex * SEGMENT_FLAG_BYTES_LENGTH;
-        mmapBuffer.write(offset, new byte[]{flag, mergeWorkerId}, true);
+        var bytes = new byte[SEGMENT_FLAG_BYTES_LENGTH];
+        bytes[0] = flag;
+        bytes[1] = mergeWorkerId;
+        ByteBuffer.wrap(bytes, 2, 8).putLong(segmentSeq);
+        mmapBuffer.write(offset, bytes, true);
     }
 
     public void setSegmentMergeFlagBatch(byte workerId, byte batchIndex, int segmentIndex, byte[] bytes) {
@@ -88,7 +94,7 @@ public class ChunkSegmentFlagMmapBuffer {
         var offset = workerId * oneWorkerCapacity +
                 batchIndex * oneBatchCapacity +
                 segmentIndex * SEGMENT_FLAG_BYTES_LENGTH;
-        return new byte[]{mmapBuffer.getByte(offset), mmapBuffer.getByte(offset + 1)};
+        return mmapBuffer.getBytes(offset, SEGMENT_FLAG_BYTES_LENGTH);
     }
 
     public void flush() {

@@ -135,7 +135,7 @@ public class ChunkMergeWorker implements OfStats {
                 }
 
                 // can reuse this chunk by segment index
-                oneSlot.setSegmentMergeFlag(one.workerId, one.batchIndex, one.index, SEGMENT_FLAG_MERGED_AND_PERSISTED, this.mergeWorkerId);
+                oneSlot.setSegmentMergeFlag(one.workerId, one.batchIndex, one.index, SEGMENT_FLAG_MERGED_AND_PERSISTED, this.mergeWorkerId, 0L);
                 it.remove();
 
                 lastPersistedSegmentIndex = one.index;
@@ -350,6 +350,7 @@ public class ChunkMergeWorker implements OfStats {
         byte batchIndex;
         ArrayList<Integer> needMergeSegmentIndexList;
         ChunkMergeWorker mergeWorker;
+        SnowFlake snowFlake;
         int validCvCountAfterRun = 0;
         int invalidCvCountAfterRun = 0;
 
@@ -497,7 +498,7 @@ public class ChunkMergeWorker implements OfStats {
                     continue;
                 }
 
-                oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, Chunk.SEGMENT_FLAG_MERGING, mergeWorker.mergeWorkerId);
+                oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, Chunk.SEGMENT_FLAG_MERGING, mergeWorker.mergeWorkerId, snowFlake.nextId());
                 if (doLog) {
                     mergeWorker.log.info("Set segment flag to merging, w={}, s={}, b={}, i={}, mw={}", workerId, slot, batchIndex, segmentIndex,
                             mergeWorker.mergeWorkerId);
@@ -598,7 +599,7 @@ public class ChunkMergeWorker implements OfStats {
             boolean isPersisted = mergeWorker.persistMergedCvList(slot, batchIndex);
             if (isPersisted) {
                 for (var segmentIndex : needMergeSegmentIndexList) {
-                    oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, mergeWorker.mergeWorkerId);
+                    oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, mergeWorker.mergeWorkerId, 0L);
 
                     if (doLog) {
                         var validCvCountRecord = validCvCountRecordList.get(segmentIndex - firstSegmentIndex);
@@ -610,7 +611,7 @@ public class ChunkMergeWorker implements OfStats {
                 for (var segmentIndex : needMergeSegmentIndexList) {
                     var validCvCountRecord = validCvCountRecordList.get(segmentIndex - firstSegmentIndex);
                     if (hasValidCvSegmentIndexSet.contains(segmentIndex)) {
-                        oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, Chunk.SEGMENT_FLAG_MERGED, mergeWorker.mergeWorkerId);
+                        oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, Chunk.SEGMENT_FLAG_MERGED, mergeWorker.mergeWorkerId, snowFlake.nextId());
 
                         if (doLog) {
                             mergeWorker.log.info("Set segment flag to merged, w={}, s={}, b={}, i={}, mw={}, valid cv count={}, invalid cv count={}",
@@ -620,7 +621,7 @@ public class ChunkMergeWorker implements OfStats {
                         // add to merged set
                         mergeWorker.mergedSegmentSets[batchIndex].add(new MergedSegment(workerId, slot, batchIndex, segmentIndex, validCvCountRecord.validCvCount));
                     } else {
-                        oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, mergeWorker.mergeWorkerId);
+                        oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, mergeWorker.mergeWorkerId, 0L);
 
                         if (doLog) {
                             mergeWorker.log.info("Set segment flag to persisted, w={}, s={}, b={}, i={}, mw={}, valid cv count={}, invalid cv count={}",

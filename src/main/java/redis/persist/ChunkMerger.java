@@ -32,6 +32,7 @@ public class ChunkMerger implements OfStats {
     private final byte requestWorkers;
     private final byte mergeWorkers;
     private final byte topMergeWorkers;
+    private final SnowFlake snowFlake;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -78,6 +79,7 @@ public class ChunkMerger implements OfStats {
         this.requestWorkers = requestWorkers;
         this.mergeWorkers = mergeWorkers;
         this.topMergeWorkers = topMergeWorkers;
+        this.snowFlake = snowFlake;
 
         this.chunkMergeWorkers = new ChunkMergeWorker[mergeWorkers];
         for (int i = 0; i < mergeWorkers; i++) {
@@ -231,6 +233,7 @@ public class ChunkMerger implements OfStats {
         job.slot = slot;
         job.batchIndex = batchIndex;
         job.needMergeSegmentIndexList = needMergeSegmentIndexList;
+        job.snowFlake = snowFlake;
 
         // begin with 0
         if (workerId < requestWorkers) {

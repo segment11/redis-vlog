@@ -324,7 +324,7 @@ public class Chunk implements OfStats {
 
             if (flag == SEGMENT_FLAG_MERGED_AND_PERSISTED || flag == SEGMENT_FLAG_REUSE_AND_PERSISTED) {
                 if (updateFlag) {
-                    oneSlot.setSegmentMergeFlag(workerId, batchIndex, targetIndex, SEGMENT_FLAG_REUSE, workerId);
+                    oneSlot.setSegmentMergeFlag(workerId, batchIndex, targetIndex, SEGMENT_FLAG_REUSE, workerId, 0L);
                 }
                 continue;
             }
@@ -339,12 +339,13 @@ public class Chunk implements OfStats {
     // for seq generation
     final SnowFlake snowFlake;
 
-    public record SegmentFlag(byte flag, byte workerId) {
+    public record SegmentFlag(byte flag, byte workerId, long segmentSeq) {
         @Override
         public String toString() {
             return "SegmentFlag{" +
-                    "f=" + flag +
-                    ", w=" + workerId +
+                    "flag=" + flag +
+                    ", workerId=" + workerId +
+                    ", segmentSeq=" + segmentSeq +
                     '}';
         }
     }
@@ -394,8 +395,12 @@ public class Chunk implements OfStats {
             return null;
         }
 
+        ArrayList<Long> segmentSeqListAll = new ArrayList<>();
+        for (var segment : segments) {
+            segmentSeqListAll.add(segment.segmentSeq());
+        }
         oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, segments.size(),
-                SEGMENT_FLAG_REUSE, workerId);
+                SEGMENT_FLAG_REUSE, workerId, segmentSeqListAll);
 
         if (segments.size() < BATCH_SEGMENT_COUNT_FOR_PWRITE) {
             for (var segment : segments) {
@@ -407,7 +412,7 @@ public class Chunk implements OfStats {
 
                 // need set segment flag so that merge worker can merge
                 oneSlot.setSegmentMergeFlag(workerId, batchIndex, segment.segmentIndex(),
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId);
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segment.segmentSeq());
 
                 segmentIndex++;
             }
@@ -418,6 +423,7 @@ public class Chunk implements OfStats {
 
             for (int i = 0; i < batchCount; i++) {
                 writePageBufferB.clear();
+                ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
                 for (int j = 0; j < BATCH_SEGMENT_COUNT_FOR_PWRITE; j++) {
                     var segment = segments.get(i * BATCH_SEGMENT_COUNT_FOR_PWRITE + j);
                     var tightBytesWithLength = segment.tightBytesWithLength();
@@ -427,6 +433,8 @@ public class Chunk implements OfStats {
                     if (tightBytesWithLength.length < segmentLength) {
                         writePageBufferB.position(writePageBufferB.position() + segmentLength - tightBytesWithLength.length);
                     }
+
+                    segmentSeqListSubBatch.add(segment.segmentSeq());
                 }
 
                 boolean isNewAppend = writeSegments(writePageBufferB, BATCH_SEGMENT_COUNT_FOR_PWRITE);
@@ -434,7 +442,7 @@ public class Chunk implements OfStats {
 
                 // need set segment flag so that merge worker can merge
                 oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, BATCH_SEGMENT_COUNT_FOR_PWRITE,
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId);
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqListSubBatch);
 
                 segmentIndex += BATCH_SEGMENT_COUNT_FOR_PWRITE;
             }
@@ -449,7 +457,7 @@ public class Chunk implements OfStats {
 
                 // need set segment flag so that merge worker can merge
                 oneSlot.setSegmentMergeFlag(workerId, batchIndex, segment.segmentIndex(),
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId);
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segment.segmentSeq());
 
                 segmentIndex++;
             }

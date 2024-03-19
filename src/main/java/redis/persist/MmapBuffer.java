@@ -81,6 +81,17 @@ public class MmapBuffer {
         return buffer.getInt(offset);
     }
 
+    public long getLong(int offset) {
+        return buffer.getLong(offset);
+    }
+
+    public byte[] getBytes(int offset, int length) {
+        var bytes = new byte[length];
+        buffer.position(offset);
+        buffer.get(bytes);
+        return bytes;
+    }
+
     public void write(int offset, byte[] data, boolean isSync) {
         buffer.position(offset);
         buffer.put(data);

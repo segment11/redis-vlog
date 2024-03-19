@@ -56,12 +56,13 @@ public class SegmentBatch {
     }
 
     public record SegmentTightBytesWithLengthAndSegmentIndex(byte[] tightBytesWithLength, int segmentIndex,
-                                                             byte blockNumber) {
+                                                             byte blockNumber, long segmentSeq) {
         @Override
         public String toString() {
             return "SegmentTightBytesWithLengthAndSegmentIndex{" +
                     "segmentIndex=" + segmentIndex +
                     ", blockNumber=" + blockNumber +
+                    ", segmentSeq=" + segmentSeq +
                     ", tightBytesWithLength.length=" + tightBytesWithLength.length +
                     '}';
         }
@@ -69,8 +70,8 @@ public class SegmentBatch {
 
     // zstd compress ratio usually < 0.25, max 4 blocks tight to one segment
     static final int MAX_BLOCK_NUMBER = 4;
-    // each sub block offset / length use one short, 4 bytes for total bytes length
-    private static final int HEADER_LENGTH = 4 + MAX_BLOCK_NUMBER * (2 + 2);
+    // seq long + total bytes length int + each sub block * (offset short / length short)
+    private static final int HEADER_LENGTH = 8 + 4 + MAX_BLOCK_NUMBER * (2 + 2);
 
     private SegmentTightBytesWithLengthAndSegmentIndex tightSegments(int afterTightSegmentIndex, ArrayList<SegmentCompressedBytesWithIndex> onceList, ArrayList<PersistValueMeta> returnPvmList) {
         for (int j = 0; j < onceList.size(); j++) {
@@ -90,9 +91,10 @@ public class SegmentBatch {
             totalBytesN += s.compressedBytes.length;
         }
 
-        // first 4 bytes is total bytes length
         var tightBytesWithLength = new byte[totalBytesN];
         var buffer = ByteBuffer.wrap(tightBytesWithLength);
+        var segmentSeq = snowFlake.nextId();
+        buffer.putLong(segmentSeq);
         buffer.putInt(totalBytesN);
 
         int offset = HEADER_LENGTH;
@@ -111,7 +113,7 @@ public class SegmentBatch {
             offset += length;
         }
 
-        return new SegmentTightBytesWithLengthAndSegmentIndex(tightBytesWithLength, afterTightSegmentIndex, (byte) onceList.size());
+        return new SegmentTightBytesWithLengthAndSegmentIndex(tightBytesWithLength, afterTightSegmentIndex, (byte) onceList.size(), segmentSeq);
     }
 
     private ArrayList<SegmentTightBytesWithLengthAndSegmentIndex> tight(ArrayList<SegmentCompressedBytesWithIndex> segments, ArrayList<PersistValueMeta> returnPvmList) {

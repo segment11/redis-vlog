@@ -832,7 +832,7 @@ public class OneSlot implements OfStats {
                 log.warn("Segment can not write, w={}, s={}, b={}, i={}", chunk.workerId, slot, chunk.batchIndex, chunk.segmentIndex);
 
                 // set persisted flag, for next loop reuse
-                setSegmentMergeFlag(chunk.workerId, chunk.batchIndex, chunk.segmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, Chunk.MAIN_WORKER_ID);
+                setSegmentMergeFlag(chunk.workerId, chunk.batchIndex, chunk.segmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, Chunk.MAIN_WORKER_ID, snowFlake.nextId());
                 log.warn("Reset persisted when init");
 
                 chunk.moveIndexNext(1);
@@ -1042,18 +1042,23 @@ public class OneSlot implements OfStats {
         if (bytes == null) {
             return null;
         }
-        return new Chunk.SegmentFlag(bytes[0], bytes[1]);
+        var buffer = ByteBuffer.wrap(bytes);
+        return new Chunk.SegmentFlag(buffer.get(), buffer.get(), buffer.getLong());
     }
 
-    public void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte mergeWorkerId) {
-        chunkSegmentFlagMmapBuffer.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, flag, mergeWorkerId);
+    public void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex,
+                                    byte flag, byte mergeWorkerId, long segmentSeq) {
+        chunkSegmentFlagMmapBuffer.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
     }
 
-    public void setSegmentMergeFlagBatch(byte workerId, byte batchIndex, int segmentIndex, int segmentCount, byte flag, byte mergeWorkerId) {
-        var bytes = new byte[segmentCount * 2];
+    public void setSegmentMergeFlagBatch(byte workerId, byte batchIndex, int segmentIndex, int segmentCount,
+                                         byte flag, byte mergeWorkerId, ArrayList<Long> segmentSeqList) {
+        var bytes = new byte[segmentCount * ChunkSegmentFlagMmapBuffer.SEGMENT_FLAG_BYTES_LENGTH];
+        var buffer = ByteBuffer.wrap(bytes);
         for (int i = 0; i < segmentCount; i++) {
-            bytes[i * 2] = flag;
-            bytes[i * 2 + 1] = mergeWorkerId;
+            buffer.put(i * 2, flag);
+            buffer.put(i * 2 + 1, mergeWorkerId);
+            buffer.putLong(i * 2 + 2, segmentSeqList.get(i));
         }
         chunkSegmentFlagMmapBuffer.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, bytes);
     }
@@ -1066,7 +1071,7 @@ public class OneSlot implements OfStats {
             }
         }
 
-        this.chunkSegmentFlagMmapBuffer.iterate((workerId, batchIndex, segmentIndex, flag, flagWorkerId) -> {
+        this.chunkSegmentFlagMmapBuffer.iterate((workerId, batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq) -> {
             if (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGING) {
                 log.warn("Segment not persisted after merging, w={}, s={}, b={}, i={}, flag={}", workerId, slot, batchIndex, segmentIndex, flag);
                 needMergeSegmentIndexListArray[workerId][batchIndex].add(segmentIndex);
