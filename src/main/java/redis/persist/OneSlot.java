@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
 import redis.repl.MasterUpdateCallback;
+import redis.repl.NoopMasterUpdateCallback;
 import redis.repl.ReplPair;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
@@ -122,7 +123,11 @@ public class OneSlot implements OfStats {
             }
         }
 
-        this.keyLoader = new KeyLoader(slot, slotDir, snowFlake, ConfForSlot.global.confBucket.bucketsPerSlot);
+        // todo, change repl master update callback
+        this.masterUpdateCallback = new NoopMasterUpdateCallback();
+        this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, masterUpdateCallback);
+
+        DictMap.getInstance().setMasterUpdateCallback(masterUpdateCallback);
 
         this.persistExecutors = new ExecutorService[batchNumber];
         for (int i = 0; i < batchNumber; i++) {
@@ -316,7 +321,7 @@ public class OneSlot implements OfStats {
 
     final KeyLoader keyLoader;
 
-    MasterUpdateCallback masterUpdateCallback;
+    private final MasterUpdateCallback masterUpdateCallback;
 
     public long getKeyCount() {
         var r = keyLoader.getKeyCount();
@@ -837,7 +842,7 @@ public class OneSlot implements OfStats {
 
             var workerId = (byte) i;
             for (int j = 0; j < batchNumber; j++) {
-                var chunk = new Chunk(workerId, slot, (byte) j, requestWorkers, snowFlake, slotDir, this, keyLoader);
+                var chunk = new Chunk(workerId, slot, (byte) j, requestWorkers, snowFlake, slotDir, this, keyLoader, masterUpdateCallback);
                 chunks[j] = chunk;
 
                 initChunk(chunk);
