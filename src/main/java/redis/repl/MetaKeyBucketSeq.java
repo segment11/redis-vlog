@@ -15,6 +15,7 @@ public class MetaKeyBucketSeq {
 
     private final byte slot;
     private final int bucketsPerSlot;
+    private final int oneSplitCapacity;
     private final RandomAccessFile raf;
 
     private static final int BATCH_SIZE = Long.BYTES * MAX_SPLIT_NUMBER * 1024;
@@ -23,6 +24,7 @@ public class MetaKeyBucketSeq {
     public MetaKeyBucketSeq(byte slot, int bucketsPerSlot, File slotDir) throws IOException {
         this.slot = slot;
         this.bucketsPerSlot = bucketsPerSlot;
+        this.oneSplitCapacity = bucketsPerSlot * Long.BYTES;
 
         var file = new File(slotDir, META_KEY_BUCKET_SEQ_FILE);
         if (!file.exists()) {
@@ -38,7 +40,7 @@ public class MetaKeyBucketSeq {
 
     public synchronized void writeSeq(int bucketIndex, byte splitIndex, long seq) {
         try {
-            raf.seek((long) splitIndex * bucketIndex * Long.BYTES);
+            raf.seek((long) splitIndex * oneSplitCapacity + bucketIndex * Long.BYTES);
             raf.writeLong(seq);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -53,7 +55,7 @@ public class MetaKeyBucketSeq {
         }
 
         try {
-            raf.seek((long) splitIndex * beginBucketIndex * Long.BYTES);
+            raf.seek((long) splitIndex * oneSplitCapacity + beginBucketIndex * Long.BYTES);
             raf.write(bytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -62,7 +64,7 @@ public class MetaKeyBucketSeq {
 
     public synchronized long readSeq(int bucketIndex, byte splitIndex) {
         try {
-            raf.seek((long) splitIndex * bucketIndex * Long.BYTES);
+            raf.seek((long) splitIndex * oneSplitCapacity + bucketIndex * Long.BYTES);
             return raf.readLong();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -75,7 +77,7 @@ public class MetaKeyBucketSeq {
     public synchronized ArrayList<OneSeq> readSeqBatch(int beginBucketIndex, byte splitIndex, int size) {
         var bytes = new byte[size * Long.BYTES];
         try {
-            raf.seek((long) splitIndex * beginBucketIndex * Long.BYTES);
+            raf.seek((long) splitIndex * oneSplitCapacity + beginBucketIndex * Long.BYTES);
             raf.read(bytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
