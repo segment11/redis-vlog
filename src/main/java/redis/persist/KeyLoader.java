@@ -44,11 +44,12 @@ public class KeyLoader implements OfStats {
     // one split index one file
     static final int KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
-    public KeyLoader(byte slot, File slotDir, SnowFlake snowFlake, int bucketsPerSlot) throws IOException {
+    public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake, MasterUpdateCallback masterUpdateCallback) throws IOException {
         this.slot = slot;
         this.bucketsPerSlot = bucketsPerSlot;
         this.slotDir = slotDir;
         this.snowFlake = snowFlake;
+        this.masterUpdateCallback = masterUpdateCallback;
         this.metaKeyBucketSeq = new MetaKeyBucketSeq(slot, bucketsPerSlot, slotDir);
 
         this.getKeyBucketCountArray = new byte[bucketsPerSlot][];
@@ -61,6 +62,7 @@ public class KeyLoader implements OfStats {
     private final int bucketsPerSlot;
     private final File slotDir;
     private final SnowFlake snowFlake;
+    private final MasterUpdateCallback masterUpdateCallback;
     private final MetaKeyBucketSeq metaKeyBucketSeq;
 
     // need read write lock
@@ -109,8 +111,6 @@ public class KeyLoader implements OfStats {
     }
 
     private final Logger log = LoggerFactory.getLogger(KeyLoader.class);
-
-    MasterUpdateCallback masterUpdateCallback;
 
     public void init(LibC libC, Config persistConfig) throws IOException {
         this.libC = libC;

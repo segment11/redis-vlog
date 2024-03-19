@@ -25,7 +25,13 @@ public class DictMap implements OfStats {
     private DictMap() {
     }
 
-    MasterUpdateCallback masterUpdateCallback;
+    private MasterUpdateCallback masterUpdateCallback;
+
+    public void setMasterUpdateCallback(MasterUpdateCallback masterUpdateCallback) {
+        if (this.masterUpdateCallback == null) {
+            this.masterUpdateCallback = masterUpdateCallback;
+        }
+    }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 

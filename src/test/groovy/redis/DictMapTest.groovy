@@ -7,13 +7,13 @@ class DictMapTest extends Specification {
 
     def 'Init'() {
         given:
-        def compressHandler = DictMap.instance
+        def dictMap = DictMap.instance
 
         def dirFile = new File('/tmp/redis-vlog-test-dir')
         FileUtils.forceMkdir(dirFile)
 
         and:
-        compressHandler.initDictMap(dirFile)
+        dictMap.initDictMap(dirFile)
 
         var dict = new Dict()
         dict.dictBytes = "test".getBytes()
@@ -21,13 +21,13 @@ class DictMapTest extends Specification {
         dict.createdTime = System.currentTimeMillis()
 
         when:
-        compressHandler.putDict("test", dict)
+        dictMap.putDict("test", dict)
         then:
-        compressHandler.getDict("test").dictBytes == "test".getBytes()
-        compressHandler.getDictBySeq(1).dictBytes == "test".getBytes()
+        dictMap.getDict("test").dictBytes == "test".getBytes()
+        dictMap.getDictBySeq(1).dictBytes == "test".getBytes()
 
         cleanup:
 //        compressHandler.clearAll();
-        compressHandler.close();
+        dictMap.close();
     }
 }

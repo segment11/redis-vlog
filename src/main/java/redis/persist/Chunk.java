@@ -98,10 +98,10 @@ public class Chunk implements OfStats {
     private ByteBuffer[] readSegmentBuffers;
     private long[] readSegmentBufferAddresses;
 
-    MasterUpdateCallback masterUpdateCallback;
+    private final MasterUpdateCallback masterUpdateCallback;
 
     public Chunk(byte workerId, byte slot, byte batchIndex, byte requestWorkers,
-                 SnowFlake snowFlake, File slotDir, OneSlot oneSlot, KeyLoader keyLoader) {
+                 SnowFlake snowFlake, File slotDir, OneSlot oneSlot, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {
         this.maxSegmentNumberPerFd = 1 << ConfForSlot.global.confChunk.segmentPower2;
         this.maxFdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;
         this.maxFdLength = (long) maxSegmentNumberPerFd * PAGE_SIZE;
@@ -118,6 +118,7 @@ public class Chunk implements OfStats {
         this.slotDir = slotDir;
         this.oneSlot = oneSlot;
         this.keyLoader = keyLoader;
+        this.masterUpdateCallback = masterUpdateCallback;
 
         this.segmentBatch = new SegmentBatch(workerId, slot, batchIndex, snowFlake);
 
@@ -410,7 +411,10 @@ public class Chunk implements OfStats {
                 writePageBuffer.clear();
                 writePageBuffer.put(segment.tightBytesWithLength());
 
-                boolean isNewAppend = writeSegments(writePageBuffer, 1);
+                ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
+                segmentSeqListSubBatch.add(segment.segmentSeq());
+
+                boolean isNewAppend = writeSegments(writePageBuffer, 1, segmentSeqListSubBatch);
                 isNewAppendAfterBatch = isNewAppend;
 
                 // need set segment flag so that merge worker can merge
@@ -440,7 +444,7 @@ public class Chunk implements OfStats {
                     segmentSeqListSubBatch.add(segment.segmentSeq());
                 }
 
-                boolean isNewAppend = writeSegments(writePageBufferB, BATCH_SEGMENT_COUNT_FOR_PWRITE);
+                boolean isNewAppend = writeSegments(writePageBufferB, BATCH_SEGMENT_COUNT_FOR_PWRITE, segmentSeqListSubBatch);
                 isNewAppendAfterBatch = isNewAppend;
 
                 // need set segment flag so that merge worker can merge
@@ -455,7 +459,10 @@ public class Chunk implements OfStats {
                 writePageBuffer.clear();
                 writePageBuffer.put(segment.tightBytesWithLength());
 
-                boolean isNewAppend = writeSegments(writePageBuffer, 1);
+                ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
+                segmentSeqListSubBatch.add(segment.segmentSeq());
+
+                boolean isNewAppend = writeSegments(writePageBuffer, 1, segmentSeqListSubBatch);
                 isNewAppendAfterBatch = isNewAppend;
 
                 // need set segment flag so that merge worker can merge
@@ -557,7 +564,7 @@ public class Chunk implements OfStats {
     private long pwriteCostNanos;
     private long pwriteCount;
 
-    private boolean writeSegments(ByteBuffer writeBuffer, int segmentCount) {
+    private boolean writeSegments(ByteBuffer writeBuffer, int segmentCount, ArrayList<Long> segmentSeqList) {
         int fdIndex = targetFdIndex();
         int fd = fds[fdIndex];
 
@@ -589,7 +596,8 @@ public class Chunk implements OfStats {
             writeBuffer.reset();
             var bytes = new byte[writeBuffer.remaining()];
             writeBuffer.get(bytes);
-            masterUpdateCallback.onSegmentWrite(workerId, batchIndex, slot, segmentLength, segmentIndex, segmentCount, bytes, n);
+            masterUpdateCallback.onSegmentWrite(workerId, batchIndex, slot, segmentLength,
+                    segmentIndex, segmentCount, segmentSeqList, bytes, n);
         }
         return isNewAppend;
     }
