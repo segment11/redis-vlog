@@ -33,6 +33,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static io.activej.config.converter.ConfigConverters.ofInteger;
+import static redis.persist.KeyBucket.AFTER_COMPRESS_PREPEND_LENGTH;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 import static redis.persist.LocalPersist.PROTECTION;
 
@@ -302,15 +303,15 @@ public class KeyLoader implements OfStats {
 
             // memory copy
             // only need compressed bytes, so the lru cache size is smaller
-            // first int is size, second int is decompressBytes int, third int is compressedSize int
-            // refer to KeyBucket compress
-            int compressedLength = readSegmentBuffer.getInt(8);
+            // seq long + size int + uncompressed length int + compressed length int
+            // refer to KeyBucket AFTER_COMPRESS_PREPEND_LENGTH
+            int compressedLength = readSegmentBuffer.getInt(AFTER_COMPRESS_PREPEND_LENGTH - 4);
             if (compressedLength == 0) {
                 // pwrite append 0
                 return null;
             }
 
-            var bytesCompressed = new byte[compressedLength + 12];
+            var bytesCompressed = new byte[compressedLength + AFTER_COMPRESS_PREPEND_LENGTH];
             readSegmentBuffer.get(bytesCompressed);
             return bytesCompressed;
         }

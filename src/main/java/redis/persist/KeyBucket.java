@@ -30,7 +30,7 @@ public class KeyBucket {
     private static final int HASH_VALUE_LENGTH = 8;
     private static final int SEQ_VALUE_LENGTH = 8;
     // seq long + size int + uncompressed length int + compressed length int
-    private static final int AFTER_COMPRESS_PREPEND_LENGTH = SEQ_VALUE_LENGTH + 4 + 4 + 4;
+    static final int AFTER_COMPRESS_PREPEND_LENGTH = SEQ_VALUE_LENGTH + 4 + 4 + 4;
 
     static final double HIGH_LOAD_FACTOR = 0.8;
     static final double LOW_LOAD_FACTOR = 0.2;
