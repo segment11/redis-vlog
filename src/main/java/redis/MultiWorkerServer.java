@@ -394,7 +394,7 @@ public class MultiWorkerServer extends Launcher {
                         if (debugMode) {
                             c.confBucket.bucketsPerSlot = ConfForSlot.ConfBucket.debugMode.bucketsPerSlot;
 
-                            c.confChunk.segmentPower2 = ConfForSlot.ConfChunk.debugMode.segmentPower2;
+                            c.confChunk.segmentNumberPerFd = ConfForSlot.ConfChunk.debugMode.segmentNumberPerFd;
                             c.confChunk.fdPerChunk = ConfForSlot.ConfChunk.debugMode.fdPerChunk;
 
                             c.confWal.oneChargeBucketNumber = ConfForSlot.ConfWal.debugMode.oneChargeBucketNumber;
@@ -422,8 +422,8 @@ public class MultiWorkerServer extends Launcher {
                         }
 
                         // override chunk conf
-                        if (config.getChild("chunk.segmentPower2").hasValue()) {
-                            c.confChunk.segmentPower2 = config.get(ofInteger(), "chunk.segmentPower2");
+                        if (config.getChild("chunk.segmentNumberPerFd").hasValue()) {
+                            c.confChunk.segmentNumberPerFd = config.get(ofInteger(), "chunk.segmentNumberPerFd");
                         }
                         if (config.getChild("chunk.fdPerChunk").hasValue()) {
                             c.confChunk.fdPerChunk = Byte.parseByte(config.get("chunk.fdPerChunk"));

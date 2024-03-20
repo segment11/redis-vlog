@@ -86,26 +86,19 @@ public enum ConfForSlot {
     }
 
     public enum ConfChunk {
-        debugMode(12, (byte) 1, PAGE_SIZE),
-        c1m(16, (byte) 2, PAGE_SIZE),
-        c10m(18, (byte) 4, PAGE_SIZE),
-        c100m(19, (byte) 8, PAGE_SIZE);
+        debugMode(4 * 1024, (byte) 1, PAGE_SIZE),
+        c1m(64 * 1024, (byte) 2, PAGE_SIZE),
+        c10m(256 * 1024, (byte) 4, PAGE_SIZE),
+        c100m(512 * 1024, (byte) 8, PAGE_SIZE);
 
-        ConfChunk(int segmentPower2, byte fdPerChunk, int segmentLength) {
-            this.segmentPower2 = segmentPower2;
+        ConfChunk(int segmentNumberPerFd, byte fdPerChunk, int segmentLength) {
+            this.segmentNumberPerFd = segmentNumberPerFd;
             this.fdPerChunk = fdPerChunk;
             this.segmentLength = segmentLength;
         }
 
         // each slot each worker persist to a file, one file one chunk, each file max 2GB, 4KB page size, each file max 512K pages
-        // <= 19
-        // 19=2GB
-        // 18=1GB
-        // 17=512MB
-        // 16=256MB
-        // 15=128MB
-        // 14=64MB make test merge easy
-        public int segmentPower2;
+        public int segmentNumberPerFd;
         // 16 * 2GB = 32GB per slot (per worker)
         // suppose one key value encoded length ~= 100 byte, one page size 4096 contains 40 key value pairs
         // one fd contains 512K pages, so one fd contains 20M key value pairs
@@ -118,7 +111,7 @@ public enum ConfForSlot {
         public ConfLru lru = new ConfLru(300, 300, 100_000_000L);
 
         public int maxSegmentNumber() {
-            return (1 << segmentPower2) * fdPerChunk;
+            return segmentNumberPerFd * fdPerChunk;
         }
 
         public int maxSegmentIndex() {
@@ -128,7 +121,7 @@ public enum ConfForSlot {
         @Override
         public String toString() {
             return "ConfChunk{" +
-                    "segmentPower2=" + segmentPower2 +
+                    "segmentNumberPerFd=" + segmentNumberPerFd +
                     ", fdPerChunk=" + fdPerChunk +
                     ", segmentLength=" + segmentLength +
                     '}';

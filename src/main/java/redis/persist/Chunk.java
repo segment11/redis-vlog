@@ -102,9 +102,9 @@ public class Chunk implements OfStats {
 
     public Chunk(byte workerId, byte slot, byte batchIndex, byte requestWorkers,
                  SnowFlake snowFlake, File slotDir, OneSlot oneSlot, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {
-        this.maxSegmentNumberPerFd = 1 << ConfForSlot.global.confChunk.segmentPower2;
+        this.maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
         this.maxFdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;
-        this.maxFdLength = (long) maxSegmentNumberPerFd * PAGE_SIZE;
+        this.maxFdLength = (long) maxSegmentNumberPerFd * ConfForSlot.global.confChunk.segmentLength;
 
         int maxSegmentNumber = maxSegmentNumberPerFd * maxFdPerChunk;
         this.maxSegmentIndex = maxSegmentNumber - 1;
