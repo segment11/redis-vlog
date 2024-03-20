@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 public class MetaChunkSegmentIndex {
     private static final String META_CHUNK_SEGMENT_INDEX_FILE = "meta_chunk_segment_index.dat";
@@ -45,6 +46,9 @@ public class MetaChunkSegmentIndex {
             FileUtils.touch(file);
 
             var initTimes = allCapacity / BATCH_SIZE;
+            if (allCapacity % BATCH_SIZE != 0) {
+                initTimes++;
+            }
             for (int i = 0; i < initTimes; i++) {
                 FileUtils.writeByteArrayToFile(file, EMPTY_BYTES, true);
             }
@@ -56,8 +60,8 @@ public class MetaChunkSegmentIndex {
         if (needRead) {
             raf.seek(0);
             raf.read(inMemoryCachedBytes);
-            log.warn("Read meta chunk segment index file success, file: {}, slot: {}, all capacity: {}KB",
-                    file, slot, allCapacity / 1024);
+            log.warn("Read meta chunk segment index file success, file: {}, slot: {}, all capacity: {}B",
+                    file, slot, allCapacity);
         }
 
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
@@ -84,11 +88,15 @@ public class MetaChunkSegmentIndex {
 
     public synchronized void clear() {
         var initTimes = allCapacity / BATCH_SIZE;
+        if (allCapacity % BATCH_SIZE != 0) {
+            initTimes++;
+        }
         try {
             for (int i = 0; i < initTimes; i++) {
                 raf.seek((long) i * BATCH_SIZE);
                 raf.write(EMPTY_BYTES);
             }
+            Arrays.fill(inMemoryCachedBytes, (byte) 0);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

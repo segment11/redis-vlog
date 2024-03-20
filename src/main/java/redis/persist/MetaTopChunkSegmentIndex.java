@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 public class MetaTopChunkSegmentIndex {
     private static final String META_TOP_CHUNK_SEGMENT_INDEX_FILE = "meta_top_chunk_segment_index.dat";
@@ -49,6 +50,9 @@ public class MetaTopChunkSegmentIndex {
             FileUtils.touch(file);
 
             var initTimes = allCapacity / BATCH_SIZE;
+            if (allCapacity % BATCH_SIZE != 0) {
+                initTimes++;
+            }
             for (int i = 0; i < initTimes; i++) {
                 FileUtils.writeByteArrayToFile(file, EMPTY_BYTES, true);
             }
@@ -92,11 +96,15 @@ public class MetaTopChunkSegmentIndex {
 
     public synchronized void clear() {
         var initTimes = allCapacity / BATCH_SIZE;
+        if (allCapacity % BATCH_SIZE != 0) {
+            initTimes++;
+        }
         try {
             for (int i = 0; i < initTimes; i++) {
                 raf.seek((long) i * BATCH_SIZE);
                 raf.write(EMPTY_BYTES);
             }
+            Arrays.fill(inMemoryCachedBytes, (byte) 0);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 import static redis.persist.KeyLoader.KEY_BUCKET_COUNT_PER_FD;
 
@@ -21,8 +22,8 @@ public class StatKeyBucketLastUpdateCount {
     private final int allCapacity;
     private final RandomAccessFile raf;
 
-    // 512KB
-    private static final int BATCH_SIZE = 1024 * 512;
+    // 64KB
+    private static final int BATCH_SIZE = 1024 * 64;
     private static final byte[] EMPTY_BYTES = new byte[BATCH_SIZE];
 
     private final byte[] inMemoryCachedBytes;
@@ -44,8 +45,8 @@ public class StatKeyBucketLastUpdateCount {
             FileUtils.touch(file);
 
             var initTimes = allCapacity / BATCH_SIZE;
-            if (initTimes == 0) {
-                initTimes = 1;
+            if (allCapacity % BATCH_SIZE != 0) {
+                initTimes++;
             }
             for (int i = 0; i < initTimes; i++) {
                 FileUtils.writeByteArrayToFile(file, EMPTY_BYTES, true);
@@ -108,14 +109,15 @@ public class StatKeyBucketLastUpdateCount {
 
     public synchronized void clear() {
         var initTimes = allCapacity / BATCH_SIZE;
-        if (initTimes == 0) {
-            initTimes = 1;
+        if (allCapacity % BATCH_SIZE != 0) {
+            initTimes++;
         }
         try {
             for (int i = 0; i < initTimes; i++) {
                 raf.seek((long) i * BATCH_SIZE);
                 raf.write(EMPTY_BYTES);
             }
+            Arrays.fill(inMemoryCachedBytes, (byte) 0);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

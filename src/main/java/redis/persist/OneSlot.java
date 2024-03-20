@@ -1068,12 +1068,7 @@ public class OneSlot implements OfStats {
     }
 
     public Chunk.SegmentFlag getSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex) {
-        var bytes = metaChunkSegmentFlagSeq.getSegmentMergeFlag(workerId, batchIndex, segmentIndex);
-        if (bytes == null) {
-            return null;
-        }
-        var buffer = ByteBuffer.wrap(bytes);
-        return new Chunk.SegmentFlag(buffer.get(), buffer.get(), buffer.getLong());
+        return metaChunkSegmentFlagSeq.getSegmentMergeFlag(workerId, batchIndex, segmentIndex);
     }
 
     public void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex,

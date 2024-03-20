@@ -11,9 +11,9 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 
 public class MetaChunkSegmentFlagSeq {
-    private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_index.dat";
-    // seq long + flag byte + merge worker byte
-    public static final int ONE_LENGTH = 8 + 1 + 1;
+    private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
+    // flag byte + merge worker byte + seq long
+    public static final int ONE_LENGTH = 1 + 1 + 8;
 
     private final byte slot;
     private final byte allWorkers;
@@ -22,9 +22,28 @@ public class MetaChunkSegmentFlagSeq {
     private final int allCapacity;
     private final RandomAccessFile raf;
 
-    // 4MB
-    private static final int BATCH_SIZE = 1024 * 1024 * 4;
+    // 100KB
+    private static final int BATCH_SIZE = 1024 * 100;
     private static final byte[] EMPTY_BYTES = new byte[BATCH_SIZE];
+
+    private static void fillSegmentFlagInit(byte[] innerBytes) {
+        var innerBuffer = ByteBuffer.wrap(innerBytes);
+        var times = innerBytes.length / ONE_LENGTH;
+        for (int i = 0; i < times; i++) {
+            innerBuffer.put(Chunk.SEGMENT_FLAG_INIT);
+            innerBuffer.position(innerBuffer.position() + 9);
+        }
+    }
+
+    static {
+        var innerBytes = new byte[100];
+        fillSegmentFlagInit(innerBytes);
+
+        var buffer = ByteBuffer.wrap(EMPTY_BYTES);
+        for (int i = 0; i < 1024; i++) {
+            buffer.put(innerBytes);
+        }
+    }
 
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
@@ -41,6 +60,7 @@ public class MetaChunkSegmentFlagSeq {
 
         // max all workers <= 128, batch number <= 4, max segment number <= 512KB, 128 * 4 * 512KB * 10 = 2.5GB
         this.inMemoryCachedBytes = new byte[allCapacity];
+        fillSegmentFlagInit(inMemoryCachedBytes);
 
         boolean needRead = false;
         var file = new File(slotDir, META_CHUNK_SEGMENT_SEQ_FLAG_FILE);
@@ -48,6 +68,9 @@ public class MetaChunkSegmentFlagSeq {
             FileUtils.touch(file);
 
             var initTimes = allCapacity / BATCH_SIZE;
+            if (allCapacity % BATCH_SIZE != 0) {
+                initTimes++;
+            }
             for (int i = 0; i < initTimes; i++) {
                 FileUtils.writeByteArrayToFile(file, EMPTY_BYTES, true);
             }
@@ -76,20 +99,11 @@ public class MetaChunkSegmentFlagSeq {
             var batchIndex = (i % oneWorkerCapacity) / oneBatchCapacity;
             var segmentIndex = (i % oneBatchCapacity) / ONE_LENGTH;
 
-            var bytes = new byte[ONE_LENGTH];
-            try {
-                raf.seek(i);
-                raf.read(bytes);
+            var flag = inMemoryCachedByteBuffer.get(i);
+            var mergeWorkerId = inMemoryCachedByteBuffer.get(i + 1);
+            var segmentSeq = inMemoryCachedByteBuffer.getLong(i + 2);
 
-                var buffer = ByteBuffer.wrap(bytes);
-                var flag = buffer.get();
-                var mergeWorkerId = buffer.get();
-                var segmentSeq = buffer.getLong();
-
-                callBack.call(workerId, (byte) batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            callBack.call(workerId, (byte) batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
         }
     }
 
@@ -123,22 +137,25 @@ public class MetaChunkSegmentFlagSeq {
         }
     }
 
-    public synchronized byte[] getSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex) {
+    public synchronized Chunk.SegmentFlag getSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex) {
         var offset = workerId * oneWorkerCapacity +
                 batchIndex * oneBatchCapacity +
                 segmentIndex * ONE_LENGTH;
-        var bytes = new byte[ONE_LENGTH];
-        inMemoryCachedByteBuffer.get(offset, bytes);
-        return bytes;
+        return new Chunk.SegmentFlag(inMemoryCachedByteBuffer.get(offset), inMemoryCachedByteBuffer.get(offset + 1),
+                inMemoryCachedByteBuffer.getLong(offset + 2));
     }
 
     public synchronized void clear() {
         var initTimes = allCapacity / BATCH_SIZE;
+        if (allCapacity % BATCH_SIZE != 0) {
+            initTimes++;
+        }
         try {
             for (int i = 0; i < initTimes; i++) {
                 raf.seek((long) i * BATCH_SIZE);
                 raf.write(EMPTY_BYTES);
             }
+            fillSegmentFlagInit(inMemoryCachedBytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
