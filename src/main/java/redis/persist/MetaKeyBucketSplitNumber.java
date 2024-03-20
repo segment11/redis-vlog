@@ -20,6 +20,10 @@ public class MetaKeyBucketSplitNumber {
     private static final int BATCH_SIZE = 1024 * 64;
     private static final byte[] EMPTY_BYTES = new byte[BATCH_SIZE];
 
+    static {
+        Arrays.fill(EMPTY_BYTES, (byte) 1);
+    }
+
     private final byte[] inMemoryCachedBytes;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -30,6 +34,7 @@ public class MetaKeyBucketSplitNumber {
 
         // max 512KB
         this.inMemoryCachedBytes = new byte[allCapacity];
+        Arrays.fill(inMemoryCachedBytes, (byte) 1);
 
         boolean needRead = false;
         var file = new File(slotDir, META_KEY_BUCKET_SPLIT_NUMBER_FILE);
