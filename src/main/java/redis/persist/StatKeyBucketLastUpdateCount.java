@@ -10,8 +10,6 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-import static redis.persist.KeyLoader.KEY_BUCKET_COUNT_PER_FD;
-
 public class StatKeyBucketLastUpdateCount {
     private static final String STAT_KEY_BUCKET_LAST_UPDATE_COUNT_FILE = "stat_key_bucket_last_update_count.dat";
     // short is enough for one key bucket total value count
@@ -100,7 +98,7 @@ public class StatKeyBucketLastUpdateCount {
 
     public long getKeyCount() {
         long keyCount = 0;
-        for (int i = 0; i < KEY_BUCKET_COUNT_PER_FD; i++) {
+        for (int i = 0; i < bucketsPerSlot; i++) {
             var offset = i * ONE_LENGTH;
             keyCount += inMemoryCachedByteBuffer.getShort(offset);
         }
