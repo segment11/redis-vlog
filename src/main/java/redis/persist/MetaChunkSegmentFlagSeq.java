@@ -1,0 +1,154 @@
+package redis.persist;
+
+import org.apache.commons.io.FileUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import redis.ConfForSlot;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+
+public class MetaChunkSegmentFlagSeq {
+    private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_index.dat";
+    // seq long + flag byte + merge worker byte
+    public static final int ONE_LENGTH = 8 + 1 + 1;
+
+    private final byte slot;
+    private final byte allWorkers;
+    private final int oneBatchCapacity;
+    private final int oneWorkerCapacity;
+    private final int allCapacity;
+    private final RandomAccessFile raf;
+
+    // 4MB
+    private static final int BATCH_SIZE = 1024 * 1024 * 4;
+    private static final byte[] EMPTY_BYTES = new byte[BATCH_SIZE];
+
+    private final byte[] inMemoryCachedBytes;
+    private final ByteBuffer inMemoryCachedByteBuffer;
+
+    private final Logger log = LoggerFactory.getLogger(getClass());
+
+    public MetaChunkSegmentFlagSeq(byte slot, byte allWorkers, File slotDir) throws IOException {
+        this.slot = slot;
+        this.allWorkers = allWorkers;
+
+        this.oneBatchCapacity = ConfForSlot.global.confChunk.maxSegmentNumber() * ONE_LENGTH;
+        this.oneWorkerCapacity = ConfForSlot.global.confWal.batchNumber * oneBatchCapacity;
+        this.allCapacity = allWorkers * oneWorkerCapacity;
+
+        // max all workers <= 128, batch number <= 4, max segment number <= 512KB, 128 * 4 * 512KB * 10 = 2.5GB
+        this.inMemoryCachedBytes = new byte[allCapacity];
+
+        boolean needRead = false;
+        var file = new File(slotDir, META_CHUNK_SEGMENT_SEQ_FLAG_FILE);
+        if (!file.exists()) {
+            FileUtils.touch(file);
+
+            var initTimes = allCapacity / BATCH_SIZE;
+            for (int i = 0; i < initTimes; i++) {
+                FileUtils.writeByteArrayToFile(file, EMPTY_BYTES, true);
+            }
+        } else {
+            needRead = true;
+        }
+        this.raf = new RandomAccessFile(file, "rw");
+
+        if (needRead) {
+            raf.seek(0);
+            raf.read(inMemoryCachedBytes);
+            log.warn("Read meta chunk segment flag seq file success, file: {}, slot: {}, all capacity: {}KB",
+                    file, slot, allCapacity / 1024);
+        }
+
+        this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
+    }
+
+    public interface IterateCallBack {
+        void call(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte mergeWorkerId, long segmentSeq);
+    }
+
+    public synchronized void iterate(IterateCallBack callBack) {
+        for (int i = 0; i < allCapacity; i += ONE_LENGTH) {
+            var workerId = (byte) (i / oneWorkerCapacity);
+            var batchIndex = (i % oneWorkerCapacity) / oneBatchCapacity;
+            var segmentIndex = (i % oneBatchCapacity) / ONE_LENGTH;
+
+            var bytes = new byte[ONE_LENGTH];
+            try {
+                raf.seek(i);
+                raf.read(bytes);
+
+                var buffer = ByteBuffer.wrap(bytes);
+                var flag = buffer.get();
+                var mergeWorkerId = buffer.get();
+                var segmentSeq = buffer.getLong();
+
+                callBack.call(workerId, (byte) batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public synchronized void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte mergeWorkerId, long segmentSeq) {
+        var offset = workerId * oneWorkerCapacity +
+                batchIndex * oneBatchCapacity +
+                segmentIndex * ONE_LENGTH;
+        var bytes = new byte[ONE_LENGTH];
+        bytes[0] = flag;
+        bytes[1] = mergeWorkerId;
+        ByteBuffer.wrap(bytes, 2, 8).putLong(segmentSeq);
+        try {
+            raf.seek(offset);
+            raf.write(bytes);
+            inMemoryCachedByteBuffer.put(offset, bytes);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public synchronized void setSegmentMergeFlagBatch(byte workerId, byte batchIndex, int beginSegmentIndex, byte[] bytes) {
+        var offset = workerId * oneWorkerCapacity +
+                batchIndex * oneBatchCapacity +
+                beginSegmentIndex * ONE_LENGTH;
+        try {
+            raf.seek(offset);
+            raf.write(bytes);
+            inMemoryCachedByteBuffer.put(offset, bytes);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public synchronized byte[] getSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex) {
+        var offset = workerId * oneWorkerCapacity +
+                batchIndex * oneBatchCapacity +
+                segmentIndex * ONE_LENGTH;
+        var bytes = new byte[ONE_LENGTH];
+        inMemoryCachedByteBuffer.get(offset, bytes);
+        return bytes;
+    }
+
+    public synchronized void clear() {
+        var initTimes = allCapacity / BATCH_SIZE;
+        try {
+            for (int i = 0; i < initTimes; i++) {
+                raf.seek((long) i * BATCH_SIZE);
+                raf.write(EMPTY_BYTES);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public synchronized void cleanUp() {
+        try {
+            raf.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+}

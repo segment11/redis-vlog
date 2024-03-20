@@ -67,9 +67,8 @@ public class KeyLoader implements OfStats {
     private final MetaKeyBucketSeq metaKeyBucketSeq;
 
     // need read write lock
-    private KeyBucketSplitNumberMmapBuffer splitNumberMmapBuffer;
+    private MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
 
-    private static final String BUCKET_SPLIT_NUMBER_MAP_FILE = "key-bucket-split-number.map";
     // split 3 times, 3 * 3 * 3 = 27
     // when 27, batch persist pvm, will slot lock and read all 27 key buckets for target bucket index, write perf bad
     // read perf ok, because only read one key bucket and lru cache
@@ -101,14 +100,14 @@ public class KeyLoader implements OfStats {
     private long splitCount;
     private long splitCostNanos;
 
-    private KeyBucketLastUpdateSizeMmapBuffer keyBucketLastUpdateSizeMmapBuffer;
+    private StatKeyBucketLastUpdateCount statKeyBucketLastUpdateCount;
 
     public short getKeyCountInBucketIndex(int bucketIndex) {
-        return keyBucketLastUpdateSizeMmapBuffer.getKeyCountInBucketIndex(bucketIndex);
+        return statKeyBucketLastUpdateCount.getKeyCountInBucketIndex(bucketIndex);
     }
 
     public long getKeyCount() {
-        return keyBucketLastUpdateSizeMmapBuffer.getKeyCount();
+        return statKeyBucketLastUpdateCount.getKeyCount();
     }
 
     private final Logger log = LoggerFactory.getLogger(KeyLoader.class);
@@ -137,10 +136,7 @@ public class KeyLoader implements OfStats {
         log.info("Persisted key bucket cache init, expire after write: {} s, expire after access: {} s, maximum bytes: {}. slot: {}",
                 lru.expireAfterWrite, lru.expireAfterAccess, lru.maximumBytes, slot);
 
-        var file = new File(slotDir, BUCKET_SPLIT_NUMBER_MAP_FILE);
-        this.splitNumberMmapBuffer = new KeyBucketSplitNumberMmapBuffer(file, bucketsPerSlot);
-        splitNumberMmapBuffer.setLibC(libC);
-        splitNumberMmapBuffer.init();
+        this.metaKeyBucketSplitNumber = new MetaKeyBucketSplitNumber(slot, bucketsPerSlot, slotDir);
 
         int fdLength = MAX_SPLIT_NUMBER;
         this.fds = new int[fdLength];
@@ -151,13 +147,10 @@ public class KeyLoader implements OfStats {
         this.readSegmentBufferAddresses = new long[fdLength];
         this.writeSegmentBufferAddressesArray = new long[fdLength][WRITE_SEGMENT_BUFFER_GROUP_NUMBER];
 
-        var maxSplitNumber = splitNumberMmapBuffer.maxSplitNumber();
+        var maxSplitNumber = metaKeyBucketSplitNumber.maxSplitNumber();
         initFdForSlot(maxSplitNumber);
 
-        var keyBucketLastUpdateSizeFile = new File(slotDir, "key-bucket-last-update-size.map");
-        this.keyBucketLastUpdateSizeMmapBuffer = new KeyBucketLastUpdateSizeMmapBuffer(keyBucketLastUpdateSizeFile, slot);
-        this.keyBucketLastUpdateSizeMmapBuffer.setLibC(libC);
-        this.keyBucketLastUpdateSizeMmapBuffer.init();
+        this.statKeyBucketLastUpdateCount = new StatKeyBucketLastUpdateCount(slot, bucketsPerSlot, slotDir);
     }
 
     // need thread safe
@@ -253,13 +246,13 @@ public class KeyLoader implements OfStats {
             System.out.println("Cleaned up read persisted key bucket cache");
         }
 
-        if (splitNumberMmapBuffer != null) {
-            splitNumberMmapBuffer.cleanUp();
-            System.out.println("Cleaned up bucket split number map");
+        if (metaKeyBucketSplitNumber != null) {
+            metaKeyBucketSplitNumber.cleanUp();
+            System.out.println("Cleaned up bucket split number");
         }
 
-        if (keyBucketLastUpdateSizeMmapBuffer != null) {
-            keyBucketLastUpdateSizeMmapBuffer.cleanUp();
+        if (statKeyBucketLastUpdateCount != null) {
+            statKeyBucketLastUpdateCount.cleanUp();
         }
 
         if (metaKeyBucketSeq != null) {
@@ -322,7 +315,7 @@ public class KeyLoader implements OfStats {
     private long clearExpiredPvmCount = 0;
 
     private KeyBucket getKeyBucketInner(int bucketIndex, long keyHash) {
-        var splitNumber = splitNumberMmapBuffer.get(bucketIndex);
+        var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
 
         int splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
         var keyBucketCacheKey = new KeyBucketCacheKey(bucketIndex, (byte) splitIndex);
@@ -372,7 +365,7 @@ public class KeyLoader implements OfStats {
         var rl = rwlArray[bucketIndex].readLock();
         rl.lock();
         try {
-            var splitNumber = splitNumberMmapBuffer.get(bucketIndex);
+            var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
             keyBuckets = new ArrayList<>(splitNumber);
 
             for (int i = 0; i < splitNumber; i++) {
@@ -464,7 +457,7 @@ public class KeyLoader implements OfStats {
         var wl = rwlArray[bucketIndex].writeLock();
         wl.lock();
         try {
-            var splitNumber = splitNumberMmapBuffer.get(bucketIndex);
+            var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
             ArrayList<KeyBucket> keyBuckets = new ArrayList<>(splitNumber);
 
             var isSingleKeyUpdate = keyHash != 0;
@@ -514,7 +507,7 @@ public class KeyLoader implements OfStats {
                 updateBatchCount++;
                 boolean isSync = updateBatchCount % 10 == 0;
                 // can be async for better performance, but key count is not accurate
-                keyBucketLastUpdateSizeMmapBuffer.setBucketIndexKeyCount(bucketIndex, (short) keyCount, isSync);
+                statKeyBucketLastUpdateCount.setKeyCountInBucketIndex(bucketIndex, (short) keyCount, isSync);
             }
         } finally {
             wl.unlock();
@@ -672,7 +665,7 @@ public class KeyLoader implements OfStats {
             beforeSplitNumberArr[0] = afterPutKeyBuckets[0].splitNumber;
 
             // update meta
-            splitNumberMmapBuffer.set(bucketIndex, beforeSplitNumberArr[0]);
+            metaKeyBucketSplitNumber.set(bucketIndex, beforeSplitNumberArr[0]);
         }
     }
 
@@ -695,7 +688,8 @@ public class KeyLoader implements OfStats {
     }
 
     public synchronized void flush() {
-        splitNumberMmapBuffer.clear();
+        metaKeyBucketSplitNumber.clear();
+        statKeyBucketLastUpdateCount.clear();
 
         boolean[] ftruncateFlags = new boolean[MAX_SPLIT_NUMBER];
 

@@ -42,7 +42,7 @@ public class LocalPersist {
 
     public void initChunkMerger(ChunkMerger chunkMerger) throws IOException {
         this.chunkMerger = chunkMerger;
-        this.chunkMerger.initTopMergeSegmentIndexMap(libC, persistDir);
+        this.chunkMerger.initTopMergeSegmentIndexMap(persistDir);
 
         for (var oneSlot : oneSlots) {
             oneSlot.setChunkMerger(chunkMerger);

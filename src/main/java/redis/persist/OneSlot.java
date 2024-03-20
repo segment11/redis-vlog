@@ -364,8 +364,8 @@ public class OneSlot implements OfStats {
     // first index is worker id, second index is batch index
     Chunk[][] chunksArray;
 
-    private ChunkSegmentFlagMmapBuffer chunkSegmentFlagMmapBuffer;
-    private ChunkSegmentIndexMmapBuffer chunkSegmentIndexMmapBuffer;
+    private MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
+    private MetaChunkSegmentIndex metaChunkSegmentIndex;
 
     private final CompressStats compressStats;
 
@@ -793,9 +793,9 @@ public class OneSlot implements OfStats {
         }
 
         this.keyLoader.flush();
-        this.chunkSegmentFlagMmapBuffer.flush();
-        this.chunkSegmentIndexMmapBuffer.flush();
-        this.chunkMerger.flushTopChunkSegmentIndexMmapBuffer();
+        this.metaChunkSegmentFlagSeq.clear();
+        this.metaChunkSegmentIndex.clear();
+        this.chunkMerger.clearMetaTopChunkSegmentIndex();
     }
 
     public void initChunks(LibC libC, byte allWorkers, byte requestWorkers, byte mergeWorkers, byte topMergeWorkers) throws IOException {
@@ -808,10 +808,7 @@ public class OneSlot implements OfStats {
         this.keyLoader.init(libC, persistConfig);
 
         // meta data
-        var chunkSegmentFlagFile = new File(slotDir, "segment-flag.map");
-        this.chunkSegmentFlagMmapBuffer = new ChunkSegmentFlagMmapBuffer(chunkSegmentFlagFile, allWorkers);
-        chunkSegmentFlagMmapBuffer.setLibC(libC);
-        chunkSegmentFlagMmapBuffer.init();
+        this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, allWorkers, slotDir);
 
         // todo, check
 //        int[] countArr = new int[batchNumber];
@@ -829,10 +826,7 @@ public class OneSlot implements OfStats {
 //            }
 //        }
 
-        var chunkSegmentIndexFile = new File(slotDir, "segment-index.map");
-        this.chunkSegmentIndexMmapBuffer = new ChunkSegmentIndexMmapBuffer(chunkSegmentIndexFile, allWorkers);
-        chunkSegmentIndexMmapBuffer.setLibC(libC);
-        chunkSegmentIndexMmapBuffer.init();
+        this.metaChunkSegmentIndex = new MetaChunkSegmentIndex(slot, allWorkers, slotDir);
 
         // chunks
         this.chunksArray = new Chunk[allWorkers][batchNumber];
@@ -929,12 +923,12 @@ public class OneSlot implements OfStats {
             System.err.println("Close wal raf error, slot: " + slot);
         }
 
-        if (chunkSegmentFlagMmapBuffer != null) {
-            chunkSegmentFlagMmapBuffer.cleanUp();
+        if (metaChunkSegmentFlagSeq != null) {
+            metaChunkSegmentFlagSeq.cleanUp();
         }
 
-        if (chunkSegmentIndexMmapBuffer != null) {
-            chunkSegmentIndexMmapBuffer.cleanUp();
+        if (metaChunkSegmentIndex != null) {
+            metaChunkSegmentIndex.cleanUp();
         }
 
         if (chunksArray != null) {
@@ -1074,7 +1068,7 @@ public class OneSlot implements OfStats {
     }
 
     public Chunk.SegmentFlag getSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex) {
-        var bytes = chunkSegmentFlagMmapBuffer.getSegmentMergeFlag(workerId, batchIndex, segmentIndex);
+        var bytes = metaChunkSegmentFlagSeq.getSegmentMergeFlag(workerId, batchIndex, segmentIndex);
         if (bytes == null) {
             return null;
         }
@@ -1084,19 +1078,19 @@ public class OneSlot implements OfStats {
 
     public void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex,
                                     byte flag, byte mergeWorkerId, long segmentSeq) {
-        chunkSegmentFlagMmapBuffer.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
+        metaChunkSegmentFlagSeq.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
     }
 
     public void setSegmentMergeFlagBatch(byte workerId, byte batchIndex, int segmentIndex, int segmentCount,
                                          byte flag, byte mergeWorkerId, ArrayList<Long> segmentSeqList) {
-        var bytes = new byte[segmentCount * ChunkSegmentFlagMmapBuffer.SEGMENT_FLAG_BYTES_LENGTH];
+        var bytes = new byte[segmentCount * MetaChunkSegmentFlagSeq.ONE_LENGTH];
         var buffer = ByteBuffer.wrap(bytes);
         for (int i = 0; i < segmentCount; i++) {
             buffer.put(i * 2, flag);
             buffer.put(i * 2 + 1, mergeWorkerId);
             buffer.putLong(i * 2 + 2, segmentSeqList.get(i));
         }
-        chunkSegmentFlagMmapBuffer.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, bytes);
+        metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, bytes);
     }
 
     public void persistMergeSegmentsUndone() throws Exception {
@@ -1107,7 +1101,7 @@ public class OneSlot implements OfStats {
             }
         }
 
-        this.chunkSegmentFlagMmapBuffer.iterate((workerId, batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq) -> {
+        this.metaChunkSegmentFlagSeq.iterate((workerId, batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq) -> {
             if (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGING) {
                 log.warn("Segment not persisted after merging, w={}, s={}, b={}, i={}, flag={}", workerId, slot, batchIndex, segmentIndex, flag);
                 needMergeSegmentIndexListArray[workerId][batchIndex].add(segmentIndex);
@@ -1159,10 +1153,10 @@ public class OneSlot implements OfStats {
     }
 
     public int getChunkWriteSegmentIndex(byte workerId, byte batchIndex) {
-        return chunkSegmentIndexMmapBuffer.get(workerId, batchIndex);
+        return metaChunkSegmentIndex.get(workerId, batchIndex);
     }
 
     public void setChunkWriteSegmentIndex(byte workerId, byte batchIndex, int segmentIndex) {
-        chunkSegmentIndexMmapBuffer.put(workerId, batchIndex, segmentIndex);
+        metaChunkSegmentIndex.put(workerId, batchIndex, segmentIndex);
     }
 }

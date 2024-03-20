@@ -1,7 +1,6 @@
 package redis.persist;
 
 import io.activej.config.Config;
-import jnr.posix.LibC;
 import net.openhft.affinity.AffinityStrategies;
 import net.openhft.affinity.AffinityThreadFactory;
 import org.slf4j.Logger;
@@ -38,10 +37,10 @@ public class ChunkMerger implements OfStats {
 
     private ScheduledExecutorService mergeSelfScheduledExecutor;
 
-    private TopChunkSegmentIndexMmapBuffer topChunkSegmentIndexMmapBuffer;
+    private MetaTopChunkSegmentIndex metaTopChunkSegmentIndex;
 
-    public void flushTopChunkSegmentIndexMmapBuffer() {
-        topChunkSegmentIndexMmapBuffer.flush();
+    public void clearMetaTopChunkSegmentIndex() {
+        metaTopChunkSegmentIndex.clear();
     }
 
     private int compressLevel;
@@ -65,12 +64,9 @@ public class ChunkMerger implements OfStats {
     static final ThreadFactory topMergeWorkerThreadFactoryGroup2 = new AffinityThreadFactory("top-merge-worker-group2",
             AffinityStrategies.SAME_CORE);
 
-    public void initTopMergeSegmentIndexMap(LibC libC, File persistDir) throws IOException {
-        var topChunkSegmentIndexFile = new File(persistDir, "top-merge-segment-index.map");
-        this.topChunkSegmentIndexMmapBuffer = new TopChunkSegmentIndexMmapBuffer(topChunkSegmentIndexFile,
-                topMergeWorkers, requestWorkers + mergeWorkers, slotNumber);
-        this.topChunkSegmentIndexMmapBuffer.setLibC(libC);
-        this.topChunkSegmentIndexMmapBuffer.init();
+    public void initTopMergeSegmentIndexMap(File persistDir) throws IOException {
+        this.metaTopChunkSegmentIndex = new MetaTopChunkSegmentIndex(slotNumber, topMergeWorkers,
+                requestWorkers + mergeWorkers, persistDir);
     }
 
     public ChunkMerger(byte requestWorkers, byte mergeWorkers, byte topMergeWorkers, short slotNumber,
@@ -128,7 +124,7 @@ public class ChunkMerger implements OfStats {
     private void mergeOne(int workerIndex, byte slot, byte batchIndex, int[] topMergeContinueSkipCountBySlot) {
         var logMerge = Debug.getInstance().logMerge;
         var topWorker = topChunkMergeWorkers[workerIndex];
-        int segmentIndex = topChunkSegmentIndexMmapBuffer.getTopMergeSegmentIndex(topWorker.mergeWorkerId, slot);
+        int segmentIndex = metaTopChunkSegmentIndex.get(topWorker.mergeWorkerId, batchIndex, slot);
 
         ArrayList<Integer> segmentIndexList = new ArrayList<>();
         segmentIndexList.add(segmentIndex);
@@ -152,7 +148,7 @@ public class ChunkMerger implements OfStats {
                 }
 
                 int nextIndex = segmentIndex == ConfForSlot.global.confChunk.maxSegmentIndex() ? 0 : segmentIndex + 1;
-                topChunkSegmentIndexMmapBuffer.setTopMergeSegmentIndex(topWorker.mergeWorkerId, slot, nextIndex);
+                metaTopChunkSegmentIndex.put(topWorker.mergeWorkerId, batchIndex, slot, nextIndex);
 
                 if (nextIndex == 0) {
                     log.info("Top self merge segment index go back to 0, w={}, s={}", topWorker.mergeWorkerId, slot);
@@ -222,8 +218,8 @@ public class ChunkMerger implements OfStats {
         mergeSelfScheduledExecutor.shutdownNow();
         System.out.println("Shutdown top merge schedule worker");
 
-        if (topChunkSegmentIndexMmapBuffer != null) {
-            topChunkSegmentIndexMmapBuffer.cleanUp();
+        if (metaTopChunkSegmentIndex != null) {
+            metaTopChunkSegmentIndex.cleanUp();
         }
     }
 
