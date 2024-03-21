@@ -353,6 +353,8 @@ public class Wal implements OfStats {
         }
 
         delayToKeyBucketValues.put(key, v);
+        delayToKeyBucketShortValues.remove(key);
+
         boolean needPersist = delayToKeyBucketValues.size() >= ConfForSlot.global.confWal.valueSizeTrigger;
         return new PutResult(needPersist, false, null, needPersist ? 0 : offset);
     }
