@@ -1,50 +1,37 @@
 package redis.repl;
 
 public enum ReplType {
-    error(true, (byte) 1, (byte) -1),
-    ping(true, (byte) 0, (byte) 0),
-    pong(true, (byte) 1, (byte) 1),
-    hello(true, (byte) 0, (byte) 2),
-    hi(true, (byte) 1, (byte) 3),
-    ok(true, (byte) 1, (byte) 4),
-    bye(true, (byte) 0, (byte) 5),
+    error(true, false, (byte) -1),
+    ping(true, true, (byte) 0),
+    pong(true, false, (byte) 1),
+    hello(true, true, (byte) 2),
+    hi(true, false, (byte) 3),
+    ok(true, false, (byte) 4),
+    bye(true, true, (byte) 5),
 
-    chunk_segment(false, (byte) 1, (byte) 10),
-    chunk_merge_flag_mmap(false, (byte) 1, (byte) 11),
-    chunk_segment_index_mmap(false, (byte) 1, (byte) 12),
-    top_chunk_segment_index_mmap(false, (byte) 1, (byte) 13),
-    big_string(false, (byte) 1, (byte) 14),
+    key_bucket_update(true, false, (byte) 10),
+    wal_append_batch(true, false, (byte) 11),
+    dict_create(true, false, (byte) 12),
+    segment_write(true, false, (byte) 13),
+    big_string_file_write(true, false, (byte) 14),
 
-    meta_chunk_segment(false, (byte) 0, (byte) 20),
-    meta_chunk_merge_flag_mmap(false, (byte) 0, (byte) 21),
-    meta_chunk_segment_index_mmap(false, (byte) 0, (byte) 22),
-    meta_top_chunk_segment_index_mmap(false, (byte) 0, (byte) 23),
-    meta_big_string(false, (byte) 0, (byte) 24),
-
-    key_bucket(false, (byte) 1, (byte) 30),
-    wal(true, (byte) 1, (byte) 31),
-    dict(false, (byte) 1, (byte) 32),
-
-    meta_key_bucket(false, (byte) 0, (byte) 40),
-    meta_wal(false, (byte) 0, (byte) 41),
-    meta_dict(false, (byte) 0, (byte) 42),
-    ;
+    exists_chunk_segments(false, true, (byte) 20),
+    meta_chunk_segment_flag_seq(false, true, (byte) 21),
+    meta_chunk_segment_index(false, true, (byte) 22),
+    meta_top_chunk_segment_index(false, true, (byte) 23),
+    meta_key_bucket_seq(false, true, (byte) 24),
+    meta_key_bucket_split_number(false, true, (byte) 25),
+    exists_big_string(false, true, (byte) 26),
+    exists_dict(false, true, (byte) 27);
 
     public final boolean newly;
-    public final byte clientOrServerSide;
+    public final boolean isClientSend;
     public final byte code;
 
-    public static final byte CLIENT_SIDE = 0;
-    public static final byte SERVER_SIDE = 1;
-
-    ReplType(boolean newly, byte clientOrServerSide, byte code) {
+    ReplType(boolean newly, boolean isClientSend, byte code) {
         this.newly = newly;
-        this.clientOrServerSide = clientOrServerSide;
+        this.isClientSend = isClientSend;
         this.code = code;
-    }
-
-    public boolean isServerSide() {
-        return clientOrServerSide == SERVER_SIDE;
     }
 
     public static ReplType fromCode(byte code) {

@@ -23,6 +23,11 @@ public class Wal implements OfStats {
     public static class V {
         byte workerId;
         long seq;
+
+        public int getBucketIndex() {
+            return bucketIndex;
+        }
+
         int bucketIndex;
         long keyHash;
         long expireAt;
@@ -75,7 +80,7 @@ public class Wal implements OfStats {
         // worker id + seq + bucket index + key hash + expire at long + key length byte + cv encoded length short + increased batch count long
         private static final int ENCODED_HEADER_LENGTH = 1 + 8 + 4 + 8 + 8 + 1 + 2 + 8;
 
-        int encodeLength() {
+        public int encodeLength() {
             int vLength = ENCODED_HEADER_LENGTH + key.length() + cvEncoded.length;
             return 4 + vLength;
         }
