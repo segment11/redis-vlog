@@ -135,7 +135,7 @@ public class OneSlot implements OfStats {
         this.masterUpdateCallback = new SendToSlaveMasterUpdateCallback(() ->
                 replPairs.stream().filter(ReplPair::isAsMaster).collect(Collectors.toList()), toSlaveWalAppendBatch);
 
-        this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, masterUpdateCallback);
+        this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, masterUpdateCallback, dynConfig);
 
         DictMap.getInstance().setMasterUpdateCallback(masterUpdateCallback);
 
@@ -281,6 +281,30 @@ public class OneSlot implements OfStats {
 
     private static final String DYN_CONFIG_FILE_NAME = "dyn-config.json";
     private final DynConfig dynConfig;
+
+    private static final ArrayList<String> dynConfigKeyWhiteList = new ArrayList<>();
+
+    static {
+        // add white list here
+        dynConfigKeyWhiteList.add("clearExpiredPvmWhenKeyBucketReadTimes");
+    }
+
+    public boolean updateDynConfig(String key, byte[] configValueBytes) throws IOException {
+        // check key white list
+        if (!dynConfigKeyWhiteList.contains(key)) {
+            log.warn("Update dyn config key not in white list, key: {}, slot: {}", key, slot);
+            return false;
+        }
+
+        if (key.equals("clearExpiredPvmWhenKeyBucketReadTimes")) {
+            dynConfig.setClearExpiredPvmWhenKeyBucketReadTimes(Integer.parseInt(new String(configValueBytes)));
+            return true;
+            // add else if here
+        } else {
+            log.warn("Update dyn config key not match, key: {}, slot: {}", key, slot);
+            return false;
+        }
+    }
 
     public boolean isReadonly() {
         return dynConfig.isReadonly();

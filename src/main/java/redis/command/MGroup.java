@@ -308,7 +308,7 @@ public class MGroup extends BaseCommand {
             return new BulkReply(sb.toString().getBytes());
         }
 
-        if (subCmd.equals("get-slot")) {
+        if (subCmd.equals("get-slot-with-key-hash")) {
             if (data.length != 3) {
                 return ErrorReply.FORMAT;
             }
@@ -316,6 +316,31 @@ public class MGroup extends BaseCommand {
             var keyBytes = data[2];
             var slotWithKeyHash = slot(keyBytes);
             return new BulkReply(slotWithKeyHash.toString().getBytes());
+        }
+
+        if (subCmd.equals("dyn-config")) {
+            if (data.length != 4) {
+                return ErrorReply.FORMAT;
+            }
+
+            var configKeyBytes = data[2];
+            var configValueBytes = data[3];
+
+            var configKey = new String(configKeyBytes);
+
+            var oneSlots = localPersist.oneSlots();
+            for (var oneSlot : oneSlots) {
+                var f = oneSlot.threadSafeHandle(() -> oneSlot.updateDynConfig(configKey, configValueBytes));
+                try {
+                    var r = f.get();
+                    if (!r) {
+                        return new ErrorReply("update dyn config failed, slot: " + oneSlot.slot());
+                    }
+                } catch (Exception e) {
+                    return new ErrorReply("update dyn config failed, slot: " + oneSlot.slot() + ", message: " + e.getMessage());
+                }
+            }
+            return OKReply.INSTANCE;
         }
 
         return NilReply.INSTANCE;

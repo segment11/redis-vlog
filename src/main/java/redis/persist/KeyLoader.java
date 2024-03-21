@@ -45,13 +45,16 @@ public class KeyLoader implements OfStats {
     // one split index one file
     static final int KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
-    public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake, MasterUpdateCallback masterUpdateCallback) throws IOException {
+    public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake,
+                     MasterUpdateCallback masterUpdateCallback, DynConfig dynConfig) throws IOException {
         this.slot = slot;
         this.bucketsPerSlot = bucketsPerSlot;
         this.slotDir = slotDir;
         this.snowFlake = snowFlake;
         this.masterUpdateCallback = masterUpdateCallback;
         this.metaKeyBucketSeq = new MetaKeyBucketSeq(slot, bucketsPerSlot, slotDir);
+
+        this.dynConfig = dynConfig;
 
         this.getKeyBucketCountArray = new byte[bucketsPerSlot][];
         for (int i = 0; i < bucketsPerSlot; i++) {
@@ -65,6 +68,8 @@ public class KeyLoader implements OfStats {
     private final SnowFlake snowFlake;
     private final MasterUpdateCallback masterUpdateCallback;
     private final MetaKeyBucketSeq metaKeyBucketSeq;
+
+    private final DynConfig dynConfig;
 
     // need read write lock
     private MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
@@ -327,7 +332,7 @@ public class KeyLoader implements OfStats {
         keyBucket.initWithCompressStats(compressStats);
 
         var count = getKeyBucketCountArray[bucketIndex][splitIndex];
-        if (count < Byte.MAX_VALUE) {
+        if (count < dynConfig.clearExpiredPvmWhenKeyBucketReadTimes()) {
             getKeyBucketCountArray[bucketIndex][splitIndex] = (byte) (count + 1);
         } else {
             clearExpiredPvmCount++;

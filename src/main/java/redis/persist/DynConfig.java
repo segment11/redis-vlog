@@ -39,6 +39,15 @@ public class DynConfig {
         update("readonly", readonly);
     }
 
+    int clearExpiredPvmWhenKeyBucketReadTimes() {
+        var obj = get("clearExpiredPvmWhenKeyBucketReadTimes");
+        return obj == null ? 10 : (int) obj;
+    }
+
+    void setClearExpiredPvmWhenKeyBucketReadTimes(int clearExpiredPvmWhenKeyBucketReadTimes) throws IOException {
+        update("clearExpiredPvmWhenKeyBucketReadTimes", clearExpiredPvmWhenKeyBucketReadTimes);
+    }
+
     DynConfig(byte slot, File dynConfigFile) throws IOException {
         this.slot = slot;
         this.dynConfigFile = dynConfigFile;
