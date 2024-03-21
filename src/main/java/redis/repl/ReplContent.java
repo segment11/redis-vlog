@@ -1,5 +1,9 @@
 package redis.repl;
 
+import io.activej.bytebuf.ByteBuf;
+
 public interface ReplContent {
-    byte[] encode();
+    void encodeTo(ByteBuf toBuf);
+
+    int encodeLength();
 }

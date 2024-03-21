@@ -1,5 +1,6 @@
 package redis.repl.content;
 
+import io.activej.bytebuf.ByteBuf;
 import redis.repl.ReplContent;
 
 public class Pong implements ReplContent {
@@ -10,7 +11,12 @@ public class Pong implements ReplContent {
     }
 
     @Override
-    public byte[] encode() {
-        return netListenAddresses.getBytes();
+    public void encodeTo(ByteBuf toBuf) {
+        toBuf.put(netListenAddresses.getBytes());
+    }
+
+    @Override
+    public int encodeLength() {
+        return netListenAddresses.length();
     }
 }

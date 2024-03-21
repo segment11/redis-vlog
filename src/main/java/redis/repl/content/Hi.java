@@ -1,8 +1,7 @@
 package redis.repl.content;
 
+import io.activej.bytebuf.ByteBuf;
 import redis.repl.ReplContent;
-
-import java.nio.ByteBuffer;
 
 public class Hi implements ReplContent {
     private final long slaveUuid;
@@ -14,11 +13,13 @@ public class Hi implements ReplContent {
     }
 
     @Override
-    public byte[] encode() {
-        var bytes = new byte[16];
-        var buffer = ByteBuffer.wrap(bytes);
-        buffer.putLong(slaveUuid);
-        buffer.putLong(masterUuid);
-        return bytes;
+    public void encodeTo(ByteBuf toBuf) {
+        toBuf.writeLong(slaveUuid);
+        toBuf.writeLong(masterUuid);
+    }
+
+    @Override
+    public int encodeLength() {
+        return 16;
     }
 }

@@ -7,19 +7,21 @@ import java.nio.ByteBuffer;
 
 public class Repl {
     public static final byte[] PROTOCOL_KEYWORD_BYTES = "X-REPL".getBytes();
+    // 8 bytes for slaveUuid, 1 byte for slot, 1 byte for type, 4 bytes for length
+    private static final int HEADER_LENGTH = PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1 + 4;
 
     public static io.activej.bytebuf.ByteBuf buffer(long slaveUuid, byte slot, ReplType type, ReplContent content) {
-        var encoded = content.encode();
+        var encodeLength = content.encodeLength();
 
-        var bytes = new byte[PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1 + 4 + encoded.length];
+        var bytes = new byte[HEADER_LENGTH + encodeLength];
         var buf = io.activej.bytebuf.ByteBuf.wrapForWriting(bytes);
 
         buf.write(PROTOCOL_KEYWORD_BYTES);
         buf.writeLong(slaveUuid);
         buf.writeByte(slot);
         buf.writeByte(type.code);
-        buf.writeInt(encoded.length);
-        buf.write(encoded);
+        buf.writeInt(encodeLength);
+        content.encodeTo(buf);
         return buf;
     }
 
@@ -45,7 +47,8 @@ public class Repl {
     }
 
     public static byte[][] decode(ByteBuf buf) {
-        if (buf.readableBytes() < PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1 + 4) {
+        // data length should > 0, so <= means no enough data
+        if (buf.readableBytes() <= HEADER_LENGTH) {
             return null;
         }
         buf.skipBytes(PROTOCOL_KEYWORD_BYTES.length);
@@ -63,6 +66,7 @@ public class Repl {
             return null;
         }
 
+        // 4 bytes arrays, first is slaveUuid, second is slot, third is replType, fourth is content data
         var data = new byte[4][];
         data[0] = new byte[8];
         ByteBuffer.wrap(data[0]).putLong(slaveUuid);
