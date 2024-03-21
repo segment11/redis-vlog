@@ -38,17 +38,30 @@ public class TcpClient {
         return sock != null && !sock.isClosed();
     }
 
-    public boolean write(ReplType type, ReplContent content) {
+    private long writeErrorCount = 0;
+    private long notConnectedErrorCount = 0;
+
+    boolean write(ReplType type, ReplContent content) {
         if (isSocketConnected()) {
             try {
                 sock.write(Repl.buffer(replPair.getSlaveUuid(), slot, type, content));
+                writeErrorCount = 0;
                 return true;
             } catch (Exception e) {
-                log.error("Could not write to server", e);
+                // reduce log
+                if (writeErrorCount % 1000 == 0) {
+                    log.error("Could not write to server", e);
+                }
+                writeErrorCount++;
                 return false;
+            } finally {
+                notConnectedErrorCount = 0;
             }
         } else {
-            log.error("Socket is not connected");
+            if (notConnectedErrorCount % 1000 == 0) {
+                log.error("Socket is not connected");
+            }
+            notConnectedErrorCount++;
             return false;
         }
     }
