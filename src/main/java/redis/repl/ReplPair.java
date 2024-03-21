@@ -4,6 +4,7 @@ import io.activej.eventloop.Eventloop;
 import redis.ConfForSlot;
 import redis.RequestHandler;
 import redis.repl.content.Hello;
+import redis.repl.content.ToSlaveWalAppendBatch;
 
 public class ReplPair {
     public ReplPair(byte slot, boolean asMaster, String host, int port) {
@@ -28,6 +29,10 @@ public class ReplPair {
 
     public int getPort() {
         return port;
+    }
+
+    boolean flushToSlaveWalAppendBatch(ToSlaveWalAppendBatch toSlaveWalAppendBatch) {
+        return write(ReplType.wal_append_batch, toSlaveWalAppendBatch);
     }
 
     @Override
@@ -143,6 +148,17 @@ public class ReplPair {
         if (tcpClient != null) {
             isSendBye = true;
             return tcpClient.bye();
+        }
+        return false;
+    }
+
+    public boolean write(ReplType type, ReplContent content) {
+        if (isSendBye) {
+            return false;
+        }
+
+        if (tcpClient != null) {
+            return tcpClient.write(type, content);
         }
         return false;
     }

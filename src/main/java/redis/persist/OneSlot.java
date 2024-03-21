@@ -1,6 +1,5 @@
 package redis.persist;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.luben.zstd.Zstd;
@@ -17,8 +16,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
 import redis.repl.MasterUpdateCallback;
-import redis.repl.NoopMasterUpdateCallback;
 import redis.repl.ReplPair;
+import redis.repl.SendToSlaveMasterUpdateCallback;
+import redis.repl.content.ToSlaveWalAppendBatch;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 import redis.task.ITask;
@@ -28,11 +28,15 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static io.activej.config.converter.ConfigConverters.ofInteger;
 import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
 public class OneSlot implements OfStats {
@@ -65,12 +69,12 @@ public class OneSlot implements OfStats {
         }
         this.dynConfig = new DynConfig(slot, dynConfigFile);
 
-        var masterUuidSaved = dynConfig.get("masterUuid");
+        var masterUuidSaved = dynConfig.getMasterUuid();
         if (masterUuidSaved != null) {
             this.masterUuid = Long.parseLong(masterUuidSaved.toString());
         } else {
             this.masterUuid = snowFlake.nextId();
-            dynConfig.update("masterUuid", masterUuid);
+            dynConfig.setMasterUuid(masterUuid);
         }
 
         int bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
@@ -123,8 +127,14 @@ public class OneSlot implements OfStats {
             }
         }
 
-        // todo, change repl master update callback
-        this.masterUpdateCallback = new NoopMasterUpdateCallback();
+        // default 2000, I do not know if it is suitable
+        var sendOnceMaxCount = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxCount", 2000);
+        var sendOnceMaxSize = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxSize", 1024 * 1024);
+        var toSlaveWalAppendBatch = new ToSlaveWalAppendBatch(sendOnceMaxCount, sendOnceMaxSize);
+        // sync to slave callback
+        this.masterUpdateCallback = new SendToSlaveMasterUpdateCallback(() ->
+                replPairs.stream().filter(ReplPair::isAsMaster).collect(Collectors.toList()), toSlaveWalAppendBatch);
+
         this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, masterUpdateCallback);
 
         DictMap.getInstance().setMasterUpdateCallback(masterUpdateCallback);
@@ -165,7 +175,7 @@ public class OneSlot implements OfStats {
     private final ArrayList<ReplPair> replPairs = new ArrayList<>();
 
     // todo, both master - master, need change equal and init as master or slave
-    public void createReplPairAsSlave(String host, int port) {
+    public void createReplPairAsSlave(String host, int port) throws IOException {
         var replPair = new ReplPair(slot, false, host, port);
         replPair.setSlaveUuid(masterUuid);
 
@@ -180,6 +190,8 @@ public class OneSlot implements OfStats {
         replPair.initAsSlave(eventloop, requestHandler);
         log.warn("Create repl pair as slave, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
+
+        setReadonly(true);
     }
 
     public ReplPair getReplPair(long slaveUuid) {
@@ -270,35 +282,12 @@ public class OneSlot implements OfStats {
     private static final String DYN_CONFIG_FILE_NAME = "dyn-config.json";
     private final DynConfig dynConfig;
 
-    static class DynConfig {
-        private final Logger log = LoggerFactory.getLogger(DynConfig.class);
-        private final byte slot;
-        private final File dynConfigFile;
+    public boolean isReadonly() {
+        return dynConfig.isReadonly();
+    }
 
-        private final HashMap<String, Object> data;
-
-        public Object get(String key) {
-            return data.get(key);
-        }
-
-        DynConfig(byte slot, File dynConfigFile) throws IOException {
-            this.slot = slot;
-            this.dynConfigFile = dynConfigFile;
-            // read json
-            var objectMapper = new ObjectMapper();
-            data = objectMapper.readValue(dynConfigFile, HashMap.class);
-
-            log.info("Init dyn config, data: {}, slot: {}", data, slot);
-        }
-
-        synchronized void update(String key, Object value) throws IOException {
-            data.put(key, value);
-            // write json
-            var objectMapper = new ObjectMapper();
-            objectMapper.writeValue(dynConfigFile, data);
-
-            log.info("Update dyn config, key: {}, value: {}, slot: {}", key, value, slot);
-        }
+    public void setReadonly(boolean readonly) throws IOException {
+        dynConfig.setReadonly(readonly);
     }
 
     public File getBigStringDir() {
@@ -393,7 +382,7 @@ public class OneSlot implements OfStats {
 
             @Override
             public String name() {
-                return "repl pair ping/pong";
+                return "repl pair client ping/server flush wal append batch";
             }
 
             @Override
@@ -402,6 +391,10 @@ public class OneSlot implements OfStats {
                     if (!replPair.isAsMaster()) {
                         // only slave need send ping
                         replPair.ping();
+                    } else {
+                        if (!masterUpdateCallback.isToSlaveWalAppendBatchEmpty()) {
+                            masterUpdateCallback.flushToSlaveWalAppendBatch();
+                        }
                     }
                 }
             }
@@ -691,6 +684,10 @@ public class OneSlot implements OfStats {
         if (threadIdProtected != -1 && threadIdProtected != currentThreadId) {
             throw new IllegalStateException("Thread id not match, w=" + workerId + ", s=" + slot +
                     ", t=" + currentThreadId + ", t2=" + threadIdProtected);
+        }
+
+        if (isReadonly()) {
+            throw new ReadonlyException();
         }
 
         var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;

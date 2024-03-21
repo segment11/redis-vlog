@@ -7,6 +7,7 @@ import redis.persist.Wal;
 
 import java.util.ArrayList;
 
+// for debug and test
 public class NoopMasterUpdateCallback implements MasterUpdateCallback {
     private final Logger log = LoggerFactory.getLogger(NoopMasterUpdateCallback.class);
 
@@ -30,6 +31,16 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
             log.warn("onWalAppend called with slot: {}, bucketIndex: {}, batchIndex: {}, isValueShort: {}, offset: {}, v: {}",
                     slot, bucketIndex, batchIndex, isValueShort, offset, v);
         }
+    }
+
+    @Override
+    public boolean isToSlaveWalAppendBatchEmpty() {
+        return false;
+    }
+
+    @Override
+    public void flushToSlaveWalAppendBatch() {
+
     }
 
     @Override
