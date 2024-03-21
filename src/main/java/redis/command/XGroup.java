@@ -349,12 +349,12 @@ public class XGroup extends BaseCommand {
         }
 
         var oneSlot = localPersist.oneSlot(slot);
-        var uuidListServer = oneSlot.getBigStringFileUuidList();
-        if (uuidListServer.isEmpty()) {
+        var uuidListInMaster = oneSlot.getBigStringFileUuidList();
+        if (uuidListInMaster.isEmpty()) {
             return Repl.reply(slot, replPair, ReplType.s_exists_big_string, new EmptyContent());
         }
 
-        var toSlaveExistsBigString = new ToSlaveExistsBigString(oneSlot.getBigStringDir(), uuidListServer, sentUuidList);
+        var toSlaveExistsBigString = new ToSlaveExistsBigString(oneSlot.getBigStringDir(), uuidListInMaster, sentUuidList);
         return Repl.reply(slot, replPair, ReplType.s_exists_big_string, toSlaveExistsBigString);
     }
 

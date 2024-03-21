@@ -13,22 +13,22 @@ public class ToSlaveExistsBigString implements ReplContent {
     private final ArrayList<Long> toSendUuidList;
     private final boolean isSendAllOnce;
 
-    private static final int ONCE_SEND_DICT_COUNT = 10;
+    private static final int ONCE_SEND_BIG_STRING_COUNT = 10;
 
-    public ToSlaveExistsBigString(File bigStringDir, ArrayList<Long> uuidListServer, ArrayList<Long> sentUuidList) {
+    public ToSlaveExistsBigString(File bigStringDir, ArrayList<Long> uuidListInMaster, ArrayList<Long> sentUuidList) {
         this.bigStringDir = bigStringDir;
 
         var toSendUuidList = new ArrayList<Long>();
         // exclude sent uuid
-        for (var uuid : uuidListServer) {
+        for (var uuid : uuidListInMaster) {
             if (!sentUuidList.contains(uuid)) {
                 toSendUuidList.add(uuid);
             }
         }
 
-        this.isSendAllOnce = toSendUuidList.size() <= ONCE_SEND_DICT_COUNT;
+        this.isSendAllOnce = toSendUuidList.size() <= ONCE_SEND_BIG_STRING_COUNT;
         if (!isSendAllOnce) {
-            toSendUuidList = new ArrayList<>(toSendUuidList.subList(0, ONCE_SEND_DICT_COUNT));
+            toSendUuidList = new ArrayList<>(toSendUuidList.subList(0, ONCE_SEND_BIG_STRING_COUNT));
         }
 
         this.toSendUuidList = toSendUuidList;
