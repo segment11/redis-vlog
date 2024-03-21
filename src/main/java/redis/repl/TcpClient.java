@@ -109,9 +109,9 @@ public class TcpClient {
     public void close() {
         if (sock != null && !sock.isClosed()) {
             sock.close();
-            System.out.println("Closed socket");
+            System.out.println("Closed socket, slot: " + slot + ", host: " + replPair.getHost() + ", port: " + replPair.getPort());
         } else {
-            System.out.println("Socket is already closed");
+            System.out.println("Socket is already closed, slot: " + slot + ", host: " + replPair.getHost() + ", port: " + replPair.getPort());
         }
     }
 }
