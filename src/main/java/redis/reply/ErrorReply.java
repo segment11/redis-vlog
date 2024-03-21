@@ -28,6 +28,7 @@ public class ErrorReply implements Reply {
     public static final ErrorReply ZSET_SIZE_TO_LONG = new ErrorReply("zset size too long");
     public static final ErrorReply ZSET_MEMBER_LENGTH_TO_LONG = new ErrorReply("zset member length too long");
     public static final ErrorReply INDEX_OUT_OF_RANGE = new ErrorReply("index out of range");
+    public static final ErrorReply READONLY = new ErrorReply("readonly");
 
     private final String message;
 

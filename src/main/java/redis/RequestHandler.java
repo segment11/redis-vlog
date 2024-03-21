@@ -11,6 +11,7 @@ import redis.command.*;
 import redis.decode.Request;
 import redis.persist.ChunkMerger;
 import redis.persist.LocalPersist;
+import redis.persist.ReadonlyException;
 import redis.persist.SegmentOverflowException;
 import redis.reply.*;
 import redis.stats.OfStats;
@@ -260,6 +261,8 @@ public class RequestHandler implements OfStats {
             var sGroup = new SGroup(cmd, data, socket).init(this, request);
             try {
                 sGroup.set(keyBytes, valueBytes);
+            } catch (ReadonlyException e) {
+                return ErrorReply.READONLY;
             } catch (SegmentOverflowException e) {
                 return new ErrorReply(e.getMessage());
             } catch (IllegalStateException e) {
@@ -306,58 +309,62 @@ public class RequestHandler implements OfStats {
 
         // else, use enum better
         var firstByte = data[0][0];
-        if (firstByte == 'a' || firstByte == 'A') {
-            return new AGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'b' || firstByte == 'B') {
-            return new BGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'c' || firstByte == 'C') {
-            return new CGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'd' || firstByte == 'D') {
-            return new DGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'e' || firstByte == 'E') {
-            return new EGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'f' || firstByte == 'F') {
-            return new FGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'g' || firstByte == 'G') {
-            return new GGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'h' || firstByte == 'H') {
-            return new HGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'i' || firstByte == 'I') {
-            return new IGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'j' || firstByte == 'J') {
-            return new JGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'k' || firstByte == 'K') {
-            return new KGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'l' || firstByte == 'L') {
-            return new LGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'm' || firstByte == 'M') {
-            return new MGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'n' || firstByte == 'N') {
-            return new NGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'o' || firstByte == 'O') {
-            return new OGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'p' || firstByte == 'P') {
-            return new PGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'q' || firstByte == 'Q') {
-            return new QGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'r' || firstByte == 'R') {
-            return new RGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 's' || firstByte == 'S') {
-            return new SGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 't' || firstByte == 'T') {
-            return new TGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'u' || firstByte == 'U') {
-            return new UGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'v' || firstByte == 'V') {
-            return new VGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'w' || firstByte == 'W') {
-            return new WGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'x' || firstByte == 'X') {
-            return new XGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'y' || firstByte == 'Y') {
-            return new YGroup(cmd, data, socket).init(this, request).handle();
-        } else if (firstByte == 'z' || firstByte == 'Z') {
-            return new ZGroup(cmd, data, socket).init(this, request).handle();
+        try {
+            if (firstByte == 'a' || firstByte == 'A') {
+                return new AGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'b' || firstByte == 'B') {
+                return new BGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'c' || firstByte == 'C') {
+                return new CGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'd' || firstByte == 'D') {
+                return new DGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'e' || firstByte == 'E') {
+                return new EGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'f' || firstByte == 'F') {
+                return new FGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'g' || firstByte == 'G') {
+                return new GGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'h' || firstByte == 'H') {
+                return new HGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'i' || firstByte == 'I') {
+                return new IGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'j' || firstByte == 'J') {
+                return new JGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'k' || firstByte == 'K') {
+                return new KGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'l' || firstByte == 'L') {
+                return new LGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'm' || firstByte == 'M') {
+                return new MGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'n' || firstByte == 'N') {
+                return new NGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'o' || firstByte == 'O') {
+                return new OGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'p' || firstByte == 'P') {
+                return new PGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'q' || firstByte == 'Q') {
+                return new QGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'r' || firstByte == 'R') {
+                return new RGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 's' || firstByte == 'S') {
+                return new SGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 't' || firstByte == 'T') {
+                return new TGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'u' || firstByte == 'U') {
+                return new UGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'v' || firstByte == 'V') {
+                return new VGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'w' || firstByte == 'W') {
+                return new WGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'x' || firstByte == 'X') {
+                return new XGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'y' || firstByte == 'Y') {
+                return new YGroup(cmd, data, socket).init(this, request).handle();
+            } else if (firstByte == 'z' || firstByte == 'Z') {
+                return new ZGroup(cmd, data, socket).init(this, request).handle();
+            }
+        } catch (ReadonlyException e) {
+            return ErrorReply.READONLY;
         }
 
         return ErrorReply.FORMAT;
