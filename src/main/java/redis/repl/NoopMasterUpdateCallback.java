@@ -22,6 +22,16 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
         }
     }
 
+    private long keyBucketSplitCount = 0;
+
+    @Override
+    public void onKeyBucketSplit(byte slot, int bucketIndex, byte splitNumber) {
+        keyBucketSplitCount++;
+        if (keyBucketSplitCount % 1000 == 0) {
+            log.warn("onKeyBucketSplit called with slot: {}, bucketIndex: {}, splitNumber: {}", slot, bucketIndex, splitNumber);
+        }
+    }
+
     private long walAppendCount = 0;
 
     @Override

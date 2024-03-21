@@ -2,7 +2,7 @@ package redis.repl;
 
 import redis.Dict;
 import redis.persist.Wal;
-import redis.repl.content.ToSlaveWalAppendBatch;
+import redis.repl.content.*;
 
 import java.util.ArrayList;
 
@@ -17,7 +17,20 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
 
     @Override
     public void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long seq, byte[] bytes) {
+        var toSlaveKeyBucketUpdate = new ToSlaveKeyBucketUpdate(bucketIndex, splitIndex, splitNumber, seq, bytes);
+        var replPairList = getCurrentSlaveReplPairList.get();
+        for (var replPair : replPairList) {
+            replPair.write(ReplType.key_bucket_update, toSlaveKeyBucketUpdate);
+        }
+    }
 
+    @Override
+    public void onKeyBucketSplit(byte slot, int bucketIndex, byte splitNumber) {
+        var toSlaveKeyBucketSplit = new ToKeyBucketSplit(bucketIndex, splitNumber);
+        var replPairList = getCurrentSlaveReplPairList.get();
+        for (var replPair : replPairList) {
+            replPair.write(ReplType.key_bucket_split, toSlaveKeyBucketSplit);
+        }
     }
 
     @Override
@@ -54,16 +67,24 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
 
     @Override
     public void onDictCreate(String key, Dict dict) {
-
+        var toSlaveDictCreate = new ToSlaveDictCreate(key, dict);
+        var replPairList = getCurrentSlaveReplPairList.get();
+        for (var replPair : replPairList) {
+            replPair.write(ReplType.dict_create, toSlaveDictCreate);
+        }
     }
 
     @Override
     public void onSegmentWrite(byte workerId, byte batchIndex, byte slot, int segmentLength, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
-
+        // todo
     }
 
     @Override
     public void onBigStringFileWrite(byte slot, long uuid, byte[] bytes) {
-
+        var toSlaveBigStringFileWrite = new ToSlaveBigStringFileWrite(uuid, bytes);
+        var replPairList = getCurrentSlaveReplPairList.get();
+        for (var replPair : replPairList) {
+            replPair.write(ReplType.big_string_file_write, toSlaveBigStringFileWrite);
+        }
     }
 }

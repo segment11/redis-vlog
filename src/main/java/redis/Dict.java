@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.Date;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Dict implements Serializable {
@@ -33,6 +34,19 @@ public class Dict implements Serializable {
                 '}';
     }
 
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(seq);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        Dict dict = (Dict) obj;
+        return seq == dict.seq;
+    }
+
     public byte[] getDictBytes() {
         return dictBytes;
     }
@@ -40,7 +54,11 @@ public class Dict implements Serializable {
     // seq int + create time long + key length short + key + dict bytes length short + dict bytes
     private static final int ENCODED_HEADER_LENGTH = 4 + 8 + 2 + 2;
 
-    byte[] encode(String key) {
+    public int encodeLength(String key) {
+        return 4 + ENCODED_HEADER_LENGTH + key.length() + dictBytes.length;
+    }
+
+    public byte[] encode(String key) {
         int vLength = ENCODED_HEADER_LENGTH + key.length() + dictBytes.length;
 
         var bytes = new byte[4 + vLength];
@@ -57,7 +75,7 @@ public class Dict implements Serializable {
         return bytes;
     }
 
-    record DictWithKey(String key, Dict dict) {
+    public record DictWithKey(String key, Dict dict) {
         @Override
         public String toString() {
             return "DictWithKey{" +

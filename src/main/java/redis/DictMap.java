@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class DictMap implements OfStats {
     public static final int TO_COMPRESS_MIN_DATA_LENGTH = 32;
+    public static final String ANONYMOUS_DICT_KEY = "x-anonymous";
 
     // singleton
     private static final DictMap instance = new DictMap();
@@ -58,11 +59,20 @@ public class DictMap implements OfStats {
         return cacheDict.put(key, dict);
     }
 
+    public ConcurrentHashMap<String, Dict> getCacheDict() {
+        return cacheDict;
+    }
+
+    public ConcurrentHashMap<Integer, Dict> getCacheDictBySeq() {
+        return cacheDictBySeq;
+    }
+
     // worker share dict, init on start, need persist
     // for compress
     private ConcurrentHashMap<String, Dict> cacheDict = new ConcurrentHashMap<>();
     // can not be removed
     // for decompress
+    // if dict retrain, and dict count is large, it will be a problem, need clean not used dict, todo
     private ConcurrentHashMap<Integer, Dict> cacheDictBySeq = new ConcurrentHashMap<>();
 
     private FileOutputStream fos;

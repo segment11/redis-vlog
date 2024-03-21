@@ -671,6 +671,7 @@ public class KeyLoader implements OfStats {
 
             // update meta
             metaKeyBucketSplitNumber.set(bucketIndex, beforeSplitNumberArr[0]);
+            masterUpdateCallback.onKeyBucketSplit(slot, bucketIndex, beforeSplitNumberArr[0]);
         }
     }
 

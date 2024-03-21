@@ -8,6 +8,8 @@ import java.util.ArrayList;
 public interface MasterUpdateCallback {
     void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long seq, byte[] bytes);
 
+    void onKeyBucketSplit(byte slot, int bucketIndex, byte splitNumber);
+
     // offset == 0, need clear values
     void onWalAppend(byte slot, int bucketIndex, byte batchIndex, boolean isValueShort, Wal.V v, int offset);
 

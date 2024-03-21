@@ -15,6 +15,7 @@ import org.checkerframework.checker.nullness.qual.PolyNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
+import redis.command.XGroup;
 import redis.repl.MasterUpdateCallback;
 import redis.repl.ReplPair;
 import redis.repl.SendToSlaveMasterUpdateCallback;
@@ -28,10 +29,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -173,9 +171,17 @@ public class OneSlot implements OfStats {
 
     private final long masterUuid;
     private final ArrayList<ReplPair> replPairs = new ArrayList<>();
+    private final LinkedList<ReplPair> delayNeedCloseReplPairs = new LinkedList<>();
+
+    public void addDelayNeedCloseReplPair(ReplPair replPair) {
+        delayNeedCloseReplPairs.add(replPair);
+    }
 
     // todo, both master - master, need change equal and init as master or slave
     public void createReplPairAsSlave(String host, int port) throws IOException {
+        // remove old if exists
+        removeReplPairAsSlave();
+
         var replPair = new ReplPair(slot, false, host, port);
         replPair.setSlaveUuid(masterUuid);
 
@@ -192,6 +198,20 @@ public class OneSlot implements OfStats {
         replPairs.add(replPair);
 
         setReadonly(true);
+        setCanRead(false);
+    }
+
+    public void removeReplPairAsSlave() throws IOException {
+        for (var replPair : replPairs) {
+            if (!replPair.isAsMaster()) {
+                replPair.bye();
+                addDelayNeedCloseReplPair(replPair);
+                return;
+            }
+        }
+
+        setReadonly(false);
+        setCanRead(true);
     }
 
     public ReplPair getReplPair(long slaveUuid) {
@@ -279,6 +299,15 @@ public class OneSlot implements OfStats {
     private static final String BIG_STRING_DIR_NAME = "big-string";
     private final File bigStringDir;
 
+    public ArrayList<Long> getBigStringFileUuidList() {
+        ArrayList<Long> list = new ArrayList<>();
+        File[] files = bigStringDir.listFiles();
+        for (File file : files) {
+            list.add(Long.parseLong(file.getName()));
+        }
+        return list;
+    }
+
     private static final String DYN_CONFIG_FILE_NAME = "dyn-config.json";
     private final DynConfig dynConfig;
 
@@ -312,6 +341,14 @@ public class OneSlot implements OfStats {
 
     public void setReadonly(boolean readonly) throws IOException {
         dynConfig.setReadonly(readonly);
+    }
+
+    public boolean canRead() {
+        return dynConfig.canRead();
+    }
+
+    public void setCanRead(boolean canRead) throws IOException {
+        dynConfig.setCanRead(canRead);
     }
 
     public File getBigStringDir() {
@@ -418,6 +455,20 @@ public class OneSlot implements OfStats {
                     } else {
                         if (!masterUpdateCallback.isToSlaveWalAppendBatchEmpty()) {
                             masterUpdateCallback.flushToSlaveWalAppendBatch();
+                        }
+                    }
+                }
+
+                if (!delayNeedCloseReplPairs.isEmpty()) {
+                    var needCloseReplPair = delayNeedCloseReplPairs.pop();
+                    needCloseReplPair.close();
+
+                    var it = replPairs.iterator();
+                    while (it.hasNext()) {
+                        var replPair = it.next();
+                        if (replPair.equals(needCloseReplPair)) {
+                            it.remove();
+                            break;
                         }
                     }
                 }
@@ -802,6 +853,28 @@ public class OneSlot implements OfStats {
             nextAvailableWal.lastUsedTimeMillis = System.currentTimeMillis();
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public void asSlaveOnMasterWalAppendBatchGet(TreeMap<Integer, ArrayList<XGroup.ExtV>> extVsGroupByBucketIndex) {
+        for (var entry : extVsGroupByBucketIndex.entrySet()) {
+            var bucketIndex = entry.getKey();
+            var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
+
+            var extVs = entry.getValue();
+            for (var extV : extVs) {
+                var batchIndex = extV.batchIndex();
+                var wal = walsArray[walGroupIndex][batchIndex];
+
+                var v = extV.v();
+                if (extV.isValueShort()) {
+                    wal.delayToKeyBucketShortValues.put(v.key, v);
+                    wal.delayToKeyBucketValues.remove(v.key);
+                } else {
+                    wal.delayToKeyBucketValues.put(v.key, v);
+                    wal.delayToKeyBucketShortValues.remove(v.key);
+                }
+            }
         }
     }
 

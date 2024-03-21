@@ -39,6 +39,15 @@ public class DynConfig {
         update("readonly", readonly);
     }
 
+    boolean canRead() {
+        var obj = get("canRead");
+        return obj == null || (boolean) obj;
+    }
+
+    void setCanRead(boolean canRead) throws IOException {
+        update("canRead", canRead);
+    }
+
     int clearExpiredPvmWhenKeyBucketReadTimes() {
         var obj = get("clearExpiredPvmWhenKeyBucketReadTimes");
         return obj == null ? 10 : (int) obj;

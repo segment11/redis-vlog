@@ -199,6 +199,26 @@ public class SGroup extends BaseCommand {
         var hostBytes = data[1];
         var portBytes = data[2];
 
+        var isNoOne = "no".equalsIgnoreCase(new String(hostBytes));
+        if (isNoOne) {
+            CompletableFuture<Boolean>[] futures = new CompletableFuture[slotNumber];
+            for (int i = 0; i < slotNumber; i++) {
+                var oneSlot = localPersist.oneSlot((byte) i);
+                futures[i] = oneSlot.threadSafeHandle(() -> {
+                    try {
+                        oneSlot.removeReplPairAsSlave();
+                        return true;
+                    } catch (Exception e) {
+                        log.error("Remove repl pair as slave failed, slot: " + oneSlot.slot(), e);
+                        return false;
+                    }
+                });
+            }
+            CompletableFuture.allOf(futures).join();
+
+            return OKReply.INSTANCE;
+        }
+
         var host = new String(hostBytes);
         // host valid check
         var matcher = IPv4_PATTERN.matcher(host);
