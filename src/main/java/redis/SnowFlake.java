@@ -23,7 +23,6 @@ public class SnowFlake {
     private long lastStamp = -1L;
 
     public SnowFlake(long datacenterId, long machineId) {
-
         if (datacenterId > MAX_DATACENTER_NUM || datacenterId < 0) {
             throw new IllegalArgumentException("Parameter datacenterId can't be greater than MAX_DATACENTER_NUM or less than 0");
         }

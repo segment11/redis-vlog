@@ -76,7 +76,7 @@ public class RequestHandler implements OfStats {
         this.topMergeWorkers = topMergeWorkers;
         this.slotNumber = slotNumber;
 
-        this.snowFlake = snowFlake == null ? new SnowFlake(workerId, workerId) : snowFlake;
+        this.snowFlake = snowFlake;
         this.chunkMerger = chunkMerger;
         this.socketInspector = socketInspector;
 
