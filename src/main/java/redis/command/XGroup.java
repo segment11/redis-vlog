@@ -7,6 +7,7 @@ import redis.BaseCommand;
 import redis.ConfForSlot;
 import redis.Dict;
 import redis.DictMap;
+import redis.persist.OneSlot;
 import redis.persist.Wal;
 import redis.repl.Repl;
 import redis.repl.ReplPair;
@@ -359,12 +360,12 @@ public class XGroup extends BaseCommand {
     }
 
     private Reply s_exists_big_string(byte slot, byte[] contentBytes) {
+        // client received from server
         // empty content means no big string, next step
         if (contentBytes.length == 1) {
             return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, new EmptyContent());
         }
 
-        // client received from server
         var buffer = ByteBuffer.wrap(contentBytes);
         var bigStringCount = buffer.getShort();
         var isSendAllOnce = buffer.get() == 1;
@@ -395,20 +396,23 @@ public class XGroup extends BaseCommand {
             // next step, fetch big string
             return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, new EmptyContent());
         } else {
-            var uuidListLocal = oneSlot.getBigStringFileUuidList();
-            if (uuidListLocal.isEmpty()) {
-                return Repl.reply(slot, replPair, ReplType.exists_big_string, new EmptyContent());
-            }
-
-            var rawBytes = new byte[8 * bigStringCount];
-            var rawBuffer = ByteBuffer.wrap(rawBytes);
-            for (var uuid : uuidListLocal) {
-                rawBuffer.putLong(uuid);
-            }
-
-            // continue fetch big string
-            return Repl.reply(slot, replPair, ReplType.exists_big_string, new RawBytesContent(rawBytes));
+            return fetchExistsBigString(slot, oneSlot);
         }
+    }
+
+    private Reply fetchExistsBigString(byte slot, OneSlot oneSlot) {
+        var uuidListLocal = oneSlot.getBigStringFileUuidList();
+        if (uuidListLocal.isEmpty()) {
+            return Repl.reply(slot, replPair, ReplType.exists_big_string, new EmptyContent());
+        }
+
+        var rawBytes = new byte[8 * uuidListLocal.size()];
+        var rawBuffer = ByteBuffer.wrap(rawBytes);
+        for (var uuid : uuidListLocal) {
+            rawBuffer.putLong(uuid);
+        }
+
+        return Repl.reply(slot, replPair, ReplType.exists_big_string, new RawBytesContent(rawBytes));
     }
 
     private Reply exists_dict(byte slot, byte[] contentBytes) {
@@ -437,19 +441,21 @@ public class XGroup extends BaseCommand {
     }
 
     private Reply s_exists_dict(byte slot, byte[] contentBytes) {
-        // empty content means no dict, next step
-        if (contentBytes.length == 1) {
-            return Repl.reply(slot, replPair, ReplType.exists_big_string, new EmptyContent());
-        }
+        var oneSlot = localPersist.oneSlot(slot);
 
         // client received from server
+        // empty content means no dict, next step
+        if (contentBytes.length == 1) {
+            return fetchExistsBigString(slot, oneSlot);
+        }
+
         var buffer = ByteBuffer.wrap(contentBytes);
         var dictCount = buffer.getShort();
         var isSendAllOnce = buffer.get() == 1;
 
         if (dictCount == 0) {
             // next step, fetch big string
-            return Repl.reply(slot, replPair, ReplType.exists_big_string, new EmptyContent());
+            return fetchExistsBigString(slot, oneSlot);
         }
 
         var dictMap = DictMap.getInstance();
@@ -474,7 +480,7 @@ public class XGroup extends BaseCommand {
 
         if (isSendAllOnce) {
             // next step, fetch big string
-            return Repl.reply(slot, replPair, ReplType.exists_big_string, new EmptyContent());
+            return fetchExistsBigString(slot, oneSlot);
         } else {
             var cacheDictBySeqLocal = dictMap.getCacheDictBySeq();
             if (cacheDictBySeqLocal.isEmpty()) {
