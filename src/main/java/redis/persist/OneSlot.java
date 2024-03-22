@@ -197,8 +197,12 @@ public class OneSlot implements OfStats {
         log.warn("Create repl pair as slave, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
 
-        setReadonly(true);
-        setCanRead(false);
+        if (!isReadonly()) {
+            setReadonly(true);
+        }
+        if (canRead()) {
+            setCanRead(false);
+        }
     }
 
     public void removeReplPairAsSlave() throws IOException {
@@ -210,8 +214,12 @@ public class OneSlot implements OfStats {
             }
         }
 
-        setReadonly(false);
-        setCanRead(true);
+        if(isReadonly()){
+            setReadonly(false);
+        }
+        if(!canRead()){
+            setCanRead(true);
+        }
     }
 
     public ReplPair getReplPair(long slaveUuid) {
