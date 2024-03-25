@@ -38,6 +38,7 @@ public class Request {
         this.slotNumber = slotNumber;
     }
 
+    // todo, need check if cross slot so can check if need use multi slot eventloop to execute task
     private BaseCommand.SlotWithKeyHash slotWithKeyHash;
 
     public BaseCommand.SlotWithKeyHash getSlotWithKeyHash() {
@@ -66,5 +67,15 @@ public class Request {
         }
         cmd = new String(data[0]).toLowerCase();
         return cmd;
+    }
+
+    @Override
+    public String toString() {
+        return "Request{" +
+                "cmd=" + cmd() +
+                "data.length=" + data.length +
+                ", isHttp=" + isHttp +
+                ", isRepl=" + isRepl +
+                '}';
     }
 }

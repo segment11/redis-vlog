@@ -9,29 +9,32 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.repl.Repl;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import static redis.repl.Repl.PROTOCOL_KEYWORD_BYTES;
 
-public class RequestDecoder implements ByteBufsDecoder<Request> {
+public class RequestDecoder implements ByteBufsDecoder<ArrayList<Request>> {
     // in local thread
     private final RESP resp = new RESP();
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    @Override
-    public @Nullable Request tryDecode(ByteBufs bufs) throws MalformedDataException {
+    private Request tryDecodeOne(ByteBufs bufs) {
         io.netty.buffer.CompositeByteBuf compositeByteBuf = Unpooled.compositeBuffer();
         int capacity = 0;
         for (var buf : bufs) {
-            if (buf.readRemaining() > 0) {
-                capacity += buf.tail();
-                compositeByteBuf.addComponent(true, Unpooled.wrappedBuffer(buf.array()));
+            int remainingN = buf.readRemaining();
+            if (remainingN > 0) {
+                capacity += remainingN;
+                compositeByteBuf.addComponent(true, Unpooled.wrappedBuffer(buf.array(), buf.head(), remainingN));
             }
         }
+        if (capacity == 0) {
+            return null;
+        }
 
-        int head = bufs.peekBuf().head();
-        compositeByteBuf.readerIndex(head);
+        compositeByteBuf.readerIndex(0);
         compositeByteBuf.writerIndex(capacity).capacity(capacity);
 
         // http or redis
@@ -47,70 +50,79 @@ public class RequestDecoder implements ByteBufsDecoder<Request> {
         var isRepl = Arrays.equals(first6, 0, 6, PROTOCOL_KEYWORD_BYTES, 0, 6);
 
         // set reader index back
-        compositeByteBuf.readerIndex(head);
+        compositeByteBuf.readerIndex(0);
 
-        try {
-            byte[][] data;
-            if (isHttp) {
-                var h = new HttpHeaderBody();
-                h.feed(compositeByteBuf, compositeByteBuf.readableBytes(), head);
-                if (!h.isOk) {
-                    return null;
-//                  throw new MalformedDataException("Malformed data");
-                }
-
-                if (isGet || isDelete) {
-                    // query parameters
-                    var pos = h.url.indexOf("?");
-                    if (pos == -1) {
-                        return null;
-                    }
-
-                    var arr = h.url.substring(pos + 1).split("&");
-                    data = new byte[arr.length][];
-                    for (int i = 0; i < arr.length; i++) {
-                        data[i] = arr[i].getBytes();
-                    }
-                } else {
-                    var body = h.body();
-                    if (body == null) {
-                        return null;
-                    }
-
-                    var arr = new String(body).split(" ");
-                    data = new byte[arr.length][];
-                    for (int i = 0; i < arr.length; i++) {
-                        data[i] = arr[i].getBytes();
-                    }
-                }
-            } else if (isRepl) {
-                data = Repl.decode(compositeByteBuf);
-            } else {
-                data = resp.decode(compositeByteBuf);
-                if (data == null) {
-                    return null;
-//                throw new MalformedDataException("Malformed data");
-                }
-            }
-
-            boolean isFinished = true;
-            for (var inner : data) {
-                if (inner == null) {
-                    isFinished = false;
-                    break;
-                }
-            }
-            if (!isFinished) {
+        byte[][] data;
+        if (isHttp) {
+            var h = new HttpHeaderBody();
+            h.feed(compositeByteBuf, compositeByteBuf.readableBytes(), 0);
+            if (!h.isOk) {
                 return null;
+//                  throw new MalformedDataException("Malformed data");
             }
 
-            // remove already consumed bytes
-            int consumedN = compositeByteBuf.readerIndex() - head;
-            bufs.takeExactSize(consumedN);
+            if (isGet || isDelete) {
+                // query parameters
+                var pos = h.url.indexOf("?");
+                if (pos == -1) {
+                    return null;
+                }
 
-            return new Request(data, isHttp, isRepl);
-//        } catch (IllegalArgumentException e) {
-//            throw new MalformedDataException("Malformed data: " + e.getMessage());
+                var arr = h.url.substring(pos + 1).split("&");
+                data = new byte[arr.length][];
+                for (int i = 0; i < arr.length; i++) {
+                    data[i] = arr[i].getBytes();
+                }
+            } else {
+                var body = h.body();
+                if (body == null) {
+                    return null;
+                }
+
+                var arr = new String(body).split(" ");
+                data = new byte[arr.length][];
+                for (int i = 0; i < arr.length; i++) {
+                    data[i] = arr[i].getBytes();
+                }
+            }
+        } else if (isRepl) {
+            data = Repl.decode(compositeByteBuf);
+        } else {
+            data = resp.decode(compositeByteBuf);
+            if (data == null) {
+                return null;
+//                throw new MalformedDataException("Malformed data");
+            }
+        }
+
+        boolean isFinished = true;
+        for (var inner : data) {
+            if (inner == null) {
+                isFinished = false;
+                break;
+            }
+        }
+        if (!isFinished) {
+            return null;
+        }
+
+        // remove already consumed bytes
+        int consumedN = compositeByteBuf.readerIndex();
+        bufs.takeExactSize(consumedN);
+
+        return new Request(data, isHttp, isRepl);
+    }
+
+    @Override
+    public @Nullable ArrayList<Request> tryDecode(ByteBufs bufs) throws MalformedDataException {
+        try {
+            ArrayList<Request> pipeline = new ArrayList<>();
+            var one = tryDecodeOne(bufs);
+            while (one != null) {
+                pipeline.add(one);
+                one = tryDecodeOne(bufs);
+            }
+            return pipeline.isEmpty() ? null : pipeline;
         } catch (Exception e) {
             log.error("Decode error", e);
             return null;

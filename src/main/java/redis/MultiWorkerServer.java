@@ -19,6 +19,7 @@ import io.activej.launcher.Launcher;
 import io.activej.launchers.initializers.Initializers;
 import io.activej.net.PrimaryServer;
 import io.activej.net.SimpleServer;
+import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.reactor.nio.NioReactor;
 import io.activej.service.ServiceGraphModule;
 import io.activej.worker.WorkerPool;
@@ -28,6 +29,7 @@ import io.activej.worker.annotation.Worker;
 import io.activej.worker.annotation.WorkerId;
 import net.openhft.affinity.AffinityStrategies;
 import net.openhft.affinity.AffinityThreadFactory;
+import redis.decode.Request;
 import redis.decode.RequestDecoder;
 import redis.persist.ChunkMerger;
 import redis.persist.KeyBucket;
@@ -43,6 +45,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Random;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadFactory;
 
 import static io.activej.config.Config.ofClassPathProperties;
@@ -54,6 +57,11 @@ import static io.activej.launchers.initializers.Initializers.ofPrimaryServer;
 import static redis.decode.HttpHeaderBody.*;
 
 public class MultiWorkerServer extends Launcher {
+//    static {
+//        ApplicationSettings.set(ServerSocketSettings.class, "receiveBufferSize", MemSize.kilobytes(64));
+//        ApplicationSettings.set(SocketSettings.class, "receiveBufferSize", MemSize.kilobytes(64));
+//    }
+
     private final int PORT = 7379;
 
     public static final String PROPERTIES_FILE = "redis-vlog.properties";
@@ -166,6 +174,61 @@ public class MultiWorkerServer extends Launcher {
         return httpBuf;
     }
 
+    private ByteBuf handleRequest(Request request, int slotNumber, ITcpSocket socket) throws ExecutionException, InterruptedException {
+        if (requestHandlersArray.length > 1) {
+            request.setSlotNumber((short) slotNumber);
+            RequestHandler.parseSlot(request);
+        }
+
+        var slot = request.getSlot();
+        if (slot == -1) {
+            RequestHandler targetHandler;
+            if (requestHandlersArray.length == 1) {
+                targetHandler = requestHandlersArray[0];
+            } else {
+                var i = new Random().nextInt(requestHandlersArray.length);
+                targetHandler = requestHandlersArray[i];
+            }
+            var reply = targetHandler.handle(request, socket);
+            if (request.isHttp()) {
+                return wrapHttpResponse(reply);
+            } else {
+                return reply.buffer();
+            }
+        }
+
+        // need not submit to request workers
+        if (reuseNetWorkers) {
+            var targetHandler = requestHandlersArray[0];
+
+            var reply = targetHandler.handle(request, socket);
+            if (request.isHttp()) {
+                return wrapHttpResponse(reply);
+            } else {
+                return reply.buffer();
+            }
+        }
+
+        int i = slot % requestHandlersArray.length;
+        var targetHandler = requestHandlersArray[i];
+        var eventloop = requestEventloopArray[i];
+
+        // use mapAsync, SettableFuture better, but exception happened, to be fixed, todo
+
+        var future = eventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
+        var reply = future.get();
+        // repl handle may return null
+        if (reply == null) {
+            return null;
+        }
+
+        if (request.isHttp()) {
+            return wrapHttpResponse(reply);
+        } else {
+            return reply.buffer();
+        }
+    }
+
     @Provides
     @Worker
     SimpleServer workerServer(NioReactor reactor, SocketInspector socketInspector, Config config) {
@@ -174,63 +237,33 @@ public class MultiWorkerServer extends Launcher {
         return SimpleServer.builder(reactor, socket ->
                         BinaryChannelSupplier.of(ChannelSuppliers.ofSocket(socket))
                                 .decodeStream(new RequestDecoder())
-                                .map(request -> {
-                                    if (request == null) {
+                                .map(pipeline -> {
+                                    if (pipeline == null) {
                                         return null;
                                     }
 
-                                    if (requestHandlersArray.length > 1) {
-                                        request.setSlotNumber((short) slotNumber);
-                                        RequestHandler.parseSlot(request);
+                                    if (pipeline.size() == 1) {
+                                        return handleRequest(pipeline.get(0), slotNumber, socket);
                                     }
 
-                                    var slot = request.getSlot();
-                                    if (slot == -1) {
-                                        RequestHandler targetHandler;
-                                        if (requestHandlersArray.length == 1) {
-                                            targetHandler = requestHandlersArray[0];
-                                        } else {
-                                            var i = new Random().nextInt(requestHandlersArray.length);
-                                            targetHandler = requestHandlersArray[i];
-                                        }
-                                        var reply = targetHandler.handle(request, socket);
-                                        if (request.isHttp()) {
-                                            return wrapHttpResponse(reply);
-                                        } else {
-                                            return reply.buffer();
+                                    var multiArrays = new byte[pipeline.size()][];
+                                    int totalN = 0;
+                                    for (int i = 0; i < pipeline.size(); i++) {
+                                        var buf = handleRequest(pipeline.get(i), slotNumber, socket);
+                                        if (buf != null) {
+                                            multiArrays[i] = buf.array();
+                                            totalN += multiArrays[i].length;
                                         }
                                     }
 
-                                    // need not submit to request workers
-                                    if (reuseNetWorkers) {
-                                        var targetHandler = requestHandlersArray[0];
-
-                                        var reply = targetHandler.handle(request, socket);
-                                        if (request.isHttp()) {
-                                            return wrapHttpResponse(reply);
-                                        } else {
-                                            return reply.buffer();
+                                    var multiBuf = ByteBuf.wrapForWriting(new byte[totalN]);
+                                    for (int i = 0; i < multiArrays.length; i++) {
+                                        var array = multiArrays[i];
+                                        if (array != null) {
+                                            multiBuf.write(array);
                                         }
                                     }
-
-                                    int i = slot % requestHandlersArray.length;
-                                    var targetHandler = requestHandlersArray[i];
-                                    var eventloop = requestEventloopArray[i];
-
-                                    // use mapAsync, SettableFuture better, but exception happened, to be fixed, todo
-
-                                    var future = eventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
-                                    var reply = future.get();
-                                    // repl handle may return null
-                                    if (reply == null) {
-                                        return null;
-                                    }
-
-                                    if (request.isHttp()) {
-                                        return wrapHttpResponse(reply);
-                                    } else {
-                                        return reply.buffer();
-                                    }
+                                    return multiBuf;
                                 })
                                 .streamTo(ChannelConsumers.ofSocket(socket)))
                 .withSocketInspector(socketInspector)
