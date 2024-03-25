@@ -23,7 +23,7 @@ public class KeyBucket {
     public static final int MAX_BUCKETS_PER_SLOT = KeyLoader.KEY_BUCKET_COUNT_PER_FD;
     public static final int DEFAULT_BUCKETS_PER_SLOT = 16384;
 
-    // key length 1 + key length <= 32 + (pvm length 24 or short value case number 17 / string 19 ) < 60
+    // key length short 2 + key length <= 32 + value length byte 1 + (pvm length 24 or short value case number 17 / string 19 ) < 60
     // if key length > 32, refer CompressedValue.KEY_MAX_LENGTH, one key may cost 2 cells
     // 8 + 60 * (60 + 8) = 4088, in 4K page size
     private static final int ONE_CELL_LENGTH = 60;
@@ -133,10 +133,10 @@ public class KeyBucket {
             var cellOffset = firstCellOffset() + i * ONE_CELL_LENGTH;
             buffer.position(cellOffset);
 
-            var keyLength = buffer.get();
+            var keyLength = buffer.getShort();
             var keyBytes = new byte[keyLength];
             buffer.get(keyBytes);
-            var valueLength = buffer.getShort();
+            var valueLength = buffer.get();
             var valueBytes = new byte[valueLength];
             buffer.get(valueBytes);
 
@@ -144,13 +144,13 @@ public class KeyBucket {
         }
     }
 
-    private record KVMeta(int offset, int keyLength, int valueLength) {
+    private record KVMeta(int offset, short keyLength, byte valueLength) {
         int valueOffset() {
-            return offset + 1 + keyLength + 2;
+            return offset + Short.BYTES + keyLength + Byte.BYTES;
         }
 
         int cellCount() {
-            int keyWithValueBytesLength = 1 + keyLength + 2 + valueLength;
+            int keyWithValueBytesLength = Short.BYTES + keyLength + Byte.BYTES + valueLength;
             int cellCount = keyWithValueBytesLength / ONE_CELL_LENGTH;
             if (keyWithValueBytesLength % ONE_CELL_LENGTH != 0) {
                 cellCount++;
@@ -248,16 +248,17 @@ public class KeyBucket {
             var cellOffset = firstCellOffset() + i * ONE_CELL_LENGTH;
             bufferNew.position(cellOffset);
 
-            var keyLength = bufferNew.get();
+            var keyLength = bufferNew.getShort();
             // skip key
             bufferNew.position(bufferNew.position() + keyLength);
-            var valueLength = bufferNew.getShort();
+            var valueLength = bufferNew.get();
             var kvMeta = new KVMeta(cellOffset, keyLength, valueLength);
 
-            var nextFirstByte = bufferNew.get();
-            var isPvm = nextFirstByte >= 0 && (valueLength == ENCODED_LEN);
+            var valueFirstByte = bufferNew.get();
+            var isPvm = valueFirstByte >= 0 && (valueLength == ENCODED_LEN);
             if (isPvm) {
                 // last 8 bytes is expireAt
+                // 1 value byte already read
                 long expireAt = bufferNew.getLong(bufferNew.position() - 1 + valueLength - 8);
                 if (expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis()) {
                     clearCell(i, kvMeta.cellCount());
@@ -308,6 +309,31 @@ public class KeyBucket {
                 continue;
             }
 
+            var cellOffset = firstCellOffset() + i * ONE_CELL_LENGTH;
+            buffer.position(cellOffset);
+            var keyLength = buffer.getShort();
+            var keyBytes = new byte[keyLength];
+            buffer.get(keyBytes);
+            var valueLength = buffer.get();
+            var valueBytes = new byte[valueLength];
+            buffer.get(valueBytes);
+
+            var kvMeta = new KVMeta(cellOffset, keyLength, valueLength);
+
+            var valueFirstByte = valueBytes[0];
+            var isPvm = valueFirstByte >= 0 && (valueLength == ENCODED_LEN);
+            if (isPvm) {
+                // last 8 bytes is expireAt
+                long expireAt = buffer.getLong(buffer.position() - 8);
+                if (expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis()) {
+                    var cellCount = kvMeta.cellCount();
+                    clearCell(i, cellCount);
+                    size--;
+                    cellCost -= cellCount;
+                    continue;
+                }
+            }
+
             int newSplitIndex = (int) Math.abs(cellHashValue % newSplitNumber);
             boolean isStillInCurrentSplit = newSplitIndex == splitIndex;
             if (isStillInCurrentSplit) {
@@ -325,27 +351,13 @@ public class KeyBucket {
                 throw new IllegalStateException("New split index not match, new split index=" + newSplitIndex);
             }
 
-            var cellOffset = firstCellOffset() + i * ONE_CELL_LENGTH;
-            var keyLength = buffer.get(cellOffset);
-            var keyBytes = new byte[keyLength];
-            buffer.position(cellOffset + 1);
-            buffer.get(keyBytes);
-            var valueLength = buffer.getShort(cellOffset + 1 + keyLength);
-            var valueBytes = new byte[valueLength];
-            buffer.position(cellOffset + 1 + keyLength + 2);
-            buffer.get(valueBytes);
-
             boolean isPut = targetKeyBucket.put(keyBytes, cellHashValue, valueBytes, null);
             if (!isPut) {
                 throw new BucketFullException("Split put fail, key=" + new String(keyBytes));
             }
 
             // clear old cell
-            int total = 1 + keyLength + 2 + valueLength;
-            var cellCount = total / ONE_CELL_LENGTH;
-            if (total % ONE_CELL_LENGTH != 0) {
-                cellCount++;
-            }
+            var cellCount = kvMeta.cellCount();
             clearCell(i, cellCount);
             size--;
             cellCost -= cellCount;
@@ -424,11 +436,8 @@ public class KeyBucket {
             return putResult;
         }
 
-        int keyWithValueBytesLength = 1 + keyBytes.length + 2 + valueBytes.length;
-        int cellCount = keyWithValueBytesLength / ONE_CELL_LENGTH;
-        if (keyWithValueBytesLength % ONE_CELL_LENGTH != 0) {
-            cellCount++;
-        }
+        var kvMeta = new KVMeta(0, (short) keyBytes.length, (byte) valueBytes.length);
+        int cellCount = kvMeta.cellCount();
         if (cellCount >= INIT_CAPACITY) {
             throw new BucketFullException("Key with value bytes too large, key length=" + keyBytes.length
                     + ", value length=" + valueBytes.length);
@@ -509,9 +518,10 @@ public class KeyBucket {
 
         int cellOffset = firstCellOffset() + putCellIndex * ONE_CELL_LENGTH;
         buffer.position(cellOffset);
-        buffer.put((byte) keyBytes.length);
+        buffer.putShort((short) keyBytes.length);
         buffer.put(keyBytes);
-        buffer.putShort((short) valueBytes.length);
+        // number or short value or pvm, 1 byte is enough
+        buffer.put((byte) valueBytes.length);
         buffer.put(valueBytes);
     }
 
@@ -630,8 +640,8 @@ public class KeyBucket {
         var beginCellOffset = firstCellOffset() + beginCellIndex * ONE_CELL_LENGTH;
         var bytes0 = new byte[ONE_CELL_LENGTH * cellCount];
 
-        buffer.position(beginCellOffset);
-        buffer.put(bytes0);
+        // do not change position
+        buffer.put(beginCellOffset, bytes0);
     }
 
     public boolean del(byte[] keyBytes, long keyHash) {
@@ -707,19 +717,28 @@ public class KeyBucket {
 
     private KVMeta keyMatch(byte[] keyBytes, int offset) {
         // compare key length first
-        if (keyBytes.length != buffer.get(offset)) {
+        if (keyBytes.length != buffer.getShort(offset)) {
             return null;
         }
 
         // compare key bytes
-        int afterKeyLengthOffset = offset + 1;
+        int afterKeyLengthOffset = offset + Short.BYTES;
+
+        // compare one by one
         for (int i = 0; i < keyBytes.length; i++) {
             if (keyBytes[i] != buffer.get(i + afterKeyLengthOffset)) {
                 return null;
             }
         }
-        return new KVMeta(offset, keyBytes.length,
-                buffer.getShort(offset + 1 + keyBytes.length));
+
+        // compare key bytes in one time, Arrays.equals is JIT optimized
+//        var toCompareKeyBytes = new byte[keyBytes.length];
+//        buffer.position(afterKeyLengthOffset).get(toCompareKeyBytes);
+//        if (!Arrays.equals(keyBytes, toCompareKeyBytes)) {
+//            return null;
+//        }
+
+        return new KVMeta(offset, (short) keyBytes.length, buffer.get(offset + Short.BYTES + keyBytes.length));
     }
 
 }

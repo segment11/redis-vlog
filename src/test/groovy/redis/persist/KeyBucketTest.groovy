@@ -1,9 +1,6 @@
 package redis.persist
 
-import redis.CompressStats
-import redis.KeyHash
-import redis.SnowFlake
-import redis.Utils
+import redis.*
 import spock.lang.Specification
 
 class KeyBucketTest extends Specification {
@@ -27,8 +24,16 @@ class KeyBucketTest extends Specification {
 
             def keyHash = KeyHash.hash(keyBytes)
 
-            list << new Wal.V((byte) 0, 0L, 0, keyHash, 0, 0,
+            def v = new Wal.V((byte) 0, 0L, 0, keyHash, 0L,
                     key, putValueBytes, putValueBytes.length)
+            if (it % 10 == 0) {
+                // set expire now
+                def pvm = new PersistValueMeta()
+                pvm.expireAt = CompressedValue.EXPIRE_NOW
+                v.cvEncoded = pvm.encode()
+            }
+
+            list << v
         }
 
         and:
@@ -60,7 +65,12 @@ class KeyBucketTest extends Specification {
             if (isPutDone) {
                 var valueBytes = targetKeyBucket.getValueByKey(keyBytes, v.keyHash)
                 if (valueBytes == null || !Arrays.equals(valueBytes, v.cvEncoded)) {
-                    throw new RuntimeException("value not found after put for key: " + v.key)
+                    def isClearExpired = (v.key[-3..-1] as int) % 10 == 0
+                    if (isClearExpired) {
+                        println 'clear expired when split: ' + v.key
+                    } else {
+                        throw new RuntimeException("value not found after put for key: " + v.key)
+                    }
                 }
             } else {
                 throw new RuntimeException("put failed for key: " + v.key)
@@ -137,7 +147,12 @@ class KeyBucketTest extends Specification {
             var targetKeyBucket2 = afterSplitKeyBucketList.find { it.splitIndex == splitIndex }
             var valueBytes = targetKeyBucket2.getValueByKey(keyBytes, v.keyHash)
             if (valueBytes == null || !Arrays.equals(valueBytes, v.cvEncoded)) {
-                throw new RuntimeException("value not found for key: " + v.key)
+                def isClearExpired = (v.key[-3..-1] as int) % 10 == 0
+                if (isClearExpired) {
+                    println 'clear expired when split: ' + v.key
+                } else {
+                    throw new RuntimeException("value not found for key: " + v.key)
+                }
             }
         }
 
