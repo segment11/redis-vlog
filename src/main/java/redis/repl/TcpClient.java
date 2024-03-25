@@ -83,11 +83,13 @@ public class TcpClient {
 
                     BinaryChannelSupplier.of(ChannelSuppliers.ofSocket(socket))
                             .decodeStream(new RequestDecoder())
-                            .map(request -> {
-                                if (request == null) {
+                            .map(pipeline -> {
+                                if (pipeline == null) {
                                     return null;
                                 }
 
+                                // no flush pipeline for repl
+                                var request = pipeline.getFirst();
                                 var xGroup = new XGroup(null, request.getData(), socket);
                                 xGroup.init(requestHandler, request);
                                 xGroup.setReplPair(replPair);
