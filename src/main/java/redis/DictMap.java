@@ -9,11 +9,13 @@ import redis.stats.StatKV;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DictMap implements OfStats {
-    public static final int TO_COMPRESS_MIN_DATA_LENGTH = 32;
+    public static final int TO_COMPRESS_MIN_DATA_LENGTH = 64;
     public static final String ANONYMOUS_DICT_KEY = "x-anonymous";
 
     // singleton
@@ -45,10 +47,12 @@ public class DictMap implements OfStats {
     }
 
     public Dict putDict(String key, Dict dict) {
-        try {
-            fos.write(dict.encode(key));
-        } catch (IOException e) {
-            log.error("Write dict to file error", e);
+        synchronized (fos) {
+            try {
+                fos.write(dict.encode(key));
+            } catch (IOException e) {
+                log.error("Write dict to file error", e);
+            }
         }
 
         if (masterUpdateCallback != null) {
@@ -59,12 +63,12 @@ public class DictMap implements OfStats {
         return cacheDict.put(key, dict);
     }
 
-    public ConcurrentHashMap<String, Dict> getCacheDict() {
-        return cacheDict;
+    public HashMap<String, Dict> getCacheDictCopy() {
+        return new HashMap<>(cacheDict);
     }
 
-    public ConcurrentHashMap<Integer, Dict> getCacheDictBySeq() {
-        return cacheDictBySeq;
+    public TreeMap<Integer, Dict> getCacheDictBySeqCopy() {
+        return new TreeMap(cacheDictBySeq);
     }
 
     // worker share dict, init on start, need persist
@@ -79,9 +83,11 @@ public class DictMap implements OfStats {
 
     public void close() throws IOException {
         if (fos != null) {
-            fos.close();
-            System.out.println("Close dict fos");
-            fos = null;
+            synchronized (fos) {
+                fos.close();
+                System.out.println("Close dict fos");
+                fos = null;
+            }
         }
     }
 
@@ -90,11 +96,13 @@ public class DictMap implements OfStats {
         cacheDictBySeq.clear();
 
         // truncate file
-        try {
-            fos.getChannel().truncate(0);
-            System.out.println("Truncate dict file");
-        } catch (IOException e) {
-            log.error("Truncate dict file error", e);
+        synchronized (fos) {
+            try {
+                fos.getChannel().truncate(0);
+                System.out.println("Truncate dict file");
+            } catch (IOException e) {
+                log.error("Truncate dict file error", e);
+            }
         }
     }
 
