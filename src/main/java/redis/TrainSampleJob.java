@@ -107,6 +107,7 @@ public class TrainSampleJob {
             }
         }
 
+        // todo, maybe not good
         // prefer to use last index of '.' or ':'
         var index = key.lastIndexOf('.');
         if (index != -1) {
@@ -133,6 +134,10 @@ public class TrainSampleJob {
         }
 
         var groupByKeyPrefixMap = sampleToTrainListCopy.stream().collect(Collectors.groupingBy(one -> {
+            if (one.keyPrefixGiven != null) {
+                return one.keyPrefixGiven;
+            }
+
             var key = one.key();
             return keyPrefix(key);
         }));
@@ -174,6 +179,6 @@ public class TrainSampleJob {
     public record TrainSampleResult(HashMap<String, Dict> cacheDict, ArrayList<Long> removedSampleKVSeqList) {
     }
 
-    public record TrainSampleKV(String key, Long seq, byte[] valueBytes) {
+    public record TrainSampleKV(String key, String keyPrefixGiven, Long seq, byte[] valueBytes) {
     }
 }
