@@ -3,11 +3,11 @@ package redis.repl.content;
 import io.activej.bytebuf.ByteBuf;
 import redis.repl.ReplContent;
 
-public class ToKeyBucketSplit implements ReplContent {
+public class ToSlaveKeyBucketSplit implements ReplContent {
     private final int bucketIndex;
     private final byte splitNumber;
 
-    public ToKeyBucketSplit(int bucketIndex, byte splitNumber) {
+    public ToSlaveKeyBucketSplit(int bucketIndex, byte splitNumber) {
         this.bucketIndex = bucketIndex;
         this.splitNumber = splitNumber;
     }

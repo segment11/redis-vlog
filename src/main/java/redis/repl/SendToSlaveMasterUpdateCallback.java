@@ -26,7 +26,7 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
 
     @Override
     public void onKeyBucketSplit(byte slot, int bucketIndex, byte splitNumber) {
-        var toSlaveKeyBucketSplit = new ToKeyBucketSplit(bucketIndex, splitNumber);
+        var toSlaveKeyBucketSplit = new ToSlaveKeyBucketSplit(bucketIndex, splitNumber);
         var replPairList = getCurrentSlaveReplPairList.get();
         for (var replPair : replPairList) {
             replPair.write(ReplType.key_bucket_split, toSlaveKeyBucketSplit);

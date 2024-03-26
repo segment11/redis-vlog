@@ -211,6 +211,7 @@ public class XGroup extends BaseCommand {
         buffer.get(bytes);
 
         var oneSlot = localPersist.oneSlot(slot);
+        // not necessary to submit task, key loader use synchronized block
         oneSlot.getKeyLoader().updateKeyBucketFromRepl(bucketIndex, splitIndex, splitNumber, seq, bytes);
 
         return Repl.emptyReply();
@@ -220,12 +221,13 @@ public class XGroup extends BaseCommand {
         // client received from server
         log.debug("Repl handle key bucket split, slot={}, slave uuid={}, {}:{}", slot,
                 replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
-        // refer to ToKeyBucketSplit.encodeTo
+        // refer to ToSlaveKeyBucketSplit.encodeTo
         var buffer = ByteBuffer.wrap(contentBytes);
         var bucketIndex = buffer.getInt();
         var splitNumber = buffer.get();
 
         var oneSlot = localPersist.oneSlot(slot);
+        // not necessary to submit task, key loader use synchronized block
         oneSlot.getKeyLoader().setMetaKeyBucketSplitNumberFromRepl(bucketIndex, splitNumber);
 
         return Repl.emptyReply();
