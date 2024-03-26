@@ -254,7 +254,7 @@ public abstract class BaseCommand {
 
         if (cv.isCompressed()) {
             Dict dict = null;
-            if (cv.isString()) {
+            if (cv.isUseDict()) {
                 if (cv.dictSeqOrSpType == Dict.SELF_ZSTD_DICT_SEQ) {
                     dict = Dict.SELF_ZSTD_DICT;
                 } else {
@@ -284,9 +284,16 @@ public abstract class BaseCommand {
     }
 
     public byte[] get(byte[] keyBytes, SlotWithKeyHash slotWithKeyHashReuse) {
+        return get(keyBytes, slotWithKeyHashReuse, false);
+    }
+
+    public byte[] get(byte[] keyBytes, SlotWithKeyHash slotWithKeyHashReuse, boolean expectTypeString) {
         var cv = getCv(keyBytes, slotWithKeyHashReuse);
         if (cv == null) {
             return null;
+        }
+        if (expectTypeString && !cv.isTypeString()) {
+            throw new TypeMismatchException("Expect type string, but got sp type: " + cv.getDictSeqOrSpType());
         }
         return getValueBytesByCv(cv);
     }

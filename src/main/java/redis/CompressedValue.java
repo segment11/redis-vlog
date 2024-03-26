@@ -38,14 +38,14 @@ public class CompressedValue {
     public static final int SP_TYPE_HH = -512;
     public static final int SP_TYPE_HH_COMPRESSED = -513;
     public static final int SP_TYPE_HASH = -1024;
-    public static final int SP_TYPE_HASH_COMPRESSED = SP_TYPE_HASH << 1;
-    public static final int SP_TYPE_LIST = SP_TYPE_HASH << 2;
-    public static final int SP_TYPE_LIST_COMPRESSED = SP_TYPE_HASH << 3;
-    public static final int SP_TYPE_SET = SP_TYPE_HASH << 4;
-    public static final int SP_TYPE_SET_COMPRESSED = SP_TYPE_HASH << 5;
-    public static final int SP_TYPE_ZSET = SP_TYPE_HASH << 6;
-    public static final int SP_TYPE_ZSET_COMPRESSED = SP_TYPE_HASH << 7;
-    public static final int SP_TYPE_STREAM = SP_TYPE_HASH << 8;
+    public static final int SP_TYPE_HASH_COMPRESSED = -1025;
+    public static final int SP_TYPE_LIST = -2048;
+    public static final int SP_TYPE_LIST_COMPRESSED = -2049;
+    public static final int SP_TYPE_SET = -4096;
+    public static final int SP_TYPE_SET_COMPRESSED = -4097;
+    public static final int SP_TYPE_ZSET = -8192;
+    public static final int SP_TYPE_ZSET_COMPRESSED = -8193;
+    public static final int SP_TYPE_STREAM = -16384;
 
     // change here to limit key size
     public static final short KEY_MAX_LENGTH = 256;
@@ -191,11 +191,6 @@ public class CompressedValue {
         return dictSeqOrSpType == SP_TYPE_STREAM;
     }
 
-    public boolean isString() {
-        // number is string
-        return dictSeqOrSpType > SP_TYPE_HH;
-    }
-
     @Override
     public String toString() {
         return "CompressedValue{" +
@@ -240,11 +235,17 @@ public class CompressedValue {
     }
 
     public static boolean isTypeString(int spType) {
-        return spType >= 0;
+        // number type also use string type
+        return spType >= SP_TYPE_BIG_STRING;
     }
 
     public boolean isTypeString() {
-        return dictSeqOrSpType >= 0;
+        // number type also use string type
+        return dictSeqOrSpType >= SP_TYPE_BIG_STRING;
+    }
+
+    public boolean isUseDict() {
+        return dictSeqOrSpType > NULL_DICT_SEQ;
     }
 
     public byte[] decompress(Dict dict) {

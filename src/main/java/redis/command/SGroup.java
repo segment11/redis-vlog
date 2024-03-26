@@ -387,7 +387,7 @@ public class SGroup extends BaseCommand {
             }
 
             // check if not string type
-            if (isOldExist && isReturnExist && !cv.isString()) {
+            if (isOldExist && isReturnExist && !cv.isTypeString()) {
                 log.debug("Key {} is not string type", new String(keyBytes));
                 return NilReply.INSTANCE;
             }
@@ -406,7 +406,7 @@ public class SGroup extends BaseCommand {
             if (cv == null) {
                 return NilReply.INSTANCE;
             } else {
-                if (!cv.isString()) {
+                if (!cv.isTypeString()) {
                     return ErrorReply.NOT_STRING;
                 }
                 return new BulkReply(getValueBytesByCv(cv));

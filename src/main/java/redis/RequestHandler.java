@@ -238,8 +238,10 @@ public class RequestHandler implements OfStats {
             var gGroup = new GGroup(cmd, data, socket).init(this, request);
             try {
                 var slotWithKeyHashList = request.getSlotWithKeyHashList();
-                var bytes = gGroup.get(keyBytes, slotWithKeyHashList.get(0));
+                var bytes = gGroup.get(keyBytes, slotWithKeyHashList.get(0), true);
                 return bytes != null ? new BulkReply(bytes) : NilReply.INSTANCE;
+            } catch (TypeMismatchException e) {
+                return new ErrorReply(e.getMessage());
             } catch (DictMissingException e) {
                 return ErrorReply.DICT_MISSING;
             }

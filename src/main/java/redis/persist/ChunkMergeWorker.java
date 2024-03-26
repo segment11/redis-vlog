@@ -749,7 +749,7 @@ public class ChunkMergeWorker implements OfStats {
                                 validCvCountRecord.validCvCount++;
 
                                 // if there is a new dict, compress use new dict and replace
-                                if (cv.isTypeString() && cv.getDictSeqOrSpType() == Dict.SELF_ZSTD_DICT_SEQ) {
+                                if (cv.isUseDict() && cv.getDictSeqOrSpType() == Dict.SELF_ZSTD_DICT_SEQ) {
                                     var dict = dictMap.getDict(TrainSampleJob.keyPrefix(key));
                                     if (dict != null) {
                                         var rawBytes = cv.decompress(Dict.SELF_ZSTD_DICT);
