@@ -35,6 +35,8 @@ public class CompressedValue {
 
     public static final byte SP_FLAG_DELETE_TMP = -128;
 
+    public static final int SP_TYPE_HH = -512;
+    public static final int SP_TYPE_HH_COMPRESSED = -513;
     public static final int SP_TYPE_HASH = -1024;
     public static final int SP_TYPE_HASH_COMPRESSED = SP_TYPE_HASH << 1;
     public static final int SP_TYPE_LIST = SP_TYPE_HASH << 2;
@@ -46,13 +48,13 @@ public class CompressedValue {
     public static final int SP_TYPE_STREAM = SP_TYPE_HASH << 8;
 
     // change here to limit key size
-    public static final short KEY_MAX_LENGTH = 32;
+    public static final short KEY_MAX_LENGTH = 256;
     // change here to limit value size
     // 8KB data compress should <= 4KB can store in one PAGE_SIZE
-    public static final short VALUE_MAX_LENGTH = 8 * 1024;
+    public static final short VALUE_MAX_LENGTH = Short.MAX_VALUE;
 
-    // seq long + expireAt long + dictSeq int + keyHash long + uncompressedLength short + cvEncodedLength short
-    public static final int VALUE_HEADER_LENGTH = 8 + 8 + 4 + 8 + 2 + 2;
+    // seq long + expireAt long + dictSeq int + keyHash long + uncompressedLength int + cvEncodedLength int
+    public static final int VALUE_HEADER_LENGTH = 8 + 8 + 4 + 8 + 4 + 4;
     // key length byte, 128 is enough
     public static final int KEY_HEADER_LENGTH = 1;
 
@@ -95,8 +97,12 @@ public class CompressedValue {
     }
 
     long keyHash;
-    short uncompressedLength;
-    short compressedLength;
+    int uncompressedLength;
+    int compressedLength;
+
+    public int getCompressedLength() {
+        return compressedLength;
+    }
 
     public boolean isNumber() {
         return dictSeqOrSpType <= SP_TYPE_NUM_BYTE && dictSeqOrSpType >= SP_TYPE_NUM_DOUBLE;
@@ -165,7 +171,8 @@ public class CompressedValue {
     }
 
     public boolean isHash() {
-        return dictSeqOrSpType == SP_TYPE_HASH || dictSeqOrSpType == SP_TYPE_HASH_COMPRESSED;
+        return dictSeqOrSpType == SP_TYPE_HH || dictSeqOrSpType == SP_TYPE_HH_COMPRESSED ||
+                dictSeqOrSpType == SP_TYPE_HASH || dictSeqOrSpType == SP_TYPE_HASH_COMPRESSED;
     }
 
     public boolean isList() {
@@ -186,7 +193,7 @@ public class CompressedValue {
 
     public boolean isString() {
         // number is string
-        return dictSeqOrSpType > SP_TYPE_HASH;
+        return dictSeqOrSpType > SP_TYPE_HH;
     }
 
     @Override
@@ -217,6 +224,7 @@ public class CompressedValue {
 
     public boolean isCompressed() {
         return dictSeqOrSpType > NULL_DICT_SEQ ||
+                dictSeqOrSpType == SP_TYPE_HH_COMPRESSED ||
                 dictSeqOrSpType == SP_TYPE_HASH_COMPRESSED ||
                 dictSeqOrSpType == SP_TYPE_LIST_COMPRESSED ||
                 dictSeqOrSpType == SP_TYPE_SET_COMPRESSED ||
@@ -224,7 +232,8 @@ public class CompressedValue {
     }
 
     public static boolean preferCompress(int spType) {
-        return spType == SP_TYPE_HASH_COMPRESSED ||
+        return spType == SP_TYPE_HH_COMPRESSED ||
+                spType == SP_TYPE_HASH_COMPRESSED ||
                 spType == SP_TYPE_LIST_COMPRESSED ||
                 spType == SP_TYPE_SET_COMPRESSED ||
                 spType == SP_TYPE_ZSET_COMPRESSED;
@@ -271,8 +280,8 @@ public class CompressedValue {
             cv.compressedData = dst;
         }
 
-        cv.compressedLength = (short) compressedSize;
-        cv.uncompressedLength = (short) data.length;
+        cv.compressedLength = compressedSize;
+        cv.uncompressedLength = data.length;
         return cv;
     }
 
@@ -298,12 +307,24 @@ public class CompressedValue {
         buf.writeLong(expireAt);
         buf.writeInt(dictSeqOrSpType);
         buf.writeLong(keyHash);
-        buf.writeShort(uncompressedLength);
-        buf.writeShort(compressedLength);
+        buf.writeInt(uncompressedLength);
+        buf.writeInt(compressedLength);
         if (compressedData != null && compressedLength > 0) {
             buf.write(compressedData);
         }
         return bytes;
+    }
+
+    public void encodeTo(ByteBuf buf) {
+        buf.writeLong(seq);
+        buf.writeLong(expireAt);
+        buf.writeInt(dictSeqOrSpType);
+        buf.writeLong(keyHash);
+        buf.writeInt(uncompressedLength);
+        buf.writeInt(compressedLength);
+        if (compressedData != null && compressedLength > 0) {
+            buf.write(compressedData);
+        }
     }
 
     public byte[] encodeAsBigStringMeta(long uuid) {
@@ -323,8 +344,8 @@ public class CompressedValue {
         buf.writeLong(expireAt);
         buf.writeInt(SP_TYPE_BIG_STRING);
         buf.writeLong(keyHash);
-        buf.writeShort(uncompressedLength);
-        buf.writeShort(compressedLength);
+        buf.writeInt(uncompressedLength);
+        buf.writeInt(compressedLength);
         buf.write(compressedData);
 
         return bytes;
@@ -350,7 +371,7 @@ public class CompressedValue {
             cv.seq = buf.readLong();
             cv.compressedData = new byte[buf.readableBytes()];
             buf.readBytes(cv.compressedData);
-            cv.compressedLength = (short) cv.compressedData.length;
+            cv.compressedLength = cv.compressedData.length;
             cv.uncompressedLength = cv.compressedLength;
             return cv;
         }
@@ -360,13 +381,13 @@ public class CompressedValue {
         cv.dictSeqOrSpType = buf.readInt();
         cv.keyHash = buf.readLong();
 
-        if (keyHash == 0) {
+        if (keyHash == 0 && keyBytes != null) {
             keyHash = KeyHash.hash(keyBytes);
         }
 
-        if (cv.keyHash != keyHash) {
-            cv.uncompressedLength = buf.readShort();
-            cv.compressedLength = buf.readShort();
+        if (keyHash != 0 && cv.keyHash != keyHash) {
+            cv.uncompressedLength = buf.readInt();
+            cv.compressedLength = buf.readInt();
             if (cv.compressedLength > 0) {
                 buf.skipBytes(cv.compressedLength);
             }
@@ -382,8 +403,8 @@ public class CompressedValue {
                     ", persisted keyHash: " + cv.keyHash);
         }
 
-        cv.uncompressedLength = buf.readShort();
-        cv.compressedLength = buf.readShort();
+        cv.uncompressedLength = buf.readInt();
+        cv.compressedLength = buf.readInt();
         if (cv.compressedLength > 0) {
             if (isJustForCheck) {
                 buf.skipBytes(cv.compressedLength);

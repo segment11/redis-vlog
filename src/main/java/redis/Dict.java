@@ -123,6 +123,10 @@ public class Dict implements Serializable {
     }
 
     public Dict(byte[] dictBytes) {
+        if (dictBytes.length > Short.MAX_VALUE) {
+            throw new IllegalArgumentException("Dict bytes too long: " + dictBytes.length);
+        }
+
         this.dictBytes = dictBytes;
         this.seq = seqGenerator.incrementAndGet();
         this.createdTime = System.currentTimeMillis();
