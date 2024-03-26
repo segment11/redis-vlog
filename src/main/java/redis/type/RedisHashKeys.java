@@ -1,16 +1,16 @@
 package redis.type;
 
 import io.netty.buffer.Unpooled;
-import redis.CompressedValue;
 import redis.KeyHash;
 
 import java.util.HashSet;
 
+// key save together, one field value save as single key
 public class RedisHashKeys {
     // change here to limit hash size
     // keys encoded compressed length should <= 4KB, suppose ratio is 0.25, then 16KB
     // suppose key length is 32, then 16KB / 32 = 512
-    public static final short HASH_MAX_SIZE = 16 * 1024 / CompressedValue.KEY_MAX_LENGTH;
+    public static final short HASH_MAX_SIZE = 4096;
 
     public static final int SET_MEMBER_MAX_LENGTH = 255;
 

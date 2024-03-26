@@ -2,7 +2,6 @@ package redis.type;
 
 import io.netty.buffer.Unpooled;
 import org.jetbrains.annotations.NotNull;
-import redis.CompressedValue;
 import redis.KeyHash;
 
 import java.util.NavigableSet;
@@ -14,7 +13,7 @@ public class RedisZSet {
     // change here to limit zset size
     // values encoded compressed length should <= 4KB, suppose ratio is 0.25, then 16KB
     // suppose value length is 32, then 16KB / 32 = 512
-    public static final short ZSET_MAX_SIZE = 16 * 1024 / CompressedValue.KEY_MAX_LENGTH;
+    public static final short ZSET_MAX_SIZE = 4096;
 
     public static final int ZSET_MEMBER_MAX_LENGTH = 255;
 
