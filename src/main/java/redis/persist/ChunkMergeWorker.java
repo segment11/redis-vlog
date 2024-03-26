@@ -100,7 +100,7 @@ public class ChunkMergeWorker implements OfStats {
             var key = cvWithKey.key;
 
             var bucketIndex = localPersist.bucketIndex(cv.getKeyHash());
-            list.add(new Wal.V(mergeWorkerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(), 0,
+            list.add(new Wal.V(mergeWorkerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                     key, cv.encode(), cv.compressedLength()));
 
             if (list.size() >= MERGING_CV_SIZE_THRESHOLD) {
@@ -328,7 +328,7 @@ public class ChunkMergeWorker implements OfStats {
         return list;
     }
 
-    public Future<Integer> execute(Job job) {
+    Future<Integer> execute(Job job) {
         try {
             var f = executors[job.batchIndex].submit(job);
             int queueSize = queues[job.batchIndex].size();
@@ -462,6 +462,7 @@ public class ChunkMergeWorker implements OfStats {
             }
 
             var chunk = oneSlot.chunksArray[mergeWorker.mergeWorkerId][batchIndex];
+            // need synchronized read buffer？ not necessary, because merge worker executor is single thread, need check this
             var readForMergingBatchBuffer = isTopMergeWorkerSelfMerge ? chunk.readSelfForMergingBatchBuffer :
                     chunk.readForMergingBatchBuffer;
 

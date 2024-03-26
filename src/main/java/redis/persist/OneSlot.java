@@ -214,10 +214,10 @@ public class OneSlot implements OfStats {
             }
         }
 
-        if(isReadonly()){
+        if (isReadonly()) {
             setReadonly(false);
         }
-        if(!canRead()){
+        if (!canRead()) {
             setCanRead(true);
         }
     }
@@ -787,7 +787,7 @@ public class OneSlot implements OfStats {
         } else {
             cvEncoded = cv.encode();
         }
-        var v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(), currentWal.increasedBatchCount,
+        var v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                 key, cvEncoded, cv.compressedLength());
 
         // for big string, use single file
@@ -810,7 +810,7 @@ public class OneSlot implements OfStats {
 
             // encode again
             cvEncoded = cv.encodeAsBigStringMeta(uuid);
-            v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(), currentWal.increasedBatchCount,
+            v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                     key, cvEncoded, cv.compressedLength());
 
             isValueShort = true;
@@ -843,11 +843,9 @@ public class OneSlot implements OfStats {
             } else {
                 nextAvailableWal.clearValues();
             }
-            nextAvailableWal.increasedBatchCount++;
 
             var needPutV = putResult.needPutV();
             if (needPutV != null) {
-                needPutV.increasedBatchCount = nextAvailableWal.increasedBatchCount;
                 nextAvailableWal.put(putResult.isValueShort(), key, needPutV);
 
                 if (masterUpdateCallback != null) {

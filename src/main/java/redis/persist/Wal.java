@@ -31,20 +31,17 @@ public class Wal implements OfStats {
         int bucketIndex;
         long keyHash;
         long expireAt;
-        // for repl async batch send to slave, if segment and key loader already persisted, ignore this batch wal values
-        long increasedBatchCount;
         String key;
         byte[] cvEncoded;
         int cvEncodedLength;
 
-        public V(byte workerId, long seq, int bucketIndex, long keyHash, long expireAt, long increasedBatchCount,
+        public V(byte workerId, long seq, int bucketIndex, long keyHash, long expireAt,
                  String key, byte[] cvEncoded, int cvEncodedLength) {
             this.workerId = workerId;
             this.seq = seq;
             this.bucketIndex = bucketIndex;
             this.keyHash = keyHash;
             this.expireAt = expireAt;
-            this.increasedBatchCount = increasedBatchCount;
             this.key = key;
             this.cvEncoded = cvEncoded;
             this.cvEncodedLength = cvEncodedLength;
@@ -62,7 +59,6 @@ public class Wal implements OfStats {
                     ", bucketIndex=" + bucketIndex +
                     ", key='" + key + '\'' +
                     ", expireAt=" + expireAt +
-                    ", increasedBatchCount=" + increasedBatchCount +
                     ", cvEncoded.length=" + cvEncoded.length +
                     '}';
         }
@@ -77,8 +73,9 @@ public class Wal implements OfStats {
             return 2 + key.length() + cvEncoded.length;
         }
 
-        // worker id + seq + bucket index + key hash + expire at long + key length byte + cv encoded length short + increased batch count long
-        private static final int ENCODED_HEADER_LENGTH = 1 + 8 + 4 + 8 + 8 + 1 + 2 + 8;
+        // worker id byte + seq long + bucket index int + key hash long + expire at long +
+        // key length short + cv encoded length int
+        private static final int ENCODED_HEADER_LENGTH = 1 + 8 + 4 + 8 + 8 + 2 + 4;
 
         public int encodeLength() {
             int vLength = ENCODED_HEADER_LENGTH + key.length() + cvEncoded.length;
@@ -97,10 +94,9 @@ public class Wal implements OfStats {
             buffer.putInt(bucketIndex);
             buffer.putLong(keyHash);
             buffer.putLong(expireAt);
-            buffer.putLong(increasedBatchCount);
-            buffer.put((byte) key.length());
+            buffer.putShort((short) key.length());
             buffer.put(key.getBytes());
-            buffer.putShort((short) cvEncoded.length);
+            buffer.putInt(cvEncoded.length);
             buffer.put(cvEncoded);
             return bytes;
         }
@@ -120,11 +116,10 @@ public class Wal implements OfStats {
             var bucketIndex = is.readInt();
             var keyHash = is.readLong();
             var expireAt = is.readLong();
-            var increasedBatchCount = is.readLong();
-            var keyLength = is.readByte();
+            var keyLength = is.readShort();
             var keyBytes = new byte[keyLength];
             is.read(keyBytes);
-            var cvEncodedLength = is.readShort();
+            var cvEncodedLength = is.readInt();
             var cvEncoded = new byte[cvEncodedLength];
             is.read(cvEncoded);
 
@@ -132,7 +127,7 @@ public class Wal implements OfStats {
                 throw new IllegalStateException("Invalid length: " + vLength);
             }
 
-            return new V(workerId, seq, bucketIndex, keyHash, expireAt, increasedBatchCount, new String(keyBytes), cvEncoded, cvEncodedLength);
+            return new V(workerId, seq, bucketIndex, keyHash, expireAt, new String(keyBytes), cvEncoded, cvEncodedLength);
         }
     }
 
@@ -196,8 +191,6 @@ public class Wal implements OfStats {
     private final RandomAccessFile walSharedFile;
     private final RandomAccessFile walSharedFileShortValue;
     private final SnowFlake snowFlake;
-
-    long increasedBatchCount = 0;
 
     HashMap<String, V> delayToKeyBucketValues;
     HashMap<String, V> delayToKeyBucketShortValues;
@@ -307,7 +300,7 @@ public class Wal implements OfStats {
 
     PutResult removeDelay(byte workerId, String key, int bucketIndex, long keyHash) {
         byte[] encoded = {CompressedValue.SP_FLAG_DELETE_TMP};
-        var v = new V(workerId, snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, increasedBatchCount, key, encoded, 1);
+        var v = new V(workerId, snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, key, encoded, 1);
 
         return put(true, key, v);
     }

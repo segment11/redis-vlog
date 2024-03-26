@@ -223,7 +223,7 @@ public class ChunkMerger implements OfStats {
         }
     }
 
-    public Future<Integer> execute(byte workerId, byte slot, byte batchIndex, ArrayList<Integer> needMergeSegmentIndexList) {
+    Future<Integer> execute(byte workerId, byte slot, byte batchIndex, ArrayList<Integer> needMergeSegmentIndexList) {
         var job = new ChunkMergeWorker.Job();
         job.workerId = workerId;
         job.slot = slot;
