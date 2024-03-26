@@ -2,6 +2,8 @@ package redis.decode;
 
 import redis.BaseCommand;
 
+import java.util.ArrayList;
+
 public class Request {
     private final byte[][] data;
 
@@ -38,27 +40,39 @@ public class Request {
         this.slotNumber = slotNumber;
     }
 
-    // todo, need check if cross slot so can check if need use multi slot eventloop to execute task
-    private BaseCommand.SlotWithKeyHash slotWithKeyHash;
+    private boolean isCrossRequestWorker;
+    private ArrayList<BaseCommand.SlotWithKeyHash> slotWithKeyHashList;
 
-    public BaseCommand.SlotWithKeyHash getSlotWithKeyHash() {
-        return slotWithKeyHash;
+    public boolean isCrossRequestWorker() {
+        return isCrossRequestWorker;
     }
 
-    public void setSlotWithKeyHash(BaseCommand.SlotWithKeyHash slotWithKeyHash) {
-        this.slotWithKeyHash = slotWithKeyHash;
+    public void setCrossRequestWorker(boolean crossRequestWorker) {
+        isCrossRequestWorker = crossRequestWorker;
     }
 
-    public byte getSlot() {
+    public ArrayList<BaseCommand.SlotWithKeyHash> getSlotWithKeyHashList() {
+        return slotWithKeyHashList;
+    }
+
+    public void setSlotWithKeyHashList(ArrayList<BaseCommand.SlotWithKeyHash> slotWithKeyHashList) {
+        this.slotWithKeyHashList = slotWithKeyHashList;
+    }
+
+    public byte getSingleSlot() {
         if (isRepl) {
             // refer to Repl.decode
             return data[1][0];
         }
 
-        if (slotWithKeyHash == null) {
+        if (slotWithKeyHashList == null) {
             return -1;
         }
-        return slotWithKeyHash.slot();
+        var first = slotWithKeyHashList.getFirst();
+        if (first == null) {
+            return -1;
+        }
+        return first.slot();
     }
 
     public String cmd() {

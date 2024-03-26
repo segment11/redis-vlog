@@ -25,6 +25,12 @@ public class LGroup extends BaseCommand {
         super(cmd, data, socket);
     }
 
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
+        return slotWithKeyHashList;
+    }
+
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("lindex".equals(cmd) || "linsert".equals(cmd)
                 || "llen".equals(cmd) || "lpop".equals(cmd) || "lpos".equals(cmd)

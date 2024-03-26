@@ -9,13 +9,21 @@ import redis.reply.*;
 import redis.type.RedisHashKeys;
 import redis.type.RedisList;
 
-import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
+import java.util.ArrayList;
+
 import static redis.CompressedValue.NO_EXPIRE;
 import static redis.CompressedValue.NULL_DICT_SEQ;
+import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 public class RGroup extends BaseCommand {
     public RGroup(String cmd, byte[][] data, ITcpSocket socket) {
         super(cmd, data, socket);
+    }
+
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
+        return slotWithKeyHashList;
     }
 
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {

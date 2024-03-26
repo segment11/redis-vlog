@@ -44,6 +44,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadFactory;
@@ -76,18 +77,33 @@ public class MultiWorkerServer extends Launcher {
     @Inject
     ChunkMerger chunkMerger;
 
-    @Inject
-    RequestHandler[] requestHandlersArray;
-
     private static final ThreadFactory requestWorkerThreadFactory = new AffinityThreadFactory("request-worker",
             AffinityStrategies.DIFFERENT_CORE);
+
+    @Inject
+    RequestHandler[] requestHandlerArray;
 
     @Inject
     Eventloop[] requestEventloopArray;
 
     private Eventloop firstNetWorkerEventloop;
 
+    Eventloop[] netWorkerEventloopArray;
+    HashMap<Long, Integer> netWorkerWorkerIdByThreadId = new HashMap<>();
+
     private static boolean reuseNetWorkers = false;
+
+    record WrapRequestHandlerArray(RequestHandler[] requestHandlerArray) {
+    }
+
+    record WrapEventloopArray(Eventloop[] eventloopArray) {
+    }
+
+    @Inject
+    WrapRequestHandlerArray multiSlotMultiThreadRequestHandlersArray;
+
+    @Inject
+    WrapEventloopArray multiSlotMultiThreadRequestEventloopArray;
 
     @Inject
     SocketInspector socketInspector;
@@ -139,12 +155,17 @@ public class MultiWorkerServer extends Launcher {
         if (firstNetWorkerEventloop == null) {
             firstNetWorkerEventloop = eventloop;
         }
+        netWorkerEventloopArray[workerId] = eventloop;
+
         return eventloop;
     }
 
     @Provides
     WorkerPool workerPool(WorkerPools workerPools, Config config) {
         int netWorkers = config.get(toInt, "netWorkers", 1);
+
+        netWorkerEventloopArray = new Eventloop[netWorkers];
+
         // already checked in beforeCreateHandler
         return workerPools.createPool(netWorkers);
     }
@@ -175,19 +196,99 @@ public class MultiWorkerServer extends Launcher {
     }
 
     private ByteBuf handleRequest(Request request, int slotNumber, ITcpSocket socket) throws ExecutionException, InterruptedException {
-        if (requestHandlersArray.length > 1) {
-            request.setSlotNumber((short) slotNumber);
-            RequestHandler.parseSlot(request);
+        request.setSlotNumber((short) slotNumber);
+        RequestHandler.parseSlots(request);
+
+        if (reuseNetWorkers) {
+            var targetHandler = requestHandlerArray[0];
+
+            var reply = targetHandler.handle(request, socket);
+            if (request.isHttp()) {
+                return wrapHttpResponse(reply);
+            } else {
+                return reply.buffer();
+            }
         }
 
-        var slot = request.getSlot();
+        boolean isCrossRequestWorker = false;
+        var slotWithKeyHashList = request.getSlotWithKeyHashList();
+        // cross slots
+        if (slotWithKeyHashList != null && slotWithKeyHashList.size() > 1 && !request.isRepl()) {
+            // check if cross threads
+            int expectRequestWorkerId = -1;
+            for (var slotWithKeyHash : slotWithKeyHashList) {
+                int slot = slotWithKeyHash.slot();
+                var expectRequestWorkerIdInner = slot % requestHandlerArray.length;
+                if (expectRequestWorkerId == -1) {
+                    expectRequestWorkerId = expectRequestWorkerIdInner;
+                }
+                if (expectRequestWorkerId != expectRequestWorkerIdInner) {
+                    isCrossRequestWorker = true;
+                    break;
+                }
+            }
+        }
+        request.setCrossRequestWorker(isCrossRequestWorker);
+
+        if (isCrossRequestWorker) {
+            RequestHandler targetHandler;
+            Eventloop eventloop;
+
+            var requestHandlerArray = multiSlotMultiThreadRequestHandlersArray.requestHandlerArray;
+            var eventloopArray = multiSlotMultiThreadRequestEventloopArray.eventloopArray;
+            if (requestHandlerArray.length == 1) {
+                targetHandler = requestHandlerArray[0];
+                eventloop = eventloopArray[0];
+            } else {
+                var i = new Random().nextInt(requestHandlerArray.length);
+                targetHandler = requestHandlerArray[i];
+                eventloop = eventloopArray[i];
+            }
+
+//            var netWorkerThreadId = Thread.currentThread().threadId();
+//            var netWorkerWorkerId = netWorkerWorkerIdByThreadId.get(netWorkerThreadId);
+//            var netWorkerEventloop = netWorkerEventloopArray[netWorkerWorkerId];
+
+            var future = eventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
+//            future.whenComplete((reply, e) -> {
+//                if (e != null) {
+//                    logger.error("Multi slot multi thread handle request error", e);
+////                    netWorkerEventloop.submit(AsyncComputation.of(() -> {
+//                    socket.close();
+////                    }));
+//                    return;
+//                }
+//
+//                if (reply == null) {
+//                    socket.close();
+//                    return;
+//                }
+//
+//                var buffer = request.isHttp() ? wrapHttpResponse(reply) : reply.buffer();
+//                socket.write(buffer);
+//            });
+
+            var reply = future.get();
+            if (reply == null) {
+                return null;
+            }
+
+            if (request.isHttp()) {
+                return wrapHttpResponse(reply);
+            } else {
+                return reply.buffer();
+            }
+        }
+
+        var slot = request.getSingleSlot();
+        // slot == -1 means net worker can handle it
         if (slot == -1) {
             RequestHandler targetHandler;
-            if (requestHandlersArray.length == 1) {
-                targetHandler = requestHandlersArray[0];
+            if (requestHandlerArray.length == 1) {
+                targetHandler = requestHandlerArray[0];
             } else {
-                var i = new Random().nextInt(requestHandlersArray.length);
-                targetHandler = requestHandlersArray[i];
+                var i = new Random().nextInt(requestHandlerArray.length);
+                targetHandler = requestHandlerArray[i];
             }
             var reply = targetHandler.handle(request, socket);
             if (request.isHttp()) {
@@ -197,27 +298,29 @@ public class MultiWorkerServer extends Launcher {
             }
         }
 
-        // need not submit to request workers
-        if (reuseNetWorkers) {
-            var targetHandler = requestHandlersArray[0];
-
-            var reply = targetHandler.handle(request, socket);
-            if (request.isHttp()) {
-                return wrapHttpResponse(reply);
-            } else {
-                return reply.buffer();
-            }
-        }
-
-        int i = slot % requestHandlersArray.length;
-        var targetHandler = requestHandlersArray[i];
+        int i = slot % requestHandlerArray.length;
+        var targetHandler = requestHandlerArray[i];
         var eventloop = requestEventloopArray[i];
 
         // use mapAsync, SettableFuture better, but exception happened, to be fixed, todo
-
         var future = eventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
+//        future.whenComplete((reply, e) -> {
+//            if (e != null) {
+//                logger.error("Target slot thread handle request error", e);
+//                socket.close();
+//                return;
+//            }
+//
+//            if (reply == null) {
+//                socket.close();
+//                return;
+//            }
+//
+//            var buffer = request.isHttp() ? wrapHttpResponse(reply) : reply.buffer();
+//            socket.write(buffer);
+//        });
+
         var reply = future.get();
-        // repl handle may return null
         if (reply == null) {
             return null;
         }
@@ -324,7 +427,7 @@ public class MultiWorkerServer extends Launcher {
     private void eventloopAsScheduler(Eventloop eventloop, int index) {
         var taskRunnable = scheduleRunnableArray[index];
         taskRunnable.setEventloop(eventloop);
-        taskRunnable.setRequestHandler(requestHandlersArray[index]);
+        taskRunnable.setRequestHandler(requestHandlerArray[index]);
 
         taskRunnable.chargeOneSlots(LocalPersist.getInstance().oneSlots());
 
@@ -338,7 +441,7 @@ public class MultiWorkerServer extends Launcher {
         localPersist.initChunkMerger(chunkMerger);
         localPersist.persistMergeSegmentsUndone();
 
-        chunkMerger.setCompressLevel(requestHandlersArray[0].compressLevel);
+        chunkMerger.setCompressLevel(requestHandlerArray[0].compressLevel);
         chunkMerger.start();
 
         if (reuseNetWorkers) {
@@ -361,8 +464,30 @@ public class MultiWorkerServer extends Launcher {
             // fix slot thread id
             int slotNumber = configInject.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
             for (int slot = 0; slot < slotNumber; slot++) {
-                int i = slot % requestHandlersArray.length;
+                int i = slot % requestHandlerArray.length;
                 localPersist.fixSlotThreadId((byte) slot, threadIds[i]);
+            }
+
+            // cross request worker threads, need use this eventloop
+            // init
+            var eventloopArray = multiSlotMultiThreadRequestEventloopArray.eventloopArray;
+            for (int i = 0; i < eventloopArray.length; i++) {
+                var eventloop = eventloopArray[i];
+
+                var thread = requestWorkerThreadFactory.newThread(eventloop);
+                thread.start();
+            }
+            logger.info("Multi slot multi thread eventloop threads started");
+
+            for (int i = 0; i < netWorkerEventloopArray.length; i++) {
+                final int finalI = i;
+                var f = netWorkerEventloopArray[i].submit(AsyncComputation.of(() -> {
+                    long threadId = Thread.currentThread().getId();
+                    netWorkerWorkerIdByThreadId.put(threadId, finalI);
+                    return threadId;
+                }));
+                var threadId = f.get();
+                logger.info("Net worker thread id get, threadId: {}, workerId: {}", threadId, finalI);
             }
         }
     }
@@ -375,12 +500,20 @@ public class MultiWorkerServer extends Launcher {
     @Override
     protected void onStop() throws Exception {
         try {
-            for (var requestHandler : requestHandlersArray) {
+            for (var requestHandler : multiSlotMultiThreadRequestHandlersArray.requestHandlerArray) {
+                requestHandler.stop();
+            }
+
+            for (var requestHandler : requestHandlerArray) {
                 requestHandler.stop();
             }
 
             for (var scheduleRunnable : scheduleRunnableArray) {
                 scheduleRunnable.stop();
+            }
+
+            for (var eventloop : multiSlotMultiThreadRequestEventloopArray.eventloopArray) {
+                eventloop.breakEventloop();
             }
 
             for (var eventloop : requestEventloopArray) {
@@ -555,8 +688,8 @@ public class MultiWorkerServer extends Launcher {
                     }
 
                     @Provides
-                    RequestHandler[] requestHandlersArray(SnowFlake snowFlake, ChunkMerger chunkMerger,
-                                                          Integer beforeCreateHandler, SocketInspector socketInspector, Config config) {
+                    RequestHandler[] requestHandlerArray(SnowFlake snowFlake, ChunkMerger chunkMerger,
+                                                         Integer beforeCreateHandler, SocketInspector socketInspector, Config config) {
                         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
 
                         int requestWorkers = config.get(toInt, "requestWorkers", 1);
@@ -600,6 +733,41 @@ public class MultiWorkerServer extends Launcher {
                             list[i] = new TaskRunnable((byte) i, (byte) requestWorkers);
                         }
                         return list;
+                    }
+
+                    @Provides
+                    WrapRequestHandlerArray multiSlotMultiThreadRequestHandlersArray(Integer beforeCreateHandler, Config config) {
+                        int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
+
+                        int multiSlotMultiThreadNumber = config.get(toInt, "multiSlotMultiThreadNumber", 1);
+
+                        var list = new RequestHandler[multiSlotMultiThreadNumber];
+                        for (int i = 0; i < multiSlotMultiThreadNumber; i++) {
+                            list[i] = new RequestHandler((byte) -i, (byte) multiSlotMultiThreadNumber, (byte) 1, (byte) 1,
+                                    (short) slotNumber, null, null, config, null);
+                        }
+                        return new WrapRequestHandlerArray(list);
+                    }
+
+                    @Provides
+                    WrapEventloopArray multiSlotMultiThreadRequestEventloopArray(Integer beforeCreateHandler, Config config) {
+                        if (reuseNetWorkers) {
+                            return new WrapEventloopArray(new Eventloop[0]);
+                        }
+
+                        int multiSlotMultiThreadNumber = config.get(toInt, "multiSlotMultiThreadNumber", 1);
+                        var list = new Eventloop[multiSlotMultiThreadNumber];
+                        for (int i = 0; i < multiSlotMultiThreadNumber; i++) {
+                            int idleMillis = config.get(toInt, "eventloop.idleMillis", 10);
+                            var eventloop = Eventloop.builder()
+                                    .withThreadName("multi-slot-multi-thread-" + i)
+                                    .withIdleInterval(Duration.ofMillis(idleMillis))
+                                    .build();
+                            eventloop.keepAlive(true);
+
+                            list[i] = eventloop;
+                        }
+                        return new WrapEventloopArray(list);
                     }
 
                     @Provides

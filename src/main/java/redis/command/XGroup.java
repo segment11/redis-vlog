@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.TreeMap;
 
 import static redis.repl.ReplType.hi;
@@ -31,6 +30,16 @@ import static redis.repl.ReplType.pong;
 public class XGroup extends BaseCommand {
     public XGroup(String cmd, byte[][] data, ITcpSocket socket) {
         super(cmd, data, socket);
+    }
+
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
+        return slotWithKeyHashList;
+    }
+
+    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
+        return null;
     }
 
     public Reply handle() {
@@ -171,13 +180,13 @@ public class XGroup extends BaseCommand {
         // begin to fetch exist data from master
         // first fetch dict
         var dictMap = DictMap.getInstance();
-        var cacheDictBySeq = dictMap.getCacheDictBySeq();
-        if (cacheDictBySeq.isEmpty()) {
+        var cacheDictBySeqCopy = dictMap.getCacheDictBySeqCopy();
+        if (cacheDictBySeqCopy.isEmpty()) {
             return Repl.reply(slot, replPair, ReplType.exists_dict, new EmptyContent());
         } else {
-            var rawBytes = new byte[4 * cacheDictBySeq.size()];
+            var rawBytes = new byte[4 * cacheDictBySeqCopy.size()];
             var rawBuffer = ByteBuffer.wrap(rawBytes);
-            for (var entry : cacheDictBySeq.entrySet()) {
+            for (var entry : cacheDictBySeqCopy.entrySet()) {
                 var seq = entry.getKey();
                 rawBuffer.putInt(seq);
             }
@@ -429,13 +438,13 @@ public class XGroup extends BaseCommand {
 
         // server received from client, send back exists dict to client, with flag can do next step
         var dictMap = DictMap.getInstance();
-        var cacheDict = dictMap.getCacheDict();
-        var cacheDictBySeq = dictMap.getCacheDictBySeq();
+        var cacheDictCopy = dictMap.getCacheDictCopy();
+        var cacheDictBySeqCopy = dictMap.getCacheDictBySeqCopy();
 
-        if (cacheDictBySeq.isEmpty()) {
+        if (cacheDictBySeqCopy.isEmpty()) {
             return Repl.reply(slot, replPair, ReplType.s_exists_dict, new EmptyContent());
         } else {
-            var toSlaveExistsDict = new ToSlaveExistsDict(new HashMap(cacheDict), new TreeMap(cacheDictBySeq), sentDictSeqList);
+            var toSlaveExistsDict = new ToSlaveExistsDict(cacheDictCopy, cacheDictBySeqCopy, sentDictSeqList);
             return Repl.reply(slot, replPair, ReplType.s_exists_dict, toSlaveExistsDict);
         }
     }
@@ -482,14 +491,14 @@ public class XGroup extends BaseCommand {
             // next step, fetch big string
             return fetchExistsBigString(slot, oneSlot);
         } else {
-            var cacheDictBySeqLocal = dictMap.getCacheDictBySeq();
-            if (cacheDictBySeqLocal.isEmpty()) {
+            var cacheDictBySeqCopyLocal = dictMap.getCacheDictBySeqCopy();
+            if (cacheDictBySeqCopyLocal.isEmpty()) {
                 return Repl.reply(slot, replPair, ReplType.exists_dict, new EmptyContent());
             }
 
-            var rawBytes = new byte[4 * cacheDictBySeqLocal.size()];
+            var rawBytes = new byte[4 * cacheDictBySeqCopyLocal.size()];
             var rawBuffer = ByteBuffer.wrap(rawBytes);
-            for (var entry : cacheDictBySeqLocal.entrySet()) {
+            for (var entry : cacheDictBySeqCopyLocal.entrySet()) {
                 var seq = entry.getKey();
                 rawBuffer.putInt(seq);
             }

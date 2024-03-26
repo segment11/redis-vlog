@@ -9,11 +9,19 @@ import redis.reply.ErrorReply;
 import redis.reply.NilReply;
 import redis.reply.Reply;
 
+import java.util.ArrayList;
+
 import static redis.CompressedValue.NO_EXPIRE;
 
 public class GGroup extends BaseCommand {
     public GGroup(String cmd, byte[][] data, ITcpSocket socket) {
         super(cmd, data, socket);
+    }
+
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
+        return slotWithKeyHashList;
     }
 
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {

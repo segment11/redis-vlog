@@ -12,10 +12,44 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public class MGroup extends BaseCommand {
     public MGroup(String cmd, byte[][] data, ITcpSocket socket) {
         super(cmd, data, socket);
+    }
+
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        if ("mget".equals(cmd)) {
+            if (data.length < 2) {
+                return null;
+            }
+
+            ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+            for (int i = 1; i < data.length; i++) {
+                var keyBytes = data[i];
+                var slotWithKeyHash = slot(keyBytes, slotNumber);
+                slotWithKeyHashList.add(slotWithKeyHash);
+            }
+            return slotWithKeyHashList;
+        }
+
+        if ("mset".equals(cmd)) {
+            if (data.length < 3 || data.length % 2 == 0) {
+                return null;
+            }
+
+            ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+            for (int i = 1; i < data.length; i += 2) {
+                var keyBytes = data[i];
+                var slotWithKeyHash = slot(keyBytes, slotNumber);
+                slotWithKeyHashList.add(slotWithKeyHash);
+            }
+            return slotWithKeyHashList;
+        }
+
+        return null;
     }
 
     public Reply handle() {
@@ -34,22 +68,84 @@ public class MGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    record KeyBytesAndSlotWithKeyHash(byte[] keyBytes, int index, SlotWithKeyHash slotWithKeyHash) {
+    }
+
+    record KeyValueBytesAndSlotWithKeyHash(byte[] keyBytes, byte[] valueBytes, SlotWithKeyHash slotWithKeyHash) {
+    }
+
+    record ValueBytesAndIndex(byte[] valueBytes, int index) {
+    }
+
     private Reply mget() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
         }
 
-        var replies = new Reply[data.length - 1];
-        for (int i = 1; i < data.length; i++) {
-            var keyBytes = data[i];
-            var value = get(keyBytes);
-            if (value == null) {
-                replies[i] = NilReply.INSTANCE;
-            } else {
-                replies[i] = new BulkReply(value);
+        if (!isCrossRequestWorker) {
+            var replies = new Reply[data.length - 1];
+            for (int i = 1; i < data.length; i++) {
+                var keyBytes = data[i];
+                var valueBytes = get(keyBytes);
+                if (valueBytes == null) {
+                    replies[i - 1] = NilReply.INSTANCE;
+                } else {
+                    replies[i - 1] = new BulkReply(valueBytes);
+                }
             }
+            return new MultiBulkReply(replies);
         }
 
+        ArrayList<KeyBytesAndSlotWithKeyHash> list = new ArrayList<>();
+        for (int i = 1; i < data.length; i++) {
+            var keyBytes = data[i];
+            var slotWithKeyHash = slotWithKeyHashListParsed.get(i - 1);
+            list.add(new KeyBytesAndSlotWithKeyHash(keyBytes, i - 1, slotWithKeyHash));
+        }
+
+        ArrayList<CompletableFuture<ArrayList<ValueBytesAndIndex>>> futureList = new ArrayList<>();
+        var groupBySlot = list.stream().collect(Collectors.groupingBy(one -> one.slotWithKeyHash.slot()));
+        for (var entry : groupBySlot.entrySet()) {
+            var slot = entry.getKey();
+            var subList = entry.getValue();
+
+            var oneSlot = localPersist.oneSlot(slot);
+            var f = oneSlot.threadSafeHandle(() -> {
+                ArrayList<ValueBytesAndIndex> valueList = new ArrayList<>();
+                for (var one : subList) {
+                    var valueBytes = get(one.keyBytes, one.slotWithKeyHash);
+                    valueList.add(new ValueBytesAndIndex(valueBytes, one.index));
+                }
+                return valueList;
+            });
+            futureList.add(f);
+        }
+
+        ArrayList<ValueBytesAndIndex> valueList = new ArrayList<>();
+        var allFutures = CompletableFuture.allOf(futureList.toArray(new CompletableFuture[futureList.size()])).whenComplete((v, e) -> {
+            for (var f : futureList) {
+                synchronized (valueList) {
+                    valueList.addAll(f.getNow(null));
+                }
+            }
+        });
+        try {
+            allFutures.get();
+        } catch (Exception e) {
+            log.error("mget error", e);
+            return new ErrorReply(e.getMessage());
+        }
+
+        var replies = new Reply[data.length - 1];
+        for (var one : valueList) {
+            var index = one.index();
+            var valueBytes = one.valueBytes();
+            if (valueBytes == null) {
+                replies[index] = NilReply.INSTANCE;
+            } else {
+                replies[index] = new BulkReply(valueBytes);
+            }
+        }
         return new MultiBulkReply(replies);
     }
 
@@ -58,12 +154,48 @@ public class MGroup extends BaseCommand {
             return ErrorReply.FORMAT;
         }
 
-        // need slot lock ? todo
+        if (!isCrossRequestWorker) {
+            for (int i = 1; i < data.length; i += 2) {
+                var keyBytes = data[i];
+                var valueBytes = data[i + 1];
+                var slotWithKeyHash = slotWithKeyHashListParsed.get(i);
+                set(keyBytes, valueBytes, slotWithKeyHash);
+            }
+            return OKReply.INSTANCE;
+        }
+
+        ArrayList<KeyValueBytesAndSlotWithKeyHash> list = new ArrayList<>();
         for (int i = 1; i < data.length; i += 2) {
             var keyBytes = data[i];
             var valueBytes = data[i + 1];
-            set(keyBytes, valueBytes);
+            var slotWithKeyHash = slotWithKeyHashListParsed.get(i - 1);
+            list.add(new KeyValueBytesAndSlotWithKeyHash(keyBytes, valueBytes, slotWithKeyHash));
         }
+
+        ArrayList<CompletableFuture<Boolean>> futureList = new ArrayList<>();
+        var groupBySlot = list.stream().collect(Collectors.groupingBy(one -> one.slotWithKeyHash.slot()));
+        for (var entry : groupBySlot.entrySet()) {
+            var slot = entry.getKey();
+            var subList = entry.getValue();
+
+            var oneSlot = localPersist.oneSlot(slot);
+            var f = oneSlot.threadSafeHandle(() -> {
+                for (var one : subList) {
+                    set(one.keyBytes, one.valueBytes, one.slotWithKeyHash);
+                }
+                return true;
+            });
+            futureList.add(f);
+        }
+
+        var allFutures = CompletableFuture.allOf(futureList.toArray(new CompletableFuture[futureList.size()]));
+        try {
+            allFutures.get();
+        } catch (Exception e) {
+            log.error("mset error", e);
+            return new ErrorReply(e.getMessage());
+        }
+
         return OKReply.INSTANCE;
     }
 

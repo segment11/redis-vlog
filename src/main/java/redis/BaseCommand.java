@@ -19,9 +19,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 import static redis.CompressedValue.NO_EXPIRE;
 import static redis.CompressedValue.NULL_DICT_SEQ;
+import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 public abstract class BaseCommand {
     protected final String cmd;
@@ -52,7 +52,8 @@ public abstract class BaseCommand {
     protected int localTestRandomValueListSize;
     protected ArrayList<byte[]> localTestRandomValueList;
 
-    protected SlotWithKeyHash slotWithKeyHashParsed;
+    protected ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed;
+    protected boolean isCrossRequestWorker;
 
     public void from(BaseCommand other) {
         this.workerId = other.workerId;
@@ -73,8 +74,8 @@ public abstract class BaseCommand {
         this.localTestRandomValueListSize = other.localTestRandomValueListSize;
         this.localTestRandomValueList = other.localTestRandomValueList;
 
-        // need parse again
-        this.slotWithKeyHashParsed = other.slotWithKeyHashParsed;
+        this.slotWithKeyHashListParsed = other.slotWithKeyHashListParsed;
+        this.isCrossRequestWorker = other.isCrossRequestWorker;
     }
 
     public BaseCommand init(RequestHandler requestHandler, Request request) {
@@ -96,15 +97,12 @@ public abstract class BaseCommand {
         this.localTestRandomValueListSize = requestHandler.localTestRandomValueListSize;
         this.localTestRandomValueList = requestHandler.localTestRandomValueList;
 
-        this.slotWithKeyHashParsed = request.getSlotWithKeyHash();
+        this.slotWithKeyHashListParsed = request.getSlotWithKeyHashList();
+        this.isCrossRequestWorker = request.isCrossRequestWorker();
         return this;
     }
 
     public abstract Reply handle();
-
-    protected static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
-        return null;
-    }
 
     protected final LocalPersist localPersist = LocalPersist.getInstance();
 
@@ -196,11 +194,15 @@ public abstract class BaseCommand {
         return slot(keyBytes, slotNumber);
     }
 
-    public SlotWithKeyHash slotPreferParsed(byte[] keyBytes) {
-        if (slotWithKeyHashParsed != null) {
-            return slotWithKeyHashParsed;
+    public SlotWithKeyHash slotPreferParsed(byte[] keyBytes, int index) {
+        if (slotWithKeyHashListParsed != null && index < slotWithKeyHashListParsed.size()) {
+            return slotWithKeyHashListParsed.get(index);
         }
         return slot(keyBytes, slotNumber);
+    }
+
+    public SlotWithKeyHash slotPreferParsed(byte[] keyBytes) {
+        return slotPreferParsed(keyBytes, 0);
     }
 
     public CompressedValue getCv(byte[] keyBytes) {
@@ -239,7 +241,7 @@ public abstract class BaseCommand {
                 return null;
             }
 
-            cv.compressedLength = (short) cv.compressedData.length;
+            cv.compressedLength = cv.compressedData.length;
         }
 
         return cv;
@@ -465,7 +467,7 @@ public abstract class BaseCommand {
             if (dict != null && dict == Dict.SELF_ZSTD_DICT) {
                 // add train sample list
                 if (sampleToTrainList.size() < trainSampleListMaxSize) {
-                    var kv = new TrainSampleJob.TrainSampleKV(key, cv.seq, valueBytes);
+                    var kv = new TrainSampleJob.TrainSampleKV(key, null, cv.seq, valueBytes);
                     sampleToTrainList.add(kv);
                 } else {
                     // no async train, latency sensitive
@@ -479,7 +481,7 @@ public abstract class BaseCommand {
             cvRaw.dictSeqOrSpType = spType;
             cvRaw.keyHash = slotWithKeyHash.keyHash;
             cvRaw.expireAt = expireAt;
-            cvRaw.uncompressedLength = (short) valueBytes.length;
+            cvRaw.uncompressedLength = valueBytes.length;
             cvRaw.compressedLength = cvRaw.uncompressedLength;
             cvRaw.compressedData = valueBytes;
 
@@ -498,7 +500,7 @@ public abstract class BaseCommand {
 
             // add train sample list
             if (sampleToTrainList.size() < trainSampleListMaxSize) {
-                var kv = new TrainSampleJob.TrainSampleKV(key, cvRaw.seq, valueBytes);
+                var kv = new TrainSampleJob.TrainSampleKV(key, null, cvRaw.seq, valueBytes);
                 sampleToTrainList.add(kv);
             } else {
                 // no async train, latency sensitive

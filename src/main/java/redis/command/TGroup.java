@@ -6,6 +6,8 @@ import redis.BaseCommand;
 import redis.reply.*;
 import redis.type.RedisHashKeys;
 
+import java.util.ArrayList;
+
 import static redis.CompressedValue.NO_EXPIRE;
 
 public class TGroup extends BaseCommand {
@@ -20,6 +22,12 @@ public class TGroup extends BaseCommand {
         super(cmd, data, socket);
     }
 
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
+        return slotWithKeyHashList;
+    }
+
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("type".equals(cmd) || "ttl".equals(cmd)) {
             if (data.length != 2) {
@@ -28,7 +36,7 @@ public class TGroup extends BaseCommand {
             var keyBytes = data[1];
             return slot(keyBytes, slotNumber);
         }
-        
+
         return null;
     }
 

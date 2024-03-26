@@ -22,6 +22,12 @@ public class SGroup extends BaseCommand {
         super(cmd, data, socket);
     }
 
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
+        return slotWithKeyHashList;
+    }
+
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("set".equals(cmd) || "setex".equals(cmd) || "setrange".equals(cmd) ||
                 "setnx".equals(cmd) || "strlen".equals(cmd) || "substr".equals(cmd)) {

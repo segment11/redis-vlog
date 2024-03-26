@@ -112,71 +112,71 @@ public class RequestHandler implements OfStats {
         this.trainSampleJob.setTrainSampleMinBodyLength(requestConfig.get(toInt, "trainSampleMinBodyLength", 4096));
     }
 
-    public static void parseSlot(@NotNull Request request) {
+    public static void parseSlots(@NotNull Request request) {
         var cmd = request.cmd();
         if (cmd.equals(PING_COMMAND) || cmd.equals(QUIT_COMMAND) || cmd.equals(AUTH_COMMAND) || cmd.equals(STATS_COMMAND)) {
             return;
         }
 
-        BaseCommand.SlotWithKeyHash slotWithKeyHash = null;
+        ArrayList<BaseCommand.SlotWithKeyHash> slotWithKeyHashList = null;
 
         var data = request.getData();
         var firstByte = data[0][0];
         if (firstByte == 'a' || firstByte == 'A') {
-            slotWithKeyHash = AGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = AGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'b' || firstByte == 'B') {
-            slotWithKeyHash = BGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = BGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'c' || firstByte == 'C') {
-            slotWithKeyHash = CGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = CGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'd' || firstByte == 'D') {
-            slotWithKeyHash = DGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = DGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'e' || firstByte == 'E') {
-            slotWithKeyHash = EGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = EGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'f' || firstByte == 'F') {
-            slotWithKeyHash = FGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = FGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'g' || firstByte == 'G') {
-            slotWithKeyHash = GGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = GGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'h' || firstByte == 'H') {
-            slotWithKeyHash = HGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = HGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'i' || firstByte == 'I') {
-            slotWithKeyHash = IGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = IGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'j' || firstByte == 'J') {
-            slotWithKeyHash = JGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = JGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'k' || firstByte == 'K') {
-            slotWithKeyHash = KGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = KGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'l' || firstByte == 'L') {
-            slotWithKeyHash = LGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = LGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'm' || firstByte == 'M') {
-            slotWithKeyHash = MGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = MGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'n' || firstByte == 'N') {
-            slotWithKeyHash = NGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = NGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'o' || firstByte == 'O') {
-            slotWithKeyHash = OGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = OGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'p' || firstByte == 'P') {
-            slotWithKeyHash = PGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = PGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'q' || firstByte == 'Q') {
-            slotWithKeyHash = QGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = QGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'r' || firstByte == 'R') {
-            slotWithKeyHash = RGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = RGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 's' || firstByte == 'S') {
-            slotWithKeyHash = SGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = SGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 't' || firstByte == 'T') {
-            slotWithKeyHash = TGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = TGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'u' || firstByte == 'U') {
-            slotWithKeyHash = UGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = UGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'v' || firstByte == 'V') {
-            slotWithKeyHash = VGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = VGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'w' || firstByte == 'W') {
-            slotWithKeyHash = WGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = WGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'x' || firstByte == 'X') {
-            slotWithKeyHash = XGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = XGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'y' || firstByte == 'Y') {
-            slotWithKeyHash = YGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = YGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'z' || firstByte == 'Z') {
-            slotWithKeyHash = ZGroup.parseSlot(cmd, data, request.getSlotNumber());
+            slotWithKeyHashList = ZGroup.parseSlots(cmd, data, request.getSlotNumber());
         }
 
-        request.setSlotWithKeyHash(slotWithKeyHash);
+        request.setSlotWithKeyHashList(slotWithKeyHashList);
     }
 
     public Reply handle(@NotNull Request request, ITcpSocket socket) {
@@ -237,7 +237,8 @@ public class RequestHandler implements OfStats {
 
             var gGroup = new GGroup(cmd, data, socket).init(this, request);
             try {
-                var bytes = gGroup.get(keyBytes, request.getSlotWithKeyHash());
+                var slotWithKeyHashList = request.getSlotWithKeyHashList();
+                var bytes = gGroup.get(keyBytes, slotWithKeyHashList.get(0));
                 return bytes != null ? new BulkReply(bytes) : NilReply.INSTANCE;
             } catch (DictMissingException e) {
                 return ErrorReply.DICT_MISSING;

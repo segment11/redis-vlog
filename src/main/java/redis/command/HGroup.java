@@ -1,22 +1,35 @@
 
 package redis.command;
 
+import io.activej.bytebuf.ByteBuf;
 import io.activej.net.socket.tcp.ITcpSocket;
 import redis.BaseCommand;
 import redis.CompressedValue;
+import redis.DictMap;
+import redis.TrainSampleJob;
 import redis.reply.*;
+import redis.type.RedisHH;
 import redis.type.RedisHashKeys;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Random;
 
 import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
+import static redis.type.RedisHH.PREFER_COMPRESS_FIELD_VALUE_LENGTH;
+import static redis.type.RedisHH.PREFER_LESS_THAN_VALUE_LENGTH;
 
 public class HGroup extends BaseCommand {
     public HGroup(String cmd, byte[][] data, ITcpSocket socket) {
         super(cmd, data, socket);
+    }
+
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
+        return slotWithKeyHashList;
     }
 
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
@@ -90,6 +103,10 @@ public class HGroup extends BaseCommand {
 
         if ("hvals".equals(cmd)) {
             return hvals();
+        }
+
+        if ("h_field_dict_train".equals(cmd)) {
+            return h_field_dict_train();
         }
 
         return NilReply.INSTANCE;
@@ -406,6 +423,8 @@ public class HGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
+        var dictMap = DictMap.getInstance();
+        int maxValueLength = 0;
         LinkedHashMap<String, byte[]> fieldValues = new LinkedHashMap<>();
         for (int i = 2; i < data.length; i += 2) {
             var fieldBytes = data[i];
@@ -417,10 +436,66 @@ public class HGroup extends BaseCommand {
                 return ErrorReply.VALUE_TOO_LONG;
             }
 
+            // compress field value bytes
+            if (fieldValueBytes.length >= PREFER_COMPRESS_FIELD_VALUE_LENGTH) {
+                final String keyPrefixGiven = new String(fieldBytes);
+
+                var dict = dictMap.getDict(keyPrefixGiven);
+                long beginT = System.nanoTime();
+                var fieldCv = CompressedValue.compress(fieldValueBytes, dict, compressLevel);
+                long costT = System.nanoTime() - beginT;
+
+                int compressedLength = fieldCv.getCompressedLength();
+
+                // stats
+                compressStats.compressedCount++;
+                compressStats.compressedValueBodyTotalLength += compressedLength;
+                compressStats.compressedCostTotalTimeNanos += costT;
+
+                int encodedCvLength = RedisHH.PREFER_COMPRESS_FIELD_MAGIC_PREFIX.length + CompressedValue.VALUE_HEADER_LENGTH + compressedLength;
+                if (encodedCvLength < fieldValueBytes.length) {
+                    fieldCv.setSeq(snowFlake.nextId());
+                    fieldCv.setDictSeqOrSpType(dict != null ? dict.getSeq() : CompressedValue.NULL_DICT_SEQ);
+                    fieldCv.setKeyHash(fieldCv.getSeq());
+
+                    if (dict == null) {
+                        var kv = new TrainSampleJob.TrainSampleKV(keyPrefixGiven, keyPrefixGiven, fieldCv.getSeq(), fieldValueBytes);
+                        sampleToTrainList.add(kv);
+                    }
+
+                    var fieldEncodeBytes = new byte[encodedCvLength];
+                    var buf = ByteBuf.wrapForWriting(fieldEncodeBytes);
+                    buf.put(RedisHH.PREFER_COMPRESS_FIELD_MAGIC_PREFIX);
+                    fieldCv.encodeTo(buf);
+
+                    // replace use compressed bytes
+                    fieldValueBytes = fieldEncodeBytes;
+                }
+            }
+
+            if (fieldValueBytes.length > maxValueLength) {
+                maxValueLength = fieldValueBytes.length;
+            }
+
             fieldValues.put(new String(fieldBytes), fieldValueBytes);
         }
 
         var key = new String(keyBytes);
+        if (maxValueLength <= PREFER_LESS_THAN_VALUE_LENGTH) {
+            // use RedisHH type to store all in one
+            var slotWithKeyHash = slot(keyBytes);
+            var valueBytes = get(keyBytes, slotWithKeyHash);
+            var rhh = valueBytes == null ? new RedisHH() : RedisHH.decode(valueBytes);
+            rhh.putAll(fieldValues);
+
+            var encodedBytes = rhh.encode();
+            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+            var spType = needCompress ? CompressedValue.SP_TYPE_HH_COMPRESSED : CompressedValue.SP_TYPE_HH;
+
+            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+            return OKReply.INSTANCE;
+        }
+
         var keysKey = RedisHashKeys.keysKey(key);
         var keysKeyBytes = keysKey.getBytes();
 
@@ -436,7 +511,8 @@ public class HGroup extends BaseCommand {
 
         // for debug
 //      int overwrite = 0;
-        for (var entry : fieldValues.entrySet()) {
+        for (
+                var entry : fieldValues.entrySet()) {
             var field = entry.getKey();
             var fieldValueBytes = entry.getValue();
 
@@ -574,5 +650,30 @@ public class HGroup extends BaseCommand {
 
         set(fieldKeyBytes, fieldValueBytes, slotWithKeyHashThisField);
         return IntegerReply.REPLY_1;
+    }
+
+    private Reply h_field_dict_train() {
+        if (data.length < 3) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyPrefixGiven = new String(data[1]);
+
+        List<TrainSampleJob.TrainSampleKV> sampleToTrainList = new ArrayList<>();
+        for (int i = 2; i < data.length; i++) {
+            sampleToTrainList.add(new TrainSampleJob.TrainSampleKV(null, keyPrefixGiven, 0L, data[i]));
+        }
+
+        var trainSampleJob = new TrainSampleJob(workerId);
+        trainSampleJob.resetSampleToTrainList(sampleToTrainList);
+        var trainSampleResult = trainSampleJob.train();
+
+        var trainSampleCacheDict = trainSampleResult.cacheDict();
+        for (var entry : trainSampleCacheDict.entrySet()) {
+            var dict = entry.getValue();
+            dictMap.putDict(entry.getKey(), dict);
+        }
+
+        return new IntegerReply(trainSampleCacheDict.size());
     }
 }

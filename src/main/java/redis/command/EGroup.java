@@ -6,11 +6,19 @@ import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
 
+import java.util.ArrayList;
+
 import static redis.CompressedValue.NO_EXPIRE;
 
 public class EGroup extends BaseCommand {
     public EGroup(String cmd, byte[][] data, ITcpSocket socket) {
         super(cmd, data, socket);
+    }
+
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
+        return slotWithKeyHashList;
     }
 
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {

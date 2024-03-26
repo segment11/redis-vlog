@@ -20,6 +20,12 @@ public class ZGroup extends BaseCommand {
         super(cmd, data, socket);
     }
 
+    public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
+        return slotWithKeyHashList;
+    }
+
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("zadd".equals(cmd) || "zcard".equals(cmd) || "zcount".equals(cmd)
                 || "zdiffstore".equals(cmd)
