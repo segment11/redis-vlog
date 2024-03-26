@@ -60,7 +60,7 @@ public class Chunk implements OfStats {
     final byte batchIndex;
     final byte slot;
     // for better latency, segment length = 4096 decompress performance is better
-    private final int segmentLength;
+    final int segmentLength;
     static final int MERGE_READ_SEGMENT_ONCE_COUNT = 10;
     private final File slotDir;
 
@@ -563,6 +563,29 @@ public class Chunk implements OfStats {
 
     private long pwriteCostNanos;
     private long pwriteCount;
+
+    public boolean writeSegmentsFromRepl(byte[] bytes, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, int capacity) {
+        var writeBuffer = segmentCount == BATCH_SEGMENT_COUNT_FOR_PWRITE ? writePageBufferB : writePageBuffer;
+        if (writeBuffer.capacity() != capacity) {
+            throw new RuntimeException("Write buffer capacity not match, expect: " + capacity + ", actual: " + writeBuffer.capacity());
+        }
+
+        writeBuffer.clear();
+        writeBuffer.put(bytes);
+
+        this.segmentIndex = segmentIndex;
+        boolean isNewAppend = writeSegments(writeBuffer, segmentCount, segmentSeqList);
+
+        if (segmentCount == 1) {
+            oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex,
+                    isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentIndex);
+        } else {
+            oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, segmentCount,
+                    isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqList);
+        }
+
+        return isNewAppend;
+    }
 
     private boolean writeSegments(ByteBuffer writeBuffer, int segmentCount, ArrayList<Long> segmentSeqList) {
         int fdIndex = targetFdIndex();

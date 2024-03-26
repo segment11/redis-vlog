@@ -15,12 +15,12 @@ public class ToSlaveDictCreate implements ReplContent {
 
     @Override
     public void encodeTo(ByteBuf toBuf) {
-        // todo
-        toBuf.put((byte) 0);
+        var bytes = dict.encode(key);
+        toBuf.write(bytes);
     }
 
     @Override
     public int encodeLength() {
-        return 1;
+        return dict.encodeLength(key);
     }
 }

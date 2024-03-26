@@ -10,6 +10,7 @@ import java.util.ArrayList;
 
 import static redis.persist.KeyLoader.MAX_SPLIT_NUMBER;
 
+// for repl increase copy, need not copy all data, just copy key buckets those seq not matched
 public class MetaKeyBucketSeq {
     private static final String META_KEY_BUCKET_SEQ_FILE = "meta_key_bucket_seq.dat";
 

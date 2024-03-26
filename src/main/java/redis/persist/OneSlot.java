@@ -379,6 +379,10 @@ public class OneSlot implements OfStats {
 
     final KeyLoader keyLoader;
 
+    public KeyLoader getKeyLoader() {
+        return keyLoader;
+    }
+
     private final MasterUpdateCallback masterUpdateCallback;
 
     public long getKeyCount() {
@@ -854,7 +858,7 @@ public class OneSlot implements OfStats {
                 }
             }
 
-            submitPersistTask(putResult.isValueShort(), walGroupIndex, currentWalArray[walGroupIndex]);
+            submitPersistTaskFromWal(putResult.isValueShort(), walGroupIndex, currentWalArray[walGroupIndex]);
             currentWalArray[walGroupIndex] = nextAvailableWal;
             nextAvailableWal.lastUsedTimeMillis = System.currentTimeMillis();
         } catch (InterruptedException e) {
@@ -862,17 +866,27 @@ public class OneSlot implements OfStats {
         }
     }
 
-    public void asSlaveOnMasterWalAppendBatchGet(TreeMap<Integer, ArrayList<XGroup.ExtV>> extVsGroupByBucketIndex) {
-        for (var entry : extVsGroupByBucketIndex.entrySet()) {
-            var bucketIndex = entry.getKey();
-            var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
-
+    // just write to mem, if crash, slave will fetch from master again
+    public void asSlaveOnMasterWalAppendBatchGet(TreeMap<Integer, ArrayList<XGroup.ExtV>> extVsGroupByWalGroupIndex) {
+        for (var entry : extVsGroupByWalGroupIndex.entrySet()) {
+            var walGroupIndex = entry.getKey();
             var extVs = entry.getValue();
+
             for (var extV : extVs) {
                 var batchIndex = extV.batchIndex();
                 var wal = walsArray[walGroupIndex][batchIndex];
 
                 var v = extV.v();
+                var offset = extV.offset();
+                if (offset == 0) {
+                    // clear
+                    if (extV.isValueShort()) {
+                        wal.delayToKeyBucketShortValues.clear();
+                    } else {
+                        wal.delayToKeyBucketValues.clear();
+                    }
+                }
+
                 if (extV.isValueShort()) {
                     wal.delayToKeyBucketShortValues.put(v.key, v);
                     wal.delayToKeyBucketValues.remove(v.key);
@@ -988,6 +1002,20 @@ public class OneSlot implements OfStats {
             chunk.setWorkerType(true, false, false);
             log.warn("Fix request worker chunk chunk thread id, w={}, rw={}, s={}, b={}, tid={}",
                     chunk.workerId, chunk.workerId, slot, chunk.batchIndex, chunk.threadIdProtected);
+        });
+    }
+
+    public void submitPersistTaskFromRepl(byte workerId, byte batchIndex, int segmentLength, int segmentIndex, int segmentCount,
+                                          ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
+        var chunk = chunksArray[workerId][batchIndex];
+        if (chunk.segmentLength != segmentLength) {
+            throw new IllegalStateException("Segment length not match, chunk segment length: " + chunk.segmentLength +
+                    ", repl segment length: " + segmentLength);
+        }
+
+        var executor = persistExecutors[batchIndex];
+        executor.submit(() -> {
+            chunk.writeSegmentsFromRepl(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
         });
     }
 
@@ -1110,7 +1138,7 @@ public class OneSlot implements OfStats {
         }
     }
 
-    private void submitPersistTask(boolean isShortValue, int walGroupIndex, Wal targetWal) {
+    private void submitPersistTaskFromWal(boolean isShortValue, int walGroupIndex, Wal targetWal) {
         var params = new PersistTaskParams(isShortValue, walGroupIndex, targetWal, System.currentTimeMillis());
         CompletableFuture<PersistTaskParams> cf = new CompletableFuture<>();
         var persistTask = new PersistTask(params, cf);

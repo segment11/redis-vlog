@@ -74,6 +74,19 @@ public class KeyLoader implements OfStats {
     // need read write lock
     private MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
 
+    // read only, important
+    public byte[] getMetaKeyBucketSplitNumberBytesForRepl() {
+        return metaKeyBucketSplitNumber.getInMemoryCachedBytes();
+    }
+
+    public void overwriteMetaKeyBucketSplitNumberBytesFromRepl(byte[] bytes) {
+        metaKeyBucketSplitNumber.overwriteInMemoryCachedBytes(bytes);
+    }
+
+    public void setMetaKeyBucketSplitNumberFromRepl(int bucketIndex, byte splitNumber) {
+        metaKeyBucketSplitNumber.set(bucketIndex, splitNumber);
+    }
+
     // split 3 times, 3 * 3 * 3 = 27
     // when 27, batch persist pvm, will slot lock and read all 27 key buckets for target bucket index, write perf bad
     // read perf ok, because only read one key bucket and lru cache
@@ -390,10 +403,18 @@ public class KeyLoader implements OfStats {
         return keyBuckets;
     }
 
+    public void updateKeyBucketFromRepl(int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes) {
+        var wl = rwlArray[bucketIndex].writeLock();
+        wl.lock();
+        try {
+            updateKeyBucketInner(bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes);
+        } finally {
+            wl.unlock();
+        }
+    }
+
     // already in write lock, reentrant
-    private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket) {
-        byte splitIndex = keyBucket.splitIndex;
-        var bytes = keyBucket.compress();
+    private void updateKeyBucketInner(int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes) {
         if (bytes.length > KEY_BUCKET_ONE_COST_SIZE) {
             throw new IllegalStateException("Key bucket bytes size too large, slot: " + slot +
                     ", bucket index: " + bucketIndex + ", split index: " + splitIndex + ", size: " + bytes.length);
@@ -407,7 +428,7 @@ public class KeyLoader implements OfStats {
         int fd = fds[fdIndex];
         if (fd == 0) {
             // split number already changed
-            initFdForSlot(keyBucket.splitNumber);
+            initFdForSlot(splitNumber);
             fd = fds[fdIndex];
         }
 
@@ -432,10 +453,14 @@ public class KeyLoader implements OfStats {
             pwriteCount++;
         }
 
-        metaKeyBucketSeq.writeSeq(bucketIndex, splitIndex, keyBucket.lastUpdateSeq);
+        metaKeyBucketSeq.writeSeq(bucketIndex, splitIndex, lastUpdateSeq);
         if (masterUpdateCallback != null) {
-            masterUpdateCallback.onKeyBucketUpdate(slot, bucketIndex, splitIndex, keyBucket.splitNumber, keyBucket.lastUpdateSeq, bytes);
+            masterUpdateCallback.onKeyBucketUpdate(slot, bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes);
         }
+    }
+
+    private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket) {
+        updateKeyBucketInner(bucketIndex, keyBucket.splitIndex, keyBucket.splitNumber, keyBucket.lastUpdateSeq, keyBucket.compress());
     }
 
     public interface BucketLockCallback {

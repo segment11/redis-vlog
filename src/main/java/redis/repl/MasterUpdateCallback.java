@@ -6,7 +6,7 @@ import redis.persist.Wal;
 import java.util.ArrayList;
 
 public interface MasterUpdateCallback {
-    void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long seq, byte[] bytes);
+    void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes);
 
     void onKeyBucketSplit(byte slot, int bucketIndex, byte splitNumber);
 

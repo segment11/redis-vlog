@@ -26,6 +26,24 @@ public class MetaKeyBucketSplitNumber {
 
     private final byte[] inMemoryCachedBytes;
 
+    public byte[] getInMemoryCachedBytes() {
+        return inMemoryCachedBytes;
+    }
+
+    public synchronized void overwriteInMemoryCachedBytes(byte[] bytes) {
+        if (bytes.length != inMemoryCachedBytes.length) {
+            throw new IllegalArgumentException("Repl meta key bucket split number, bytes length not match");
+        }
+        System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
+
+        try {
+            raf.seek(0);
+            raf.write(bytes);
+        } catch (IOException e) {
+            throw new RuntimeException("Repl meta key bucket split number, write file error", e);
+        }
+    }
+
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     public MetaKeyBucketSplitNumber(byte slot, int bucketsPerSlot, File slotDir) throws IOException {
@@ -61,6 +79,7 @@ public class MetaKeyBucketSplitNumber {
         }
     }
 
+    // read write lock better
     public synchronized void set(int bucketIndex, byte splitNumber) {
         var offset = bucketIndex;
         try {

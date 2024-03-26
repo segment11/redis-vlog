@@ -14,11 +14,11 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
     private long keyBucketUpdateCount = 0;
 
     @Override
-    public void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long seq, byte[] bytes) {
+    public void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes) {
         keyBucketUpdateCount++;
         if (keyBucketUpdateCount % 10000 == 0) {
             log.warn("onKeyBucketUpdate called with slot: {}, bucketIndex: {}, splitIndex: {}, splitNumber: {}, seq: {}, bytes.length: {}",
-                    slot, bucketIndex, splitIndex, splitNumber, seq, bytes.length);
+                    slot, bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes.length);
         }
     }
 

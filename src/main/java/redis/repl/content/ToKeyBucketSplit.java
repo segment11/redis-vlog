@@ -14,12 +14,12 @@ public class ToKeyBucketSplit implements ReplContent {
 
     @Override
     public void encodeTo(ByteBuf toBuf) {
-        // todo
-        toBuf.put((byte) 0);
+        toBuf.writeInt(bucketIndex);
+        toBuf.writeByte(splitNumber);
     }
 
     @Override
     public int encodeLength() {
-        return 1;
+        return 4 + 1;
     }
 }

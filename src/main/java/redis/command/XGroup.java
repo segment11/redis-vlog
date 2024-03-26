@@ -199,6 +199,20 @@ public class XGroup extends BaseCommand {
         // client received from server
         log.debug("Repl handle key bucket update, slot={}, slave uuid={}, {}:{}", slot,
                 replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+
+        // refer to ToSlaveKeyBucketUpdate.encodeTo
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var bucketIndex = buffer.getInt();
+        var splitIndex = buffer.get();
+        var splitNumber = buffer.get();
+        var seq = buffer.getLong();
+        var bytesLength = buffer.getInt();
+        var bytes = new byte[bytesLength];
+        buffer.get(bytes);
+
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.getKeyLoader().updateKeyBucketFromRepl(bucketIndex, splitIndex, splitNumber, seq, bytes);
+
         return Repl.emptyReply();
     }
 
@@ -206,6 +220,14 @@ public class XGroup extends BaseCommand {
         // client received from server
         log.debug("Repl handle key bucket split, slot={}, slave uuid={}, {}:{}", slot,
                 replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        // refer to ToKeyBucketSplit.encodeTo
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var bucketIndex = buffer.getInt();
+        var splitNumber = buffer.get();
+
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.getKeyLoader().setMetaKeyBucketSplitNumberFromRepl(bucketIndex, splitNumber);
+
         return Repl.emptyReply();
     }
 
@@ -230,8 +252,8 @@ public class XGroup extends BaseCommand {
         }
 
         // v already sorted by seq
-        // sort by bucket index, debug better
-        TreeMap<Integer, ArrayList<ExtV>> extVsGroupByBucketIndex = new TreeMap<>();
+        // sort by wal group index, debug better
+        TreeMap<Integer, ArrayList<ExtV>> extVsGroupByWalGroupIndex = new TreeMap<>();
         try {
             for (int i = 0; i < batchCount; i++) {
                 var batchIndex = buffer.get();
@@ -245,11 +267,12 @@ public class XGroup extends BaseCommand {
                 var v = Wal.V.decode(is);
 
                 var bucketIndex = v.getBucketIndex();
+                var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
 
-                var vList = extVsGroupByBucketIndex.get(bucketIndex);
+                var vList = extVsGroupByWalGroupIndex.get(walGroupIndex);
                 if (vList == null) {
                     vList = new ArrayList<>();
-                    extVsGroupByBucketIndex.put(bucketIndex, vList);
+                    extVsGroupByWalGroupIndex.put(walGroupIndex, vList);
                 }
                 vList.add(new ExtV(batchIndex, isValueShort, offset, v));
             }
@@ -260,7 +283,7 @@ public class XGroup extends BaseCommand {
         var oneSlot = localPersist.oneSlot(slot);
         // need not write to wal, perf too bad
         // just write to mem, if crash, slave will fetch from master again
-        oneSlot.asSlaveOnMasterWalAppendBatchGet(extVsGroupByBucketIndex);
+        oneSlot.asSlaveOnMasterWalAppendBatchGet(extVsGroupByWalGroupIndex);
 
         return Repl.emptyReply();
     }
@@ -268,12 +291,41 @@ public class XGroup extends BaseCommand {
     private Reply dict_create(byte slot, byte[] contentBytes) {
         log.debug("Repl handle dict create, slot={}, slave uuid={}, {}:{}", slot,
                 replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        // refer Dict.encode
+        var is = new DataInputStream(new ByteArrayInputStream(contentBytes));
+        try {
+            var dictWithKey = Dict.decode(is);
+            DictMap.getInstance().putDict(dictWithKey.key(), dictWithKey.dict());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         return Repl.emptyReply();
     }
 
     private Reply segment_write(byte slot, byte[] contentBytes) {
         log.debug("Repl handle segment write, slot={}, slave uuid={}, {}:{}", slot,
                 replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        // refer to ToSlaveSegmentWrite.encodeTo
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var workerId = buffer.get();
+        var batchIndex = buffer.get();
+        var segmentLength = buffer.getInt();
+        var segmentIndex = buffer.getInt();
+        var segmentCount = buffer.getInt();
+        var segmentSeqList = new ArrayList<Long>();
+        for (int i = 0; i < segmentCount; i++) {
+            segmentSeqList.add(buffer.getLong());
+        }
+        var bytesLength = buffer.getInt();
+        var bytes = new byte[bytesLength];
+        buffer.get(bytes);
+        var capacity = buffer.getInt();
+
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.submitPersistTaskFromRepl(workerId, batchIndex, segmentLength, segmentIndex, segmentCount,
+                segmentSeqList, bytes, capacity);
+
         return Repl.emptyReply();
     }
 
@@ -335,14 +387,16 @@ public class XGroup extends BaseCommand {
 
     private Reply meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
         // server received from client
-        // todo
-        return Repl.reply(slot, replPair, ReplType.s_meta_key_bucket_split_number, new EmptyContent());
+        var oneSlot = localPersist.oneSlot(slot);
+        var bytes = oneSlot.getKeyLoader().getMetaKeyBucketSplitNumberBytesForRepl();
+        return Repl.reply(slot, replPair, ReplType.s_meta_key_bucket_split_number, new RawBytesContent(bytes));
     }
 
     private Reply s_meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
         // client received from server
-        // todo
-        return Repl.reply(slot, replPair, ReplType.exists_all_done, new EmptyContent());
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.getKeyLoader().overwriteMetaKeyBucketSplitNumberBytesFromRepl(contentBytes);
+        return Repl.reply(slot, replPair, ReplType.meta_key_bucket_seq, new EmptyContent());
     }
 
     private Reply exists_big_string(byte slot, byte[] contentBytes) {
@@ -368,6 +422,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_big_string, toSlaveExistsBigString);
     }
 
+    // need delete local big string file if not exists in master, todo
     private Reply s_exists_big_string(byte slot, byte[] contentBytes) {
         // client received from server
         // empty content means no big string, next step

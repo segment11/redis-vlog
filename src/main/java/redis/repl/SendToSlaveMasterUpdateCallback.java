@@ -16,8 +16,8 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
     }
 
     @Override
-    public void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long seq, byte[] bytes) {
-        var toSlaveKeyBucketUpdate = new ToSlaveKeyBucketUpdate(bucketIndex, splitIndex, splitNumber, seq, bytes);
+    public void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes) {
+        var toSlaveKeyBucketUpdate = new ToSlaveKeyBucketUpdate(bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes);
         var replPairList = getCurrentSlaveReplPairList.get();
         for (var replPair : replPairList) {
             replPair.write(ReplType.key_bucket_update, toSlaveKeyBucketUpdate);
@@ -75,8 +75,14 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
     }
 
     @Override
-    public void onSegmentWrite(byte workerId, byte batchIndex, byte slot, int segmentLength, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
-        // todo
+    public void onSegmentWrite(byte workerId, byte batchIndex, byte slot, int segmentLength, int segmentIndex, int segmentCount,
+                               ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
+        var toSlaveSegmentWrite = new ToSlaveSegmentWrite(workerId, batchIndex, segmentLength, segmentIndex, segmentCount,
+                segmentSeqList, bytes, capacity);
+        var replPairList = getCurrentSlaveReplPairList.get();
+        for (var replPair : replPairList) {
+            replPair.write(ReplType.segment_write, toSlaveSegmentWrite);
+        }
     }
 
     @Override
