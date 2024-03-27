@@ -101,7 +101,7 @@ public class MetaTopChunkSegmentIndex {
         }
         try {
             for (int i = 0; i < initTimes; i++) {
-                raf.seek((long) i * BATCH_SIZE);
+                raf.seek( i * BATCH_SIZE);
                 raf.write(EMPTY_BYTES);
             }
             Arrays.fill(inMemoryCachedBytes, (byte) 0);
