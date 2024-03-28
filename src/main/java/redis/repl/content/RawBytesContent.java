@@ -12,7 +12,7 @@ public class RawBytesContent implements ReplContent {
 
     @Override
     public void encodeTo(ByteBuf toBuf) {
-        toBuf.put(bytes);
+        toBuf.write(bytes);
     }
 
     @Override

@@ -12,7 +12,7 @@ public class Pong implements ReplContent {
 
     @Override
     public void encodeTo(ByteBuf toBuf) {
-        toBuf.put(netListenAddresses.getBytes());
+        toBuf.write(netListenAddresses.getBytes());
     }
 
     @Override

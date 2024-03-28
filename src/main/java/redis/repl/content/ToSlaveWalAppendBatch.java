@@ -72,7 +72,7 @@ public class ToSlaveWalAppendBatch implements ReplContent {
 
     @Override
     public void encodeTo(ByteBuf toBuf) {
-        toBuf.put(bytes, 0, HEADER_LENGTH + dataLength);
+        toBuf.write(bytes, 0, HEADER_LENGTH + dataLength);
     }
 
     @Override

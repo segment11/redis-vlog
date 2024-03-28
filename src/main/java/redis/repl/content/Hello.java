@@ -15,7 +15,7 @@ public class Hello implements ReplContent {
     @Override
     public void encodeTo(ByteBuf toBuf) {
         toBuf.writeLong(slaveUuid);
-        toBuf.put(netListenAddresses.getBytes());
+        toBuf.write(netListenAddresses.getBytes());
     }
 
     @Override

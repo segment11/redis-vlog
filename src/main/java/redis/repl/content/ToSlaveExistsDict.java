@@ -47,12 +47,12 @@ public class ToSlaveExistsDict implements ReplContent {
     public void encodeTo(ByteBuf toBuf) {
         if (toSendCacheDictBySeq.isEmpty()) {
             toBuf.writeShort((short) 0);
-            toBuf.put((byte) 1);
+            toBuf.writeByte((byte) 1);
             return;
         }
 
         toBuf.writeShort((short) toSendCacheDictBySeq.size());
-        toBuf.put((byte) (isSendAllOnce ? 1 : 0));
+        toBuf.writeByte((byte) (isSendAllOnce ? 1 : 0));
 
         for (var entry : toSendCacheDictBySeq.entrySet()) {
             var dict = entry.getValue();
@@ -60,7 +60,7 @@ public class ToSlaveExistsDict implements ReplContent {
 
             var encodeLength = key == null ? dict.encodeLength(ANONYMOUS_DICT_KEY) : dict.encodeLength(key);
             toBuf.writeInt(encodeLength);
-            toBuf.put(dict.encode(key == null ? ANONYMOUS_DICT_KEY : key));
+            toBuf.write(dict.encode(key == null ? ANONYMOUS_DICT_KEY : key));
         }
     }
 

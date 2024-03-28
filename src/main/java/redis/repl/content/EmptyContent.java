@@ -6,7 +6,7 @@ import redis.repl.ReplContent;
 public class EmptyContent implements ReplContent {
     @Override
     public void encodeTo(ByteBuf toBuf) {
-        toBuf.put((byte) 0);
+        toBuf.writeByte((byte) 0);
     }
 
     @Override

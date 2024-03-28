@@ -14,12 +14,12 @@ public class ToSlaveBigStringFileWrite implements ReplContent {
 
     @Override
     public void encodeTo(ByteBuf toBuf) {
-        // todo
-        toBuf.put((byte) 0);
+        toBuf.writeLong(uuid);
+        toBuf.write(bytes);
     }
 
     @Override
     public int encodeLength() {
-        return 1;
+        return 8 + bytes.length;
     }
 }

@@ -41,12 +41,12 @@ public class ToSlaveExistsBigString implements ReplContent {
     public void encodeTo(ByteBuf toBuf) {
         if (toSendUuidList.isEmpty()) {
             toBuf.writeShort((short) 0);
-            toBuf.put((byte) 1);
+            toBuf.writeByte((byte) 1);
             return;
         }
 
         toBuf.writeShort((short) toSendUuidList.size());
-        toBuf.put((byte) (isSendAllOnce ? 1 : 0));
+        toBuf.writeByte((byte) (isSendAllOnce ? 1 : 0));
 
         short existCount = 0;
         for (var uuid : toSendUuidList) {
@@ -63,7 +63,7 @@ public class ToSlaveExistsBigString implements ReplContent {
 
             try {
                 byte[] bytes = FileUtils.readFileToByteArray(file);
-                toBuf.put(bytes);
+                toBuf.write(bytes);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
