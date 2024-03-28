@@ -16,6 +16,8 @@ public enum ReplType {
     dict_create(true, false, (byte) 13),
     segment_write(true, false, (byte) 14),
     big_string_file_write(true, false, (byte) 15),
+    segment_index_change(true, false, (byte) 16),
+    top_segment_index_update(true, false, (byte) 17),
 
     exists_chunk_segments(false, true, (byte) 20),
     meta_chunk_segment_flag_seq(false, true, (byte) 21),

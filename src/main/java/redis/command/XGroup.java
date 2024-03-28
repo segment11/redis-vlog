@@ -119,6 +119,8 @@ public class XGroup extends BaseCommand {
             case dict_create -> dict_create(slot, contentBytes);
             case segment_write -> segment_write(slot, contentBytes);
             case big_string_file_write -> big_string_file_write(slot, contentBytes);
+            case segment_index_change -> segment_index_change(slot, contentBytes);
+            case top_segment_index_update -> top_segment_index_update(slot, contentBytes);
             case exists_chunk_segments -> exists_chunk_segments(slot, contentBytes);
             case meta_chunk_segment_flag_seq -> meta_chunk_segment_flag_seq(slot, contentBytes);
             case meta_chunk_segment_index -> meta_chunk_segment_index(slot, contentBytes);
@@ -353,6 +355,35 @@ public class XGroup extends BaseCommand {
         return Repl.emptyReply();
     }
 
+    private Reply segment_index_change(byte slot, byte[] contentBytes) {
+        log.debug("Repl handle segment index change, slot={}, slave uuid={}, {}:{}", slot,
+                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var workerId = buffer.get();
+        var batchIndex = buffer.get();
+        var segmentIndex = buffer.getInt();
+
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.setChunkWriteSegmentIndex(workerId, batchIndex, segmentIndex);
+
+        return Repl.emptyReply();
+    }
+
+    private Reply top_segment_index_update(byte slot, byte[] contentBytes) {
+        log.debug("Repl handle top segment index update, slot={}, slave uuid={}, {}:{}", slot,
+                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var workerId = buffer.get();
+        var batchIndex = buffer.get();
+        var slotGiven = buffer.get();
+        var segmentIndex = buffer.get();
+
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.getChunkMerger().setMetaTopChunkSegmentIndexFromRepl(workerId, batchIndex, slotGiven, segmentIndex);
+
+        return Repl.emptyReply();
+    }
+
     private Reply exists_chunk_segments(byte slot, byte[] contentBytes) {
         // server received from client, send back exists chunk segments to client, with flag can do next step
         return Repl.emptyReply();
@@ -375,22 +406,35 @@ public class XGroup extends BaseCommand {
 
     private Reply meta_chunk_segment_index(byte slot, byte[] contentBytes) {
         // server received from client
-        return Repl.emptyReply();
+        // ignore content bytes, send all
+        var oneSlot = localPersist.oneSlot(slot);
+        var bytes = oneSlot.getMetaChunkSegmentIndexBytesForRepl();
+        return Repl.reply(slot, replPair, ReplType.s_meta_chunk_segment_index, new RawBytesContent(bytes));
     }
 
     private Reply s_meta_chunk_segment_index(byte slot, byte[] contentBytes) {
         // client received from server
-        return Repl.emptyReply();
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.overwriteMetaChunkSegmentIndexBytesFromRepl(contentBytes);
+        // next step, fetch meta top chunk segment index
+        // all slots only need fetch once, todo
+        return Repl.reply(slot, replPair, ReplType.meta_top_chunk_segment_index, new EmptyContent());
     }
 
     private Reply meta_top_chunk_segment_index(byte slot, byte[] contentBytes) {
         // server received from client
-        return Repl.emptyReply();
+        // ignore content bytes, send all
+        var oneSlot = localPersist.oneSlot(slot);
+        var bytes = oneSlot.getChunkMerger().getMetaTopChunkSegmentIndexBytesForRepl();
+        return Repl.reply(slot, replPair, ReplType.s_meta_top_chunk_segment_index, new RawBytesContent(bytes));
     }
 
     private Reply s_meta_top_chunk_segment_index(byte slot, byte[] contentBytes) {
         // client received from server
-        return Repl.emptyReply();
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.getChunkMerger().overwriteMetaTopChunkSegmentIndexBytesFromRepl(contentBytes);
+        // next step, fetch meta chunk segment flag seq
+        return Repl.reply(slot, replPair, ReplType.meta_chunk_segment_flag_seq, new EmptyContent());
     }
 
     private Reply meta_key_bucket_seq(byte slot, byte[] contentBytes) {
@@ -405,6 +449,7 @@ public class XGroup extends BaseCommand {
 
     private Reply meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
         // server received from client
+        // ignore content bytes, send all
         var oneSlot = localPersist.oneSlot(slot);
         var bytes = oneSlot.getKeyLoader().getMetaKeyBucketSplitNumberBytesForRepl();
         return Repl.reply(slot, replPair, ReplType.s_meta_key_bucket_split_number, new RawBytesContent(bytes));
@@ -414,7 +459,8 @@ public class XGroup extends BaseCommand {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
         oneSlot.getKeyLoader().overwriteMetaKeyBucketSplitNumberBytesFromRepl(contentBytes);
-        return Repl.reply(slot, replPair, ReplType.meta_key_bucket_seq, new EmptyContent());
+        // next step, fetch meta chunk segment index
+        return Repl.reply(slot, replPair, ReplType.meta_chunk_segment_index, new EmptyContent());
     }
 
     private Reply exists_big_string(byte slot, byte[] contentBytes) {

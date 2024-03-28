@@ -79,4 +79,14 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
             log.warn("onBigStringFileWrite called with slot: {}, uuid: {}, bytes.length: {}", slot, uuid, bytes.length);
         }
     }
+
+    @Override
+    public void onSegmentIndexChange(byte workerId, byte batchIndex, int segmentIndex) {
+
+    }
+
+    @Override
+    public void onTopMergeSegmentIndexUpdate(byte workerId, byte batchIndex, byte slot, int segmentIndex) {
+
+    }
 }

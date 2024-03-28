@@ -4,6 +4,7 @@ import redis.Dict;
 import redis.persist.Wal;
 import redis.repl.content.*;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
 public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
@@ -91,6 +92,35 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
         var replPairList = getCurrentSlaveReplPairList.get();
         for (var replPair : replPairList) {
             replPair.write(ReplType.big_string_file_write, toSlaveBigStringFileWrite);
+        }
+    }
+
+    @Override
+    public void onSegmentIndexChange(byte workerId, byte batchIndex, int segmentIndex) {
+        var bytes = new byte[1 + 1 + 4];
+        bytes[0] = workerId;
+        bytes[1] = batchIndex;
+        ByteBuffer.wrap(bytes, 2, 4).putInt(segmentIndex);
+
+        var replContent = new RawBytesContent(bytes);
+        var replPairList = getCurrentSlaveReplPairList.get();
+        for (var replPair : replPairList) {
+            replPair.write(ReplType.segment_index_change, replContent);
+        }
+    }
+
+    @Override
+    public void onTopMergeSegmentIndexUpdate(byte workerId, byte batchIndex, byte slot, int segmentIndex) {
+        var bytes = new byte[1 + 1 + 1 + 4];
+        bytes[0] = workerId;
+        bytes[1] = batchIndex;
+        bytes[2] = slot;
+        ByteBuffer.wrap(bytes, 3, 4).putInt(segmentIndex);
+
+        var replContent = new RawBytesContent(bytes);
+        var replPairList = getCurrentSlaveReplPairList.get();
+        for (var replPair : replPairList) {
+            replPair.write(ReplType.top_segment_index_update, replContent);
         }
     }
 }

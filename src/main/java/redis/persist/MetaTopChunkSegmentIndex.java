@@ -30,6 +30,24 @@ public class MetaTopChunkSegmentIndex {
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
+    public byte[] getInMemoryCachedBytes() {
+        return inMemoryCachedBytes;
+    }
+
+    public synchronized void overwriteInMemoryCachedBytes(byte[] bytes) {
+        if (bytes.length != inMemoryCachedBytes.length) {
+            throw new IllegalArgumentException("Repl meta top chunk segment index, bytes length not match");
+        }
+
+        try {
+            raf.seek(0);
+            raf.write(bytes);
+            System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
+        } catch (IOException e) {
+            throw new RuntimeException("Repl meta key bucket split number, write file error", e);
+        }
+    }
+
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     public MetaTopChunkSegmentIndex(short slotNumber, byte topMergeWorkers, int topMergeWorkerBeginIndex, File persistDir) throws IOException {
@@ -41,7 +59,7 @@ public class MetaTopChunkSegmentIndex {
         this.oneWorkerCapacity = ConfForSlot.global.confWal.batchNumber * oneBatchCapacity;
         this.allCapacity = topMergeWorkers * oneWorkerCapacity;
 
-        // top merge workers <= 32, batch number <= 4, slot number <= 128, 32 * 4 * 128 * 4 = 64KB
+        // top merge workers <= 32, batch number <= 2, slot number <= 128, 32 * 2 * 128 * 4 = 32KB
         this.inMemoryCachedBytes = new byte[allCapacity];
 
         boolean needRead = false;
@@ -101,7 +119,7 @@ public class MetaTopChunkSegmentIndex {
         }
         try {
             for (int i = 0; i < initTimes; i++) {
-                raf.seek( i * BATCH_SIZE);
+                raf.seek(i * BATCH_SIZE);
                 raf.write(EMPTY_BYTES);
             }
             Arrays.fill(inMemoryCachedBytes, (byte) 0);

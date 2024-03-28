@@ -9,12 +9,14 @@ import redis.CompressedValue;
 import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
+import redis.repl.MasterUpdateCallback;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.*;
 
@@ -33,6 +35,12 @@ public class ChunkMerger implements OfStats {
     private final byte topMergeWorkers;
     private final SnowFlake snowFlake;
 
+    private final HashMap<Byte, MasterUpdateCallback> masterUpdateCallbackBySlot = new HashMap<>();
+
+    void putMasterUpdateCallback(byte slot, MasterUpdateCallback masterUpdateCallback) {
+        masterUpdateCallbackBySlot.put(slot, masterUpdateCallback);
+    }
+
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private ScheduledExecutorService mergeSelfScheduledExecutor;
@@ -41,6 +49,19 @@ public class ChunkMerger implements OfStats {
 
     public void clearMetaTopChunkSegmentIndex() {
         metaTopChunkSegmentIndex.clear();
+    }
+
+    // read only, important
+    public byte[] getMetaTopChunkSegmentIndexBytesForRepl() {
+        return metaTopChunkSegmentIndex.getInMemoryCachedBytes();
+    }
+
+    public void overwriteMetaTopChunkSegmentIndexBytesFromRepl(byte[] bytes) {
+        metaTopChunkSegmentIndex.overwriteInMemoryCachedBytes(bytes);
+    }
+
+    public void setMetaTopChunkSegmentIndexFromRepl(byte mergeWorkerId, byte batchIndex, byte slot, int nextIndex) {
+        metaTopChunkSegmentIndex.put(mergeWorkerId, batchIndex, slot, nextIndex);
     }
 
     private int compressLevel;
@@ -149,6 +170,11 @@ public class ChunkMerger implements OfStats {
 
                 int nextIndex = segmentIndex == ConfForSlot.global.confChunk.maxSegmentIndex() ? 0 : segmentIndex + 1;
                 metaTopChunkSegmentIndex.put(topWorker.mergeWorkerId, batchIndex, slot, nextIndex);
+
+                var masterUpdateCallback = masterUpdateCallbackBySlot.get(slot);
+                if (masterUpdateCallback != null) {
+                    masterUpdateCallback.onTopMergeSegmentIndexUpdate(topWorker.mergeWorkerId, batchIndex, slot, nextIndex);
+                }
 
                 if (nextIndex == 0) {
                     log.info("Top self merge segment index go back to 0, w={}, s={}", topWorker.mergeWorkerId, slot);

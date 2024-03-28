@@ -413,6 +413,10 @@ public class OneSlot implements OfStats {
 
     private ChunkMerger chunkMerger;
 
+    public ChunkMerger getChunkMerger() {
+        return chunkMerger;
+    }
+
     public void setChunkMerger(ChunkMerger chunkMerger) {
         this.chunkMerger = chunkMerger;
 
@@ -421,6 +425,8 @@ public class OneSlot implements OfStats {
                 chunkMerger.getChunkMergeWorker((byte) i).fixChunkThreadId(chunk);
             }
         }
+
+        chunkMerger.putMasterUpdateCallback(slot, masterUpdateCallback);
     }
 
     // first index is worker id, second index is batch index
@@ -428,6 +434,15 @@ public class OneSlot implements OfStats {
 
     private MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
     private MetaChunkSegmentIndex metaChunkSegmentIndex;
+
+    // read only, important
+    public byte[] getMetaChunkSegmentIndexBytesForRepl() {
+        return metaChunkSegmentIndex.getInMemoryCachedBytes();
+    }
+
+    public void overwriteMetaChunkSegmentIndexBytesFromRepl(byte[] bytes) {
+        metaChunkSegmentIndex.overwriteInMemoryCachedBytes(bytes);
+    }
 
     private final CompressStats compressStats;
 

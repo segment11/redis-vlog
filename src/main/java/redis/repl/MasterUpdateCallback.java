@@ -23,4 +23,8 @@ public interface MasterUpdateCallback {
                         int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, byte[] bytes, int capacity);
 
     void onBigStringFileWrite(byte slot, long uuid, byte[] bytes);
+
+    void onSegmentIndexChange(byte workerId, byte batchIndex, int segmentIndex);
+
+    void onTopMergeSegmentIndexUpdate(byte workerId, byte batchIndex, byte slot, int segmentIndex);
 }

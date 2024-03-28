@@ -507,6 +507,9 @@ public class Chunk implements OfStats {
         }
 
         oneSlot.setChunkWriteSegmentIndex(workerId, batchIndex, segmentIndex);
+        if (masterUpdateCallback != null) {
+            masterUpdateCallback.onSegmentIndexChange(workerId, batchIndex, segmentIndex);
+        }
         return needMergeSegmentIndexList;
     }
 
