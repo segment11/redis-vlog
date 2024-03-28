@@ -332,6 +332,24 @@ public class XGroup extends BaseCommand {
     private Reply big_string_file_write(byte slot, byte[] contentBytes) {
         log.debug("Repl handle big string file write, slot={}, slave uuid={}, {}:{}", slot,
                 replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        // refer to ToSlaveBigStringFileWrite.encodeTo
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var uuid = buffer.getLong();
+        var encodeLength = buffer.remaining();
+        var encodeBytes = new byte[encodeLength];
+        buffer.get(encodeBytes);
+
+        var oneSlot = localPersist.oneSlot(slot);
+        var bigStringDir = oneSlot.getBigStringDir();
+        var uuidAsFileName = String.valueOf(uuid);
+
+        var file = new File(bigStringDir, uuidAsFileName);
+        try {
+            FileUtils.writeByteArrayToFile(file, encodeBytes);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         return Repl.emptyReply();
     }
 
