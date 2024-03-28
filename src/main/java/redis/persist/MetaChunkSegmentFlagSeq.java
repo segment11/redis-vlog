@@ -58,7 +58,7 @@ public class MetaChunkSegmentFlagSeq {
         this.oneWorkerCapacity = ConfForSlot.global.confWal.batchNumber * oneBatchCapacity;
         this.allCapacity = allWorkers * oneWorkerCapacity;
 
-        // max all workers <= 128, batch number <= 4, max segment number <= 512KB, 128 * 4 * 512KB * 10 = 2.5GB
+        // max all workers <= 128, batch number <= 2, max segment number <= 512KB, 128 * 2 * 512KB * 10 = 1.28GB
         this.inMemoryCachedBytes = new byte[allCapacity];
         fillSegmentFlagInit(inMemoryCachedBytes);
 
@@ -152,7 +152,7 @@ public class MetaChunkSegmentFlagSeq {
         }
         try {
             for (int i = 0; i < initTimes; i++) {
-                raf.seek( i * BATCH_SIZE);
+                raf.seek(i * BATCH_SIZE);
                 raf.write(EMPTY_BYTES);
             }
             fillSegmentFlagInit(inMemoryCachedBytes);
