@@ -609,7 +609,7 @@ public class KeyLoader implements OfStats {
 
             for (int i = 0; i < shortValueList.size(); i++) {
                 var v = shortValueList.get(i);
-                int splitIndex = beforeSplitNumberArr[0] == 1 ? 0 : (int) Math.abs(v.keyHash % beforeSplitNumberArr[0]);
+                int splitIndex = beforeSplitNumberArr[0] == 1 ? 0 : (int) Math.abs(v.keyHash() % beforeSplitNumberArr[0]);
                 var keyBucket = beforeKeyBuckets.get(splitIndex);
 
                 boolean notSplit = beforeSplitNumberArr[0] == splitNumber;
@@ -617,7 +617,7 @@ public class KeyLoader implements OfStats {
 
                 // delete must not split
                 if (v.isDeleteFlag()) {
-                    if (keyBucket.del(v.key.getBytes(), v.keyHash) && notSplit) {
+                    if (keyBucket.del(v.key().getBytes(), v.keyHash()) && notSplit) {
                         putBackFlags[splitIndex] = true;
                     }
                     continue;
@@ -633,9 +633,9 @@ public class KeyLoader implements OfStats {
                     break;
                 }
 
-                boolean isPut = keyBucket.put(v.key.getBytes(), v.keyHash, v.cvEncoded, afterPutKeyBuckets);
+                boolean isPut = keyBucket.put(v.key().getBytes(), v.keyHash(), v.cvEncoded(), afterPutKeyBuckets);
                 if (!isPut) {
-                    throw new IllegalStateException("Put short value error, key: " + v.key);
+                    throw new IllegalStateException("Put short value error, key: " + v.key());
                 }
 
                 splitOthersIfSplit(bucketIndex, keyBuckets, putBackFlags,

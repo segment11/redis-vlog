@@ -20,37 +20,8 @@ import java.util.List;
 import static redis.CompressedValue.EXPIRE_NOW;
 
 public class Wal implements OfStats {
-    public static class V {
-        byte workerId;
-        long seq;
-
-        public int getBucketIndex() {
-            return bucketIndex;
-        }
-
-        int bucketIndex;
-        long keyHash;
-        long expireAt;
-        String key;
-        byte[] cvEncoded;
-        int cvEncodedLength;
-
-        public V(byte workerId, long seq, int bucketIndex, long keyHash, long expireAt,
-                 String key, byte[] cvEncoded, int cvEncodedLength) {
-            this.workerId = workerId;
-            this.seq = seq;
-            this.bucketIndex = bucketIndex;
-            this.keyHash = keyHash;
-            this.expireAt = expireAt;
-            this.key = key;
-            this.cvEncoded = cvEncoded;
-            this.cvEncodedLength = cvEncodedLength;
-        }
-
-        int bucketIndex() {
-            return bucketIndex;
-        }
-
+    public record V(byte workerId, long seq, int bucketIndex, long keyHash, long expireAt,
+                    String key, byte[] cvEncoded, int cvEncodedLength) {
         @Override
         public String toString() {
             return "V{" +
@@ -310,6 +281,25 @@ public class Wal implements OfStats {
         boolean r2 = delayToKeyBucketValues.remove(key) != null;
 
         return r || r2;
+    }
+
+    void writeRafAndOffsetFromRepl(boolean isValueShort, V v, int offset) {
+        var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
+        var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
+        var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
+
+        var encodeLength = v.encodeLength();
+
+        synchronized (raf) {
+            try {
+                raf.seek(targetGroupBeginOffset + offset);
+                raf.write(v.encode());
+                positionArray[groupIndex] += encodeLength;
+            } catch (IOException e) {
+                log.error("Write to file error", e);
+                throw new RuntimeException("Write to file error: " + e.getMessage());
+            }
+        }
     }
 
     // return need persist

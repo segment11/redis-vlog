@@ -866,12 +866,12 @@ public class OneSlot implements OfStats {
         }
     }
 
-    // just write to mem, if crash, slave will fetch from master again
     public void asSlaveOnMasterWalAppendBatchGet(TreeMap<Integer, ArrayList<XGroup.ExtV>> extVsGroupByWalGroupIndex) {
         for (var entry : extVsGroupByWalGroupIndex.entrySet()) {
             var walGroupIndex = entry.getKey();
             var extVs = entry.getValue();
 
+            // batch index is not single, can not write once
             for (var extV : extVs) {
                 var batchIndex = extV.batchIndex();
                 var wal = walsArray[walGroupIndex][batchIndex];
@@ -887,12 +887,15 @@ public class OneSlot implements OfStats {
                     }
                 }
 
+                wal.writeRafAndOffsetFromRepl(extV.isValueShort(), v, offset);
+
+                var key = v.key();
                 if (extV.isValueShort()) {
-                    wal.delayToKeyBucketShortValues.put(v.key, v);
-                    wal.delayToKeyBucketValues.remove(v.key);
+                    wal.delayToKeyBucketShortValues.put(key, v);
+                    wal.delayToKeyBucketValues.remove(key);
                 } else {
-                    wal.delayToKeyBucketValues.put(v.key, v);
-                    wal.delayToKeyBucketShortValues.remove(v.key);
+                    wal.delayToKeyBucketValues.put(key, v);
+                    wal.delayToKeyBucketShortValues.remove(key);
                 }
             }
         }
@@ -1115,7 +1118,7 @@ public class OneSlot implements OfStats {
                     list.sort(Comparator.comparingInt(Wal.V::bucketIndex));
 
                     var batchIndex = targetWal.batchIndex;
-                    var workerId = list.get(0).workerId;
+                    var workerId = list.get(0).workerId();
                     var chunk = chunksArray[workerId][batchIndex];
 
                     var needMergeSegmentIndexList = chunk.persist(list);

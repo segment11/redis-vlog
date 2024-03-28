@@ -206,20 +206,20 @@ public class SegmentBatch {
         int offsetInThisSegment = SEGMENT_HEADER_LENGTH;
 
         for (var v : list) {
-            crcCalBuffer.putLong(v.keyHash);
+            crcCalBuffer.putLong(v.keyHash());
 
-            var keyBytes = v.key.getBytes();
+            var keyBytes = v.key().getBytes();
             buffer.put((byte) keyBytes.length);
             buffer.put(keyBytes);
-            buffer.put(v.cvEncoded);
+            buffer.put(v.cvEncoded());
 
             int lenKey = KEY_HEADER_LENGTH + keyBytes.length;
-            int lenValue = VALUE_HEADER_LENGTH + v.cvEncodedLength;
+            int lenValue = VALUE_HEADER_LENGTH + v.cvEncodedLength();
             int length = lenKey + lenValue;
 
             var pvm = new PersistValueMeta();
             pvm.keyBytes = keyBytes;
-            pvm.keyHash = v.keyHash;
+            pvm.keyHash = v.keyHash();
             pvm.bucketIndex = v.bucketIndex();
 
             pvm.workerId = workerId;
@@ -231,7 +231,7 @@ public class SegmentBatch {
             // tmp current segment index, then update
             pvm.segmentIndex = segmentIndex;
             pvm.segmentOffset = offsetInThisSegment;
-            pvm.expireAt = v.expireAt;
+            pvm.expireAt = v.expireAt();
             returnPvmList.add(pvm);
 
             offsetInThisSegment += length;

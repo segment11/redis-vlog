@@ -268,8 +268,7 @@ public class XGroup extends BaseCommand {
                 var is = new DataInputStream(new ByteArrayInputStream(vEncodeBytes));
                 var v = Wal.V.decode(is);
 
-                var bucketIndex = v.getBucketIndex();
-                var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
+                var walGroupIndex = v.bucketIndex() / ConfForSlot.global.confWal.oneChargeBucketNumber;
 
                 var vList = extVsGroupByWalGroupIndex.get(walGroupIndex);
                 if (vList == null) {
@@ -283,8 +282,7 @@ public class XGroup extends BaseCommand {
         }
 
         var oneSlot = localPersist.oneSlot(slot);
-        // need not write to wal, perf too bad
-        // just write to mem, if crash, slave will fetch from master again
+        // need write to wal, perf too bad
         oneSlot.asSlaveOnMasterWalAppendBatchGet(extVsGroupByWalGroupIndex);
 
         return Repl.emptyReply();
