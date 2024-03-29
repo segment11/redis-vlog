@@ -130,8 +130,12 @@ public class OneSlot implements OfStats {
         var sendOnceMaxSize = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxSize", 1024 * 1024);
         var toSlaveWalAppendBatch = new ToSlaveWalAppendBatch(sendOnceMaxCount, sendOnceMaxSize);
         // sync to slave callback
-        this.masterUpdateCallback = new SendToSlaveMasterUpdateCallback(() ->
-                replPairs.stream().filter(ReplPair::isAsMaster).collect(Collectors.toList()), toSlaveWalAppendBatch);
+        this.masterUpdateCallback = new SendToSlaveMasterUpdateCallback(() -> {
+            // merge worker thread also call this, so need thread safe
+            synchronized (replPairs) {
+                return replPairs.stream().filter(ReplPair::isAsMaster).collect(Collectors.toList());
+            }
+        }, toSlaveWalAppendBatch);
 
         this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, masterUpdateCallback, dynConfig);
 
@@ -1031,10 +1035,16 @@ public class OneSlot implements OfStats {
                     ", repl segment length: " + segmentLength);
         }
 
-        var executor = persistExecutors[batchIndex];
-        executor.submit(() -> {
-            chunk.writeSegmentsFromRepl(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
-        });
+        if (workerId < requestWorkers) {
+            var executor = persistExecutors[batchIndex];
+            executor.submit(() -> {
+                chunk.writeSegmentsFromRepl(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
+            });
+        } else {
+            // merge worker
+            chunkMerger.getChunkMergeWorker(workerId).submitWriteSegmentsFromRepl(chunk,
+                    bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
+        }
     }
 
     public int preadForMerge(byte workerId, byte batchIndex, int segmentIndex, ByteBuffer buffer, long offset) {

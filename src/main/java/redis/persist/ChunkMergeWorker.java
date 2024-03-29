@@ -221,6 +221,12 @@ public class ChunkMergeWorker implements OfStats {
         });
     }
 
+    public void submitWriteSegmentsFromRepl(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, int capacity) {
+        this.executors[chunk.batchIndex].submit(() -> {
+            chunk.writeSegmentsFromRepl(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
+        });
+    }
+
     private ThreadFactory getThreadFactoryGroup(byte mergeWorkerId) {
         // every cpu vCore has 10 threads
         // one core decompress usually 1000MB/s, 1 thread can handle 100MB/s
