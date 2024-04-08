@@ -58,7 +58,6 @@ public class RequestDecoder implements ByteBufsDecoder<ArrayList<Request>> {
             h.feed(compositeByteBuf, compositeByteBuf.readableBytes(), 0);
             if (!h.isOk) {
                 return null;
-//                  throw new MalformedDataException("Malformed data");
             }
 
             if (isGet || isDelete) {
@@ -87,23 +86,14 @@ public class RequestDecoder implements ByteBufsDecoder<ArrayList<Request>> {
             }
         } else if (isRepl) {
             data = Repl.decode(compositeByteBuf);
+            if (data == null) {
+                return null;
+            }
         } else {
             data = resp.decode(compositeByteBuf);
             if (data == null) {
                 return null;
-//                throw new MalformedDataException("Malformed data");
             }
-        }
-
-        boolean isFinished = true;
-        for (var inner : data) {
-            if (inner == null) {
-                isFinished = false;
-                break;
-            }
-        }
-        if (!isFinished) {
-            return null;
         }
 
         // remove already consumed bytes

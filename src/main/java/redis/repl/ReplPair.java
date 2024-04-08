@@ -1,6 +1,8 @@
 package redis.repl;
 
 import io.activej.eventloop.Eventloop;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.RequestHandler;
 import redis.repl.content.Hello;
@@ -18,6 +20,8 @@ public class ReplPair {
     private final boolean asMaster;
     private final String host;
     private final int port;
+
+    private final Logger log = LoggerFactory.getLogger(ReplPair.class);
 
     public byte getSlot() {
         return slot;
@@ -104,14 +108,15 @@ public class ReplPair {
     public void initAsSlave(Eventloop eventloop, RequestHandler requestHandler) {
         if (System.currentTimeMillis() - lastPongGetTimestamp < 1000 * 3
                 && tcpClient != null && tcpClient.isSocketConnected()) {
+            log.warn("Repl pair init as slave: already connected, target host: {}, port: {}, slot: {}", host, port, slot);
         } else {
             if (tcpClient != null) {
                 tcpClient.close();
             }
 
-            tcpClient = new TcpClient(slot, eventloop, requestHandler, this);
-
             var replContent = new Hello(slaveUuid, ConfForSlot.global.netListenAddresses);
+
+            tcpClient = new TcpClient(slot, eventloop, requestHandler, this);
             tcpClient.connect(host, port, () -> Repl.buffer(slaveUuid, slot, ReplType.hello, replContent));
         }
     }
@@ -119,6 +124,7 @@ public class ReplPair {
     public void initAsMaster(long slaveUuid, Eventloop eventloop, RequestHandler requestHandler) {
         if (System.currentTimeMillis() - lastPingGetTimestamp < 1000 * 3 && slaveUuid == this.slaveUuid
                 && tcpClient != null && tcpClient.isSocketConnected()) {
+            log.warn("Repl pair init as master: already connected, target host: {}, port: {}, slot: {}", host, port, slot);
         } else {
             if (tcpClient != null) {
                 tcpClient.close();
@@ -143,6 +149,10 @@ public class ReplPair {
     }
 
     private boolean isSendBye = false;
+
+    public boolean isSendBye() {
+        return isSendBye;
+    }
 
     public boolean bye() {
         if (tcpClient != null) {

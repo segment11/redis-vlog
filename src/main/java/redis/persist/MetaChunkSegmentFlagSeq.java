@@ -48,6 +48,30 @@ public class MetaChunkSegmentFlagSeq {
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
+    public byte[] getInMemoryCachedBytesOneWorker(byte workerId) {
+        var bytes = new byte[oneWorkerCapacity + 1];
+        bytes[0] = workerId;
+        var offset = workerId * oneWorkerCapacity;
+        System.arraycopy(inMemoryCachedBytes, offset, bytes, 1, oneWorkerCapacity);
+        return bytes;
+    }
+
+    public synchronized void overwriteInMemoryCachedBytesOneWorker(byte[] bytes) {
+        if (bytes.length != oneWorkerCapacity + 1) {
+            throw new IllegalArgumentException("Repl meta chunk segment flag seq, bytes length not match");
+        }
+
+        var workerId = bytes[0];
+        var offset = workerId * oneWorkerCapacity;
+        try {
+            raf.seek(offset);
+            raf.write(bytes, 1, oneWorkerCapacity);
+            System.arraycopy(bytes, 1, inMemoryCachedBytes, offset, oneWorkerCapacity);
+        } catch (IOException e) {
+            throw new RuntimeException("Repl meta chunk segment flag seq, write file error", e);
+        }
+    }
+
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     public MetaChunkSegmentFlagSeq(byte slot, byte allWorkers, File slotDir) throws IOException {

@@ -174,7 +174,21 @@ public class OneSlot implements OfStats {
     }
 
     private final long masterUuid;
+
     private final ArrayList<ReplPair> replPairs = new ArrayList<>();
+
+    // slave need not top merge
+    public boolean isAsSlave() {
+        boolean isAsSlave = false;
+        for (var replPair : replPairs) {
+            if (!replPair.isSendBye() && !replPair.isAsMaster()) {
+                isAsSlave = true;
+                break;
+            }
+        }
+        return isAsSlave;
+    }
+
     private final LinkedList<ReplPair> delayNeedCloseReplPairs = new LinkedList<>();
 
     public void addDelayNeedCloseReplPair(ReplPair replPair) {
@@ -188,15 +202,6 @@ public class OneSlot implements OfStats {
 
         var replPair = new ReplPair(slot, false, host, port);
         replPair.setSlaveUuid(masterUuid);
-
-        for (var replPair1 : replPairs) {
-            if (replPair1.equals(replPair)) {
-                log.warn("Repl pair already exists, host: {}, port: {}, slot: {}", host, port, slot);
-                replPair1.initAsSlave(eventloop, requestHandler);
-                return;
-            }
-        }
-
         replPair.initAsSlave(eventloop, requestHandler);
         log.warn("Create repl pair as slave, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
@@ -211,6 +216,10 @@ public class OneSlot implements OfStats {
 
     public void removeReplPairAsSlave() throws IOException {
         for (var replPair : replPairs) {
+            if (replPair.isSendBye()) {
+                continue;
+            }
+
             if (!replPair.isAsMaster()) {
                 replPair.bye();
                 addDelayNeedCloseReplPair(replPair);
@@ -226,8 +235,12 @@ public class OneSlot implements OfStats {
         }
     }
 
-    public ReplPair getReplPair(long slaveUuid) {
+    public ReplPair getReplPairAsMaster(long slaveUuid) {
         for (var replPair : replPairs) {
+            if (replPair.isSendBye()) {
+                continue;
+            }
+
             if (replPair.isAsMaster() && replPair.getSlaveUuid() == slaveUuid) {
                 return replPair;
             }
@@ -235,21 +248,17 @@ public class OneSlot implements OfStats {
         return null;
     }
 
-    public void closeAndRemoveReplPair(long slaveUuid, String host, int port) {
-        var it = replPairs.iterator();
-        while (it.hasNext()) {
-            var replPair = it.next();
-            if (replPair.getHost().equals(host) && replPair.getPort() == port) {
-                // should not happen
-                if (replPair.getSlaveUuid() != slaveUuid) {
-                    log.warn("Repl pair slave uuid not match, slave uuid: {}, host: {}, port: {}, slot: {}", slaveUuid, host, port, slot);
-                }
+    public ReplPair getReplPairAsSlave(long slaveUuid) {
+        for (var replPair : replPairs) {
+            if (replPair.isSendBye()) {
+                continue;
+            }
 
-                replPair.close();
-                it.remove();
-                return;
+            if (!replPair.isAsMaster() && replPair.getSlaveUuid() == slaveUuid) {
+                return replPair;
             }
         }
+        return null;
     }
 
     public ReplPair createIfNotExistReplPairAsMaster(long slaveUuid, String host, int port) {
@@ -437,10 +446,19 @@ public class OneSlot implements OfStats {
     Chunk[][] chunksArray;
 
     private MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
+
+    public byte[] getMetaChunkSegmentFlagSeqBytesOneWorkerToSlaveExists(byte workerId) {
+        return metaChunkSegmentFlagSeq.getInMemoryCachedBytesOneWorker(workerId);
+    }
+
+    public void overwriteMetaChunkSegmentFlagSeqBytesOneWorkerFromMasterExists(byte[] bytes) {
+        metaChunkSegmentFlagSeq.overwriteInMemoryCachedBytesOneWorker(bytes);
+    }
+
     private MetaChunkSegmentIndex metaChunkSegmentIndex;
 
     // read only, important
-    public byte[] getMetaChunkSegmentIndexBytesForRepl() {
+    public byte[] getMetaChunkSegmentIndexBytesToSlaveExists() {
         return metaChunkSegmentIndex.getInMemoryCachedBytes();
     }
 
@@ -480,6 +498,10 @@ public class OneSlot implements OfStats {
             @Override
             public void run() {
                 for (var replPair : replPairs) {
+                    if (replPair.isSendBye()) {
+                        continue;
+                    }
+
                     if (!replPair.isAsMaster()) {
                         // only slave need send ping
                         replPair.ping();
@@ -499,6 +521,7 @@ public class OneSlot implements OfStats {
                         var replPair = it.next();
                         if (replPair.equals(needCloseReplPair)) {
                             it.remove();
+                            log.warn("Remove repl pair after bye, host: {}, port: {}, slot: {}", replPair.getHost(), replPair.getPort(), slot);
                             break;
                         }
                     }
@@ -575,6 +598,10 @@ public class OneSlot implements OfStats {
         if (!replPairs.isEmpty()) {
             list.add(StatKV.split);
             for (var replPair : replPairs) {
+                if (replPair.isSendBye()) {
+                    continue;
+                }
+
                 list.add(new StatKV("repl pair link up to " + replPair.getHost() + ":" + replPair.getPort(), replPair.isLinkUp() ? 1 : 0));
             }
         }

@@ -52,15 +52,15 @@ public class ChunkMerger implements OfStats {
     }
 
     // read only, important
-    public byte[] getMetaTopChunkSegmentIndexBytesForRepl() {
+    public byte[] getMetaTopChunkSegmentIndexBytesToSlaveExists() {
         return metaTopChunkSegmentIndex.getInMemoryCachedBytes();
     }
 
-    public void overwriteMetaTopChunkSegmentIndexBytesFromRepl(byte[] bytes) {
+    public void overwriteMetaTopChunkSegmentIndexBytesFromMasterExists(byte[] bytes) {
         metaTopChunkSegmentIndex.overwriteInMemoryCachedBytes(bytes);
     }
 
-    public void setMetaTopChunkSegmentIndexFromRepl(byte mergeWorkerId, byte batchIndex, byte slot, int nextIndex) {
+    public void setMetaTopChunkSegmentIndexFromMasterNewly(byte mergeWorkerId, byte batchIndex, byte slot, int nextIndex) {
         metaTopChunkSegmentIndex.put(mergeWorkerId, batchIndex, slot, nextIndex);
     }
 
