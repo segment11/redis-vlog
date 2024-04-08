@@ -524,7 +524,7 @@ public class MultiWorkerServer extends Launcher {
             chunkMerger.stop();
 
             // disconnect all clients
-            // todo
+            socketInspector.closeAll();
 
             // close local persist
             LocalPersist.getInstance().cleanUp();
@@ -534,12 +534,7 @@ public class MultiWorkerServer extends Launcher {
             throw e;
         }
 
-        // close all clients
-        // todo
-//        for (var socket : socketInspector.socketMap.values()) {
-//            socket.close();
-//        }
-        socketInspector.socketMap.clear();
+        socketInspector.clearAll();
     }
 
     public static void main(String[] args) throws Exception {

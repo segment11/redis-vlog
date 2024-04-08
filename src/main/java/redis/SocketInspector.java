@@ -69,4 +69,15 @@ public class SocketInspector implements TcpSocket.Inspector {
     public <T extends TcpSocket.Inspector> @Nullable T lookup(Class<T> type) {
         return null;
     }
+
+    public void closeAll() {
+        for (var socket : socketMap.values()) {
+            socket.close();
+        }
+        log.info("All sockets closed");
+    }
+
+    public void clearAll() {
+        socketMap.clear();
+    }
 }
