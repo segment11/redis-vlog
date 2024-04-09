@@ -3,6 +3,7 @@ package redis.persist;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.ConfForSlot;
 
 import java.io.File;
 import java.io.IOException;
@@ -14,7 +15,7 @@ public class MetaKeyBucketSplitNumber {
 
     private final byte slot;
     private final int allCapacity;
-    private final RandomAccessFile raf;
+    private RandomAccessFile raf;
 
     // 64KB
     private static final int BATCH_SIZE = 1024 * 64;
@@ -26,7 +27,7 @@ public class MetaKeyBucketSplitNumber {
 
     private final byte[] inMemoryCachedBytes;
 
-    public byte[] getInMemoryCachedBytes() {
+    public synchronized byte[] getInMemoryCachedBytes() {
         return inMemoryCachedBytes;
     }
 
@@ -35,6 +36,10 @@ public class MetaKeyBucketSplitNumber {
             throw new IllegalArgumentException("Repl meta key bucket split number, bytes length not match");
         }
         System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
+
+        if (ConfForSlot.global.pureMemory) {
+            return;
+        }
 
         try {
             raf.seek(0);
@@ -53,6 +58,10 @@ public class MetaKeyBucketSplitNumber {
         // max 512KB
         this.inMemoryCachedBytes = new byte[allCapacity];
         Arrays.fill(inMemoryCachedBytes, (byte) 1);
+
+        if (ConfForSlot.global.pureMemory) {
+            return;
+        }
 
         boolean needRead = false;
         var file = new File(slotDir, META_KEY_BUCKET_SPLIT_NUMBER_FILE);
@@ -81,6 +90,11 @@ public class MetaKeyBucketSplitNumber {
 
     // read write lock better
     public synchronized void set(int bucketIndex, byte splitNumber) {
+        if (ConfForSlot.global.pureMemory) {
+            inMemoryCachedBytes[bucketIndex] = splitNumber;
+            return;
+        }
+
         var offset = bucketIndex;
         try {
             raf.seek(offset);
@@ -107,6 +121,11 @@ public class MetaKeyBucketSplitNumber {
     }
 
     public synchronized void clear() {
+        if (ConfForSlot.global.pureMemory) {
+            Arrays.fill(inMemoryCachedBytes, (byte) 0);
+            return;
+        }
+
         var initTimes = allCapacity / BATCH_SIZE;
         if (allCapacity % BATCH_SIZE != 0) {
             initTimes++;
@@ -123,6 +142,10 @@ public class MetaKeyBucketSplitNumber {
     }
 
     public synchronized void cleanUp() {
+        if (ConfForSlot.global.pureMemory) {
+            return;
+        }
+
         try {
             raf.close();
         } catch (IOException e) {

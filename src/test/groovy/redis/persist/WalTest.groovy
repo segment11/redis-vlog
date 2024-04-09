@@ -44,7 +44,7 @@ class WalTest extends Specification {
 
             def cvEncoded = cv.encode()
 
-            def v = new Wal.V((byte) 0, snowFlake.nextId(), 0, cv.keyHash, CompressedValue.NO_EXPIRE, 0,
+            def v = new Wal.V((byte) 0, snowFlake.nextId(), 0, cv.keyHash, CompressedValue.NO_EXPIRE,
                     key, cvEncoded, cvEncoded.length)
 
             wal.put(true, key, v)

@@ -3,6 +3,7 @@ package redis.persist;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.ConfForSlot;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,7 +19,7 @@ public class StatKeyBucketLastUpdateCount {
     private final byte slot;
     private final int bucketsPerSlot;
     private final int allCapacity;
-    private final RandomAccessFile raf;
+    private RandomAccessFile raf;
 
     // 64KB
     private static final int BATCH_SIZE = 1024 * 64;
@@ -36,6 +37,11 @@ public class StatKeyBucketLastUpdateCount {
 
         // max 512KB * 2 = 1MB
         this.inMemoryCachedBytes = new byte[allCapacity];
+
+        if (ConfForSlot.global.pureMemory) {
+            this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
+            return;
+        }
 
         boolean needRead = false;
         var file = new File(slotDir, STAT_KEY_BUCKET_LAST_UPDATE_COUNT_FILE);
@@ -79,6 +85,10 @@ public class StatKeyBucketLastUpdateCount {
         var offset = bucketIndex * ONE_LENGTH;
         inMemoryCachedByteBuffer.putShort(offset, keyCount);
 
+        if (ConfForSlot.global.pureMemory) {
+            return;
+        }
+
         if (isSync) {
             var bytes = new byte[2];
             ByteBuffer.wrap(bytes).putShort(keyCount);
@@ -106,6 +116,11 @@ public class StatKeyBucketLastUpdateCount {
     }
 
     public synchronized void clear() {
+        if (ConfForSlot.global.pureMemory) {
+            Arrays.fill(inMemoryCachedBytes, (byte) 0);
+            return;
+        }
+
         var initTimes = allCapacity / BATCH_SIZE;
         if (allCapacity % BATCH_SIZE != 0) {
             initTimes++;
@@ -122,6 +137,10 @@ public class StatKeyBucketLastUpdateCount {
     }
 
     public synchronized void cleanUp() {
+        if (ConfForSlot.global.pureMemory) {
+            return;
+        }
+
         try {
             raf.close();
         } catch (IOException e) {

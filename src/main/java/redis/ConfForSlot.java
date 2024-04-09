@@ -14,6 +14,8 @@ public enum ConfForSlot {
     public final ConfChunk confChunk;
     public final ConfWal confWal;
 
+    public boolean pureMemory = false;
+
     public static ConfForSlot from(long estimateKeyNumber) {
         if (estimateKeyNumber <= 1_000_000L) {
             return c1m;

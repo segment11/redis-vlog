@@ -30,7 +30,7 @@ public class MetaTopChunkSegmentIndex {
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
-    public byte[] getInMemoryCachedBytes() {
+    public synchronized byte[] getInMemoryCachedBytes() {
         return inMemoryCachedBytes;
     }
 

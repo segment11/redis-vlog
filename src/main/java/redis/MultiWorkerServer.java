@@ -551,6 +551,10 @@ public class MultiWorkerServer extends Launcher {
                         c.netListenAddresses = config.get(ofString(), "net.listenAddresses");
                         logger.info("Net listen addresses: {}", c.netListenAddresses);
 
+                        if (config.hasChild("pureMemory")) {
+                            c.pureMemory = config.get(ofBoolean(), "pureMemory");
+                        }
+
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
                         if (debugMode) {
                             c.confBucket.bucketsPerSlot = ConfForSlot.ConfBucket.debugMode.bucketsPerSlot;

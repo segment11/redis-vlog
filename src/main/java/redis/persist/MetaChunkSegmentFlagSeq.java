@@ -48,7 +48,7 @@ public class MetaChunkSegmentFlagSeq {
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
-    public byte[] getInMemoryCachedBytesOneWorker(byte workerId) {
+    public synchronized byte[] getInMemoryCachedBytesOneWorker(byte workerId) {
         var bytes = new byte[oneWorkerCapacity + 1];
         bytes[0] = workerId;
         var offset = workerId * oneWorkerCapacity;

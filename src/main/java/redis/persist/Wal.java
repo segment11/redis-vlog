@@ -117,13 +117,15 @@ public class Wal implements OfStats {
         this.delayToKeyBucketValues = new HashMap<>(ConfForSlot.global.confWal.valueSizeTrigger);
         this.delayToKeyBucketShortValues = new HashMap<>(ConfForSlot.global.confWal.shortValueSizeTrigger);
 
-        var n1 = readWal(walSharedFile, delayToKeyBucketValues, false);
-        var n2 = readWal(walSharedFileShortValue, delayToKeyBucketShortValues, true);
+        if (!ConfForSlot.global.pureMemory) {
+            var n1 = readWal(walSharedFile, delayToKeyBucketValues, false);
+            var n2 = readWal(walSharedFileShortValue, delayToKeyBucketShortValues, true);
 
-        // reduce log
-        if (slot == 0 && groupIndex == 0 && batchIndex == 0) {
-            log.info("Read wal file success, slot: {}, group index: {}, batch index: {}, value size: {}, short value size: {}",
-                    slot, groupIndex, batchIndex, n1, n2);
+            // reduce log
+            if (slot == 0 && groupIndex == 0 && batchIndex == 0) {
+                log.info("Read wal file success, slot: {}, group index: {}, batch index: {}, value size: {}, short value size: {}",
+                        slot, groupIndex, batchIndex, n1, n2);
+            }
         }
     }
 
@@ -206,20 +208,22 @@ public class Wal implements OfStats {
 
     private void truncateWal(boolean isShortValue) {
         var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
-        var raf = isShortValue ? walSharedFileShortValue : walSharedFile;
         var positionArray = isShortValue ? writePositionArrayShortValue : writePositionArray;
 
-        synchronized (raf) {
-            try {
-                raf.seek(targetGroupBeginOffset);
-                raf.write(K128);
-
-                // reset write position
-                positionArray[groupIndex] = 0;
-            } catch (IOException e) {
-                log.error("Truncate wal group error", e);
+        if (!ConfForSlot.global.pureMemory) {
+            var raf = isShortValue ? walSharedFileShortValue : walSharedFile;
+            synchronized (raf) {
+                try {
+                    raf.seek(targetGroupBeginOffset);
+                    raf.write(K128);
+                } catch (IOException e) {
+                    log.error("Truncate wal group error", e);
+                }
             }
         }
+
+        // reset write position
+        positionArray[groupIndex] = 0;
     }
 
     // not thread safe
@@ -283,49 +287,53 @@ public class Wal implements OfStats {
         return r || r2;
     }
 
-    void writeRafAndOffsetFromRepl(boolean isValueShort, V v, int offset) {
+    void writeRafAndOffsetFromMasterNewly(boolean isValueShort, V v, int offset) {
         var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
-        var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
         var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
-
         var encodeLength = v.encodeLength();
 
-        synchronized (raf) {
-            try {
-                raf.seek(targetGroupBeginOffset + offset);
-                raf.write(v.encode());
-                positionArray[groupIndex] += encodeLength;
-            } catch (IOException e) {
-                log.error("Write to file error", e);
-                throw new RuntimeException("Write to file error: " + e.getMessage());
+        if (!ConfForSlot.global.pureMemory) {
+            var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
+            synchronized (raf) {
+                try {
+                    raf.seek(targetGroupBeginOffset + offset);
+                    raf.write(v.encode());
+                } catch (IOException e) {
+                    log.error("Write to file error", e);
+                    throw new RuntimeException("Write to file error: " + e.getMessage());
+                }
             }
         }
+
+        positionArray[groupIndex] += encodeLength;
     }
 
     // return need persist
     PutResult put(boolean isValueShort, String key, V v) {
         var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
-        var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
         var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
+        int offset = positionArray[groupIndex];
 
         var encodeLength = v.encodeLength();
 
-        int offset;
-        synchronized (raf) {
-            try {
-                offset = positionArray[groupIndex];
-                if (offset + encodeLength > ONE_GROUP_SIZE) {
-                    return new PutResult(true, isValueShort, v, 0);
-                }
+        if (!ConfForSlot.global.pureMemory) {
+            var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
+            synchronized (raf) {
+                try {
+                    if (offset + encodeLength > ONE_GROUP_SIZE) {
+                        return new PutResult(true, isValueShort, v, 0);
+                    }
 
-                raf.seek(targetGroupBeginOffset + offset);
-                raf.write(v.encode());
-                positionArray[groupIndex] += encodeLength;
-            } catch (IOException e) {
-                log.error("Write to file error", e);
-                throw new RuntimeException("Write to file error: " + e.getMessage());
+                    raf.seek(targetGroupBeginOffset + offset);
+                    raf.write(v.encode());
+                } catch (IOException e) {
+                    log.error("Write to file error", e);
+                    throw new RuntimeException("Write to file error: " + e.getMessage());
+                }
             }
         }
+
+        positionArray[groupIndex] += encodeLength;
 
         if (isValueShort) {
             delayToKeyBucketShortValues.put(key, v);

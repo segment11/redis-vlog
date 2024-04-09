@@ -233,7 +233,7 @@ public class XGroup extends BaseCommand {
 
         var oneSlot = localPersist.oneSlot(slot);
         // not necessary to submit task, key loader use synchronized block
-        oneSlot.getKeyLoader().updateKeyBucketFromRepl(bucketIndex, splitIndex, splitNumber, seq, bytes);
+        oneSlot.getKeyLoader().updateKeyBucketFromMasterNewly(bucketIndex, splitIndex, splitNumber, seq, bytes);
 
         return Repl.emptyReply();
     }
@@ -419,7 +419,9 @@ public class XGroup extends BaseCommand {
         buffer.put(splitIndex);
         buffer.put(splitNumber);
         buffer.putInt(beginBucketIndex);
-        buffer.put(bytes);
+        if (bytes.length != 0) {
+            buffer.put(bytes);
+        }
 
         return Repl.reply(slot, replPair, ReplType.s_exists_key_buckets, new RawBytesContent(responseBytes));
     }
