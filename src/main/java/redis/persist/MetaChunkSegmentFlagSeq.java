@@ -20,7 +20,7 @@ public class MetaChunkSegmentFlagSeq {
     private final int oneBatchCapacity;
     private final int oneWorkerCapacity;
     private final int allCapacity;
-    private final RandomAccessFile raf;
+    private RandomAccessFile raf;
 
     // 100KB
     private static final int BATCH_SIZE = 1024 * 100;
@@ -63,6 +63,12 @@ public class MetaChunkSegmentFlagSeq {
 
         var workerId = bytes[0];
         var offset = workerId * oneWorkerCapacity;
+
+        if (ConfForSlot.global.pureMemory) {
+            System.arraycopy(bytes, 1, inMemoryCachedBytes, offset, oneWorkerCapacity);
+            return;
+        }
+
         try {
             raf.seek(offset);
             raf.write(bytes, 1, oneWorkerCapacity);
@@ -85,6 +91,11 @@ public class MetaChunkSegmentFlagSeq {
         // max all workers <= 128, batch number <= 2, max segment number <= 512KB, 128 * 2 * 512KB * 10 = 1.28GB
         this.inMemoryCachedBytes = new byte[allCapacity];
         fillSegmentFlagInit(inMemoryCachedBytes);
+
+        if (ConfForSlot.global.pureMemory) {
+            this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
+            return;
+        }
 
         boolean needRead = false;
         var file = new File(slotDir, META_CHUNK_SEGMENT_SEQ_FLAG_FILE);
@@ -139,6 +150,12 @@ public class MetaChunkSegmentFlagSeq {
         bytes[0] = flag;
         bytes[1] = mergeWorkerId;
         ByteBuffer.wrap(bytes, 2, 8).putLong(segmentSeq);
+
+        if (ConfForSlot.global.pureMemory) {
+            inMemoryCachedByteBuffer.put(offset, bytes);
+            return;
+        }
+
         try {
             raf.seek(offset);
             raf.write(bytes);
@@ -152,6 +169,12 @@ public class MetaChunkSegmentFlagSeq {
         var offset = workerId * oneWorkerCapacity +
                 batchIndex * oneBatchCapacity +
                 beginSegmentIndex * ONE_LENGTH;
+
+        if (ConfForSlot.global.pureMemory) {
+            inMemoryCachedByteBuffer.put(offset, bytes);
+            return;
+        }
+
         try {
             raf.seek(offset);
             raf.write(bytes);
@@ -170,6 +193,11 @@ public class MetaChunkSegmentFlagSeq {
     }
 
     public synchronized void clear() {
+        if (ConfForSlot.global.pureMemory) {
+            fillSegmentFlagInit(inMemoryCachedBytes);
+            return;
+        }
+
         var initTimes = allCapacity / BATCH_SIZE;
         if (allCapacity % BATCH_SIZE != 0) {
             initTimes++;
@@ -186,6 +214,10 @@ public class MetaChunkSegmentFlagSeq {
     }
 
     public synchronized void cleanUp() {
+        if (ConfForSlot.global.pureMemory) {
+            return;
+        }
+
         try {
             raf.close();
         } catch (IOException e) {

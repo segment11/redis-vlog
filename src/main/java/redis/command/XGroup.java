@@ -335,7 +335,7 @@ public class XGroup extends BaseCommand {
         var capacity = buffer.getInt();
 
         var oneSlot = localPersist.oneSlot(slot);
-        oneSlot.submitPersistTaskFromRepl(workerId, batchIndex, segmentLength, segmentIndex, segmentCount,
+        oneSlot.submitPersistTaskFromMasterNewly(workerId, batchIndex, segmentLength, segmentIndex, segmentCount,
                 segmentSeqList, bytes, capacity);
 
         return Repl.emptyReply();

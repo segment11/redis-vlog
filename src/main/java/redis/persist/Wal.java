@@ -315,15 +315,14 @@ public class Wal implements OfStats {
         int offset = positionArray[groupIndex];
 
         var encodeLength = v.encodeLength();
+        if (offset + encodeLength > ONE_GROUP_SIZE) {
+            return new PutResult(true, isValueShort, v, 0);
+        }
 
         if (!ConfForSlot.global.pureMemory) {
             var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
             synchronized (raf) {
                 try {
-                    if (offset + encodeLength > ONE_GROUP_SIZE) {
-                        return new PutResult(true, isValueShort, v, 0);
-                    }
-
                     raf.seek(targetGroupBeginOffset + offset);
                     raf.write(v.encode());
                 } catch (IOException e) {
@@ -332,7 +331,6 @@ public class Wal implements OfStats {
                 }
             }
         }
-
         positionArray[groupIndex] += encodeLength;
 
         if (isValueShort) {

@@ -100,6 +100,9 @@ public class Chunk implements OfStats {
 
     private final MasterUpdateCallback masterUpdateCallback;
 
+    // index is segment index
+    private byte[][] allBytesBySegmentIndex;
+
     public Chunk(byte workerId, byte slot, byte batchIndex, byte requestWorkers,
                  SnowFlake snowFlake, File slotDir, OneSlot oneSlot, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {
         this.maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
@@ -122,30 +125,45 @@ public class Chunk implements OfStats {
 
         this.segmentBatch = new SegmentBatch(workerId, slot, batchIndex, snowFlake);
 
-        var pageManager = PageManager.getInstance();
-        var m = MemoryIO.getInstance();
-
         var npages0 = segmentLength / PAGE_SIZE;
-        this.writePageAddress = pageManager.allocatePages(npages0, PROTECTION);
-        this.writePageBuffer = m.newDirectByteBuffer(writePageAddress, segmentLength);
+        int npagesMerge = npages0 * MERGE_READ_SEGMENT_ONCE_COUNT;
 
-        this.writePageAddressB = pageManager.allocatePages(npages0 * BATCH_SEGMENT_COUNT_FOR_PWRITE, PROTECTION);
-        this.writePageBufferB = m.newDirectByteBuffer(writePageAddressB, segmentLength * BATCH_SEGMENT_COUNT_FOR_PWRITE);
+        if (ConfForSlot.global.pureMemory) {
+            this.allBytesBySegmentIndex = new byte[maxSegmentNumber][];
 
-        if (workerId >= requestWorkers) {
-            int npagesMerge = npages0 * MERGE_READ_SEGMENT_ONCE_COUNT;
+            // for compatibility
+            this.writePageBuffer = ByteBuffer.allocate(segmentLength);
+            this.writePageBufferB = ByteBuffer.allocate(segmentLength * BATCH_SEGMENT_COUNT_FOR_PWRITE);
 
-            // only merge worker need read for merging batch
-            this.readForMergingBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
-            this.readForMergingBatchBuffer = m.newDirectByteBuffer(readForMergingBatchAddress, npagesMerge * PAGE_SIZE);
+            this.readForMergingBatchBuffer = ByteBuffer.allocate(npagesMerge * PAGE_SIZE);
+            this.readSelfForMergingBatchBuffer = ByteBuffer.allocate(npagesMerge * PAGE_SIZE);
+        } else {
+            var pageManager = PageManager.getInstance();
+            var m = MemoryIO.getInstance();
 
-            // only top merge worker need read self for merging batch
-            this.readSelfForMergingBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
-            this.readSelfForMergingBatchBuffer = m.newDirectByteBuffer(readSelfForMergingBatchAddress, npagesMerge * PAGE_SIZE);
+            this.writePageAddress = pageManager.allocatePages(npages0, PROTECTION);
+            this.writePageBuffer = m.newDirectByteBuffer(writePageAddress, segmentLength);
+
+            this.writePageAddressB = pageManager.allocatePages(npages0 * BATCH_SEGMENT_COUNT_FOR_PWRITE, PROTECTION);
+            this.writePageBufferB = m.newDirectByteBuffer(writePageAddressB, segmentLength * BATCH_SEGMENT_COUNT_FOR_PWRITE);
+
+            if (workerId >= requestWorkers) {
+                // only merge worker need read for merging batch
+                this.readForMergingBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
+                this.readForMergingBatchBuffer = m.newDirectByteBuffer(readForMergingBatchAddress, npagesMerge * PAGE_SIZE);
+
+                // only top merge worker need read self for merging batch
+                this.readSelfForMergingBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
+                this.readSelfForMergingBatchBuffer = m.newDirectByteBuffer(readSelfForMergingBatchAddress, npagesMerge * PAGE_SIZE);
+            }
         }
     }
 
     public void initFds(LibC libC) throws IOException {
+        if (ConfForSlot.global.pureMemory) {
+            return;
+        }
+
         this.libC = libC;
 
         this.fds = new int[maxFdPerChunk];
@@ -191,6 +209,18 @@ public class Chunk implements OfStats {
     }
 
     int preadForMerge(int targetSegmentIndex, ByteBuffer buffer, long offset) {
+        if (ConfForSlot.global.pureMemory) {
+            var segmentCount = buffer.capacity() / segmentLength;
+            for (int i = 0; i < segmentCount; i++) {
+                var segmentIndex = targetSegmentIndex + i;
+                var segmentBytes = allBytesBySegmentIndex[segmentIndex];
+                if (segmentBytes != null) {
+                    buffer.put(i * segmentLength, segmentBytes);
+                }
+            }
+            return buffer.capacity();
+        }
+
         int fdIndex = targetFdIndex(targetSegmentIndex);
         int fd = fds[fdIndex];
         var fdOffset = (int) (offset % maxFdLength);
@@ -202,6 +232,10 @@ public class Chunk implements OfStats {
     private long preadCount;
 
     byte[] preadSegmentTightBytesWithLength(int targetSegmentIndex) {
+        if (ConfForSlot.global.pureMemory) {
+            return allBytesBySegmentIndex[targetSegmentIndex];
+        }
+
         int fdIndex = targetFdIndex(targetSegmentIndex);
         int fd = fds[fdIndex];
         var readSegmentBuffer = readSegmentBuffers[fdIndex];
@@ -390,9 +424,6 @@ public class Chunk implements OfStats {
             nextNSegmentIndex[i] = segmentIndex + i;
         }
 
-        long beginT = System.nanoTime();
-        boolean isNewAppendAfterBatch = true;
-
         ArrayList<PersistValueMeta> pvmList = new ArrayList<>();
         var segments = segmentBatch.splitAndTight(list, nextNSegmentIndex, pvmList);
         if (segments == null) {
@@ -406,92 +437,116 @@ public class Chunk implements OfStats {
         oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, segments.size(),
                 SEGMENT_FLAG_REUSE, workerId, segmentSeqListAll);
 
-        if (segments.size() < BATCH_SEGMENT_COUNT_FOR_PWRITE) {
+        boolean isNewAppendAfterBatch = true;
+
+        if (ConfForSlot.global.pureMemory) {
+            isNewAppendAfterBatch = allBytesBySegmentIndex[segments.getFirst().segmentIndex()] == null;
             for (var segment : segments) {
-                writePageBuffer.clear();
-                writePageBuffer.put(segment.tightBytesWithLength());
+                byte[] bytes = segment.tightBytesWithLength();
+                allBytesBySegmentIndex[segment.segmentIndex()] = bytes;
 
-                ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
-                segmentSeqListSubBatch.add(segment.segmentSeq());
-
-                boolean isNewAppend = writeSegments(writePageBuffer, 1, segmentSeqListSubBatch);
-                isNewAppendAfterBatch = isNewAppend;
-
-                // need set segment flag so that merge worker can merge
-                oneSlot.setSegmentMergeFlag(workerId, batchIndex, segment.segmentIndex(),
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segment.segmentSeq());
-
-                segmentIndex++;
+                if (masterUpdateCallback != null) {
+                    ArrayList<Long> segmentSeqList = new ArrayList<>();
+                    segmentSeqList.add(segment.segmentSeq());
+                    masterUpdateCallback.onSegmentWrite(workerId, batchIndex, slot, segmentLength,
+                            segment.segmentIndex(), 1, segmentSeqList, bytes, bytes.length);
+                }
             }
+            segmentIndex = segments.size();
+
+            oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, segments.size(),
+                    isNewAppendAfterBatch ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqListAll);
         } else {
-            // batch write
-            var batchCount = segments.size() / BATCH_SEGMENT_COUNT_FOR_PWRITE;
-            var remainCount = segments.size() % BATCH_SEGMENT_COUNT_FOR_PWRITE;
+            long beginT = System.nanoTime();
+            if (segments.size() < BATCH_SEGMENT_COUNT_FOR_PWRITE) {
+                for (var segment : segments) {
+                    writePageBuffer.clear();
+                    writePageBuffer.put(segment.tightBytesWithLength());
 
-            for (int i = 0; i < batchCount; i++) {
-                writePageBufferB.clear();
-                ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
-                for (int j = 0; j < BATCH_SEGMENT_COUNT_FOR_PWRITE; j++) {
-                    var segment = segments.get(i * BATCH_SEGMENT_COUNT_FOR_PWRITE + j);
-                    var tightBytesWithLength = segment.tightBytesWithLength();
-                    writePageBufferB.put(tightBytesWithLength);
+                    ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
+                    segmentSeqListSubBatch.add(segment.segmentSeq());
 
-                    // padding to segment length
-                    if (tightBytesWithLength.length < segmentLength) {
-                        writePageBufferB.position(writePageBufferB.position() + segmentLength - tightBytesWithLength.length);
+                    boolean isNewAppend = writeSegments(writePageBuffer, 1, segmentSeqListSubBatch);
+                    isNewAppendAfterBatch = isNewAppend;
+
+                    // need set segment flag so that merge worker can merge
+                    oneSlot.setSegmentMergeFlag(workerId, batchIndex, segment.segmentIndex(),
+                            isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segment.segmentSeq());
+
+                    segmentIndex++;
+                }
+            } else {
+                // batch write
+                var batchCount = segments.size() / BATCH_SEGMENT_COUNT_FOR_PWRITE;
+                var remainCount = segments.size() % BATCH_SEGMENT_COUNT_FOR_PWRITE;
+
+                for (int i = 0; i < batchCount; i++) {
+                    writePageBufferB.clear();
+                    ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
+                    for (int j = 0; j < BATCH_SEGMENT_COUNT_FOR_PWRITE; j++) {
+                        var segment = segments.get(i * BATCH_SEGMENT_COUNT_FOR_PWRITE + j);
+                        var tightBytesWithLength = segment.tightBytesWithLength();
+                        writePageBufferB.put(tightBytesWithLength);
+
+                        // padding to segment length
+                        if (tightBytesWithLength.length < segmentLength) {
+                            writePageBufferB.position(writePageBufferB.position() + segmentLength - tightBytesWithLength.length);
+                        }
+
+                        segmentSeqListSubBatch.add(segment.segmentSeq());
                     }
 
-                    segmentSeqListSubBatch.add(segment.segmentSeq());
+                    boolean isNewAppend = writeSegments(writePageBufferB, BATCH_SEGMENT_COUNT_FOR_PWRITE, segmentSeqListSubBatch);
+                    isNewAppendAfterBatch = isNewAppend;
+
+                    // need set segment flag so that merge worker can merge
+                    oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, BATCH_SEGMENT_COUNT_FOR_PWRITE,
+                            isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqListSubBatch);
+
+                    segmentIndex += BATCH_SEGMENT_COUNT_FOR_PWRITE;
                 }
 
-                boolean isNewAppend = writeSegments(writePageBufferB, BATCH_SEGMENT_COUNT_FOR_PWRITE, segmentSeqListSubBatch);
-                isNewAppendAfterBatch = isNewAppend;
+                for (int i = 0; i < remainCount; i++) {
+                    var segment = segments.get(batchCount * BATCH_SEGMENT_COUNT_FOR_PWRITE + i);
+                    writePageBuffer.clear();
+                    writePageBuffer.put(segment.tightBytesWithLength());
 
-                // need set segment flag so that merge worker can merge
-                oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, BATCH_SEGMENT_COUNT_FOR_PWRITE,
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqListSubBatch);
+                    ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
+                    segmentSeqListSubBatch.add(segment.segmentSeq());
 
-                segmentIndex += BATCH_SEGMENT_COUNT_FOR_PWRITE;
+                    boolean isNewAppend = writeSegments(writePageBuffer, 1, segmentSeqListSubBatch);
+                    isNewAppendAfterBatch = isNewAppend;
+
+                    // need set segment flag so that merge worker can merge
+                    oneSlot.setSegmentMergeFlag(workerId, batchIndex, segment.segmentIndex(),
+                            isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segment.segmentSeq());
+
+                    segmentIndex++;
+                }
             }
+            long costT = System.nanoTime() - beginT;
+            persistCostTotalTimeMicros += costT / 1000;
 
-            for (int i = 0; i < remainCount; i++) {
-                var segment = segments.get(batchCount * BATCH_SEGMENT_COUNT_FOR_PWRITE + i);
-                writePageBuffer.clear();
-                writePageBuffer.put(segment.tightBytesWithLength());
-
-                ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
-                segmentSeqListSubBatch.add(segment.segmentSeq());
-
-                boolean isNewAppend = writeSegments(writePageBuffer, 1, segmentSeqListSubBatch);
-                isNewAppendAfterBatch = isNewAppend;
-
-                // need set segment flag so that merge worker can merge
-                oneSlot.setSegmentMergeFlag(workerId, batchIndex, segment.segmentIndex(),
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segment.segmentSeq());
-
-                segmentIndex++;
-            }
+            persistCount++;
+            persistSegmentCount += segments.size();
+            persistCvCount += list.size();
+            lastPersistCvCount = list.size();
         }
-        long costT = System.nanoTime() - beginT;
-        persistCostTotalTimeMicros += costT / 1000;
-
-        persistCount++;
-        persistSegmentCount += segments.size();
-        persistCvCount += list.size();
-        lastPersistCvCount = list.size();
 
         if (!Debug.getInstance().perfSkipPvmUpdate) {
-            for (var segment : segments) {
-                oneSlot.refreshReadPersistedSegmentCache(workerId, batchIndex, segment.segmentIndex(), segment.tightBytesWithLength());
+            if (!ConfForSlot.global.pureMemory) {
+                for (var segment : segments) {
+                    oneSlot.refreshReadPersistedSegmentCache(workerId, batchIndex, segment.segmentIndex(), segment.tightBytesWithLength());
 
-                if (segment.segmentIndex() % 10000 == 0 && slot == 0) {
-                    log.info("Segment cache!, w={}, s={}, b={}, i={}", workerId, slot, batchIndex, segment.segmentIndex());
+                    if (segment.segmentIndex() % 10000 == 0 && slot == 0) {
+                        log.info("Segment cache!, w={}, s={}, b={}, i={}", workerId, slot, batchIndex, segment.segmentIndex());
+                    }
                 }
             }
 
-            beginT = System.nanoTime();
+            long beginT = System.nanoTime();
             keyLoader.updatePvmListAfterWriteSegment(pvmList);
-            costT = System.nanoTime() - beginT;
+            long costT = System.nanoTime() - beginT;
             updatePvmCostTotalTimeMicros += costT / 1000;
         }
 
@@ -567,27 +622,45 @@ public class Chunk implements OfStats {
     private long pwriteCostNanos;
     private long pwriteCount;
 
-    public boolean writeSegmentsFromRepl(byte[] bytes, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, int capacity) {
-        var writeBuffer = segmentCount == BATCH_SEGMENT_COUNT_FOR_PWRITE ? writePageBufferB : writePageBuffer;
-        if (writeBuffer.capacity() != capacity) {
-            throw new RuntimeException("Write buffer capacity not match, expect: " + capacity + ", actual: " + writeBuffer.capacity());
-        }
+    public boolean writeSegmentsFromMasterNewly(byte[] bytes, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, int capacity) {
+        if (ConfForSlot.global.pureMemory) {
+            if (capacity != bytes.length) {
+                throw new RuntimeException("Write buffer capacity not match, expect: " + capacity + ", actual: " + bytes.length);
+            }
 
-        writeBuffer.clear();
-        writeBuffer.put(bytes);
+            if (segmentCount != 1) {
+                throw new RuntimeException("Segment count not match, expect: 1, actual: " + segmentCount);
+            }
 
-        this.segmentIndex = segmentIndex;
-        boolean isNewAppend = writeSegments(writeBuffer, segmentCount, segmentSeqList);
+            var isNewAppend = allBytesBySegmentIndex[segmentIndex] == null;
+            allBytesBySegmentIndex[segmentIndex] = bytes;
 
-        if (segmentCount == 1) {
             oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex,
-                    isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentIndex);
-        } else {
-            oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, segmentCount,
-                    isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqList);
-        }
+                    isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqList.getFirst());
 
-        return isNewAppend;
+            return isNewAppend;
+        } else {
+            var writeBuffer = segmentCount == BATCH_SEGMENT_COUNT_FOR_PWRITE ? writePageBufferB : writePageBuffer;
+            if (writeBuffer.capacity() != capacity) {
+                throw new RuntimeException("Write buffer capacity not match, expect: " + capacity + ", actual: " + writeBuffer.capacity());
+            }
+
+            writeBuffer.clear();
+            writeBuffer.put(bytes);
+
+            this.segmentIndex = segmentIndex;
+            boolean isNewAppend = writeSegments(writeBuffer, segmentCount, segmentSeqList);
+
+            if (segmentCount == 1) {
+                oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex,
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqList.getFirst());
+            } else {
+                oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, segmentCount,
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqList);
+            }
+
+            return isNewAppend;
+        }
     }
 
     private boolean writeSegments(ByteBuffer writeBuffer, int segmentCount, ArrayList<Long> segmentSeqList) {

@@ -19,7 +19,7 @@ public class MetaChunkSegmentIndex {
     private final byte allWorkers;
     private final int oneWorkerCapacity;
     private final int allCapacity;
-    private final RandomAccessFile raf;
+    private RandomAccessFile raf;
 
     // 1KB
     private static final int BATCH_SIZE = 1024;
@@ -35,6 +35,11 @@ public class MetaChunkSegmentIndex {
     public synchronized void overwriteInMemoryCachedBytes(byte[] bytes) {
         if (bytes.length != inMemoryCachedBytes.length) {
             throw new IllegalArgumentException("Repl meta chunk segment index, bytes length not match");
+        }
+
+        if (ConfForSlot.global.pureMemory) {
+            System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
+            return;
         }
 
         try {
@@ -57,6 +62,11 @@ public class MetaChunkSegmentIndex {
 
         // max all workers <= 128, batch number <= 2, 128 * 2 * 4 = 1024
         this.inMemoryCachedBytes = new byte[allCapacity];
+
+        if (ConfForSlot.global.pureMemory) {
+            this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
+            return;
+        }
 
         boolean needRead = false;
         var file = new File(slotDir, META_CHUNK_SEGMENT_INDEX_FILE);
@@ -90,6 +100,12 @@ public class MetaChunkSegmentIndex {
         ByteBuffer.wrap(bytes).putInt(segmentIndex);
 
         var offset = workerId * oneWorkerCapacity + batchIndex * ONE_LENGTH;
+
+        if (ConfForSlot.global.pureMemory) {
+            inMemoryCachedByteBuffer.putInt(offset, segmentIndex);
+            return;
+        }
+
         try {
             raf.seek(offset);
             raf.write(bytes);
@@ -105,6 +121,11 @@ public class MetaChunkSegmentIndex {
     }
 
     public synchronized void clear() {
+        if (ConfForSlot.global.pureMemory) {
+            Arrays.fill(inMemoryCachedBytes, (byte) 0);
+            return;
+        }
+
         var initTimes = allCapacity / BATCH_SIZE;
         if (allCapacity % BATCH_SIZE != 0) {
             initTimes++;
@@ -121,6 +142,10 @@ public class MetaChunkSegmentIndex {
     }
 
     public synchronized void cleanUp() {
+        if (ConfForSlot.global.pureMemory) {
+            return;
+        }
+
         try {
             raf.close();
         } catch (IOException e) {

@@ -21,7 +21,7 @@ public class MetaTopChunkSegmentIndex {
     private final int oneBatchCapacity;
     private final int oneWorkerCapacity;
     private final int allCapacity;
-    private final RandomAccessFile raf;
+    private RandomAccessFile raf;
 
     // 16KB
     private static final int BATCH_SIZE = 16 * 1024;
@@ -37,6 +37,11 @@ public class MetaTopChunkSegmentIndex {
     public synchronized void overwriteInMemoryCachedBytes(byte[] bytes) {
         if (bytes.length != inMemoryCachedBytes.length) {
             throw new IllegalArgumentException("Repl meta top chunk segment index, bytes length not match");
+        }
+
+        if (ConfForSlot.global.pureMemory) {
+            System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
+            return;
         }
 
         try {
@@ -61,6 +66,11 @@ public class MetaTopChunkSegmentIndex {
 
         // top merge workers <= 32, batch number <= 2, slot number <= 128, 32 * 2 * 128 * 4 = 32KB
         this.inMemoryCachedBytes = new byte[allCapacity];
+
+        if (ConfForSlot.global.pureMemory) {
+            this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
+            return;
+        }
 
         boolean needRead = false;
         var file = new File(persistDir, META_TOP_CHUNK_SEGMENT_INDEX_FILE);
@@ -96,6 +106,12 @@ public class MetaTopChunkSegmentIndex {
         var offset = (workerId - topMergeWorkerBeginIndex) * oneWorkerCapacity +
                 batchIndex * oneBatchCapacity +
                 slot * ONE_LENGTH;
+
+        if (ConfForSlot.global.pureMemory) {
+            inMemoryCachedByteBuffer.putInt(offset, segmentIndex);
+            return;
+        }
+
         try {
             raf.seek(offset);
             raf.write(bytes);
@@ -113,6 +129,11 @@ public class MetaTopChunkSegmentIndex {
     }
 
     public synchronized void clear() {
+        if (ConfForSlot.global.pureMemory) {
+            Arrays.fill(inMemoryCachedBytes, (byte) 0);
+            return;
+        }
+
         var initTimes = allCapacity / BATCH_SIZE;
         if (allCapacity % BATCH_SIZE != 0) {
             initTimes++;
@@ -129,6 +150,10 @@ public class MetaTopChunkSegmentIndex {
     }
 
     public synchronized void cleanUp() {
+        if (ConfForSlot.global.pureMemory) {
+            return;
+        }
+
         try {
             raf.close();
         } catch (IOException e) {

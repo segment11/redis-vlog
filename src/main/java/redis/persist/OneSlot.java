@@ -157,11 +157,13 @@ public class OneSlot implements OfStats {
 
     private void initSegmentCache() {
         var lru = ConfForSlot.global.confChunk.lru;
+        // 10MB
+        var maximumBytes = ConfForSlot.global.pureMemory ? Math.min(1024 * 1024 * 10L, lru.maximumBytes) : lru.maximumBytes;
         this.readPersistedSegmentCache = Caffeine.newBuilder()
                 .recordStats()
                 .expireAfterWrite(lru.expireAfterWrite, TimeUnit.SECONDS)
                 .expireAfterAccess(lru.expireAfterAccess, TimeUnit.SECONDS)
-                .maximumWeight(lru.maximumBytes)
+                .maximumWeight(maximumBytes)
                 .weigher((SegmentCacheKey k, byte[] v) -> v.length)
                 .build();
         log.info("Read segment cache init, expire after write: {} s, expire after access: {} s, maximum bytes: {}",
@@ -574,20 +576,18 @@ public class OneSlot implements OfStats {
 
         list.add(StatKV.split);
         list.addAll(keyLoader.stats());
-
         list.add(StatKV.split);
 
         var stats = readPersistedSegmentCache.stats();
         final String prefix = "segment cache ";
         OfStats.cacheStatsToList(list, stats, prefix);
-
         list.add(StatKV.split);
+
         list.addAll(compressStats.stats());
-
         list.add(StatKV.split);
+
         var firstChunk = chunksArray[0][0];
         list.addAll(firstChunk.stats());
-
         list.add(StatKV.split);
 
         list.add(new StatKV("wal-s-" + slot + "-group-0 queue size", walQueueArray[0].size()));
@@ -596,6 +596,7 @@ public class OneSlot implements OfStats {
         if (takeWalCount > 0) {
             list.add(new StatKV("wal-s-" + slot + " take wal cost avg nanos", (double) takeWalCostNanos / takeWalCount));
         }
+        list.add(StatKV.split);
 
         if (!replPairs.isEmpty()) {
             list.add(StatKV.split);
@@ -606,9 +607,9 @@ public class OneSlot implements OfStats {
 
                 list.add(new StatKV("repl pair link up to " + replPair.getHost() + ":" + replPair.getPort(), replPair.isLinkUp() ? 1 : 0));
             }
+            list.add(StatKV.split);
         }
 
-        list.add(StatKV.split);
         return list;
     }
 
@@ -668,20 +669,18 @@ public class OneSlot implements OfStats {
             return Unpooled.wrappedBuffer(tmpValueBytes);
         }
 
-        var valueBytes = keyLoader.get(bucketIndex, keyBytes, keyHash);
-        if (valueBytes == null) {
+        var valueBytesWithExpireAt = keyLoader.get(bucketIndex, keyBytes, keyHash);
+        if (valueBytesWithExpireAt == null) {
             return null;
         }
 
-        // is not meta, short value
+        // if value bytes is not meta, must be short value
+        var valueBytes = valueBytesWithExpireAt.valueBytes();
         if (!PersistValueMeta.isPvm(valueBytes)) {
             return Unpooled.wrappedBuffer(valueBytes);
         }
 
         var pvm = PersistValueMeta.decode(valueBytes);
-        if (pvm.isExpired()) {
-            return null;
-        }
 
         // need not lock, write is always append only, old value will not be changed
         var withKeyHeaderBuf = getKeyValueBufByPvm(pvm);
@@ -735,8 +734,12 @@ public class OneSlot implements OfStats {
         // one key value pair only store in one segment
         byte[] tightBytesWithLength;
         if (!perfTestReadSegmentNoCache) {
-            var segmentCacheKey = new SegmentCacheKey(pvm.workerId, pvm.batchIndex, pvm.segmentIndex, 0);
-            tightBytesWithLength = readPersistedSegmentCache.get(segmentCacheKey, fnLoadPersistedSegmentBytes);
+            if (ConfForSlot.global.pureMemory) {
+                tightBytesWithLength = preadSegmentTightBytesWithLength(pvm.workerId, pvm.batchIndex, pvm.segmentIndex);
+            } else {
+                var segmentCacheKey = new SegmentCacheKey(pvm.workerId, pvm.batchIndex, pvm.segmentIndex, 0);
+                tightBytesWithLength = readPersistedSegmentCache.get(segmentCacheKey, fnLoadPersistedSegmentBytes);
+            }
         } else {
             // ignore big string, just for no cache, ssd read performance test
             tightBytesWithLength = preadSegmentTightBytesWithLength(pvm.workerId, pvm.batchIndex, pvm.segmentIndex);
@@ -1056,8 +1059,8 @@ public class OneSlot implements OfStats {
         });
     }
 
-    public void submitPersistTaskFromRepl(byte workerId, byte batchIndex, int segmentLength, int segmentIndex, int segmentCount,
-                                          ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
+    public void submitPersistTaskFromMasterNewly(byte workerId, byte batchIndex, int segmentLength, int segmentIndex, int segmentCount,
+                                                 ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
         var chunk = chunksArray[workerId][batchIndex];
         if (chunk.segmentLength != segmentLength) {
             throw new IllegalStateException("Segment length not match, chunk segment length: " + chunk.segmentLength +
@@ -1067,11 +1070,11 @@ public class OneSlot implements OfStats {
         if (workerId < requestWorkers) {
             var executor = persistExecutors[batchIndex];
             executor.submit(() -> {
-                chunk.writeSegmentsFromRepl(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
+                chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
             });
         } else {
             // merge worker
-            chunkMerger.getChunkMergeWorker(workerId).submitWriteSegmentsFromRepl(chunk,
+            chunkMerger.getChunkMergeWorker(workerId).submitWriteSegmentsMasterNewly(chunk,
                     bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
         }
     }
