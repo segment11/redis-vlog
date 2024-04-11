@@ -53,11 +53,6 @@ public class KeyLoader implements OfStats {
         this.masterUpdateCallback = masterUpdateCallback;
 
         this.dynConfig = dynConfig;
-
-        this.getKeyBucketCountArray = new byte[bucketsPerSlot][];
-        for (int i = 0; i < bucketsPerSlot; i++) {
-            getKeyBucketCountArray[i] = new byte[MAX_SPLIT_NUMBER];
-        }
     }
 
     private final byte slot;
@@ -496,10 +491,6 @@ public class KeyLoader implements OfStats {
         }
     };
 
-    // first index is bucket index, second index is split index, increase read count and clear expired pvm
-    private final byte[][] getKeyBucketCountArray;
-    private long clearExpiredPvmCount = 0;
-
     private KeyBucket getKeyBucketInner(int bucketIndex, long keyHash) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         int splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
@@ -527,27 +518,10 @@ public class KeyLoader implements OfStats {
             keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
             keyBucket.initWithCompressStats(compressStats);
         }
-
-        var count = getKeyBucketCountArray[bucketIndex][splitIndex];
-        if (count < dynConfig.clearExpiredPvmWhenKeyBucketReadTimes()) {
-            getKeyBucketCountArray[bucketIndex][splitIndex] = (byte) (count + 1);
-        } else {
-            clearExpiredPvmCount++;
-            // reset
-            getKeyBucketCountArray[bucketIndex][splitIndex] = 0;
-
-            var n = keyBucket.clearExpiredPvm();
-            if (clearExpiredPvmCount % 1000 == 0) {
-                log.info("Clear expired pvm, slot: {}, bucket index: {}, split index: {}, clear count: {}", slot, bucketIndex, splitIndex, n);
-            }
-            if (n > 0) {
-                // save back, but not in write lock, todo
-            }
-        }
         return keyBucket;
     }
 
-    public byte[] get(int bucketIndex, byte[] keyBytes, long keyHash) {
+    public KeyBucket.ValueBytesWithExpireAt get(int bucketIndex, byte[] keyBytes, long keyHash) {
         var keyBucket = getKeyBucket(bucketIndex, keyHash);
         if (keyBucket == null) {
             return null;
@@ -775,12 +749,13 @@ public class KeyLoader implements OfStats {
         }
     }
 
-    private record PvmRow(long keyHash, byte[] keyBytes, byte[] encoded) {
+    private record PvmRow(long keyHash, long expireAt, byte[] keyBytes, byte[] encoded) {
         @Override
         public String toString() {
             return "PvmRow{" +
                     "key=" + new String(keyBytes) +
                     ", keyHash=" + keyHash +
+                    ", expireAt=" + expireAt +
                     '}';
         }
     }
@@ -793,8 +768,7 @@ public class KeyLoader implements OfStats {
 
             ArrayList<PvmRow> pvmRowList = new ArrayList<>(list.size());
             for (var pvm : list) {
-                byte[] encoded = pvm.encode();
-                pvmRowList.add(new PvmRow(pvm.keyHash, pvm.keyBytes, encoded));
+                pvmRowList.add(new PvmRow(pvm.keyHash, pvm.expireAt, pvm.keyBytes, pvm.encode()));
             }
             persistPvmListBatch(bucketIndex, pvmRowList);
         }
@@ -822,7 +796,7 @@ public class KeyLoader implements OfStats {
                     break;
                 }
 
-                boolean isPut = keyBucket.put(pvmRow.keyBytes(), pvmRow.keyHash(), pvmRow.encoded(), afterPutKeyBuckets);
+                boolean isPut = keyBucket.put(pvmRow.keyBytes(), pvmRow.keyHash(), pvmRow.expireAt(), pvmRow.encoded(), afterPutKeyBuckets);
                 if (!isPut) {
                     throw new IllegalStateException("Put pvm error, pvm: " + pvmRow);
                 }
@@ -864,7 +838,7 @@ public class KeyLoader implements OfStats {
                     break;
                 }
 
-                boolean isPut = keyBucket.put(v.key().getBytes(), v.keyHash(), v.cvEncoded(), afterPutKeyBuckets);
+                boolean isPut = keyBucket.put(v.key().getBytes(), v.keyHash(), v.expireAt(), v.cvEncoded(), afterPutKeyBuckets);
                 if (!isPut) {
                     throw new IllegalStateException("Put short value error, key: " + v.key());
                 }

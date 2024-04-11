@@ -24,16 +24,20 @@ class KeyBucketTest extends Specification {
 
             def keyHash = KeyHash.hash(keyBytes)
 
-            def v = new Wal.V((byte) 0, 0L, 0, keyHash, 0L,
-                    key, putValueBytes, putValueBytes.length)
+
             if (it % 10 == 0) {
                 // set expire now
                 def pvm = new PersistValueMeta()
                 pvm.expireAt = CompressedValue.EXPIRE_NOW
-                v.cvEncoded = pvm.encode()
+                def encode = pvm.encode()
+                def v = new Wal.V((byte) 0, 0L, 0, keyHash, 0L,
+                        key, pvm.encode(), encode.length)
+                list << v
+            } else {
+                def v = new Wal.V((byte) 0, 0L, 0, keyHash, 0L,
+                        key, putValueBytes, putValueBytes.length)
+                list << v
             }
-
-            list << v
         }
 
         and:
@@ -50,7 +54,7 @@ class KeyBucketTest extends Specification {
             }
 
             var kbArr = afterSplitKeyBucketList ? null : new KeyBucket[3]
-            boolean isPutDone = targetKeyBucket.put(keyBytes, v.keyHash, v.cvEncoded, kbArr)
+            boolean isPutDone = targetKeyBucket.put(keyBytes, v.keyHash, v.expireAt(), v.cvEncoded, kbArr)
 
             if (kbArr && kbArr[0] != null) {
                 println 'after split key buckets: '
@@ -63,8 +67,8 @@ class KeyBucketTest extends Specification {
                 afterSplitKeyBucketList << kbArr[2]
             }
             if (isPutDone) {
-                var valueBytes = targetKeyBucket.getValueByKey(keyBytes, v.keyHash)
-                if (valueBytes == null || !Arrays.equals(valueBytes, v.cvEncoded)) {
+                var valueBytesWithExpireAt = targetKeyBucket.getValueByKey(keyBytes, v.keyHash)
+                if (valueBytesWithExpireAt == null || !Arrays.equals(valueBytesWithExpireAt.valueBytes(), v.cvEncoded)) {
                     def isClearExpired = (v.key[-3..-1] as int) % 10 == 0
                     if (isClearExpired) {
                         println 'clear expired when split: ' + v.key
@@ -145,8 +149,8 @@ class KeyBucketTest extends Specification {
             var keyBytes = v.key.bytes
             var splitIndex = (int) Math.abs(v.keyHash % 3)
             var targetKeyBucket2 = afterSplitKeyBucketList.find { it.splitIndex == splitIndex }
-            var valueBytes = targetKeyBucket2.getValueByKey(keyBytes, v.keyHash)
-            if (valueBytes == null || !Arrays.equals(valueBytes, v.cvEncoded)) {
+            var valueBytesWithExpireAt = targetKeyBucket2.getValueByKey(keyBytes, v.keyHash)
+            if (valueBytesWithExpireAt == null || !Arrays.equals(valueBytesWithExpireAt.valueBytes(), v.cvEncoded)) {
                 def isClearExpired = (v.key[-3..-1] as int) % 10 == 0
                 if (isClearExpired) {
                     println 'clear expired when split: ' + v.key

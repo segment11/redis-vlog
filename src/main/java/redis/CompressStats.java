@@ -29,9 +29,9 @@ public class CompressStats implements OfStats {
     public LongAdder rawValueBodyTotalLength2 = new LongAdder();
 
     // for key tmp bucket size
-    private final ConcurrentMap<Integer, Integer> keySizeByBucket = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Integer, Short> keySizeByBucket = new ConcurrentHashMap<>();
     // for bucket key access analyze
-    private Cache<Integer, Integer> keySizeByBucketLru;
+    private Cache<Integer, Short> keySizeByBucketLru;
 
     public void initKeySizeByBucketLru(int expireAfterWrite, int expireAfterAccess, int maximumSize) {
         keySizeByBucketLru = Caffeine.newBuilder()
@@ -62,7 +62,7 @@ public class CompressStats implements OfStats {
     }
 
     // bucket index max is 4096
-    public void updateTmpBucketSize(byte slot, int bucketIndex, byte splitIndex, int size) {
+    public void updateTmpBucketSize(byte slot, int bucketIndex, byte splitIndex, short size) {
         int key = slot << (Short.SIZE + 4) | bucketIndex << Byte.SIZE | splitIndex;
         keySizeByBucket.put(key, size);
         if (keySizeByBucketLru != null) {

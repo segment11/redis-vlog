@@ -18,8 +18,8 @@ public class CompressedValue {
         return expireAt == 1;
     }
 
-    public static final long NO_EXPIRE = -1;
-    public static final long EXPIRE_NOW = 0;
+    public static final long NO_EXPIRE = 0;
+    public static final long EXPIRE_NOW = -1;
     public static final int NULL_DICT_SEQ = 0;
     public static final int SP_TYPE_NUM_BYTE = -1;
     public static final int SP_TYPE_NUM_SHORT = -2;

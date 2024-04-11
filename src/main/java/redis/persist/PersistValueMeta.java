@@ -6,17 +6,15 @@ import static redis.CompressedValue.NO_EXPIRE;
 
 public class PersistValueMeta {
     // worker id byte + slot byte  + batch index byte + segment sub block index byte
-    // + length int + segment index int + segment offset int + expire at long
+    // + length int + segment index int + segment offset int
     // may add type or other metadata in the future
-    static final int ENCODED_LEN = 1 + 1 + 1 + 1 + 4 + 4 + 4 + 8;
-    // + key masked value int + bucket index int
-    static final int ENCODED_LEN_WITH_KEY_MASKED_VALUE = ENCODED_LEN + 4 + 4;
+    static final int ENCODED_LEN = 1 + 1 + 1 + 1 + 4 + 4 + 4;
 
     // CompressedValue encoded length is much more than PersistValueMeta encoded length
     public static boolean isPvm(byte[] bytes) {
         // short string encoded
         // first byte is type, < 0 means special type
-        return bytes[0] >= 0 && (bytes.length == ENCODED_LEN || bytes.length == ENCODED_LEN_WITH_KEY_MASKED_VALUE);
+        return bytes[0] >= 0 && (bytes.length == ENCODED_LEN);
     }
 
     byte workerId;
@@ -34,21 +32,17 @@ public class PersistValueMeta {
     long keyHash;
     int bucketIndex;
 
-    public boolean isExpired() {
-        return expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis();
-    }
-
     @Override
     public String toString() {
         return "PersistValueMeta{" +
-                "w=" + workerId +
-                ", s=" + slot +
-                ", b=" + batchIndex +
-                ", l=" + length +
-                ", si=" + segmentIndex +
-                ", sbi=" + subBlockIndex +
-                ", so=" + segmentOffset +
-                ", e=" + expireAt +
+                "workerId=" + workerId +
+                ", slot=" + slot +
+                ", batchIndex=" + batchIndex +
+                ", length=" + length +
+                ", segmentIndex=" + segmentIndex +
+                ", subBlockIndex=" + subBlockIndex +
+                ", segmentOffset=" + segmentOffset +
+                ", expireAt=" + expireAt +
                 '}';
     }
 
@@ -62,7 +56,6 @@ public class PersistValueMeta {
         buf.writeInt(length);
         buf.writeInt(segmentIndex);
         buf.writeInt(segmentOffset);
-        buf.writeLong(expireAt);
         return bytes;
     }
 
@@ -76,7 +69,6 @@ public class PersistValueMeta {
         pvm.length = buf.readInt();
         pvm.segmentIndex = buf.readInt();
         pvm.segmentOffset = buf.readInt();
-        pvm.expireAt = buf.readLong();
         return pvm;
     }
 

@@ -221,9 +221,9 @@ public class ChunkMergeWorker implements OfStats {
         });
     }
 
-    public void submitWriteSegmentsFromRepl(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, int capacity) {
+    public void submitWriteSegmentsMasterNewly(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, int capacity) {
         this.executors[chunk.batchIndex].submit(() -> {
-            chunk.writeSegmentsFromRepl(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
+            chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
         });
     }
 
@@ -680,7 +680,12 @@ public class ChunkMergeWorker implements OfStats {
                     } else {
                         int splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(cv.getKeyHash() % splitNumber);
                         var keyBucket = keyBuckets.get(splitIndex);
-                        valueBytesCurrent = keyBucket.getValueByKey(key.getBytes(), cv.getKeyHash());
+                        var valueBytesWithExpireAt = keyBucket.getValueByKey(key.getBytes(), cv.getKeyHash());
+                        if (valueBytesWithExpireAt != null && !valueBytesWithExpireAt.isExpired()) {
+                            valueBytesCurrent = valueBytesWithExpireAt.valueBytes();
+                        } else {
+                            valueBytesCurrent = null;
+                        }
                     }
                     if (valueBytesCurrent == null) {
                         validCvCountRecord.invalidCvCount++;
@@ -718,7 +723,7 @@ public class ChunkMergeWorker implements OfStats {
                     } else {
                         // compare is worker id, slot, offset is same
                         var pvmCurrent = PersistValueMeta.decode(valueBytesCurrent);
-                        if (pvmCurrent.isExpired() || pvmCurrent.workerId != workerId || pvmCurrent.batchIndex != batchIndex
+                        if (pvmCurrent.workerId != workerId || pvmCurrent.batchIndex != batchIndex
                                 || pvmCurrent.segmentIndex != segmentIndex || pvmCurrent.subBlockIndex != subBlockIndex || pvmCurrent.segmentOffset != segmentOffset) {
                             // cv is old， discard
                             validCvCountRecord.invalidCvCount++;
