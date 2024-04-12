@@ -79,6 +79,8 @@ public enum ConfForSlot {
 
         public ConfLru lru = new ConfLru(300, 300, 100_000_000L);
 
+        public boolean isCompress = false;
+
         @Override
         public String toString() {
             return "ConfBucket{" +

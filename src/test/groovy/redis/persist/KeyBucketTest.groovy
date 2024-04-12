@@ -6,6 +6,8 @@ import spock.lang.Specification
 class KeyBucketTest extends Specification {
     def 'put and split'() {
         given:
+//        ConfForSlot.global.confBucket.isCompress = true
+
         def snowFlake = new SnowFlake(1, 1)
 
         byte[] emptyBytes = []
@@ -24,13 +26,12 @@ class KeyBucketTest extends Specification {
 
             def keyHash = KeyHash.hash(keyBytes)
 
-
             if (it % 10 == 0) {
                 // set expire now
                 def pvm = new PersistValueMeta()
-                pvm.expireAt = CompressedValue.EXPIRE_NOW
+                pvm.segmentOffset = it
                 def encode = pvm.encode()
-                def v = new Wal.V((byte) 0, 0L, 0, keyHash, 0L,
+                def v = new Wal.V((byte) 0, 0L, 0, keyHash, CompressedValue.EXPIRE_NOW,
                         key, pvm.encode(), encode.length)
                 list << v
             } else {
@@ -67,13 +68,23 @@ class KeyBucketTest extends Specification {
                 afterSplitKeyBucketList << kbArr[2]
             }
             if (isPutDone) {
+                if (afterSplitKeyBucketList) {
+                    // already split
+                    var targetSplitIndex = (int) Math.abs(v.keyHash % 3)
+                    targetKeyBucket = afterSplitKeyBucketList.find { it.splitIndex == targetSplitIndex }
+                }
+
                 var valueBytesWithExpireAt = targetKeyBucket.getValueByKey(keyBytes, v.keyHash)
-                if (valueBytesWithExpireAt == null || !Arrays.equals(valueBytesWithExpireAt.valueBytes(), v.cvEncoded)) {
+                if (valueBytesWithExpireAt == null) {
                     def isClearExpired = (v.key[-3..-1] as int) % 10 == 0
                     if (isClearExpired) {
-                        println 'clear expired when split: ' + v.key
+                        println 'clear expired when put or split: ' + v.key
                     } else {
                         throw new RuntimeException("value not found after put for key: " + v.key)
+                    }
+                } else {
+                    if (!Arrays.equals(valueBytesWithExpireAt.valueBytes(), v.cvEncoded)) {
+                        throw new RuntimeException("value not match after put for key: " + v.key)
                     }
                 }
             } else {

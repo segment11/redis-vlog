@@ -179,7 +179,7 @@ public abstract class BaseCommand {
         var file = new File("bucketKeyCount.txt");
         FileUtils.touch(file);
         var writer = new FileWriter(file);
-        writer.write("--- key masked value list split to bucket ---\n");
+        writer.write("--- key hash list split to bucket ---\n");
 
         for (int i = 0; i < slotNumber; i++) {
             writer.write("s " + i + "\n");
@@ -365,7 +365,7 @@ public abstract class BaseCommand {
         } else {
             // new seq
             cv.setSeq(snowFlake.nextId());
-            // update key masked value
+            // update key hash
             cv.setKeyHash(slotWithKeyHash.keyHash());
 
             if (cv.isCompressed()) {

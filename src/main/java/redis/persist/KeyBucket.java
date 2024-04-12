@@ -4,6 +4,7 @@ import com.github.luben.zstd.Zstd;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressStats;
+import redis.ConfForSlot;
 import redis.SnowFlake;
 
 import javax.annotation.Nullable;
@@ -16,8 +17,6 @@ import static redis.persist.KeyLoader.SPLIT_MULTI_STEP;
 
 public class KeyBucket {
     private static final short INIT_CAPACITY = 50;
-    // 16KB compress ratio better, 4KB decompress faster
-    private static final int INIT_BYTES_LENGTH = LocalPersist.PAGE_SIZE;
     // if big, wal will cost too much memory
     public static final int MAX_BUCKETS_PER_SLOT = KeyLoader.KEY_BUCKET_COUNT_PER_FD;
     public static final int DEFAULT_BUCKETS_PER_SLOT = 16384;
@@ -28,12 +27,12 @@ public class KeyBucket {
     private static final int ONE_CELL_LENGTH = 64;
     private static final int HASH_VALUE_LENGTH = 8;
     private static final int EXPIRE_AT_VALUE_LENGTH = 8;
+    private static final int ONE_CELL_META_LENGTH = HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH;
     private static final int SEQ_VALUE_LENGTH = 8;
     // seq long + size short + cell count short + uncompressed length short + compressed length short
-    static final int AFTER_COMPRESS_PREPEND_LENGTH = SEQ_VALUE_LENGTH + 2 + 2 + 2 + 2;
+    static final int HEADER_LENGTH = SEQ_VALUE_LENGTH + 2 + 2 + 2 + 2;
 
-    static final double HIGH_LOAD_FACTOR = 0.99;
-    static final double LOW_LOAD_FACTOR = 0.2;
+    private static final int INIT_BYTES_LENGTH = HEADER_LENGTH + INIT_CAPACITY * (ONE_CELL_META_LENGTH + ONE_CELL_LENGTH);
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -41,19 +40,18 @@ public class KeyBucket {
     short size;
     private short cellCost;
 
+    public boolean isFull() {
+        return cellCost >= capacity;
+    }
+
     long lastUpdateSeq;
 
     private final SnowFlake snowFlake;
 
     long lastSplitCostNanos;
 
-    public double loadFactor() {
-        return cellCost / (double) capacity;
-    }
-
-    private int firstCellOffset() {
-        // key masked value long 8 bytes + expire at value long 8 bytes for each cell
-        return capacity * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
+    private int oneCellOffset(int cellIndex) {
+        return HEADER_LENGTH + capacity * ONE_CELL_META_LENGTH + cellIndex * ONE_CELL_LENGTH;
     }
 
     static final long NO_KEY = 0;
@@ -74,7 +72,6 @@ public class KeyBucket {
                 ", capacity=" + capacity +
                 ", size=" + size +
                 ", cellCost=" + cellCost +
-                ", loadFactor=" + loadFactor() +
                 ", lastUpdateSeq=" + lastUpdateSeq +
                 '}';
     }
@@ -115,7 +112,7 @@ public class KeyBucket {
         this.cellCost = 0;
         this.snowFlake = snowFlake;
 
-        this.decompressBytes = new byte[capacity * HASH_VALUE_LENGTH + capacity * ONE_CELL_LENGTH];
+        this.decompressBytes = new byte[INIT_BYTES_LENGTH];
         this.buffer = ByteBuffer.wrap(decompressBytes);
     }
 
@@ -124,16 +121,15 @@ public class KeyBucket {
     }
 
     void iterate(IterateCallBack callBack) {
-        for (int i = 0; i < capacity; i++) {
-            int index = i * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-            var cellHashValue = buffer.getLong(index);
+        for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
+            int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+            var cellHashValue = buffer.getLong(metaIndex);
             if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
                 continue;
             }
 
-            var expireAt = buffer.getLong(index + HASH_VALUE_LENGTH);
-            var cellOffset = firstCellOffset() + i * ONE_CELL_LENGTH;
-            buffer.position(cellOffset);
+            var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
+            buffer.position(oneCellOffset(cellIndex));
 
             var keyLength = buffer.getShort();
             var keyBytes = new byte[keyLength];
@@ -180,6 +176,7 @@ public class KeyBucket {
         if (compressedData == null || compressedData.length == 0) {
             decompressBytes = new byte[INIT_BYTES_LENGTH];
             size = 0;
+            cellCost = 0;
         } else {
             var bufferInner = ByteBuffer.wrap(compressedData);
             // first 8 bytes is seq
@@ -190,36 +187,45 @@ public class KeyBucket {
             cellCost = bufferInner.getShort();
             compressStats.updateTmpBucketSize(slot, bucketIndex, splitIndex, size);
 
-            // then 2 bytes is uncompressed length
-            var uncompressedLength = bufferInner.getShort();
-            // fix this, Destination buffer is too small, todo
-            decompressBytes = new byte[uncompressedLength];
+            var isCompress = ConfForSlot.global.confBucket.isCompress;
+            if (!isCompress) {
+                decompressBytes = compressedData;
+            } else {
+                // then 2 bytes is uncompressed length
+                var uncompressedLength = bufferInner.getShort();
+                // fix this, Destination buffer is too small, todo
+                decompressBytes = new byte[uncompressedLength];
 
-            var compressedSize = bufferInner.getShort();
+                var compressedSize = bufferInner.getShort();
 
-            long begin = System.nanoTime();
-            Zstd.decompressByteArray(decompressBytes, 0, uncompressedLength,
-                    compressedData, AFTER_COMPRESS_PREPEND_LENGTH, compressedSize);
-            long costT = System.nanoTime() - begin;
+                long begin = System.nanoTime();
+                Zstd.decompressByteArray(decompressBytes, HEADER_LENGTH, uncompressedLength - HEADER_LENGTH,
+                        compressedData, HEADER_LENGTH, compressedSize);
+                long costT = System.nanoTime() - begin;
 
-            // stats
-            // thread not safe, use long adder
-            compressStats.decompressCount2.increment();
-            compressStats.decompressCostTotalTimeNanos2.add(costT);
-
-//            compressStats.rawValueBodyTotalLength2.add(uncompressedLength);
-//            compressStats.compressedValueBodyTotalLength2.add(compressedData.length);
+                // stats
+                // thread not safe, use long adder
+                compressStats.decompressCount2.increment();
+                compressStats.decompressCostTotalTimeNanos2.add(costT);
+            }
         }
         buffer = ByteBuffer.wrap(decompressBytes);
     }
 
     public byte[] compress() {
-        var maxDstSize = (int) Zstd.compressBound(decompressBytes.length);
-        var dst = new byte[maxDstSize + AFTER_COMPRESS_PREPEND_LENGTH];
-        int compressedSize = (int) Zstd.compressByteArray(dst, AFTER_COMPRESS_PREPEND_LENGTH, maxDstSize,
-                decompressBytes, 0, decompressBytes.length, Zstd.defaultCompressionLevel());
+        var isCompress = ConfForSlot.global.confBucket.isCompress;
+        if (!isCompress) {
+            var bufferInner = ByteBuffer.wrap(decompressBytes);
+            bufferInner.putLong(lastUpdateSeq).putShort(size).putShort(cellCost);
+            return decompressBytes;
+        }
 
-        int afterCompressPersistSize = compressedSize + AFTER_COMPRESS_PREPEND_LENGTH;
+        var maxDstSize = (int) Zstd.compressBound(decompressBytes.length - HEADER_LENGTH);
+        var dst = new byte[maxDstSize + HEADER_LENGTH];
+        int compressedSize = (int) Zstd.compressByteArray(dst, HEADER_LENGTH, maxDstSize,
+                decompressBytes, HEADER_LENGTH, decompressBytes.length - HEADER_LENGTH, Zstd.defaultCompressionLevel());
+
+        int afterCompressPersistSize = compressedSize + HEADER_LENGTH;
         if (afterCompressPersistSize > KeyLoader.KEY_BUCKET_ONE_COST_SIZE) {
             throw new IllegalStateException("Compressed size too large, compressed size=" + afterCompressPersistSize);
         }
@@ -241,8 +247,9 @@ public class KeyBucket {
 
     private void clearOneExpired(int i) {
         int cellCount = 1;
-        for (int j = i + 1; j < capacity; j++) {
-            var nextCellHashValue = buffer.getLong(j * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH));
+        for (int cellIndex = i + 1; cellIndex < capacity; cellIndex++) {
+            int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+            var nextCellHashValue = buffer.getLong(metaIndex);
             if (nextCellHashValue == PRE_KEY) {
                 cellCount++;
             } else {
@@ -257,7 +264,8 @@ public class KeyBucket {
     String allPrint() {
         var sb = new StringBuilder();
         iterate((keyHash, expireAt, keyBytes, valueBytes) -> sb.append("key=").append(new String(keyBytes))
-                .append(", value=").append(new String(valueBytes)).append(", expireAt=").append(expireAt).append("\n"));
+                .append(", value=").append(PersistValueMeta.isPvm(valueBytes) ? PersistValueMeta.decode(valueBytes) : new String(valueBytes))
+                .append(", expireAt=").append(expireAt).append("\n"));
         return sb.toString();
     }
 
@@ -288,16 +296,16 @@ public class KeyBucket {
             keyBuckets[i] = splitKeyBucket;
         }
 
-        for (int i = 0; i < capacity; i++) {
-            int index = i * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-            var cellHashValue = buffer.getLong(index);
+        for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
+            int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+            var cellHashValue = buffer.getLong(metaIndex);
             if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
                 continue;
             }
 
-            var expireAt = buffer.getLong(index + HASH_VALUE_LENGTH);
+            var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
             if (expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis()) {
-                clearOneExpired(i);
+                clearOneExpired(cellIndex);
                 continue;
             }
 
@@ -318,7 +326,7 @@ public class KeyBucket {
                 throw new IllegalStateException("New split index not match, new split index=" + newSplitIndex);
             }
 
-            var cellOffset = firstCellOffset() + i * ONE_CELL_LENGTH;
+            var cellOffset = oneCellOffset(cellIndex);
             buffer.position(cellOffset);
             var keyLength = buffer.getShort();
             var keyBytes = new byte[keyLength];
@@ -336,7 +344,7 @@ public class KeyBucket {
 
             // clear old cell
             var cellCount = kvMeta.cellCount();
-            clearCell(i, cellCount);
+            clearCell(cellIndex, cellCount);
             size--;
             cellCost -= cellCount;
         }
@@ -348,8 +356,8 @@ public class KeyBucket {
         long costT = System.nanoTime() - begin;
         // reduce log
         if (slot == 0 && bucketIndex % 1024 == 0) {
-            log.info("Split cost time={}us, capacity={}, size={}, load factor={}, slot={}, bucket index={}, new split number={}",
-                    costT / 1000, capacity, size, loadFactor(), slot, bucketIndex, newSplitNumber);
+            log.info("Split cost time={}us, capacity={}, size={}, cell cost={}, slot={}, bucket index={}, new split number={}",
+                    costT / 1000, capacity, size, cellCost, slot, bucketIndex, newSplitNumber);
         }
         lastSplitCostNanos = costT;
 
@@ -368,8 +376,7 @@ public class KeyBucket {
     }
 
     public boolean put(byte[] keyBytes, long keyHash, long expireAt, byte[] valueBytes, KeyBucket[] afterPutKeyBuckets) {
-        double loadFactor = loadFactor();
-        if (loadFactor > HIGH_LOAD_FACTOR) {
+        if (cellCost == capacity) {
             if (afterPutKeyBuckets == null) {
                 // fix bug here
                 // can not split
@@ -383,7 +390,7 @@ public class KeyBucket {
                 afterPutKeyBuckets[i] = x;
 
                 if (!isSplitFail) {
-                    isSplitFail = x.loadFactor() > HIGH_LOAD_FACTOR;
+                    isSplitFail = x.cellCost >= x.capacity;
                 }
             }
             if (isSplitFail) {
@@ -424,11 +431,11 @@ public class KeyBucket {
         int needRemoveSameKeyCellIndexAfterPut = -1;
 
         boolean isUpdate = false;
-        int putCellIndex = -1;
+        int putToCellIndex = -1;
         for (int i = 0; i < capacity; i++) {
             var canPutResult = canPut(keyBytes, keyHash, i, cellCount);
             if (canPutResult.flag) {
-                putCellIndex = i;
+                putToCellIndex = i;
                 isUpdate = canPutResult.isUpdate;
                 break;
             }
@@ -438,23 +445,18 @@ public class KeyBucket {
             }
         }
 
-        if (putCellIndex == -1) {
-            if (loadFactor < LOW_LOAD_FACTOR) {
-                log.warn("Key bucket is full, slot={}, bucket index={}, capacity={}, size={}, load factor={}",
-                        slot, bucketIndex, capacity, size, loadFactor);
-            }
+        if (putToCellIndex == -1) {
             throw new BucketFullException("Key bucket is full, slot=" + slot + ", bucket index=" + bucketIndex);
         }
 
-        putTo(putCellIndex, cellCount, keyHash, expireAt, keyBytes, valueBytes);
+        putTo(putToCellIndex, cellCount, keyHash, expireAt, keyBytes, valueBytes);
         if (!isUpdate) {
             size++;
             cellCost += cellCount;
         }
 
         if (needRemoveSameKeyCellIndexAfterPut != -1) {
-            var cellOffset = firstCellOffset() + needRemoveSameKeyCellIndexAfterPut * ONE_CELL_LENGTH;
-            buffer.position(cellOffset);
+            buffer.position(oneCellOffset(needRemoveSameKeyCellIndexAfterPut));
 
             var keyLength = buffer.getShort();
             buffer.position(buffer.position() + keyLength);
@@ -470,21 +472,21 @@ public class KeyBucket {
         return true;
     }
 
-    private void putTo(int putCellIndex, int cellCount, long keyHash, long expireAt, byte[] keyBytes, byte[] valueBytes) {
-        int index = putCellIndex * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-        buffer.putLong(index, keyHash);
-        buffer.putLong(index + HASH_VALUE_LENGTH, expireAt);
+    private void putTo(int putToCellIndex, int cellCount, long keyHash, long expireAt, byte[] keyBytes, byte[] valueBytes) {
+        int metaIndex = HEADER_LENGTH + putToCellIndex * ONE_CELL_META_LENGTH;
+        buffer.putLong(metaIndex, keyHash);
+        buffer.putLong(metaIndex + HASH_VALUE_LENGTH, expireAt);
 
         for (int i = 1; i < cellCount; i++) {
-            int nextCellIndex = (putCellIndex + i) * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-            buffer.putLong(nextCellIndex, PRE_KEY);
-            buffer.putLong(nextCellIndex + HASH_VALUE_LENGTH, NO_EXPIRE);
+            int nextIndex = HEADER_LENGTH + (putToCellIndex + i) * ONE_CELL_META_LENGTH;
+            buffer.putLong(nextIndex, PRE_KEY);
+            buffer.putLong(nextIndex + HASH_VALUE_LENGTH, NO_EXPIRE);
         }
 
         // reset old PRE_KEY to NO_KEY
-        buffer.position((putCellIndex + cellCount) * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH));
-        int beginCheckCellIndex = putCellIndex + cellCount;
-        while (beginCheckCellIndex < capacity) {
+        int beginResetOldCellIndex = putToCellIndex + cellCount;
+        buffer.position(HEADER_LENGTH + beginResetOldCellIndex * ONE_CELL_META_LENGTH);
+        while (beginResetOldCellIndex < capacity) {
             var targetCellHashValue = buffer.getLong();
             buffer.position(buffer.position() + EXPIRE_AT_VALUE_LENGTH);
 
@@ -494,10 +496,10 @@ public class KeyBucket {
 
             buffer.putLong(buffer.position() - EXPIRE_AT_VALUE_LENGTH, NO_EXPIRE);
             buffer.putLong(buffer.position() - EXPIRE_AT_VALUE_LENGTH - HASH_VALUE_LENGTH, NO_KEY);
-            beginCheckCellIndex++;
+            beginResetOldCellIndex++;
         }
 
-        int cellOffset = firstCellOffset() + putCellIndex * ONE_CELL_LENGTH;
+        var cellOffset = oneCellOffset(putToCellIndex);
         buffer.position(cellOffset);
         buffer.putShort((short) keyBytes.length);
         buffer.put(keyBytes);
@@ -507,10 +509,9 @@ public class KeyBucket {
     }
 
     private CanPutResult canPut(byte[] keyBytes, long keyHash, int cellIndex, int cellCount) {
-        // cell index already in range [0, capacity - ceilCount]
-        int index = cellIndex * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-        var cellHashValue = buffer.getLong(index);
-        var expireAt = buffer.getLong(index + HASH_VALUE_LENGTH);
+        int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+        var cellHashValue = buffer.getLong(metaIndex);
+        var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
 
         if (cellHashValue == NO_KEY) {
             var flag = isCellAvailableN(cellIndex, cellCount, false);
@@ -528,8 +529,7 @@ public class KeyBucket {
                 return new CanPutResult(false, false, -1);
             }
 
-            var cellOffset = firstCellOffset() + cellIndex * ONE_CELL_LENGTH;
-            var matchMeta = keyMatch(keyBytes, cellOffset);
+            var matchMeta = keyMatch(keyBytes, oneCellOffset(cellIndex));
             if (matchMeta != null) {
                 // update
                 var flag = isCellAvailableN(cellIndex + 1, cellCount - 1, true);
@@ -544,13 +544,13 @@ public class KeyBucket {
 
     private boolean isCellAvailableN(int cellIndex, int cellCount, boolean isForUpdate) {
         for (int i = 0; i < cellCount; i++) {
-            int targetCellIndex = cellIndex + i;
-            if (targetCellIndex >= capacity) {
+            int nextCellIndex = cellIndex + i;
+            if (nextCellIndex >= capacity) {
                 return false;
             }
 
-            int index = targetCellIndex * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-            var cellHashValue = buffer.getLong(index);
+            int metaIndex = HEADER_LENGTH + nextCellIndex * ONE_CELL_META_LENGTH;
+            var cellHashValue = buffer.getLong(metaIndex);
             if (isForUpdate) {
                 if (cellHashValue != PRE_KEY && cellHashValue != NO_KEY) {
                     return false;
@@ -574,9 +574,9 @@ public class KeyBucket {
         }
 
         for (int i = 0; i < capacity; i++) {
-            var valueBytes = getValueByKeyWithCellIndex(keyBytes, keyHash, i);
-            if (valueBytes != null) {
-                return valueBytes;
+            var r = getValueByKeyWithCellIndex(keyBytes, keyHash, i);
+            if (r != null) {
+                return r;
             }
         }
 
@@ -584,8 +584,8 @@ public class KeyBucket {
     }
 
     private ValueBytesWithExpireAt getValueByKeyWithCellIndex(byte[] keyBytes, long keyHash, int cellIndex) {
-        int index = cellIndex * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-        var cellHashValue = buffer.getLong(index);
+        int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+        var cellHashValue = buffer.getLong(metaIndex);
         // NO_KEY or PRE_KEY
         if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
             return null;
@@ -594,10 +594,9 @@ public class KeyBucket {
             return null;
         }
 
-        var expireAt = buffer.getLong(index + HASH_VALUE_LENGTH);
+        var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
 
-        var cellOffset = firstCellOffset() + cellIndex * ONE_CELL_LENGTH;
-        var matchMeta = keyMatch(keyBytes, cellOffset);
+        var matchMeta = keyMatch(keyBytes, oneCellOffset(cellIndex));
         if (matchMeta == null) {
             return null;
         }
@@ -609,24 +608,23 @@ public class KeyBucket {
 
     private void clearCell(int beginCellIndex, int cellCount) {
         for (int i = 0; i < cellCount; i++) {
-            var cellIndex = beginCellIndex + i;
-            int index = cellIndex * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-            buffer.putLong(index, NO_KEY);
-            buffer.putLong(index + HASH_VALUE_LENGTH, NO_EXPIRE);
+            var nextCellIndex = beginCellIndex + i;
+            int metaIndex = HEADER_LENGTH + nextCellIndex * ONE_CELL_META_LENGTH;
+            buffer.putLong(metaIndex, NO_KEY);
+            buffer.putLong(metaIndex + HASH_VALUE_LENGTH, NO_EXPIRE);
         }
 
         // set 0 for better compress ratio
-        var beginCellOffset = firstCellOffset() + beginCellIndex * ONE_CELL_LENGTH;
+        var beginCellOffset = oneCellOffset(beginCellIndex);
         var bytes0 = new byte[ONE_CELL_LENGTH * cellCount];
 
-        // do not change position
         buffer.put(beginCellOffset, bytes0);
     }
 
     public boolean del(byte[] keyBytes, long keyHash) {
-        for (int i = 0; i < capacity; i++) {
-            int index = i * (HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-            var cellHashValue = buffer.getLong(index);
+        for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
+            int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+            var cellHashValue = buffer.getLong(metaIndex);
             if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
                 continue;
             }
@@ -634,19 +632,19 @@ public class KeyBucket {
                 continue;
             }
 
-            var cellOffset = firstCellOffset() + i * ONE_CELL_LENGTH;
+            var cellOffset = oneCellOffset(cellIndex);
             var matchMeta = keyMatch(keyBytes, cellOffset);
             if (matchMeta != null) {
                 var cellCount = matchMeta.cellCount();
-                clearCell(i, cellCount);
+                clearCell(cellIndex, cellCount);
                 size--;
                 cellCost -= cellCount;
                 updateSeq();
                 return true;
             } else {
-                // key masked value conflict, just continue
-                log.warn("Key masked value conflict, key masked value={}, target cell index={}, key={}, slot={}, bucket index={}",
-                        keyHash, i, new String(keyBytes), slot, bucketIndex);
+                // hash conflict, just continue
+                log.warn("Key hash conflict, key hash={}, target cell index={}, key={}, slot={}, bucket index={}",
+                        keyHash, cellIndex, new String(keyBytes), slot, bucketIndex);
             }
         }
 

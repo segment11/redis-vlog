@@ -586,6 +586,10 @@ public class MultiWorkerServer extends Launcher {
                             c.confBucket.lru.maximumBytes = config.get(ofLong(), "bucket.lru.maximumBytes");
                         }
 
+                        if (config.getChild("bucket.isCompress").hasValue()) {
+                            c.confBucket.isCompress = config.get(ofBoolean(), "bucket.isCompress");
+                        }
+
                         // override chunk conf
                         if (config.getChild("chunk.segmentNumberPerFd").hasValue()) {
                             c.confChunk.segmentNumberPerFd = config.get(ofInteger(), "chunk.segmentNumberPerFd");

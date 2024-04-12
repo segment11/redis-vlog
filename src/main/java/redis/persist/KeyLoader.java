@@ -32,7 +32,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static io.activej.config.converter.ConfigConverters.ofInteger;
-import static redis.persist.KeyBucket.AFTER_COMPRESS_PREPEND_LENGTH;
+import static redis.persist.KeyBucket.HEADER_LENGTH;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 import static redis.persist.LocalPersist.PROTECTION;
 
@@ -479,13 +479,13 @@ public class KeyLoader implements OfStats {
             // only need compressed bytes, so the lru cache size is smaller
             // seq long + size int + uncompressed length int + compressed length int
             // refer to KeyBucket AFTER_COMPRESS_PREPEND_LENGTH
-            int compressedLength = readBucketBuffer.getInt(AFTER_COMPRESS_PREPEND_LENGTH - 4);
+            int compressedLength = readBucketBuffer.getInt(HEADER_LENGTH - 4);
             if (compressedLength == 0) {
                 // pwrite append 0
                 return null;
             }
 
-            var bytesCompressed = new byte[compressedLength + AFTER_COMPRESS_PREPEND_LENGTH];
+            var bytesCompressed = new byte[compressedLength + HEADER_LENGTH];
             readBucketBuffer.get(bytesCompressed);
             return bytesCompressed;
         }
@@ -787,8 +787,7 @@ public class KeyLoader implements OfStats {
                 boolean notSplit = beforeSplitNumberArr[0] == splitNumber;
                 var afterPutKeyBuckets = notSplit ? new KeyBucket[SPLIT_MULTI_STEP] : null;
 
-                double loadFactor = keyBucket.loadFactor();
-                if (loadFactor > KeyBucket.HIGH_LOAD_FACTOR && afterPutKeyBuckets == null) {
+                if (keyBucket.isFull() && afterPutKeyBuckets == null) {
                     // stop this batch, do next time
                     var leftPvmRowList = new ArrayList<PvmRow>(pvmRowList.size() - i);
                     leftPvmRowList.addAll(pvmRowList.subList(i, pvmRowList.size()));
@@ -828,8 +827,7 @@ public class KeyLoader implements OfStats {
                     continue;
                 }
 
-                double loadFactor = keyBucket.loadFactor();
-                if (loadFactor > KeyBucket.HIGH_LOAD_FACTOR && afterPutKeyBuckets == null) {
+                if (keyBucket.isFull() && afterPutKeyBuckets == null) {
                     // stop this batch, do next time
                     // why ? I forget why I write this... sign, need test, todo
                     var leftShortValueList = new ArrayList<Wal.V>(shortValueList.size() - i);
@@ -908,7 +906,7 @@ public class KeyLoader implements OfStats {
     public boolean remove(int bucketIndex, byte[] keyBytes, long keyHash) {
         boolean[] deleteFlags = new boolean[1];
         updateBatch(bucketIndex, keyHash, (keyBuckets, putFlags, splitNumber, isLoadedAll) -> {
-            // key masked value is not 0, just get one target key bucket
+            // key hash is not 0, just get one target key bucket
             var keyBucket = keyBuckets.get(0);
             if (keyBucket.size == 0) {
                 return;
