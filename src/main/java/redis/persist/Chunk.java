@@ -393,10 +393,9 @@ public class Chunk implements OfStats {
     // use zstd compress, default level 3
     static final int COMPRESS_LEVEL = 3;
 
-    private static final int LEFT_SEGMENT_COUNT_NO_USE = 100;
     // need refer Wal valueSizeTrigger
-    // todo, use config value better
-    static final int ONCE_PREPARE_SEGMENT_COUNT = 100;
+    // 32 segments is enough for 1000 Wal.V persist
+    static final int ONCE_PREPARE_SEGMENT_COUNT = 32;
 
     long threadIdProtected = -1;
 
@@ -551,13 +550,10 @@ public class Chunk implements OfStats {
         }
 
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
-        // top merge worker use a schedule to merge self
-        if (isRequestWorker || isMergeWorker) {
-            for (var segment : segments) {
-                int toMergeSegmentIndex = needMergeSegmentIndex(isNewAppendAfterBatch, segment.segmentIndex());
-                if (toMergeSegmentIndex != -1) {
-                    needMergeSegmentIndexList.add(toMergeSegmentIndex);
-                }
+        for (var segment : segments) {
+            int toMergeSegmentIndex = needMergeSegmentIndex(isNewAppendAfterBatch, segment.segmentIndex());
+            if (toMergeSegmentIndex != -1) {
+                needMergeSegmentIndexList.add(toMergeSegmentIndex);
             }
         }
 
@@ -570,7 +566,7 @@ public class Chunk implements OfStats {
 
     private void moveIndexForPrepare() {
         int leftSegmentCountThisFd = maxSegmentNumberPerFd - segmentIndex % maxSegmentNumberPerFd;
-        if (leftSegmentCountThisFd < LEFT_SEGMENT_COUNT_NO_USE) {
+        if (leftSegmentCountThisFd < ONCE_PREPARE_SEGMENT_COUNT) {
             // begin with next fd
             segmentIndex += leftSegmentCountThisFd;
         }

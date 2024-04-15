@@ -963,7 +963,6 @@ public class OneSlot implements OfStats {
         this.keyLoader.flush();
         this.metaChunkSegmentFlagSeq.clear();
         this.metaChunkSegmentIndex.clear();
-        this.chunkMerger.clearMetaTopChunkSegmentIndex();
     }
 
     public void initChunks(LibC libC, byte allWorkers, byte requestWorkers, byte mergeWorkers, byte topMergeWorkers) throws IOException {

@@ -84,9 +84,4 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
     public void onSegmentIndexChange(byte workerId, byte batchIndex, int segmentIndex) {
 
     }
-
-    @Override
-    public void onTopMergeSegmentIndexUpdate(byte workerId, byte batchIndex, byte slot, int segmentIndex) {
-
-    }
 }

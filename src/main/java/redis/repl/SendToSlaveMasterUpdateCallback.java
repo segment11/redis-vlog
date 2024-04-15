@@ -108,19 +108,4 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
             replPair.write(ReplType.segment_index_change, replContent);
         }
     }
-
-    @Override
-    public void onTopMergeSegmentIndexUpdate(byte workerId, byte batchIndex, byte slot, int segmentIndex) {
-        var bytes = new byte[1 + 1 + 1 + 4];
-        bytes[0] = workerId;
-        bytes[1] = batchIndex;
-        bytes[2] = slot;
-        ByteBuffer.wrap(bytes, 3, 4).putInt(segmentIndex);
-
-        var replContent = new RawBytesContent(bytes);
-        var replPairList = getCurrentSlaveReplPairList.get();
-        for (var replPair : replPairList) {
-            replPair.write(ReplType.top_segment_index_update, replContent);
-        }
-    }
 }

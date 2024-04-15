@@ -3,24 +3,16 @@ package redis.persist;
 import io.activej.config.Config;
 import net.openhft.affinity.AffinityStrategies;
 import net.openhft.affinity.AffinityThreadFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import redis.CompressedValue;
-import redis.ConfForSlot;
-import redis.Debug;
 import redis.SnowFlake;
 import redis.repl.MasterUpdateCallback;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.*;
-
-import static io.activej.config.converter.ConfigConverters.ofInteger;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadFactory;
 
 public class ChunkMerger implements OfStats {
     public static final byte MAX_MERGE_WORKERS = 32;
@@ -39,29 +31,6 @@ public class ChunkMerger implements OfStats {
 
     void putMasterUpdateCallback(byte slot, MasterUpdateCallback masterUpdateCallback) {
         masterUpdateCallbackBySlot.put(slot, masterUpdateCallback);
-    }
-
-    private final Logger log = LoggerFactory.getLogger(getClass());
-
-    private ScheduledExecutorService mergeSelfScheduledExecutor;
-
-    private MetaTopChunkSegmentIndex metaTopChunkSegmentIndex;
-
-    public void clearMetaTopChunkSegmentIndex() {
-        metaTopChunkSegmentIndex.clear();
-    }
-
-    // read only, important
-    public byte[] getMetaTopChunkSegmentIndexBytesToSlaveExists() {
-        return metaTopChunkSegmentIndex.getInMemoryCachedBytes();
-    }
-
-    public void overwriteMetaTopChunkSegmentIndexBytesFromMasterExists(byte[] bytes) {
-        metaTopChunkSegmentIndex.overwriteInMemoryCachedBytes(bytes);
-    }
-
-    public void setMetaTopChunkSegmentIndexFromMasterNewly(byte mergeWorkerId, byte batchIndex, byte slot, int nextIndex) {
-        metaTopChunkSegmentIndex.put(mergeWorkerId, batchIndex, slot, nextIndex);
     }
 
     private int compressLevel;
@@ -84,11 +53,6 @@ public class ChunkMerger implements OfStats {
             AffinityStrategies.SAME_CORE);
     static final ThreadFactory topMergeWorkerThreadFactoryGroup2 = new AffinityThreadFactory("top-merge-worker-group2",
             AffinityStrategies.SAME_CORE);
-
-    public void initTopMergeSegmentIndexMap(File persistDir) throws IOException {
-        this.metaTopChunkSegmentIndex = new MetaTopChunkSegmentIndex(slotNumber, topMergeWorkers,
-                requestWorkers + mergeWorkers, persistDir);
-    }
 
     public ChunkMerger(byte requestWorkers, byte mergeWorkers, byte topMergeWorkers, short slotNumber,
                        SnowFlake snowFlake, Config chunkConfig) {
@@ -117,10 +81,6 @@ public class ChunkMerger implements OfStats {
 
             this.topChunkMergeWorkers[i].compressLevel = compressLevel;
         }
-
-        var toInt = ofInteger();
-        this.intervalSeconds = chunkConfig.get(toInt, "merge.top.scheduleIntervalSeconds", 1);
-        this.mergeTriggerPersistForcePerIntervalCount = 10 / intervalSeconds;
     }
 
     public ChunkMergeWorker getChunkMergeWorker(byte mergeWorkerId) {
@@ -138,93 +98,7 @@ public class ChunkMerger implements OfStats {
         return null;
     }
 
-    private final int intervalSeconds;
-    private final int mergeTriggerPersistForcePerIntervalCount;
-    private long intervalCount = 0;
-
-    private void mergeOne(int workerIndex, byte slot, byte batchIndex, int[] topMergeContinueSkipCountBySlot) {
-        var logMerge = Debug.getInstance().logMerge;
-        var topWorker = topChunkMergeWorkers[workerIndex];
-        int segmentIndex = metaTopChunkSegmentIndex.get(topWorker.mergeWorkerId, batchIndex, slot);
-
-        ArrayList<Integer> segmentIndexList = new ArrayList<>();
-        segmentIndexList.add(segmentIndex);
-
-        int k = workerIndex * slotNumber + slot;
-        try {
-            // wait until done
-            int validCvCount = execute(topWorker.mergeWorkerId, slot, batchIndex, segmentIndexList).get();
-            if (validCvCount == -1) {
-                topMergeContinueSkipCountBySlot[k]++;
-                // stay at current index
-                if (topMergeContinueSkipCountBySlot[k] % 100 == 0 && slot == 0) {
-                    log.info("Top self merge, continue skip count={}, w={}, s={}, b={}, i={}", topMergeContinueSkipCountBySlot[k],
-                            topWorker.mergeWorkerId, slot, batchIndex, segmentIndex);
-                }
-            } else {
-                topMergeContinueSkipCountBySlot[k] = 0;
-                if (logMerge || (segmentIndex % 100 == 0 && slot == 0)) {
-                    log.info("Top self merge, valid cv count={}, w={}, s={}, b={}, i={}",
-                            validCvCount, topWorker.mergeWorkerId, slot, batchIndex, segmentIndex);
-                }
-
-                int nextIndex = segmentIndex == ConfForSlot.global.confChunk.maxSegmentIndex() ? 0 : segmentIndex + 1;
-                metaTopChunkSegmentIndex.put(topWorker.mergeWorkerId, batchIndex, slot, nextIndex);
-
-                var masterUpdateCallback = masterUpdateCallbackBySlot.get(slot);
-                if (masterUpdateCallback != null) {
-                    masterUpdateCallback.onTopMergeSegmentIndexUpdate(topWorker.mergeWorkerId, batchIndex, slot, nextIndex);
-                }
-
-                if (nextIndex == 0) {
-                    log.info("Top self merge segment index go back to 0, w={}, s={}", topWorker.mergeWorkerId, slot);
-                }
-            }
-        } catch (Exception e) {
-            log.error("Execute top merge error", e);
-        }
-    }
-
-    public void beginIntervalTopMerge() {
-        this.mergeSelfScheduledExecutor = Executors.newScheduledThreadPool(1, topMergeWorkerThreadFactoryGroup2);
-
-        int len = topChunkMergeWorkers.length * slotNumber;
-        int[] topMergeContinueSkipCountBySlot = new int[len];
-
-        var batchNumber = ConfForSlot.global.confWal.batchNumber;
-
-        // for debug wait
-        final int delaySeconds = 30;
-        log.info("Begin interval top merge, delay seconds={}", delaySeconds);
-        this.mergeSelfScheduledExecutor.scheduleWithFixedDelay(() -> {
-            intervalCount++;
-            for (int workerIndex = 0; workerIndex < topChunkMergeWorkers.length; workerIndex++) {
-                for (int slot = 0; slot < slotNumber; slot++) {
-                    for (int batchIndex = 0; batchIndex < batchNumber; batchIndex++) {
-                        mergeOne(workerIndex, (byte) slot, (byte) batchIndex, topMergeContinueSkipCountBySlot);
-                    }
-                }
-            }
-
-            if (intervalCount % mergeTriggerPersistForcePerIntervalCount == 0) {
-                var triggerCv = CompressedValue.createTriggerCv();
-
-                for (int i = 0; i < slotNumber; i++) {
-                    int chooseIndex = i % chunkMergeWorkers.length;
-                    var mergeWorker = chunkMergeWorkers[chooseIndex];
-                    mergeWorker.triggerPersistForce((byte) i, triggerCv);
-
-                    if (i == 0 && intervalCount % 100 == 0) {
-                        log.info("Trigger merge persist force, w={}, s={}", mergeWorker.mergeWorkerId, i);
-                    }
-                }
-            }
-        }, delaySeconds, intervalSeconds, java.util.concurrent.TimeUnit.SECONDS);
-        log.info("Begin interval top merge, interval seconds={}", intervalSeconds);
-    }
-
     public void start() {
-        beginIntervalTopMerge();
         for (var worker : chunkMergeWorkers) {
             worker.start();
         }
@@ -240,16 +114,9 @@ public class ChunkMerger implements OfStats {
         for (var topWorker : topChunkMergeWorkers) {
             topWorker.stop();
         }
-
-        mergeSelfScheduledExecutor.shutdownNow();
-        System.out.println("Shutdown top merge schedule worker");
-
-        if (metaTopChunkSegmentIndex != null) {
-            metaTopChunkSegmentIndex.cleanUp();
-        }
     }
 
-    Future<Integer> execute(byte workerId, byte slot, byte batchIndex, ArrayList<Integer> needMergeSegmentIndexList) {
+    CompletableFuture<Integer> execute(byte workerId, byte slot, byte batchIndex, ArrayList<Integer> needMergeSegmentIndexList) {
         var job = new ChunkMergeWorker.Job();
         job.workerId = workerId;
         job.slot = slot;
@@ -266,15 +133,15 @@ public class ChunkMerger implements OfStats {
             return mergeWorker.execute(job);
         } else {
             if (workerId >= requestWorkers + chunkMergeWorkers.length) {
-                // this is already the top merge worker, use same file to merge, use lock to avoid conflict
                 for (var topMergeWorker : topChunkMergeWorkers) {
                     if (topMergeWorker.mergeWorkerId == workerId) {
                         job.mergeWorker = topMergeWorker;
-                        return topMergeWorker.execute(job);
+                        // use current thread when top merge worker merge self
+                        return CompletableFuture.completedFuture(job.get());
                     }
                 }
             } else {
-                // by slot or by worker id?
+                // by slot
                 int chooseIndex = slot % topChunkMergeWorkers.length;
                 var topMergeWorker = topChunkMergeWorkers[chooseIndex];
                 job.mergeWorker = topMergeWorker;

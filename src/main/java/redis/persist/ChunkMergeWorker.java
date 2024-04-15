@@ -1,6 +1,9 @@
 package redis.persist;
 
 import com.github.luben.zstd.Zstd;
+import io.activej.async.callback.AsyncComputation;
+import io.activej.common.function.SupplierEx;
+import io.activej.eventloop.Eventloop;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
@@ -13,11 +16,13 @@ import redis.stats.StatKV;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.TreeSet;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 
 import static redis.CompressedValue.KEY_HEADER_LENGTH;
@@ -29,8 +34,6 @@ import static redis.persist.ChunkMerger.topMergeWorkerThreadFactoryGroup1;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
 public class ChunkMergeWorker implements OfStats {
-    private static final int QUEUE_CAPACITY = 10;
-
     byte mergeWorkerId;
     short slotNumber;
     byte requestWorkers;
@@ -39,8 +42,6 @@ public class ChunkMergeWorker implements OfStats {
 
     SnowFlake snowFlake;
     ChunkMerger chunkMerger;
-
-    int queueCapacity = QUEUE_CAPACITY;
 
     long mergedSegmentCount = 0;
     long mergedSegmentCostTotalTimeNanos = 0;
@@ -56,9 +57,7 @@ public class ChunkMergeWorker implements OfStats {
     private final LocalPersist localPersist = LocalPersist.getInstance();
 
     // index is batch index
-    private LinkedBlockingQueue<Runnable>[] queues;
-
-    private ExecutorService[] executors;
+    private Eventloop[] eventloopArray;
 
     private boolean isTopMergeWorker;
 
@@ -151,11 +150,8 @@ public class ChunkMergeWorker implements OfStats {
             }
         }
 
-        if (!isTopMergeWorker) {
-            if (!needMergeSegmentIndexListAll.isEmpty()) {
-                // need trigger top merge worker to merge
-                chunkMerger.execute(mergeWorkerId, slot, batchIndex, needMergeSegmentIndexListAll);
-            }
+        if (!needMergeSegmentIndexListAll.isEmpty()) {
+            chunkMerger.execute(mergeWorkerId, slot, batchIndex, needMergeSegmentIndexListAll);
         }
 
         lastPersistAtMillis = System.currentTimeMillis();
@@ -198,22 +194,21 @@ public class ChunkMergeWorker implements OfStats {
 
         var batchNumber = ConfForSlot.global.confWal.batchNumber;
 
-        this.queueCapacity = Math.max(QUEUE_CAPACITY, requestWorkers * slotNumber * 2);
-
-        this.queues = new LinkedBlockingQueue[batchNumber];
-        this.executors = new ThreadPoolExecutor[batchNumber];
+        this.eventloopArray = new Eventloop[batchNumber];
+        final int idleMillis = 10;
         for (int i = 0; i < batchNumber; i++) {
-            this.queues[i] = new LinkedBlockingQueue<>(this.queueCapacity);
-            this.executors[i] = new ThreadPoolExecutor(1, 1,
-                    0L, TimeUnit.MILLISECONDS,
-                    queues[i],
-                    getThreadFactoryGroup(mergeWorkerId));
+            var eventloop = Eventloop.builder()
+                    .withThreadName("chunk-merge-worker-" + i)
+                    .withIdleInterval(Duration.ofMillis(idleMillis))
+                    .build();
+            eventloop.keepAlive(true);
+            this.eventloopArray[i] = eventloop;
         }
-        log.info("Create chunk merge worker executor {}", mergeWorkerId);
+        log.info("Create chunk merge worker eventloop {}", mergeWorkerId);
     }
 
     public void fixChunkThreadId(Chunk chunk) {
-        this.executors[chunk.batchIndex].submit(() -> {
+        this.eventloopArray[chunk.batchIndex].submit(() -> {
             chunk.threadIdProtected = Thread.currentThread().threadId();
             chunk.setWorkerType(false, true, isTopMergeWorker);
             log.warn("Fix merge worker chunk thread id, w={}, mw={}, s={}, b={}, tid={}",
@@ -222,7 +217,7 @@ public class ChunkMergeWorker implements OfStats {
     }
 
     public void submitWriteSegmentsMasterNewly(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, int capacity) {
-        this.executors[chunk.batchIndex].submit(() -> {
+        this.eventloopArray[chunk.batchIndex].submit(() -> {
             chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
         });
     }
@@ -283,24 +278,19 @@ public class ChunkMergeWorker implements OfStats {
     }
 
     void start() {
-        log.info("Start chunk merge worker {}", mergeWorkerId);
+        for (int i = 0; i < eventloopArray.length; i++) {
+            var eventloop = eventloopArray[i];
+            var thread = getThreadFactoryGroup(mergeWorkerId).newThread(eventloop);
+            thread.start();
+            log.info("Chunk merge worker eventloop thread started, w={}, b={}", mergeWorkerId, i);
+        }
     }
 
     void stop() {
-        for (var executor : executors) {
-            executor.shutdownNow();
+        for (var eventloop : eventloopArray) {
+            eventloop.breakEventloop();
         }
-        System.out.println("Stop chunk merge worker " + mergeWorkerId + " executor service");
-    }
-
-    void triggerPersistForce(byte slot, CompressedValue triggerCv) {
-//        executor.submit(() -> {
-//            var writeToChunk = toMergeChunks[slot];
-//            WriteBatchKV.writeBatchKV.put(slot, mergeWorkerId, "", triggerCv, false, (slotInner, workerId, list, includeLast) -> {
-//                writeToChunk.persist(list, includeLast);
-//                WriteBatchKV.writeBatchKV.clearAfterPersist(slot, writeToChunk.lastPersistSegmentIndex(), workerId, includeLast);
-//            });
-//        });
+        System.out.println("Stop chunk merge worker " + mergeWorkerId + " eventloop");
     }
 
     @Override
@@ -328,29 +318,16 @@ public class ChunkMergeWorker implements OfStats {
         list.add(new StatKV(prefix + "last merged worker id", lastMergedWorkerId));
         list.add(new StatKV(prefix + "last merged slot", lastMergedSlot));
         list.add(new StatKV(prefix + "last merged segment index", lastMergedSegmentIndex));
-        list.add(new StatKV(prefix + "batch index 0 wait queue size", queues[0].size()));
 
         list.add(StatKV.split);
         return list;
     }
 
-    Future<Integer> execute(Job job) {
-        try {
-            var f = executors[job.batchIndex].submit(job);
-            int queueSize = queues[job.batchIndex].size();
-            if (queueSize >= queueCapacity / 2) {
-                log.warn("!!!Chunk merge worker queue size is too large after submit, w={}, s={}, b={}, i={}, mw={}, queue size={}, queue capacity={}",
-                        job.workerId, job.slot, job.batchIndex, job.needMergeSegmentIndexList, mergeWorkerId, queueSize, queueCapacity);
-                // need change rate limit for request set, todo
-            }
-            return f;
-        } catch (RejectedExecutionException e) {
-            log.warn("Reject chunk merge job, w={}, s={}, b={}, i={}, mw={}", job.workerId, job.slot, job.batchIndex, job.needMergeSegmentIndexList, mergeWorkerId);
-            throw e;
-        }
+    CompletableFuture<Integer> execute(Job job) {
+        return eventloopArray[job.batchIndex].submit(AsyncComputation.of(job));
     }
 
-    static class Job implements Callable<Integer> {
+    static class Job implements SupplierEx<Integer> {
         byte workerId;
         byte slot;
         byte batchIndex;
@@ -363,7 +340,7 @@ public class ChunkMergeWorker implements OfStats {
         private final LocalPersist localPersist = LocalPersist.getInstance();
 
         @Override
-        public Integer call() {
+        public Integer get() {
             boolean isTopMergeWorkerSelfMerge = workerId == mergeWorker.mergeWorkerId;
 
             var batchCount = needMergeSegmentIndexList.size() / MERGE_READ_SEGMENT_ONCE_COUNT;
