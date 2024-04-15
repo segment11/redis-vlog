@@ -1,6 +1,7 @@
 package redis.persist;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,9 +20,9 @@ public class DynConfig {
         return data.get(key);
     }
 
-    String getMasterUuid() {
-        var obj = get("masterUuid");
-        return obj == null ? null : obj.toString();
+    Long getMasterUuid() {
+        Object val = get("masterUuid");
+        return val == null ? null : Long.valueOf(val.toString());
     }
 
     void setMasterUuid(long masterUuid) throws IOException {
@@ -39,7 +40,7 @@ public class DynConfig {
         update("readonly", readonly);
     }
 
-    boolean canRead() {
+    boolean isCanRead() {
         var obj = get("canRead");
         return obj == null || (boolean) obj;
     }
@@ -48,23 +49,31 @@ public class DynConfig {
         update("canRead", canRead);
     }
 
-    int clearExpiredPvmWhenKeyBucketReadTimes() {
-        var obj = get("clearExpiredPvmWhenKeyBucketReadTimes");
+    int getTestKey() {
+        var obj = get("testKey");
         return obj == null ? 10 : (int) obj;
     }
 
-    void setClearExpiredPvmWhenKeyBucketReadTimes(int clearExpiredPvmWhenKeyBucketReadTimes) throws IOException {
-        update("clearExpiredPvmWhenKeyBucketReadTimes", clearExpiredPvmWhenKeyBucketReadTimes);
+    void setTestKey(int testKey) throws IOException {
+        update("testKey", testKey);
     }
 
     DynConfig(byte slot, File dynConfigFile) throws IOException {
         this.slot = slot;
         this.dynConfigFile = dynConfigFile;
-        // read json
-        var objectMapper = new ObjectMapper();
-        data = objectMapper.readValue(dynConfigFile, HashMap.class);
 
-        log.info("Init dyn config, data: {}, slot: {}", data, slot);
+        if (!dynConfigFile.exists()) {
+            FileUtils.touch(dynConfigFile);
+            FileUtils.writeByteArrayToFile(dynConfigFile, "{}".getBytes());
+
+            this.data = new HashMap<>();
+            log.info("Init dyn config, data: {}, slot: {}", data, slot);
+        } else {
+            // read json
+            var objectMapper = new ObjectMapper();
+            this.data = objectMapper.readValue(dynConfigFile, HashMap.class);
+            log.info("Init dyn config, data: {}, slot: {}", data, slot);
+        }
     }
 
     private synchronized void update(String key, Object value) throws IOException {

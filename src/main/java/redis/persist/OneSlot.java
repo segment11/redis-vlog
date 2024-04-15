@@ -61,15 +61,11 @@ public class OneSlot implements OfStats {
         }
 
         var dynConfigFile = new File(slotDir, DYN_CONFIG_FILE_NAME);
-        if (!dynConfigFile.exists()) {
-            FileUtils.touch(dynConfigFile);
-            FileUtils.writeByteArrayToFile(dynConfigFile, "{}".getBytes());
-        }
         this.dynConfig = new DynConfig(slot, dynConfigFile);
 
         var masterUuidSaved = dynConfig.getMasterUuid();
         if (masterUuidSaved != null) {
-            this.masterUuid = Long.parseLong(masterUuidSaved.toString());
+            this.masterUuid = masterUuidSaved;
         } else {
             this.masterUuid = snowFlake.nextId();
             dynConfig.setMasterUuid(masterUuid);
@@ -340,7 +336,7 @@ public class OneSlot implements OfStats {
 
     static {
         // add white list here
-        dynConfigKeyWhiteList.add("clearExpiredPvmWhenKeyBucketReadTimes");
+        dynConfigKeyWhiteList.add("testKey");
     }
 
     public boolean updateDynConfig(String key, byte[] configValueBytes) throws IOException {
@@ -350,8 +346,8 @@ public class OneSlot implements OfStats {
             return false;
         }
 
-        if (key.equals("clearExpiredPvmWhenKeyBucketReadTimes")) {
-            dynConfig.setClearExpiredPvmWhenKeyBucketReadTimes(Integer.parseInt(new String(configValueBytes)));
+        if (key.equals("testKey")) {
+            dynConfig.setTestKey(Integer.parseInt(new String(configValueBytes)));
             return true;
             // add else if here
         } else {
@@ -369,7 +365,7 @@ public class OneSlot implements OfStats {
     }
 
     public boolean canRead() {
-        return dynConfig.canRead();
+        return dynConfig.isCanRead();
     }
 
     public void setCanRead(boolean canRead) throws IOException {
