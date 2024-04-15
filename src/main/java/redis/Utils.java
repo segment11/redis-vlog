@@ -20,7 +20,7 @@ public class Utils {
         if (s.length() >= len) {
             return s;
         }
-        StringBuilder sb = new StringBuilder();
+        var sb = new StringBuilder();
         while (sb.length() < len - s.length()) {
             sb.append(pad);
         }
