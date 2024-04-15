@@ -8,16 +8,6 @@ import org.slf4j.LoggerFactory;
 import java.nio.ByteBuffer;
 
 public class CompressedValue {
-    public static CompressedValue createTriggerCv() {
-        var cv = new CompressedValue();
-        cv.expireAt = 1;
-        return cv;
-    }
-
-    public boolean isTrigger() {
-        return expireAt == 1;
-    }
-
     public static final long NO_EXPIRE = 0;
     public static final long EXPIRE_NOW = -1;
     public static final int NULL_DICT_SEQ = 0;
