@@ -1,8 +1,8 @@
 package redis.type;
 
-import io.netty.buffer.Unpooled;
 import redis.KeyHash;
 
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.LinkedList;
 
@@ -71,29 +71,29 @@ public class RedisList {
             len += 2 + e.length;
         }
 
-        var buf = Unpooled.buffer(len + HEADER_LENGTH);
-        buf.writeShort(list.size());
+        var buffer = ByteBuffer.allocate(len + HEADER_LENGTH);
+        buffer.putShort((short) list.size());
         // tmp crc
-        buf.writeInt(0);
+        buffer.putInt(0);
         for (var e : list) {
-            buf.writeShort((short) e.length);
-            buf.writeBytes(e);
+            buffer.putShort((short) e.length);
+            buffer.put(e);
         }
 
         // crc
         if (len > 0) {
-            var hb = buf.array();
+            var hb = buffer.array();
             int crc = KeyHash.hash32Offset(hb, HEADER_LENGTH, hb.length - HEADER_LENGTH);
-            buf.setInt(2, crc);
+            buffer.putInt(2, crc);
         }
 
-        return buf.array();
+        return buffer.array();
     }
 
     public static RedisList decode(byte[] data) {
-        var buf = Unpooled.wrappedBuffer(data);
-        int size = buf.readShort();
-        int crc = buf.readInt();
+        var buffer = ByteBuffer.wrap(data);
+        int size = buffer.getShort();
+        int crc = buffer.getInt();
 
         // check crc
         if (size > 0) {
@@ -105,9 +105,9 @@ public class RedisList {
 
         var r = new RedisList();
         for (int i = 0; i < size; i++) {
-            int len = buf.readShort();
+            int len = buffer.getShort();
             var bytes = new byte[len];
-            buf.readBytes(bytes);
+            buffer.get(bytes);
             r.list.add(bytes);
         }
         return r;

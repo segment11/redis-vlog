@@ -1,8 +1,8 @@
 package redis.type;
 
-import io.netty.buffer.Unpooled;
 import redis.KeyHash;
 
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 
 // key / value save together
@@ -47,33 +47,33 @@ public class RedisHH {
             len += 2 + key.length() + 2 + value.length;
         }
 
-        var buf = Unpooled.buffer(len + HEADER_LENGTH);
-        buf.writeShort(map.size());
+        var buffer = ByteBuffer.allocate(len + HEADER_LENGTH);
+        buffer.putShort((short) map.size());
         // tmp crc
-        buf.writeInt(0);
+        buffer.putInt(0);
         for (var entry : map.entrySet()) {
             var key = entry.getKey();
             var value = entry.getValue();
-            buf.writeShort((short) key.length());
-            buf.writeBytes(key.getBytes());
-            buf.writeShort((short) value.length);
-            buf.writeBytes(value);
+            buffer.putShort((short) key.length());
+            buffer.put(key.getBytes());
+            buffer.putShort((short) value.length);
+            buffer.put(value);
         }
 
         // crc
         if (len > 0) {
-            var hb = buf.array();
+            var hb = buffer.array();
             int crc = KeyHash.hash32Offset(hb, HEADER_LENGTH, hb.length - HEADER_LENGTH);
-            buf.setInt(2, crc);
+            buffer.putInt(2, crc);
         }
 
-        return buf.array();
+        return buffer.array();
     }
 
     public static RedisHH decode(byte[] data) {
-        var buf = Unpooled.wrappedBuffer(data);
-        int size = buf.readShort();
-        int crc = buf.readInt();
+        var buffer = ByteBuffer.wrap(data);
+        int size = buffer.getShort();
+        int crc = buffer.getInt();
 
         // check crc
         if (size > 0) {
@@ -85,12 +85,12 @@ public class RedisHH {
 
         var r = new RedisHH();
         for (int i = 0; i < size; i++) {
-            int keyLength = buf.readShort();
+            int keyLength = buffer.getShort();
             var keyBytes = new byte[keyLength];
-            buf.readBytes(keyBytes);
-            var valueLength = buf.readShort();
+            buffer.get(keyBytes);
+            var valueLength = buffer.getShort();
             var valueBytes = new byte[valueLength];
-            buf.readBytes(valueBytes);
+            buffer.get(valueBytes);
             r.map.put(new String(keyBytes), valueBytes);
         }
         return r;

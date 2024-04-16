@@ -1,9 +1,9 @@
 package redis.type;
 
-import io.netty.buffer.Unpooled;
 import org.jetbrains.annotations.NotNull;
 import redis.KeyHash;
 
+import java.nio.ByteBuffer;
 import java.util.NavigableSet;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -187,30 +187,30 @@ public class RedisZSet {
             len += 2 + member.length();
         }
 
-        var buf = Unpooled.buffer(len + HEADER_LENGTH);
-        buf.writeShort(set.size());
+        var buffer = ByteBuffer.allocate(len + HEADER_LENGTH);
+        buffer.putShort((short) set.size());
         // tmp crc
-        buf.writeInt(0);
+        buffer.putInt(0);
         for (var e : set) {
-            buf.writeShort((short) e.length());
-            buf.writeDouble(e.score);
-            buf.writeBytes(e.member.getBytes());
+            buffer.putShort((short) e.length());
+            buffer.putDouble(e.score);
+            buffer.put(e.member.getBytes());
         }
 
         // crc
         if (len > 0) {
-            var hb = buf.array();
+            var hb = buffer.array();
             int crc = KeyHash.hash32Offset(hb, HEADER_LENGTH, hb.length - HEADER_LENGTH);
-            buf.setInt(2, crc);
+            buffer.putInt(2, crc);
         }
 
-        return buf.array();
+        return buffer.array();
     }
 
     public static RedisZSet decode(byte[] data) {
-        var buf = Unpooled.wrappedBuffer(data);
-        int size = buf.readShort();
-        int crc = buf.readInt();
+        var buffer = ByteBuffer.wrap(data);
+        int size = buffer.getShort();
+        int crc = buffer.getInt();
 
         // check crc
         if (size > 0) {
@@ -223,10 +223,10 @@ public class RedisZSet {
         var r = new RedisZSet();
         int rank = 0;
         for (int i = 0; i < size; i++) {
-            int len = buf.readShort();
-            double score = buf.readDouble();
+            int len = buffer.getShort();
+            double score = buffer.getDouble();
             var bytes = new byte[len - 8];
-            buf.readBytes(bytes);
+            buffer.get(bytes);
             var member = new String(bytes);
             var sv = new ScoreValue(score, member);
 
