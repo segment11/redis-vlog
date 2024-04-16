@@ -167,10 +167,10 @@ public class ChunkMergeWorker implements OfStats {
         @Override
         public String toString() {
             return "MergedSegment{" +
-                    ", s=" + slot +
-                    ", b=" + batchIndex +
-                    ", i=" + index +
-                    ", v=" + validCvCount +
+                    ", slot=" + slot +
+                    ", batchIndex=" + batchIndex +
+                    ", index=" + index +
+                    ", validCvCount=" + validCvCount +
                     '}';
         }
 
