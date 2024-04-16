@@ -828,12 +828,12 @@ public class OneSlot implements OfStats {
         var currentWal = currentWalArray[walGroupIndex];
 
         byte[] cvEncoded;
-        boolean isValueShort = cv.noExpire() && (cv.isNumber() || cv.isShortString());
+        boolean isValueShort = cv.noExpire() && (cv.isTypeNumber() || cv.isShortString());
         if (isValueShort) {
-            if (cv.isNumber()) {
-                cvEncoded = cv.encodeNumberWithType();
+            if (cv.isTypeNumber()) {
+                cvEncoded = cv.encodeAsNumber();
             } else {
-                cvEncoded = cv.encodeShortString();
+                cvEncoded = cv.encodeAsShortString();
             }
         } else {
             cvEncoded = cv.encode();

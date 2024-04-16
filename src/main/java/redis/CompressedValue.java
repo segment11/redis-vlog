@@ -94,7 +94,7 @@ public class CompressedValue {
         return compressedLength;
     }
 
-    public boolean isNumber() {
+    public boolean isTypeNumber() {
         return dictSeqOrSpType <= SP_TYPE_NUM_BYTE && dictSeqOrSpType >= SP_TYPE_NUM_DOUBLE;
     }
 
@@ -102,31 +102,31 @@ public class CompressedValue {
         return spType <= SP_TYPE_NUM_BYTE && spType >= SP_TYPE_NUM_DOUBLE;
     }
 
-    public byte[] encodeNumberWithType() {
+    public byte[] encodeAsNumber() {
         return switch (dictSeqOrSpType) {
             case SP_TYPE_NUM_BYTE -> {
-                var buf = ByteBuffer.allocate(10);
+                var buf = ByteBuffer.allocate(1 + 8 + 1);
                 buf.put((byte) dictSeqOrSpType);
                 buf.putLong(seq);
                 buf.put(compressedData[0]);
                 yield buf.array();
             }
             case SP_TYPE_NUM_SHORT -> {
-                var buf = ByteBuffer.allocate(11);
+                var buf = ByteBuffer.allocate(1 + 8 + 2);
                 buf.put((byte) dictSeqOrSpType);
                 buf.putLong(seq);
                 buf.put(compressedData);
                 yield buf.array();
             }
             case SP_TYPE_NUM_INT -> {
-                var buf = ByteBuffer.allocate(13);
+                var buf = ByteBuffer.allocate(1 + 8 + 4);
                 buf.put((byte) dictSeqOrSpType);
                 buf.putLong(seq);
                 buf.put(compressedData);
                 yield buf.array();
             }
             case SP_TYPE_NUM_LONG, SP_TYPE_NUM_DOUBLE -> {
-                var buf = ByteBuffer.allocate(17);
+                var buf = ByteBuffer.allocate(1 + 8 + 8);
                 buf.put((byte) dictSeqOrSpType);
                 buf.putLong(seq);
                 buf.put(compressedData);
@@ -137,8 +137,8 @@ public class CompressedValue {
     }
 
     // not seq, may have a problem
-    public byte[] encodeShortString() {
-        var buf = ByteBuffer.allocate(8 + 1 + compressedData.length);
+    public byte[] encodeAsShortString() {
+        var buf = ByteBuffer.allocate(1 + 8 + compressedData.length);
         buf.put((byte) SP_TYPE_SHORT_STRING);
         buf.putLong(seq);
         buf.put(compressedData);
@@ -274,10 +274,6 @@ public class CompressedValue {
         cv.compressedLength = compressedSize;
         cv.uncompressedLength = data.length;
         return cv;
-    }
-
-    public int persistEncodeLength(int keyLength) {
-        return KEY_HEADER_LENGTH + keyLength + VALUE_HEADER_LENGTH + compressedLength;
     }
 
     public boolean isShortString() {

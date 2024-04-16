@@ -129,7 +129,7 @@ public class DGroup extends BaseCommand {
 
         long longValue = 0;
         double doubleValue = 0;
-        if (cv.isNumber()) {
+        if (cv.isTypeNumber()) {
             if (isByFloat) {
                 doubleValue = cv.numberValue().doubleValue();
             } else {

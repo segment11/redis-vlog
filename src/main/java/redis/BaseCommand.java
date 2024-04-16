@@ -248,7 +248,7 @@ public abstract class BaseCommand {
     }
 
     public byte[] getValueBytesByCv(CompressedValue cv) {
-        if (cv.isNumber()) {
+        if (cv.isTypeNumber()) {
             return String.valueOf(cv.numberValue()).getBytes();
         }
 
@@ -360,7 +360,7 @@ public abstract class BaseCommand {
 
     public void setCv(byte[] keyBytes, CompressedValue cv, SlotWithKeyHash slotWithKeyHashReuse) {
         var slotWithKeyHash = slotWithKeyHashReuse != null ? slotWithKeyHashReuse : slot(keyBytes);
-        if (cv.isNumber()) {
+        if (cv.isTypeNumber()) {
             setNumber(keyBytes, cv.numberValue(), slotWithKeyHash);
         } else {
             // new seq
