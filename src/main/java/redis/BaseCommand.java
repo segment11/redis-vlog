@@ -138,7 +138,7 @@ public abstract class BaseCommand {
         }
         if (hashTagBeginIndex >= 0 && hashTagEndIndex > hashTagBeginIndex) {
             // hash tag
-            var tagHash = KeyHash.hashOffset(keyBytes, hashTagBeginIndex + 1, hashTagEndIndex - hashTagBeginIndex);
+            var tagHash = KeyHash.hashOffset(keyBytes, hashTagBeginIndex + 1, hashTagEndIndex - hashTagBeginIndex - 1);
 
             // same slot, but not same bucket index
             var slotPositive = slotNumber == 1 ? 0 : Math.abs((tagHash / x) % halfSlotNumber);
