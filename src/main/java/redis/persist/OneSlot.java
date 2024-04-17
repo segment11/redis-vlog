@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.luben.zstd.Zstd;
 import io.activej.async.callback.AsyncComputation;
+import io.activej.common.function.RunnableEx;
 import io.activej.common.function.SupplierEx;
 import io.activej.config.Config;
 import io.activej.eventloop.Eventloop;
@@ -29,8 +30,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -38,7 +42,7 @@ import static io.activej.config.converter.ConfigConverters.ofInteger;
 import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
 public class OneSlot implements OfStats {
-    public OneSlot(byte slot, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
+    public OneSlot(byte slot, short slotNumber, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
         this.segmentLength = ConfForSlot.global.confChunk.segmentLength;
         this.batchNumber = ConfForSlot.global.confWal.batchNumber;
 
@@ -139,10 +143,19 @@ public class OneSlot implements OfStats {
 
         DictMap.getInstance().setMasterUpdateCallback(masterUpdateCallback);
 
-        this.persistExecutors = new ExecutorService[batchNumber];
+        this.persistEventloopArray = new Eventloop[batchNumber];
+        final int idleMillis = 10;
         for (int i = 0; i < batchNumber; i++) {
-            var executor = Executors.newSingleThreadExecutor(new NamedThreadFactory("wal-p-s-" + slot + "-b-" + i));
-            persistExecutors[i] = executor;
+            var eventloop = Eventloop.builder()
+                    .withThreadName("persist-worker-slot-" + slot + "-batch-" + i)
+                    .withIdleInterval(Duration.ofMillis(idleMillis))
+                    .build();
+            eventloop.keepAlive(true);
+            this.persistEventloopArray[i] = eventloop;
+
+            var thread = chunkMerger.getPersistThreadFactoryForSlot(slot, slotNumber).newThread(eventloop);
+            thread.start();
+            log.info("Slot persist eventloop thread started, s={}, b={}", slot, i);
         }
 
         this.compressStats = new CompressStats("slot-" + slot);
@@ -416,7 +429,7 @@ public class OneSlot implements OfStats {
         return keyLoader.getKeyBuckets(bucketIndex);
     }
 
-    private final ExecutorService[] persistExecutors;
+    private final Eventloop[] persistEventloopArray;
 
     private LibC libC;
     private byte allWorkers;
@@ -1045,8 +1058,8 @@ public class OneSlot implements OfStats {
     }
 
     private void fixRequestWorkerChunkThreadId(Chunk chunk) {
-        var executor = persistExecutors[chunk.batchIndex];
-        executor.submit(() -> {
+        var eventloop = persistEventloopArray[chunk.batchIndex];
+        eventloop.submit(() -> {
             chunk.threadIdProtected = Thread.currentThread().threadId();
             chunk.setWorkerType(true, false, false);
             log.warn("Fix request worker chunk chunk thread id, w={}, rw={}, s={}, b={}, tid={}",
@@ -1063,8 +1076,8 @@ public class OneSlot implements OfStats {
         }
 
         if (workerId < requestWorkers) {
-            var executor = persistExecutors[batchIndex];
-            executor.submit(() -> {
+            var eventloop = persistEventloopArray[batchIndex];
+            eventloop.submit(() -> {
                 chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
             });
         } else {
@@ -1085,11 +1098,11 @@ public class OneSlot implements OfStats {
     }
 
     public void cleanUp() {
-        // executor shutdown before chunk clean up
-        for (var executor : persistExecutors) {
-            executor.shutdownNow();
+        // eventloop break before chunk clean up
+        for (var eventloop : persistEventloopArray) {
+            eventloop.breakEventloop();
         }
-        System.out.println("Slot handler persist executor shutdown, slot: " + slot);
+        System.out.println("Slot persist eventloop threads stopped, slot: " + slot);
 
         // close wal raf
         try {
@@ -1139,7 +1152,7 @@ public class OneSlot implements OfStats {
 
     }
 
-    private class PersistTask implements Runnable {
+    private class PersistTask implements RunnableEx {
         PersistTask(PersistTaskParams params, CompletableFuture<PersistTaskParams> cf) {
             this.params = params;
             this.cf = cf;
@@ -1180,7 +1193,7 @@ public class OneSlot implements OfStats {
                     }
 
                     if (!needMergeSegmentIndexList.isEmpty()) {
-                        chunkMerger.execute(workerId, slot, batchIndex, needMergeSegmentIndexList);
+                        chunkMerger.submit(workerId, slot, batchIndex, needMergeSegmentIndexList);
                     }
                 }
             } catch (Exception e) {
@@ -1221,8 +1234,8 @@ public class OneSlot implements OfStats {
                 walQueueArray[result.walGroupIndex].add(result.targetWal);
             }
         });
-        var executor = persistExecutors[targetWal.batchIndex];
-        executor.submit(persistTask);
+        var eventloop = persistEventloopArray[targetWal.batchIndex];
+        eventloop.submit(persistTask);
     }
 
     public TreeSet<ChunkMergeWorker.MergedSegment> getMergedSegmentSet(byte mergeWorkerId, byte workerId) {
@@ -1296,7 +1309,7 @@ public class OneSlot implements OfStats {
                     if (lastSegmentIndex - firstSegmentIndex + 1 == needMergeSegmentIndexList.size()) {
                         // wait until done
                         // write batch list duplicated if restart server
-                        int validCvCountAfterRun = chunkMerger.execute((byte) workerId, slot, (byte) batchIndex, needMergeSegmentIndexList).get();
+                        int validCvCountAfterRun = chunkMerger.submit((byte) workerId, slot, (byte) batchIndex, needMergeSegmentIndexList).get();
                         log.warn("Merge segments undone, w={}, s={}, b={}, i={}, end i={}, valid cv count after run: {}", workerId, slot, batchIndex,
                                 firstSegmentIndex, lastSegmentIndex, validCvCountAfterRun);
                     } else {
@@ -1309,7 +1322,7 @@ public class OneSlot implements OfStats {
                             var segmentIndex = needMergeSegmentIndexList.get(i);
                             if (segmentIndex - last != 1) {
                                 if (!onceList.isEmpty()) {
-                                    int validCvCountAfterRun = chunkMerger.execute((byte) workerId, slot, (byte) batchIndex, onceList).get();
+                                    int validCvCountAfterRun = chunkMerger.submit((byte) workerId, slot, (byte) batchIndex, onceList).get();
                                     log.warn("Merge segments undone, w={}, s={}, b={}, i={}, end i={} valid cv count after run: {}", workerId, slot, batchIndex,
                                             onceList.getFirst(), onceList.getLast(), validCvCountAfterRun);
                                     onceList.clear();
@@ -1320,7 +1333,7 @@ public class OneSlot implements OfStats {
                         }
 
                         if (!onceList.isEmpty()) {
-                            int validCvCountAfterRun = chunkMerger.execute((byte) workerId, slot, (byte) batchIndex, onceList).get();
+                            int validCvCountAfterRun = chunkMerger.submit((byte) workerId, slot, (byte) batchIndex, onceList).get();
                             log.warn("Merge segments undone, w={}, s={}, b={}, i={}, end i={} valid cv count after run: {}", workerId, slot, batchIndex,
                                     onceList.getFirst(), onceList.getLast(), validCvCountAfterRun);
                         }

@@ -40,6 +40,15 @@ public class ChunkMerger implements OfStats {
     }
 
     // decompress is cpu intensive
+    static final ThreadFactory persistWorkerThreadFactoryGroup1 = new AffinityThreadFactory("persist-worker-group1",
+            AffinityStrategies.SAME_CORE);
+    static final ThreadFactory persistWorkerThreadFactoryGroup2 = new AffinityThreadFactory("persist-worker-group2",
+            AffinityStrategies.SAME_CORE);
+    static final ThreadFactory persistWorkerThreadFactoryGroup3 = new AffinityThreadFactory("persist-worker-group3",
+            AffinityStrategies.SAME_CORE);
+    static final ThreadFactory persistWorkerThreadFactoryGroup4 = new AffinityThreadFactory("persist-worker-group4",
+            AffinityStrategies.SAME_CORE);
+
     static final ThreadFactory mergeWorkerThreadFactoryGroup1 = new AffinityThreadFactory("merge-worker-group1",
             AffinityStrategies.SAME_CORE);
     static final ThreadFactory mergeWorkerThreadFactoryGroup2 = new AffinityThreadFactory("merge-worker-group2",
@@ -53,6 +62,26 @@ public class ChunkMerger implements OfStats {
             AffinityStrategies.SAME_CORE);
     static final ThreadFactory topMergeWorkerThreadFactoryGroup2 = new AffinityThreadFactory("top-merge-worker-group2",
             AffinityStrategies.SAME_CORE);
+
+    static ThreadFactory getPersistThreadFactoryForSlot(byte slot, short slotNumber) {
+        final int step = 10;
+        if (slotNumber <= step) {
+            return persistWorkerThreadFactoryGroup1;
+        }
+
+        if (slotNumber <= step * 2) {
+            return slot < step ? persistWorkerThreadFactoryGroup1 : persistWorkerThreadFactoryGroup2;
+        }
+
+        int diff = slot % 4;
+        return switch (diff) {
+            case 0 -> persistWorkerThreadFactoryGroup1;
+            case 1 -> persistWorkerThreadFactoryGroup2;
+            case 2 -> persistWorkerThreadFactoryGroup3;
+            case 3 -> persistWorkerThreadFactoryGroup4;
+            default -> throw new IllegalStateException("Unexpected value: " + diff);
+        };
+    }
 
     public ChunkMerger(byte requestWorkers, byte mergeWorkers, byte topMergeWorkers, short slotNumber,
                        SnowFlake snowFlake, Config chunkConfig) {
@@ -116,7 +145,7 @@ public class ChunkMerger implements OfStats {
         }
     }
 
-    CompletableFuture<Integer> execute(byte workerId, byte slot, byte batchIndex, ArrayList<Integer> needMergeSegmentIndexList) {
+    CompletableFuture<Integer> submit(byte workerId, byte slot, byte batchIndex, ArrayList<Integer> needMergeSegmentIndexList) {
         var job = new ChunkMergeWorker.Job();
         job.workerId = workerId;
         job.slot = slot;
@@ -130,13 +159,14 @@ public class ChunkMerger implements OfStats {
             int chooseIndex = slot % chunkMergeWorkers.length;
             var mergeWorker = chunkMergeWorkers[chooseIndex];
             job.mergeWorker = mergeWorker;
-            return mergeWorker.execute(job);
+            return mergeWorker.submit(job);
         } else {
             if (workerId >= requestWorkers + chunkMergeWorkers.length) {
                 for (var topMergeWorker : topChunkMergeWorkers) {
                     if (topMergeWorker.mergeWorkerId == workerId) {
                         job.mergeWorker = topMergeWorker;
                         // use current thread when top merge worker merge self
+                        // wait or post later
                         return CompletableFuture.completedFuture(job.get());
                     }
                 }
@@ -145,7 +175,7 @@ public class ChunkMerger implements OfStats {
                 int chooseIndex = slot % topChunkMergeWorkers.length;
                 var topMergeWorker = topChunkMergeWorkers[chooseIndex];
                 job.mergeWorker = topMergeWorker;
-                return topMergeWorker.execute(job);
+                return topMergeWorker.submit(job);
             }
         }
         // should not reach here

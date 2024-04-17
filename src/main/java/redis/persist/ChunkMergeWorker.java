@@ -29,8 +29,7 @@ import static redis.CompressedValue.KEY_HEADER_LENGTH;
 import static redis.CompressedValue.VALUE_HEADER_LENGTH;
 import static redis.persist.Chunk.MERGE_READ_SEGMENT_ONCE_COUNT;
 import static redis.persist.Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED;
-import static redis.persist.ChunkMerger.mergeWorkerThreadFactoryGroup1;
-import static redis.persist.ChunkMerger.topMergeWorkerThreadFactoryGroup1;
+import static redis.persist.ChunkMerger.*;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
 public class ChunkMergeWorker implements OfStats {
@@ -151,7 +150,7 @@ public class ChunkMergeWorker implements OfStats {
         }
 
         if (!needMergeSegmentIndexListAll.isEmpty()) {
-            chunkMerger.execute(mergeWorkerId, slot, batchIndex, needMergeSegmentIndexListAll);
+            chunkMerger.submit(mergeWorkerId, slot, batchIndex, needMergeSegmentIndexListAll);
         }
 
         lastPersistAtMillis = System.currentTimeMillis();
@@ -222,7 +221,7 @@ public class ChunkMergeWorker implements OfStats {
         });
     }
 
-    private ThreadFactory getThreadFactoryGroup(byte mergeWorkerId) {
+    private ThreadFactory getMergeThreadFactoryForMergeWorker(byte mergeWorkerId) {
         // every cpu vCore has 10 threads
         // one core decompress usually 1000MB/s, 1 thread can handle 100MB/s
         // 4KB usually compress/decompress cost 10us
@@ -280,7 +279,7 @@ public class ChunkMergeWorker implements OfStats {
     void start() {
         for (int i = 0; i < eventloopArray.length; i++) {
             var eventloop = eventloopArray[i];
-            var thread = getThreadFactoryGroup(mergeWorkerId).newThread(eventloop);
+            var thread = getMergeThreadFactoryForMergeWorker(mergeWorkerId).newThread(eventloop);
             thread.start();
             log.info("Chunk merge worker eventloop thread started, w={}, b={}", mergeWorkerId, i);
         }
@@ -323,7 +322,7 @@ public class ChunkMergeWorker implements OfStats {
         return list;
     }
 
-    CompletableFuture<Integer> execute(Job job) {
+    CompletableFuture<Integer> submit(Job job) {
         return eventloopArray[job.batchIndex].submit(AsyncComputation.of(job));
     }
 

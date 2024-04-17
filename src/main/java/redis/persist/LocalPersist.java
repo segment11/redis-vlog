@@ -88,7 +88,7 @@ public class LocalPersist {
 
         this.oneSlots = new OneSlot[slotNumber];
         for (short i = 0; i < slotNumber; i++) {
-            var oneSlot = new OneSlot((byte) i, snowFlake, persistDir, persistConfig);
+            var oneSlot = new OneSlot((byte) i, slotNumber, snowFlake, persistDir, persistConfig);
             oneSlot.reuseNetWorkers = reuseNetWorkers;
             oneSlot.initChunks(libC, allWorkers, requestWorkers, mergeWorkers, topMergeWorkers);
 
@@ -116,7 +116,7 @@ public class LocalPersist {
     public int startChunkMergerJob(byte workerId, byte slot, byte batchIndex, int segmentIndex) throws ExecutionException, InterruptedException {
         ArrayList<Integer> segmentIndexList = new ArrayList<>();
         segmentIndexList.add(segmentIndex);
-        var i = chunkMerger.execute(workerId, slot, batchIndex, segmentIndexList).get();
+        var i = chunkMerger.submit(workerId, slot, batchIndex, segmentIndexList).get();
         if (i == -1) {
             throw new IllegalStateException("Merge segment error, w=" + workerId + ", s=" + slot + ", b=" + batchIndex + ", i=" + segmentIndex);
         }
