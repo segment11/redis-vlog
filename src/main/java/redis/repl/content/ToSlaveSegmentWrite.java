@@ -4,6 +4,7 @@ import io.activej.bytebuf.ByteBuf;
 import redis.repl.ReplContent;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class ToSlaveSegmentWrite implements ReplContent {
     private final byte workerId;
@@ -11,12 +12,12 @@ public class ToSlaveSegmentWrite implements ReplContent {
     private final int segmentLength;
     private final int segmentIndex;
     private final int segmentCount;
-    private final ArrayList<Long> segmentSeqList;
+    private final List<Long> segmentSeqList;
     private final byte[] bytes;
     private final int capacity;
 
     public ToSlaveSegmentWrite(byte workerId, byte batchIndex, int segmentLength, int segmentIndex, int segmentCount,
-                               ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
+                               List<Long> segmentSeqList, byte[] bytes, int capacity) {
         this.workerId = workerId;
         this.batchIndex = batchIndex;
         this.segmentLength = segmentLength;

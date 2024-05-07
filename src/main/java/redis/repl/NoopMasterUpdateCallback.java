@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 import redis.Dict;
 import redis.persist.Wal;
 
-import java.util.ArrayList;
+import java.util.List;
 
 // for debug and test
 public class NoopMasterUpdateCallback implements MasterUpdateCallback {
@@ -62,7 +62,7 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
 
     @Override
     public void onSegmentWrite(byte workerId, byte batchIndex, byte slot, int segmentLength,
-                               int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
+                               int segmentIndex, int segmentCount, List<Long> segmentSeqList, byte[] bytes, int capacity) {
         segmentWriteCount++;
         if (segmentWriteCount % 1000 == 0) {
             log.warn("onSegmentWrite called with workerId: {}, batchIndex: {}, slot: {}, segmentLength: {}, segmentIndex: {}, segmentCount: {}, segmentSeqList: {}, bytes.length: {}, capacity: {}",

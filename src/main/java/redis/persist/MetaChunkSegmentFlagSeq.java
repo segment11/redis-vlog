@@ -9,6 +9,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MetaChunkSegmentFlagSeq {
     private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
@@ -48,11 +50,10 @@ public class MetaChunkSegmentFlagSeq {
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
-    public synchronized byte[] getInMemoryCachedBytesOneWorker(byte workerId) {
-        var bytes = new byte[oneWorkerCapacity + 1];
-        bytes[0] = workerId;
-        var offset = workerId * oneWorkerCapacity;
-        System.arraycopy(inMemoryCachedBytes, offset, bytes, 1, oneWorkerCapacity);
+    public synchronized byte[] getInMemoryCachedBytesOneWorkerOneBatch(byte workerId, byte batchIndex) {
+        var bytes = new byte[oneBatchCapacity];
+        var offset = workerId * oneWorkerCapacity + batchIndex * oneBatchCapacity;
+        System.arraycopy(inMemoryCachedBytes, offset, bytes, 0, oneBatchCapacity);
         return bytes;
     }
 
@@ -140,6 +141,18 @@ public class MetaChunkSegmentFlagSeq {
 
             callBack.call(workerId, (byte) batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
         }
+    }
+
+    public synchronized List<Long> getSomeSegmentsSeqList(byte workerId, byte batchIndex, int beginSegmentIndex, int segmentCount) {
+        var offset = workerId * oneWorkerCapacity +
+                batchIndex * oneBatchCapacity +
+                beginSegmentIndex * ONE_LENGTH;
+        var list = new ArrayList<Long>();
+        for (int i = beginSegmentIndex; i < beginSegmentIndex + segmentCount; i++) {
+            list.add(inMemoryCachedByteBuffer.getLong(offset + 2));
+            offset += ONE_LENGTH;
+        }
+        return list;
     }
 
     public synchronized void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte mergeWorkerId, long segmentSeq) {

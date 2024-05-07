@@ -3,6 +3,7 @@ package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.annotations.NotNull;
 import redis.BaseCommand;
 import redis.ConfForSlot;
 import redis.Dict;
@@ -23,6 +24,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.TreeMap;
 
 import static redis.repl.ReplType.hi;
@@ -256,7 +258,7 @@ public class XGroup extends BaseCommand {
     }
 
     private Reply wal_append_batch(byte slot, byte[] contentBytes) {
-        // client received hi from server
+        // client received from server
         // refer to ToSlaveWalAppendBatch.encodeTo
         var buffer = ByteBuffer.wrap(contentBytes);
         var batchCount = buffer.getShort();
@@ -378,13 +380,97 @@ public class XGroup extends BaseCommand {
 
     private Reply exists_chunk_segments(byte slot, byte[] contentBytes) {
         // server received from client
-        // todo
-        return Repl.reply(slot, replPair, ReplType.s_exists_chunk_segments, new EmptyContent());
+        var oneSlot = localPersist.oneSlot(slot);
+        var flag = contentBytes[0];
+        var workerId = contentBytes[1];
+        var batchIndex = contentBytes[2];
+
+        if (flag == ToMasterExistsSegmentMeta.FLAG_IS_MY_CHARGE) {
+            // refer to ToMasterExistsSegmentMeta.encodeTo
+            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeqBytesOneWorkerOneBatchToSlaveExists(workerId, batchIndex);
+
+            var oncePulls = ToMasterExistsSegmentMeta.diffMasterAndSlave(metaBytes, contentBytes);
+            return Repl.reply(slot, replPair, ReplType.s_exists_chunk_segments, new ToSlaveExistsSegmentMeta(workerId, batchIndex, oncePulls));
+        } else if (flag == ToMasterExistsSegmentOncePull.FLAG_IS_MY_CHARGE) {
+            // refer to ToMasterExistsSegmentOncePull.encodeTo
+            var buffer = ByteBuffer.wrap(contentBytes, 3, contentBytes.length - 3);
+            var oncePull = ToMasterExistsSegmentMeta.OncePull.decode(buffer);
+            return Repl.reply(slot, replPair, ReplType.s_exists_chunk_segments, new ToSlaveExistsSegmentOncePull(oneSlot, workerId, batchIndex, oncePull));
+        } else {
+            throw new IllegalArgumentException("Repl handle error: unknown flag");
+        }
     }
 
     private Reply s_exists_chunk_segments(byte slot, byte[] contentBytes) {
         // client received from server
-        return Repl.reply(slot, replPair, ReplType.exists_all_done, new EmptyContent());
+        var oneSlot = localPersist.oneSlot(slot);
+        var flag = contentBytes[0];
+        var workerId = contentBytes[1];
+        var batchIndex = contentBytes[2];
+
+        if (flag == ToSlaveExistsSegmentMeta.FLAG_IS_MY_CHARGE) {
+            // refer to ToSlaveExistsSegmentMeta.encodeTo
+            var buffer = ByteBuffer.wrap(contentBytes, 3, contentBytes.length - 3);
+            var size = buffer.getInt();
+            if (size != 0) {
+                LinkedList<ToMasterExistsSegmentMeta.OncePull> oncePulls = new LinkedList<>();
+                for (int i = 0; i < size; i++) {
+                    var oncePull = ToMasterExistsSegmentMeta.OncePull.decode(buffer);
+                    oncePulls.add(oncePull);
+                }
+                oneSlot.resetOncePulls(workerId, batchIndex, oncePulls);
+                var firstOncePull = oncePulls.getFirst();
+                return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentOncePull(workerId, batchIndex, firstOncePull));
+            } else {
+                return nextExistsSegmentMetaReply(oneSlot, workerId, batchIndex);
+            }
+        } else if (flag == ToSlaveExistsSegmentOncePull.FLAG_IS_MY_CHARGE) {
+            // refer to ToSlaveExistsSegmentOncePull.encodeTo
+            var buffer = ByteBuffer.wrap(contentBytes, 3, contentBytes.length - 3);
+            var beginSegmentIndex = buffer.getInt();
+            var segmentCount = buffer.getInt();
+
+            var segmentSeqList = new ArrayList<Long>();
+            for (int i = 0; i < segmentCount; i++) {
+                segmentSeqList.add(buffer.getLong());
+            }
+
+            var bytes = new byte[buffer.remaining()];
+            buffer.get(bytes);
+
+            oneSlot.submitPersistTaskFromMasterExists(workerId, batchIndex, beginSegmentIndex, segmentCount, segmentSeqList, bytes);
+            var nextOncePull = oneSlot.removeOncePull(workerId, batchIndex, beginSegmentIndex);
+            if (nextOncePull == null) {
+                return nextExistsSegmentMetaReply(oneSlot, workerId, batchIndex);
+            } else {
+                return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentOncePull(workerId, batchIndex, nextOncePull));
+            }
+        } else {
+            throw new IllegalArgumentException("Repl handle error: unknown flag");
+        }
+    }
+
+    @NotNull
+    private Reply nextExistsSegmentMetaReply(OneSlot oneSlot, byte workerId, byte batchIndex) {
+        var slot = oneSlot.slot();
+        int batchNumber = ConfForSlot.global.confWal.batchNumber;
+        if (batchIndex < batchNumber - 1) {
+            // next batch
+            var nextBatchIndex = (byte) (batchIndex + 1);
+            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeqBytesOneWorkerOneBatchToSlaveExists(workerId, nextBatchIndex);
+            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentMeta(workerId, nextBatchIndex, metaBytes));
+        } else {
+            var allWorkers = oneSlot.getAllWorkers();
+            if (workerId < allWorkers - 1) {
+                // next worker
+                var nextWorkerId = (byte) (workerId + 1);
+                var metaBytes = oneSlot.getMetaChunkSegmentFlagSeqBytesOneWorkerOneBatchToSlaveExists(nextWorkerId, (byte) 0);
+                return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentMeta(nextWorkerId, (byte) 0, metaBytes));
+            } else {
+                // next step
+                return Repl.reply(slot, replPair, ReplType.exists_all_done, new EmptyContent());
+            }
+        }
     }
 
     private Reply exists_key_buckets(byte slot, byte[] contentBytes) {
@@ -422,7 +508,8 @@ public class XGroup extends BaseCommand {
         var isAllReceived = splitIndex == splitNumber - 1 && isLastBatchInThisSplit;
         if (isAllReceived) {
             // next step, fetch exists chunk segments
-            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new EmptyContent());
+            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeqBytesOneWorkerOneBatchToSlaveExists((byte) 0, (byte) 0);
+            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentMeta((byte) 0, (byte) 0, metaBytes));
         } else {
             var nextSplitIndex = isLastBatchInThisSplit ? splitIndex + 1 : splitIndex;
             var nextBeginBucketIndex = isLastBatchInThisSplit ? 0 : beginBucketIndex + KeyLoader.READ_BUCKET_FOR_REPL_BATCH_NUMBER;
@@ -470,7 +557,7 @@ public class XGroup extends BaseCommand {
     private Reply exists_big_string(byte slot, byte[] contentBytes) {
         // server received from client, send back exists big string to client, with flag can do next step
         // client already persisted big string uuid, send to client exclude sent big string
-        ArrayList<Long> sentUuidList = new ArrayList<>();
+        var sentUuidList = new ArrayList<Long>();
         if (contentBytes.length >= 8) {
             var sentUuidCount = contentBytes.length / 8;
 

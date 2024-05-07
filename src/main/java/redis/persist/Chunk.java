@@ -11,6 +11,7 @@ import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
 import redis.repl.MasterUpdateCallback;
+import redis.repl.content.ToMasterExistsSegmentMeta;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 
@@ -74,7 +75,13 @@ public class Chunk implements OfStats {
     ByteBuffer readSelfForMergingBatchBuffer;
     private long readSelfForMergingBatchAddress;
 
-    private final int BATCH_SEGMENT_COUNT_FOR_PWRITE = 4;
+    ByteBuffer readForReplBuffer;
+    private long readForReplAddress;
+
+    ByteBuffer writeForReplBuffer;
+    private long writeForReplAddress;
+
+    public static final int BATCH_SEGMENT_COUNT_FOR_PWRITE = 4;
 
     private ByteBuffer writePageBuffer;
     private ByteBuffer writePageBufferB;
@@ -137,6 +144,9 @@ public class Chunk implements OfStats {
 
             this.readForMergingBatchBuffer = ByteBuffer.allocate(npagesMerge * PAGE_SIZE);
             this.readSelfForMergingBatchBuffer = ByteBuffer.allocate(npagesMerge * PAGE_SIZE);
+
+            this.readForReplBuffer = ByteBuffer.allocate(segmentLength * ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT);
+            this.writeForReplBuffer = ByteBuffer.allocate(segmentLength * ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT);
         } else {
             var pageManager = PageManager.getInstance();
             var m = MemoryIO.getInstance();
@@ -156,6 +166,13 @@ public class Chunk implements OfStats {
                 this.readSelfForMergingBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
                 this.readSelfForMergingBatchBuffer = m.newDirectByteBuffer(readSelfForMergingBatchAddress, npagesMerge * PAGE_SIZE);
             }
+
+            var replPages = segmentLength * ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT / PAGE_SIZE;
+            this.readForReplAddress = pageManager.allocatePages(replPages, PROTECTION);
+            this.readForReplBuffer = m.newDirectByteBuffer(readForReplAddress, replPages * PAGE_SIZE);
+
+            this.writeForReplAddress = pageManager.allocatePages(replPages, PROTECTION);
+            this.writeForReplBuffer = m.newDirectByteBuffer(writeForReplAddress, replPages * PAGE_SIZE);
         }
     }
 
@@ -225,6 +242,37 @@ public class Chunk implements OfStats {
         int fd = fds[fdIndex];
         var fdOffset = (int) (offset % maxFdLength);
         return libC.pread(fd, buffer, buffer.capacity(), fdOffset);
+    }
+
+    byte[] preadForRepl(int targetSegmentIndex) {
+        readForReplBuffer.clear();
+
+        var segmentCount = ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
+        if (ConfForSlot.global.pureMemory) {
+            for (int i = 0; i < segmentCount; i++) {
+                var segmentIndex = targetSegmentIndex + i;
+                var segmentBytes = allBytesBySegmentIndex[segmentIndex];
+                if (segmentBytes != null) {
+                    readForReplBuffer.put(i * segmentLength, segmentBytes);
+                }
+            }
+        } else {
+            var offset = (long) targetSegmentIndex * segmentLength;
+
+            int fdIndex = targetFdIndex(targetSegmentIndex);
+            int fd = fds[fdIndex];
+            var fdOffset = (int) (offset % maxFdLength);
+
+            var n = libC.pread(fd, readForReplBuffer, readForReplBuffer.capacity(), fdOffset);
+            if (n != readForReplBuffer.capacity()) {
+                throw new IllegalStateException("Read persisted segment index error, fd: " + fd + ", offset: " + offset +
+                        ", length: " + readForReplBuffer.capacity() + ", last error: " + libC.strerror(n));
+            }
+        }
+
+        var bytes = new byte[readForReplBuffer.capacity()];
+        readForReplBuffer.position(0).get(bytes);
+        return bytes;
     }
 
     private long preadCostNanos;
@@ -304,6 +352,23 @@ public class Chunk implements OfStats {
 
             readSelfForMergingBatchAddress = 0;
             readSelfForMergingBatchBuffer = null;
+        }
+
+        var replPages = segmentLength * ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT / PAGE_SIZE;
+        if (readForReplAddress != 0) {
+            pageManager.freePages(readForReplAddress, replPages);
+            System.out.println("Clean up chunk, w=" + workerId + ", s=" + slot + ", b=" + batchIndex + ", read for repl page address: " + readForReplAddress);
+
+            readForReplAddress = 0;
+            readForReplBuffer = null;
+        }
+
+        if (writeForReplAddress != 0) {
+            pageManager.freePages(writeForReplAddress, replPages);
+            System.out.println("Clean up chunk, w=" + workerId + ", s=" + slot + ", b=" + batchIndex + ", write for repl page address: " + writeForReplAddress);
+
+            writeForReplAddress = 0;
+            writeForReplBuffer = null;
         }
 
         if (fds != null) {
@@ -429,7 +494,7 @@ public class Chunk implements OfStats {
             return null;
         }
 
-        ArrayList<Long> segmentSeqListAll = new ArrayList<>();
+        List<Long> segmentSeqListAll = new ArrayList<>();
         for (var segment : segments) {
             segmentSeqListAll.add(segment.segmentSeq());
         }
@@ -445,7 +510,7 @@ public class Chunk implements OfStats {
                 allBytesBySegmentIndex[segment.segmentIndex()] = bytes;
 
                 if (masterUpdateCallback != null) {
-                    ArrayList<Long> segmentSeqList = new ArrayList<>();
+                    List<Long> segmentSeqList = new ArrayList<>();
                     segmentSeqList.add(segment.segmentSeq());
                     masterUpdateCallback.onSegmentWrite(workerId, batchIndex, slot, segmentLength,
                             segment.segmentIndex(), 1, segmentSeqList, bytes, bytes.length);
@@ -462,7 +527,7 @@ public class Chunk implements OfStats {
                     writePageBuffer.clear();
                     writePageBuffer.put(segment.tightBytesWithLength());
 
-                    ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
+                    List<Long> segmentSeqListSubBatch = new ArrayList<>();
                     segmentSeqListSubBatch.add(segment.segmentSeq());
 
                     boolean isNewAppend = writeSegments(writePageBuffer, 1, segmentSeqListSubBatch);
@@ -481,7 +546,7 @@ public class Chunk implements OfStats {
 
                 for (int i = 0; i < batchCount; i++) {
                     writePageBufferB.clear();
-                    ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
+                    List<Long> segmentSeqListSubBatch = new ArrayList<>();
                     for (int j = 0; j < BATCH_SEGMENT_COUNT_FOR_PWRITE; j++) {
                         var segment = segments.get(i * BATCH_SEGMENT_COUNT_FOR_PWRITE + j);
                         var tightBytesWithLength = segment.tightBytesWithLength();
@@ -510,7 +575,7 @@ public class Chunk implements OfStats {
                     writePageBuffer.clear();
                     writePageBuffer.put(segment.tightBytesWithLength());
 
-                    ArrayList<Long> segmentSeqListSubBatch = new ArrayList<>();
+                    List<Long> segmentSeqListSubBatch = new ArrayList<>();
                     segmentSeqListSubBatch.add(segment.segmentSeq());
 
                     boolean isNewAppend = writeSegments(writePageBuffer, 1, segmentSeqListSubBatch);
@@ -618,25 +683,35 @@ public class Chunk implements OfStats {
     private long pwriteCostNanos;
     private long pwriteCount;
 
-    public boolean writeSegmentsFromMasterNewly(byte[] bytes, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, int capacity) {
+    public boolean writeSegmentsFromMasterNewly(byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
         if (ConfForSlot.global.pureMemory) {
             if (capacity != bytes.length) {
                 throw new RuntimeException("Write buffer capacity not match, expect: " + capacity + ", actual: " + bytes.length);
             }
 
-            if (segmentCount != 1) {
-                throw new RuntimeException("Segment count not match, expect: 1, actual: " + segmentCount);
-            }
-
             var isNewAppend = allBytesBySegmentIndex[segmentIndex] == null;
-            allBytesBySegmentIndex[segmentIndex] = bytes;
+            if (segmentCount == 1) {
+                allBytesBySegmentIndex[segmentIndex] = bytes;
 
-            oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex,
-                    isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqList.getFirst());
+                oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex,
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqList.getFirst());
+            } else {
+                for (int i = 0; i < segmentCount; i++) {
+                    // trim 0, todo
+                    var oneSegmentBytes = new byte[segmentLength];
+                    System.arraycopy(bytes, i * segmentLength, oneSegmentBytes, 0, segmentLength);
+
+                    allBytesBySegmentIndex[segmentIndex + i] = oneSegmentBytes;
+                }
+
+                oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, segmentCount,
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqList);
+            }
 
             return isNewAppend;
         } else {
-            var writeBuffer = segmentCount == BATCH_SEGMENT_COUNT_FOR_PWRITE ? writePageBufferB : writePageBuffer;
+            var writeBuffer = segmentCount == ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT ? writeForReplBuffer :
+                    (segmentCount == BATCH_SEGMENT_COUNT_FOR_PWRITE ? writePageBufferB : writePageBuffer);
             if (writeBuffer.capacity() != capacity) {
                 throw new RuntimeException("Write buffer capacity not match, expect: " + capacity + ", actual: " + writeBuffer.capacity());
             }
@@ -659,7 +734,7 @@ public class Chunk implements OfStats {
         }
     }
 
-    private boolean writeSegments(ByteBuffer writeBuffer, int segmentCount, ArrayList<Long> segmentSeqList) {
+    private boolean writeSegments(ByteBuffer writeBuffer, int segmentCount, List<Long> segmentSeqList) {
         int fdIndex = targetFdIndex();
         int fd = fds[fdIndex];
 

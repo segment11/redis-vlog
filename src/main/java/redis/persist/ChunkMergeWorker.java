@@ -215,7 +215,7 @@ public class ChunkMergeWorker implements OfStats {
         });
     }
 
-    public void submitWriteSegmentsMasterNewly(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, int capacity) {
+    public void submitWriteSegmentsMasterNewly(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
         this.eventloopArray[chunk.batchIndex].submit(() -> {
             chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
         });

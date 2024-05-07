@@ -20,6 +20,7 @@ import redis.command.XGroup;
 import redis.repl.MasterUpdateCallback;
 import redis.repl.ReplPair;
 import redis.repl.SendToSlaveMasterUpdateCallback;
+import redis.repl.content.ToMasterExistsSegmentMeta;
 import redis.repl.content.ToSlaveWalAppendBatch;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
@@ -333,8 +334,8 @@ public class OneSlot implements OfStats {
     private static final String BIG_STRING_DIR_NAME = "big-string";
     private final File bigStringDir;
 
-    public ArrayList<Long> getBigStringFileUuidList() {
-        ArrayList<Long> list = new ArrayList<>();
+    public List<Long> getBigStringFileUuidList() {
+        var list = new ArrayList<Long>();
         File[] files = bigStringDir.listFiles();
         for (File file : files) {
             list.add(Long.parseLong(file.getName()));
@@ -432,6 +433,11 @@ public class OneSlot implements OfStats {
     private final Eventloop[] persistEventloopArray;
 
     private LibC libC;
+
+    public byte getAllWorkers() {
+        return allWorkers;
+    }
+
     private byte allWorkers;
     private byte requestWorkers;
     private byte mergeWorkers;
@@ -460,8 +466,8 @@ public class OneSlot implements OfStats {
 
     private MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
 
-    public byte[] getMetaChunkSegmentFlagSeqBytesOneWorkerToSlaveExists(byte workerId) {
-        return metaChunkSegmentFlagSeq.getInMemoryCachedBytesOneWorker(workerId);
+    public byte[] getMetaChunkSegmentFlagSeqBytesOneWorkerOneBatchToSlaveExists(byte workerId, byte batchIndex) {
+        return metaChunkSegmentFlagSeq.getInMemoryCachedBytesOneWorkerOneBatch(workerId, batchIndex);
     }
 
     public void overwriteMetaChunkSegmentFlagSeqBytesOneWorkerFromMasterExists(byte[] bytes) {
@@ -961,6 +967,40 @@ public class OneSlot implements OfStats {
         }
     }
 
+    private HashMap<Short, LinkedList<ToMasterExistsSegmentMeta.OncePull>> oncePullsByWorkerAndBatchIndex = new HashMap<>();
+
+    public void resetOncePulls(byte workerId, byte batchIndex, LinkedList<ToMasterExistsSegmentMeta.OncePull> oncePulls) {
+        var key = (short) ((workerId << 8) | batchIndex);
+        this.oncePullsByWorkerAndBatchIndex.put(key, oncePulls);
+    }
+
+    public ToMasterExistsSegmentMeta.OncePull removeOncePull(byte workerId, byte batchIndex, int beginSegmentIndex) {
+        var key = (short) ((workerId << 8) | batchIndex);
+        var oncePulls = oncePullsByWorkerAndBatchIndex.get(key);
+        if (oncePulls == null) {
+            return null;
+        }
+
+        var it = oncePulls.iterator();
+        while (it.hasNext()) {
+            var oncePull = it.next();
+            if (oncePull.beginSegmentIndex() == beginSegmentIndex) {
+                it.remove();
+                break;
+            }
+        }
+
+        var it2 = oncePulls.iterator();
+        while (it2.hasNext()) {
+            var oncePull = it2.next();
+            if (oncePull.beginSegmentIndex() > beginSegmentIndex) {
+                return oncePull;
+            }
+        }
+
+        return null;
+    }
+
     public void flush() {
         // can truncate all batch for better perf, todo
         for (var wals : walsArray) {
@@ -1068,7 +1108,7 @@ public class OneSlot implements OfStats {
     }
 
     public void submitPersistTaskFromMasterNewly(byte workerId, byte batchIndex, int segmentLength, int segmentIndex, int segmentCount,
-                                                 ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
+                                                 List<Long> segmentSeqList, byte[] bytes, int capacity) {
         var chunk = chunksArray[workerId][batchIndex];
         if (chunk.segmentLength != segmentLength) {
             throw new IllegalStateException("Segment length not match, chunk segment length: " + chunk.segmentLength +
@@ -1087,6 +1127,26 @@ public class OneSlot implements OfStats {
         }
     }
 
+    public void submitPersistTaskFromMasterExists(byte workerId, byte batchIndex, int segmentIndex, int segmentCount,
+                                                  List<Long> segmentSeqList, byte[] bytes) {
+        var chunk = chunksArray[workerId][batchIndex];
+        if (bytes.length != chunk.segmentLength * segmentCount) {
+            throw new IllegalStateException("Bytes length not match, bytes length: " + bytes.length +
+                    ", segment length: " + chunk.segmentLength + ", segment count: " + segmentCount);
+        }
+
+        if (workerId < requestWorkers) {
+            var eventloop = persistEventloopArray[batchIndex];
+            eventloop.submit(() -> {
+                chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);
+            });
+        } else {
+            // merge worker
+            chunkMerger.getChunkMergeWorker(workerId).submitWriteSegmentsMasterNewly(chunk,
+                    bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);
+        }
+    }
+
     public int preadForMerge(byte workerId, byte batchIndex, int segmentIndex, ByteBuffer buffer, long offset) {
         var chunk = chunksArray[workerId][batchIndex];
         return chunk.preadForMerge(segmentIndex, buffer, offset);
@@ -1095,6 +1155,11 @@ public class OneSlot implements OfStats {
     public byte[] preadSegmentTightBytesWithLength(byte workerId, byte batchIndex, int segmentIndex) {
         var chunk = chunksArray[workerId][batchIndex];
         return chunk.preadSegmentTightBytesWithLength(segmentIndex);
+    }
+
+    public byte[] preadForRepl(byte workerId, byte batchIndex, int segmentIndex) {
+        var chunk = chunksArray[workerId][batchIndex];
+        return chunk.preadForRepl(segmentIndex);
     }
 
     public void cleanUp() {
@@ -1272,8 +1337,12 @@ public class OneSlot implements OfStats {
         metaChunkSegmentFlagSeq.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
     }
 
+    public List<Long> getSomeSegmentsSeqList(byte workerId, byte batchIndex, int segmentIndex, int segmentCount) {
+        return metaChunkSegmentFlagSeq.getSomeSegmentsSeqList(workerId, batchIndex, segmentIndex, segmentCount);
+    }
+
     public void setSegmentMergeFlagBatch(byte workerId, byte batchIndex, int segmentIndex, int segmentCount,
-                                         byte flag, byte mergeWorkerId, ArrayList<Long> segmentSeqList) {
+                                         byte flag, byte mergeWorkerId, List<Long> segmentSeqList) {
         var bytes = new byte[segmentCount * MetaChunkSegmentFlagSeq.ONE_LENGTH];
         var buffer = ByteBuffer.wrap(bytes);
         for (int i = 0; i < segmentCount; i++) {

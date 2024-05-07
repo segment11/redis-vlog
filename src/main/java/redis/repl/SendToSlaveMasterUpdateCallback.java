@@ -5,7 +5,7 @@ import redis.persist.Wal;
 import redis.repl.content.*;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.util.List;
 
 public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
     private final GetCurrentSlaveReplPairList getCurrentSlaveReplPairList;
@@ -77,7 +77,7 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
 
     @Override
     public void onSegmentWrite(byte workerId, byte batchIndex, byte slot, int segmentLength, int segmentIndex, int segmentCount,
-                               ArrayList<Long> segmentSeqList, byte[] bytes, int capacity) {
+                               List<Long> segmentSeqList, byte[] bytes, int capacity) {
         var toSlaveSegmentWrite = new ToSlaveSegmentWrite(workerId, batchIndex, segmentLength, segmentIndex, segmentCount,
                 segmentSeqList, bytes, capacity);
         var replPairList = getCurrentSlaveReplPairList.get();

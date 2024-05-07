@@ -7,15 +7,16 @@ import redis.repl.ReplContent;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 public class ToSlaveExistsBigString implements ReplContent {
     private final File bigStringDir;
-    private final ArrayList<Long> toSendUuidList;
+    private final List<Long> toSendUuidList;
     private final boolean isSendAllOnce;
 
     private static final int ONCE_SEND_BIG_STRING_COUNT = 10;
 
-    public ToSlaveExistsBigString(File bigStringDir, ArrayList<Long> uuidListInMaster, ArrayList<Long> sentUuidList) {
+    public ToSlaveExistsBigString(File bigStringDir, List<Long> uuidListInMaster, List<Long> sentUuidList) {
         this.bigStringDir = bigStringDir;
 
         var toSendUuidList = new ArrayList<Long>();

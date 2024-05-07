@@ -3,7 +3,7 @@ package redis.repl;
 import redis.Dict;
 import redis.persist.Wal;
 
-import java.util.ArrayList;
+import java.util.List;
 
 public interface MasterUpdateCallback {
     void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes);
@@ -20,7 +20,7 @@ public interface MasterUpdateCallback {
     void onDictCreate(String key, Dict dict);
 
     void onSegmentWrite(byte workerId, byte batchIndex, byte slot, int segmentLength,
-                        int segmentIndex, int segmentCount, ArrayList<Long> segmentSeqList, byte[] bytes, int capacity);
+                        int segmentIndex, int segmentCount, List<Long> segmentSeqList, byte[] bytes, int capacity);
 
     void onBigStringFileWrite(byte slot, long uuid, byte[] bytes);
 
