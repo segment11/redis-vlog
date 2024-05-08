@@ -17,6 +17,11 @@ import java.util.concurrent.TimeUnit;
 public class BenchmarkSnowFlake {
     private final SnowFlake snowFlake = new SnowFlake(0, 0);
 
+    /*
+Benchmark                   Mode  Cnt  Score   Error   Units
+BenchmarkSnowFlake.nextId  thrpt       8.192          ops/us
+BenchmarkSnowFlake.nextId   avgt       0.244           us/op
+     */
     @Benchmark
     public void nextId() {
         snowFlake.nextId();

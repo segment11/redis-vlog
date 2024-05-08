@@ -1,7 +1,5 @@
 package redis;
 
-import java.util.Date;
-
 public class SnowFlake {
     private final static long START_STAMP = 1701354128058L;
 
@@ -76,14 +74,5 @@ public class SnowFlake {
 
     private long getNewStamp() {
         return System.currentTimeMillis();
-    }
-
-    public static void main(String[] args) {
-        var startDate = new Date(START_STAMP);
-        System.out.println("start date: " + startDate);
-        var snowFlake = new SnowFlake(2, 3);
-        for (int i = 0; i < (1 << 12); i++) {
-            System.out.println(snowFlake.nextId());
-        }
     }
 }
