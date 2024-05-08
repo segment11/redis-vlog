@@ -245,6 +245,7 @@ public class Chunk implements OfStats {
     }
 
     byte[] preadForRepl(int targetSegmentIndex) {
+        checkCurrentThread();
         readForReplBuffer.clear();
 
         var segmentCount = ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
@@ -462,17 +463,13 @@ public class Chunk implements OfStats {
     // 32 segments is enough for 1000 Wal.V persist
     static final int ONCE_PREPARE_SEGMENT_COUNT = 32;
 
-    long threadIdProtected = -1;
+    long threadIdProtectedWhenWrite = -1;
 
     private static final ArrayList<Integer> EMPTY_LIST = new ArrayList<>();
 
     // return need merge segment index array
     public ArrayList<Integer> persist(ArrayList<Wal.V> list) {
-        var currentThreadId = Thread.currentThread().threadId();
-        if (threadIdProtected != -1 && threadIdProtected != currentThreadId) {
-            throw new IllegalStateException("Thread id not match, w=" + workerId + ", s=" + slot + ", b=" + batchIndex +
-                    ", t=" + currentThreadId + ", t2=" + threadIdProtected);
-        }
+        checkCurrentThread();
         if (Debug.getInstance().perfSkipPersist) {
             return EMPTY_LIST;
         }
@@ -629,6 +626,14 @@ public class Chunk implements OfStats {
         return needMergeSegmentIndexList;
     }
 
+    private void checkCurrentThread() {
+        var currentThreadId = Thread.currentThread().threadId();
+        if (threadIdProtectedWhenWrite != -1 && threadIdProtectedWhenWrite != currentThreadId) {
+            throw new IllegalStateException("Thread id not match, w=" + workerId + ", s=" + slot + ", b=" + batchIndex +
+                    ", t=" + currentThreadId + ", t2=" + threadIdProtectedWhenWrite);
+        }
+    }
+
     private void moveIndexForPrepare() {
         int leftSegmentCountThisFd = maxSegmentNumberPerFd - segmentIndex % maxSegmentNumberPerFd;
         if (leftSegmentCountThisFd < ONCE_PREPARE_SEGMENT_COUNT) {
@@ -735,6 +740,8 @@ public class Chunk implements OfStats {
     }
 
     private boolean writeSegments(ByteBuffer writeBuffer, int segmentCount, List<Long> segmentSeqList) {
+        checkCurrentThread();
+
         int fdIndex = targetFdIndex();
         int fd = fds[fdIndex];
 

@@ -103,7 +103,7 @@ public class LocalPersist {
     }
 
     public void fixSlotThreadId(byte slot, long threadId) {
-        oneSlots[slot].threadIdProtected = threadId;
+        oneSlots[slot].threadIdProtectedWhenPut = threadId;
         log.warn("Fix slot thread id, s={}, tid={}", slot, threadId);
     }
 

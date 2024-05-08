@@ -206,12 +206,12 @@ public class ChunkMergeWorker implements OfStats {
         log.info("Create chunk merge handle eventloop {}", mergeWorkerId);
     }
 
-    public void fixChunkThreadId(Chunk chunk) {
+    public void fixMergeHandleChunkThreadId(Chunk chunk) {
         this.mergeHandleEventloopArray[chunk.batchIndex].submit(() -> {
-            chunk.threadIdProtected = Thread.currentThread().threadId();
+            chunk.threadIdProtectedWhenWrite = Thread.currentThread().threadId();
             chunk.setWorkerType(false, true, isTopMergeWorker);
             log.warn("Fix merge worker chunk thread id, w={}, mw={}, s={}, b={}, tid={}",
-                    chunk.workerId, mergeWorkerId, chunk.slot, chunk.batchIndex, chunk.threadIdProtected);
+                    chunk.workerId, mergeWorkerId, chunk.slot, chunk.batchIndex, chunk.threadIdProtectedWhenWrite);
         });
     }
 

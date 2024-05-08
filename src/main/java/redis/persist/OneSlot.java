@@ -34,6 +34,7 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -454,7 +455,7 @@ public class OneSlot implements OfStats {
 
         for (int i = requestWorkers; i < allWorkers; i++) {
             for (var chunk : chunksArray[i]) {
-                chunkMerger.getChunkMergeWorker((byte) i).fixChunkThreadId(chunk);
+                chunkMerger.getChunkMergeWorker((byte) i).fixMergeHandleChunkThreadId(chunk);
             }
         }
 
@@ -829,7 +830,7 @@ public class OneSlot implements OfStats {
         return isRemoved;
     }
 
-    long threadIdProtected = -1;
+    long threadIdProtectedWhenPut = -1;
 
     // thread safe, same slot, same event loop
     public void put(byte workerId, String key, int bucketIndex, CompressedValue cv) {
@@ -896,9 +897,9 @@ public class OneSlot implements OfStats {
 
     private void checkCurrentThread(byte workerId) {
         var currentThreadId = Thread.currentThread().threadId();
-        if (threadIdProtected != -1 && threadIdProtected != currentThreadId) {
+        if (threadIdProtectedWhenPut != -1 && threadIdProtectedWhenPut != currentThreadId) {
             throw new IllegalStateException("Thread id not match, w=" + workerId + ", s=" + slot +
-                    ", t=" + currentThreadId + ", t2=" + threadIdProtected);
+                    ", t=" + currentThreadId + ", t2=" + threadIdProtectedWhenPut);
         }
     }
 
@@ -1061,7 +1062,7 @@ public class OneSlot implements OfStats {
                 initChunk(chunk);
 
                 if (i < requestWorkers) {
-                    fixRequestWorkerChunkThreadId(chunk);
+                    fixRequestHandleChunkThreadId(chunk);
                 }
             }
         }
@@ -1100,13 +1101,13 @@ public class OneSlot implements OfStats {
         }
     }
 
-    private void fixRequestWorkerChunkThreadId(Chunk chunk) {
+    private void fixRequestHandleChunkThreadId(Chunk chunk) {
         var persistHandleEventloop = persistHandleEventloopArray[chunk.batchIndex];
         persistHandleEventloop.submit(() -> {
-            chunk.threadIdProtected = Thread.currentThread().threadId();
+            chunk.threadIdProtectedWhenWrite = Thread.currentThread().threadId();
             chunk.setWorkerType(true, false, false);
             log.warn("Fix request worker chunk chunk thread id, w={}, rw={}, s={}, b={}, tid={}",
-                    chunk.workerId, chunk.workerId, slot, chunk.batchIndex, chunk.threadIdProtected);
+                    chunk.workerId, chunk.workerId, slot, chunk.batchIndex, chunk.threadIdProtectedWhenWrite);
         });
     }
 
@@ -1162,7 +1163,16 @@ public class OneSlot implements OfStats {
 
     public byte[] preadForRepl(byte workerId, byte batchIndex, int segmentIndex) {
         var chunk = chunksArray[workerId][batchIndex];
-        return chunk.preadForRepl(segmentIndex);
+
+        var persistHandleEventloop = persistHandleEventloopArray[batchIndex];
+        var f = persistHandleEventloop.submit(AsyncComputation.of(() -> chunk.preadForRepl(segmentIndex)));
+        try {
+            return f.get();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void cleanUp() {
