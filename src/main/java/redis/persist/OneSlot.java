@@ -144,19 +144,19 @@ public class OneSlot implements OfStats {
 
         DictMap.getInstance().setMasterUpdateCallback(masterUpdateCallback);
 
-        this.persistEventloopArray = new Eventloop[batchNumber];
+        this.persistHandleEventloopArray = new Eventloop[batchNumber];
         final int idleMillis = 10;
         for (int i = 0; i < batchNumber; i++) {
-            var eventloop = Eventloop.builder()
+            var persistHandleEventloop = Eventloop.builder()
                     .withThreadName("persist-worker-slot-" + slot + "-batch-" + i)
                     .withIdleInterval(Duration.ofMillis(idleMillis))
                     .build();
-            eventloop.keepAlive(true);
-            this.persistEventloopArray[i] = eventloop;
+            persistHandleEventloop.keepAlive(true);
+            this.persistHandleEventloopArray[i] = persistHandleEventloop;
 
-            var thread = chunkMerger.getPersistThreadFactoryForSlot(slot, slotNumber).newThread(eventloop);
+            var thread = chunkMerger.getPersistThreadFactoryForSlot(slot, slotNumber).newThread(persistHandleEventloop);
             thread.start();
-            log.info("Slot persist eventloop thread started, s={}, b={}", slot, i);
+            log.info("Slot persist handle eventloop thread started, s={}, b={}", slot, i);
         }
 
         this.compressStats = new CompressStats("slot-" + slot);
@@ -216,7 +216,7 @@ public class OneSlot implements OfStats {
 
         var replPair = new ReplPair(slot, false, host, port);
         replPair.setSlaveUuid(masterUuid);
-        replPair.initAsSlave(eventloop, requestHandler);
+        replPair.initAsSlave(requestHandleEventloop, requestHandler);
         log.warn("Create repl pair as slave, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
 
@@ -283,22 +283,22 @@ public class OneSlot implements OfStats {
         for (var replPair1 : replPairs) {
             if (replPair1.equals(replPair)) {
                 log.warn("Repl pair already exists, host: {}, port: {}, slot: {}", host, port, slot);
-                replPair1.initAsMaster(slaveUuid, eventloop, requestHandler);
+                replPair1.initAsMaster(slaveUuid, requestHandleEventloop, requestHandler);
                 return replPair1;
             }
         }
 
-        replPair.initAsMaster(slaveUuid, eventloop, requestHandler);
+        replPair.initAsMaster(slaveUuid, requestHandleEventloop, requestHandler);
         log.warn("Create repl pair as master, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
         return replPair;
     }
 
-    public void setEventloop(Eventloop eventloop) {
-        this.eventloop = eventloop;
+    public void setRequestHandleEventloop(Eventloop requestHandleEventloop) {
+        this.requestHandleEventloop = requestHandleEventloop;
     }
 
-    private Eventloop eventloop;
+    private Eventloop requestHandleEventloop;
 
     public void setRequestHandler(RequestHandler requestHandler) {
         this.requestHandler = requestHandler;
@@ -316,7 +316,7 @@ public class OneSlot implements OfStats {
             }
         }
 
-        return eventloop.submit(AsyncComputation.of(supplierEx));
+        return requestHandleEventloop.submit(AsyncComputation.of(supplierEx));
     }
 
     private final byte slot;
@@ -430,7 +430,7 @@ public class OneSlot implements OfStats {
         return keyLoader.getKeyBuckets(bucketIndex);
     }
 
-    private final Eventloop[] persistEventloopArray;
+    private final Eventloop[] persistHandleEventloopArray;
 
     private LibC libC;
 
@@ -833,12 +833,7 @@ public class OneSlot implements OfStats {
 
     // thread safe, same slot, same event loop
     public void put(byte workerId, String key, int bucketIndex, CompressedValue cv) {
-        var currentThreadId = Thread.currentThread().threadId();
-        if (threadIdProtected != -1 && threadIdProtected != currentThreadId) {
-            throw new IllegalStateException("Thread id not match, w=" + workerId + ", s=" + slot +
-                    ", t=" + currentThreadId + ", t2=" + threadIdProtected);
-        }
-
+        checkCurrentThread(workerId);
         if (isReadonly()) {
             throw new ReadonlyException();
         }
@@ -897,6 +892,14 @@ public class OneSlot implements OfStats {
         }
 
         doPersist(walGroupIndex, key, bucketIndex, putResult);
+    }
+
+    private void checkCurrentThread(byte workerId) {
+        var currentThreadId = Thread.currentThread().threadId();
+        if (threadIdProtected != -1 && threadIdProtected != currentThreadId) {
+            throw new IllegalStateException("Thread id not match, w=" + workerId + ", s=" + slot +
+                    ", t=" + currentThreadId + ", t2=" + threadIdProtected);
+        }
     }
 
     private void doPersist(int walGroupIndex, String key, int bucketIndex, Wal.PutResult putResult) {
@@ -1098,8 +1101,8 @@ public class OneSlot implements OfStats {
     }
 
     private void fixRequestWorkerChunkThreadId(Chunk chunk) {
-        var eventloop = persistEventloopArray[chunk.batchIndex];
-        eventloop.submit(() -> {
+        var persistHandleEventloop = persistHandleEventloopArray[chunk.batchIndex];
+        persistHandleEventloop.submit(() -> {
             chunk.threadIdProtected = Thread.currentThread().threadId();
             chunk.setWorkerType(true, false, false);
             log.warn("Fix request worker chunk chunk thread id, w={}, rw={}, s={}, b={}, tid={}",
@@ -1116,8 +1119,8 @@ public class OneSlot implements OfStats {
         }
 
         if (workerId < requestWorkers) {
-            var eventloop = persistEventloopArray[batchIndex];
-            eventloop.submit(() -> {
+            var persistHandleEventloop = persistHandleEventloopArray[batchIndex];
+            persistHandleEventloop.submit(() -> {
                 chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
             });
         } else {
@@ -1136,8 +1139,8 @@ public class OneSlot implements OfStats {
         }
 
         if (workerId < requestWorkers) {
-            var eventloop = persistEventloopArray[batchIndex];
-            eventloop.submit(() -> {
+            var persistHandleEventloop = persistHandleEventloopArray[batchIndex];
+            persistHandleEventloop.submit(() -> {
                 chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);
             });
         } else {
@@ -1163,11 +1166,11 @@ public class OneSlot implements OfStats {
     }
 
     public void cleanUp() {
-        // eventloop break before chunk clean up
-        for (var eventloop : persistEventloopArray) {
-            eventloop.breakEventloop();
+        // persist handle eventloop break before chunk clean up
+        for (var persistHandleEventloop : persistHandleEventloopArray) {
+            persistHandleEventloop.breakEventloop();
         }
-        System.out.println("Slot persist eventloop threads stopped, slot: " + slot);
+        System.out.println("Slot persist handle eventloop threads stopped, slot: " + slot);
 
         // close wal raf
         try {
@@ -1276,10 +1279,6 @@ public class OneSlot implements OfStats {
         CompletableFuture<PersistTaskParams> cf = new CompletableFuture<>();
         var persistTask = new PersistTask(params, cf);
 
-        // sync
-//        persistTask.run();
-//        handlePersistResult(params);
-
         // async
         cf.whenComplete((result, e) -> {
             if (e != null) {
@@ -1299,8 +1298,8 @@ public class OneSlot implements OfStats {
                 walQueueArray[result.walGroupIndex].add(result.targetWal);
             }
         });
-        var eventloop = persistEventloopArray[targetWal.batchIndex];
-        eventloop.submit(persistTask);
+        var persistHandleEventloop = persistHandleEventloopArray[targetWal.batchIndex];
+        persistHandleEventloop.submit(persistTask);
     }
 
     public TreeSet<ChunkMergeWorker.MergedSegment> getMergedSegmentSet(byte mergeWorkerId, byte workerId) {

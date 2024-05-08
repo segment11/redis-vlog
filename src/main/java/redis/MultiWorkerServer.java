@@ -96,7 +96,7 @@ public class MultiWorkerServer extends Launcher {
     record WrapRequestHandlerArray(RequestHandler[] requestHandlerArray) {
     }
 
-    record WrapEventloopArray(Eventloop[] eventloopArray) {
+    record WrapEventloopArray(Eventloop[] multiSlotEventloopArray) {
     }
 
     @Inject
@@ -145,19 +145,19 @@ public class MultiWorkerServer extends Launcher {
     NioReactor workerReactor(@WorkerId int workerId, OptionalDependency<ThrottlingController> throttlingController, Config config) {
         // default 10ms
         int idleMillis = config.get(toInt, "idleMillis", 10);
-        var eventloop = Eventloop.builder()
+        var netHandleEventloop = Eventloop.builder()
                 .withThreadName("net-worker-" + workerId)
                 .withIdleInterval(Duration.ofMillis(idleMillis))
-                .initialize(ofEventloop(config.getChild("eventloop.worker")))
+                .initialize(ofEventloop(config.getChild("net.eventloop.worker")))
                 .withInspector(throttlingController.orElse(null))
                 .build();
 
         if (firstNetWorkerEventloop == null) {
-            firstNetWorkerEventloop = eventloop;
+            firstNetWorkerEventloop = netHandleEventloop;
         }
-        netWorkerEventloopArray[workerId] = eventloop;
+        netWorkerEventloopArray[workerId] = netHandleEventloop;
 
-        return eventloop;
+        return netHandleEventloop;
     }
 
     @Provides
@@ -232,24 +232,24 @@ public class MultiWorkerServer extends Launcher {
 
         if (isCrossRequestWorker) {
             RequestHandler targetHandler;
-            Eventloop eventloop;
+            Eventloop multiSlotEventloop;
 
             var requestHandlerArray = multiSlotMultiThreadRequestHandlersArray.requestHandlerArray;
-            var eventloopArray = multiSlotMultiThreadRequestEventloopArray.eventloopArray;
+            var multiSlotEventloopArray = multiSlotMultiThreadRequestEventloopArray.multiSlotEventloopArray;
             if (requestHandlerArray.length == 1) {
                 targetHandler = requestHandlerArray[0];
-                eventloop = eventloopArray[0];
+                multiSlotEventloop = multiSlotEventloopArray[0];
             } else {
                 var i = new Random().nextInt(requestHandlerArray.length);
                 targetHandler = requestHandlerArray[i];
-                eventloop = eventloopArray[i];
+                multiSlotEventloop = multiSlotEventloopArray[i];
             }
 
 //            var netWorkerThreadId = Thread.currentThread().threadId();
 //            var netWorkerWorkerId = netWorkerWorkerIdByThreadId.get(netWorkerThreadId);
 //            var netWorkerEventloop = netWorkerEventloopArray[netWorkerWorkerId];
 
-            var future = eventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
+            var future = multiSlotEventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
 //            future.whenComplete((reply, e) -> {
 //                if (e != null) {
 //                    logger.error("Multi slot multi thread handle request error", e);
@@ -300,10 +300,10 @@ public class MultiWorkerServer extends Launcher {
 
         int i = slot % requestHandlerArray.length;
         var targetHandler = requestHandlerArray[i];
-        var eventloop = requestEventloopArray[i];
+        var requestEventloop = requestEventloopArray[i];
 
         // use mapAsync, SettableFuture better, but exception happened, to be fixed, todo
-        var future = eventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
+        var future = requestEventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
 //        future.whenComplete((reply, e) -> {
 //            if (e != null) {
 //                logger.error("Target slot thread handle request error", e);
@@ -424,15 +424,15 @@ public class MultiWorkerServer extends Launcher {
     @Inject
     TaskRunnable[] scheduleRunnableArray;
 
-    private void eventloopAsScheduler(Eventloop eventloop, int index) {
+    private void eventloopAsScheduler(Eventloop requestHandleEventloop, int index) {
         var taskRunnable = scheduleRunnableArray[index];
-        taskRunnable.setEventloop(eventloop);
+        taskRunnable.setRequestHandleEventloop(requestHandleEventloop);
         taskRunnable.setRequestHandler(requestHandlerArray[index]);
 
         taskRunnable.chargeOneSlots(LocalPersist.getInstance().oneSlots());
 
         // interval 1s
-        eventloop.delay(1000L, taskRunnable);
+        requestHandleEventloop.delay(1000L, taskRunnable);
     }
 
     @Override
@@ -451,15 +451,15 @@ public class MultiWorkerServer extends Launcher {
             long[] threadIds = new long[requestEventloopArray.length];
 
             for (int i = 0; i < requestEventloopArray.length; i++) {
-                var eventloop = requestEventloopArray[i];
-                eventloopAsScheduler(eventloop, i);
+                var requestHandleEventloop = requestEventloopArray[i];
+                eventloopAsScheduler(requestHandleEventloop, i);
 
-                var thread = requestWorkerThreadFactory.newThread(eventloop);
+                var thread = requestWorkerThreadFactory.newThread(requestHandleEventloop);
                 thread.start();
 
                 threadIds[i] = thread.getId();
             }
-            logger.info("Request eventloop threads started");
+            logger.info("Request handle eventloop threads started");
 
             // fix slot thread id
             int slotNumber = configInject.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
@@ -470,11 +470,11 @@ public class MultiWorkerServer extends Launcher {
 
             // cross request worker threads, need use this eventloop
             // init
-            var eventloopArray = multiSlotMultiThreadRequestEventloopArray.eventloopArray;
-            for (int i = 0; i < eventloopArray.length; i++) {
-                var eventloop = eventloopArray[i];
+            var multiSlotEventloopArray = multiSlotMultiThreadRequestEventloopArray.multiSlotEventloopArray;
+            for (int i = 0; i < multiSlotEventloopArray.length; i++) {
+                var multiSlotEventloop = multiSlotEventloopArray[i];
 
-                var thread = requestWorkerThreadFactory.newThread(eventloop);
+                var thread = requestWorkerThreadFactory.newThread(multiSlotEventloop);
                 thread.start();
             }
             logger.info("Multi slot multi thread eventloop threads started");
@@ -512,12 +512,12 @@ public class MultiWorkerServer extends Launcher {
                 scheduleRunnable.stop();
             }
 
-            for (var eventloop : multiSlotMultiThreadRequestEventloopArray.eventloopArray) {
-                eventloop.breakEventloop();
+            for (var multiSlotEventloop : multiSlotMultiThreadRequestEventloopArray.multiSlotEventloopArray) {
+                multiSlotEventloop.breakEventloop();
             }
 
-            for (var eventloop : requestEventloopArray) {
-                eventloop.breakEventloop();
+            for (var requestHandleEventloop : requestEventloopArray) {
+                requestHandleEventloop.breakEventloop();
             }
 
             // need stop chunk merge threads first
@@ -714,18 +714,18 @@ public class MultiWorkerServer extends Launcher {
                         }
 
                         int requestWorkers = config.get(toInt, "requestWorkers", 1);
-                        var list = new Eventloop[requestWorkers];
+                        var requestHandleEventloopArray = new Eventloop[requestWorkers];
                         for (int i = 0; i < requestWorkers; i++) {
                             int idleMillis = config.get(toInt, "eventloop.idleMillis", 10);
-                            var eventloop = Eventloop.builder()
+                            var requestHandleEventloop = Eventloop.builder()
                                     .withThreadName("request-" + i)
                                     .withIdleInterval(Duration.ofMillis(idleMillis))
                                     .build();
-                            eventloop.keepAlive(true);
+                            requestHandleEventloop.keepAlive(true);
 
-                            list[i] = eventloop;
+                            requestHandleEventloopArray[i] = requestHandleEventloop;
                         }
-                        return list;
+                        return requestHandleEventloopArray;
                     }
 
                     @Provides
@@ -759,18 +759,18 @@ public class MultiWorkerServer extends Launcher {
                         }
 
                         int multiSlotMultiThreadNumber = config.get(toInt, "multiSlotMultiThreadNumber", 1);
-                        var list = new Eventloop[multiSlotMultiThreadNumber];
+                        var multiSlotEventloopArray = new Eventloop[multiSlotMultiThreadNumber];
                         for (int i = 0; i < multiSlotMultiThreadNumber; i++) {
                             int idleMillis = config.get(toInt, "eventloop.idleMillis", 10);
-                            var eventloop = Eventloop.builder()
+                            var multiSlotEventloop = Eventloop.builder()
                                     .withThreadName("multi-slot-multi-thread-" + i)
                                     .withIdleInterval(Duration.ofMillis(idleMillis))
                                     .build();
-                            eventloop.keepAlive(true);
+                            multiSlotEventloop.keepAlive(true);
 
-                            list[i] = eventloop;
+                            multiSlotEventloopArray[i] = multiSlotEventloop;
                         }
-                        return new WrapEventloopArray(list);
+                        return new WrapEventloopArray(multiSlotEventloopArray);
                     }
 
                     @Provides

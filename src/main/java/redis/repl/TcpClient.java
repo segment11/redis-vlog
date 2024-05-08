@@ -19,13 +19,13 @@ import java.util.concurrent.Callable;
 
 public class TcpClient {
     private final byte slot;
-    private final Eventloop eventloop;
+    private final Eventloop requestHandleEventloop;
     private final RequestHandler requestHandler;
     private final ReplPair replPair;
 
-    public TcpClient(byte slot, Eventloop eventloop, RequestHandler requestHandler, ReplPair replPair) {
+    public TcpClient(byte slot, Eventloop requestHandleEventloop, RequestHandler requestHandler, ReplPair replPair) {
         this.slot = slot;
-        this.eventloop = eventloop;
+        this.requestHandleEventloop = requestHandleEventloop;
         this.requestHandler = requestHandler;
         this.replPair = replPair;
     }
@@ -76,7 +76,7 @@ public class TcpClient {
     }
 
     public void connect(String host, int port, Callable<ByteBuf> callback) {
-        TcpSocket.connect(eventloop, new InetSocketAddress(host, port))
+        TcpSocket.connect(requestHandleEventloop, new InetSocketAddress(host, port))
                 .whenResult(socket -> {
                     log.info("Connected to server at {}:{}, slot: {}", host, port, slot);
                     sock = socket;

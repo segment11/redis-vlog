@@ -56,7 +56,7 @@ public class ChunkMergeWorker implements OfStats {
     private final LocalPersist localPersist = LocalPersist.getInstance();
 
     // index is batch index
-    private Eventloop[] eventloopArray;
+    private Eventloop[] mergeHandleEventloopArray;
 
     private boolean isTopMergeWorker;
 
@@ -193,21 +193,21 @@ public class ChunkMergeWorker implements OfStats {
 
         var batchNumber = ConfForSlot.global.confWal.batchNumber;
 
-        this.eventloopArray = new Eventloop[batchNumber];
+        this.mergeHandleEventloopArray = new Eventloop[batchNumber];
         final int idleMillis = 10;
         for (int i = 0; i < batchNumber; i++) {
-            var eventloop = Eventloop.builder()
+            var mergeHandleEventloop = Eventloop.builder()
                     .withThreadName("chunk-merge-worker-" + i)
                     .withIdleInterval(Duration.ofMillis(idleMillis))
                     .build();
-            eventloop.keepAlive(true);
-            this.eventloopArray[i] = eventloop;
+            mergeHandleEventloop.keepAlive(true);
+            this.mergeHandleEventloopArray[i] = mergeHandleEventloop;
         }
-        log.info("Create chunk merge worker eventloop {}", mergeWorkerId);
+        log.info("Create chunk merge handle eventloop {}", mergeWorkerId);
     }
 
     public void fixChunkThreadId(Chunk chunk) {
-        this.eventloopArray[chunk.batchIndex].submit(() -> {
+        this.mergeHandleEventloopArray[chunk.batchIndex].submit(() -> {
             chunk.threadIdProtected = Thread.currentThread().threadId();
             chunk.setWorkerType(false, true, isTopMergeWorker);
             log.warn("Fix merge worker chunk thread id, w={}, mw={}, s={}, b={}, tid={}",
@@ -216,7 +216,7 @@ public class ChunkMergeWorker implements OfStats {
     }
 
     public void submitWriteSegmentsMasterNewly(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
-        this.eventloopArray[chunk.batchIndex].submit(() -> {
+        this.mergeHandleEventloopArray[chunk.batchIndex].submit(() -> {
             chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
         });
     }
@@ -277,17 +277,17 @@ public class ChunkMergeWorker implements OfStats {
     }
 
     void start() {
-        for (int i = 0; i < eventloopArray.length; i++) {
-            var eventloop = eventloopArray[i];
-            var thread = getMergeThreadFactoryForMergeWorker(mergeWorkerId).newThread(eventloop);
+        for (int i = 0; i < mergeHandleEventloopArray.length; i++) {
+            var mergeHandleEventloop = mergeHandleEventloopArray[i];
+            var thread = getMergeThreadFactoryForMergeWorker(mergeWorkerId).newThread(mergeHandleEventloop);
             thread.start();
-            log.info("Chunk merge worker eventloop thread started, w={}, b={}", mergeWorkerId, i);
+            log.info("Chunk merge handle eventloop thread started, w={}, b={}", mergeWorkerId, i);
         }
     }
 
     void stop() {
-        for (var eventloop : eventloopArray) {
-            eventloop.breakEventloop();
+        for (var mergeHandleEventloop : mergeHandleEventloopArray) {
+            mergeHandleEventloop.breakEventloop();
         }
         System.out.println("Stop chunk merge worker " + mergeWorkerId + " eventloop");
     }
@@ -323,7 +323,7 @@ public class ChunkMergeWorker implements OfStats {
     }
 
     CompletableFuture<Integer> submit(Job job) {
-        return eventloopArray[job.batchIndex].submit(AsyncComputation.of(job));
+        return mergeHandleEventloopArray[job.batchIndex].submit(AsyncComputation.of(job));
     }
 
     static class Job implements SupplierEx<Integer> {

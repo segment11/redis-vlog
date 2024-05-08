@@ -121,7 +121,7 @@ public class ReplPair {
         }
     }
 
-    public void initAsMaster(long slaveUuid, Eventloop eventloop, RequestHandler requestHandler) {
+    public void initAsMaster(long slaveUuid, Eventloop requestHandleEventloop, RequestHandler requestHandler) {
         if (System.currentTimeMillis() - lastPingGetTimestamp < 1000 * 3 && slaveUuid == this.slaveUuid
                 && tcpClient != null && tcpClient.isSocketConnected()) {
             log.warn("Repl pair init as master: already connected, target host: {}, port: {}, slot: {}", host, port, slot);
@@ -132,7 +132,7 @@ public class ReplPair {
 
             this.slaveUuid = slaveUuid;
 
-            tcpClient = new TcpClient(slot, eventloop, requestHandler, this);
+            tcpClient = new TcpClient(slot, requestHandleEventloop, requestHandler, this);
             tcpClient.connect(host, port, null);
         }
     }

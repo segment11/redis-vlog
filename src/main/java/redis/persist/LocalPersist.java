@@ -124,7 +124,7 @@ public class LocalPersist {
     }
 
     public void flush(byte slot) {
-        // should use eventloop submit to make sure thread safe, todo
+        // should use persist eventloop submit to make sure thread safe, todo
         oneSlots[slot].flush();
     }
 }

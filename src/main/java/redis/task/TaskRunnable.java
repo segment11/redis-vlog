@@ -22,16 +22,16 @@ public class TaskRunnable implements Runnable {
             if (oneSlot.slot() % requestWorkers == i) {
                 this.oneSlots.add(oneSlot);
 
-                oneSlot.setEventloop(eventloop);
+                oneSlot.setRequestHandleEventloop(requestHandleEventloop);
                 oneSlot.setRequestHandler(requestHandler);
             }
         }
     }
 
-    private Eventloop eventloop;
+    private Eventloop requestHandleEventloop;
 
-    public void setEventloop(Eventloop eventloop) {
-        this.eventloop = eventloop;
+    public void setRequestHandleEventloop(Eventloop requestHandleEventloop) {
+        this.requestHandleEventloop = requestHandleEventloop;
     }
 
     private RequestHandler requestHandler;
@@ -53,7 +53,7 @@ public class TaskRunnable implements Runnable {
             return;
         }
 
-        eventloop.delay(1000L, this);
+        requestHandleEventloop.delay(1000L, this);
     }
 
     private boolean isStopped = false;
