@@ -7,11 +7,11 @@ import redis.persist.OneSlot;
 import java.util.ArrayList;
 
 public class TaskRunnable implements Runnable {
-    private final byte i;
+    private final byte requestWorkerId;
     private final byte requestWorkers;
 
-    public TaskRunnable(byte i, byte requestWorkers) {
-        this.i = i;
+    public TaskRunnable(byte requestWorkerId, byte requestWorkers) {
+        this.requestWorkerId = requestWorkerId;
         this.requestWorkers = requestWorkers;
     }
 
@@ -19,7 +19,7 @@ public class TaskRunnable implements Runnable {
 
     public void chargeOneSlots(OneSlot[] oneSlots) {
         for (var oneSlot : oneSlots) {
-            if (oneSlot.slot() % requestWorkers == i) {
+            if (oneSlot.slot() % requestWorkers == requestWorkerId) {
                 this.oneSlots.add(oneSlot);
 
                 oneSlot.setRequestHandleEventloop(requestHandleEventloop);
@@ -60,6 +60,6 @@ public class TaskRunnable implements Runnable {
 
     public void stop() {
         isStopped = true;
-        System.out.println("Task delay stopped. index: " + i);
+        System.out.println("Task delay stopped. index: " + requestWorkerId);
     }
 }
