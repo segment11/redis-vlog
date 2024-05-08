@@ -3,17 +3,15 @@ package redis;
 import com.github.luben.zstd.Zstd;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.command.AGroup;
 import redis.decode.Request;
+import redis.mock.ByPassGetSet;
 import redis.persist.LocalPersist;
 import redis.persist.SegmentOverflowException;
 import redis.reply.Reply;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,6 +52,43 @@ public abstract class BaseCommand {
 
     protected ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed;
     protected boolean isCrossRequestWorker;
+
+    public static AGroup mockAGroup(byte workerId, byte requestWorkers, short slotNumber) {
+        return mockAGroup(workerId, requestWorkers, slotNumber, new CompressStats(""),
+                Zstd.defaultCompressionLevel(), 100, new SnowFlake(1, 1),
+                new TrainSampleJob(workerId), new ArrayList<>(),
+                false, 0, new ArrayList<>(),
+                new ArrayList<>(), false);
+    }
+
+    public static AGroup mockAGroup(byte workerId, byte requestWorkers, short slotNumber, CompressStats compressStats,
+                                    int compressLevel, int trainSampleListMaxSize, SnowFlake snowFlake,
+                                    TrainSampleJob trainSampleJob, List<TrainSampleJob.TrainSampleKV> sampleToTrainList,
+                                    boolean localTest, int localTestRandomValueListSize, ArrayList<byte[]> localTestRandomValueList,
+                                    ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed, boolean isCrossRequestWorker) {
+        var aGroup = new AGroup("append", new byte[][]{new byte[0], new byte[0], new byte[0]}, null);
+        aGroup.workerId = workerId;
+        aGroup.requestWorkers = requestWorkers;
+        aGroup.slotNumber = slotNumber;
+
+        aGroup.compressStats = compressStats;
+
+        aGroup.compressLevel = compressLevel;
+        aGroup.trainSampleListMaxSize = trainSampleListMaxSize;
+
+        aGroup.snowFlake = snowFlake;
+
+        aGroup.trainSampleJob = trainSampleJob;
+        aGroup.sampleToTrainList = sampleToTrainList;
+
+        aGroup.localTest = localTest;
+        aGroup.localTestRandomValueListSize = localTestRandomValueListSize;
+        aGroup.localTestRandomValueList = localTestRandomValueList;
+
+        aGroup.slotWithKeyHashListParsed = slotWithKeyHashListParsed;
+        aGroup.isCrossRequestWorker = isCrossRequestWorker;
+        return aGroup;
+    }
 
     public void from(BaseCommand other) {
         this.workerId = other.workerId;
@@ -153,43 +188,6 @@ public abstract class BaseCommand {
         return new SlotWithKeyHash((byte) slot, (int) bucketIndex, keyHash);
     }
 
-    public static void main(String[] args) throws IOException {
-        testBucketDataSkew();
-    }
-
-    private static void testBucketDataSkew() throws IOException {
-        int number = 100000000;
-        int slotNumber = 8;
-        var bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
-
-        int[][] bucketKeyCount = new int[slotNumber][];
-        for (int i = 0; i < slotNumber; i++) {
-            bucketKeyCount[i] = new int[bucketsPerSlot];
-        }
-
-        for (int i = 0; i < number; i++) {
-            // like redis-benchmark key generator
-            var key = "key:" + Utils.leftPad(String.valueOf(i), "0", 12);
-            var keyBytes = key.getBytes();
-
-            var slotWithKeyHash = slot(keyBytes, slotNumber);
-            bucketKeyCount[slotWithKeyHash.slot][slotWithKeyHash.bucketIndex]++;
-        }
-
-        var file = new File("bucketKeyCount.txt");
-        FileUtils.touch(file);
-        var writer = new FileWriter(file);
-        writer.write("--- key hash list split to bucket ---\n");
-
-        for (int i = 0; i < slotNumber; i++) {
-            writer.write("s " + i + "\n");
-            var array = bucketKeyCount[i];
-            for (int j = 0; j < bucketsPerSlot; j++) {
-                writer.write("b " + j + " c: " + array[j] + "\n");
-            }
-        }
-    }
-
     public SlotWithKeyHash slot(byte[] keyBytes) {
         return slot(keyBytes, slotNumber);
     }
@@ -205,6 +203,13 @@ public abstract class BaseCommand {
         return slotPreferParsed(keyBytes, 0);
     }
 
+    // for mock test
+    private ByPassGetSet byPassGetSet;
+
+    public void setByPassGetSet(ByPassGetSet byPassGetSet) {
+        this.byPassGetSet = byPassGetSet;
+    }
+
     public CompressedValue getCv(byte[] keyBytes) {
         return getCv(keyBytes, null);
     }
@@ -213,14 +218,19 @@ public abstract class BaseCommand {
         var slotWithKeyHash = slotWithKeyHashReuse != null ? slotWithKeyHashReuse : slot(keyBytes);
         var slot = slotWithKeyHash.slot();
 
-        var oneSlot = localPersist.oneSlot(slot);
         ByteBuf buf;
-        try {
-            buf = oneSlot.get(keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
-        } catch (Exception e) {
-            log.error("Get error, key: {}, message: {}", new String(keyBytes), e.getMessage());
-            return null;
+        if (byPassGetSet != null) {
+            buf = byPassGetSet.getBuf(slot, keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
+        } else {
+            var oneSlot = localPersist.oneSlot(slot);
+            try {
+                buf = oneSlot.get(keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
+            } catch (Exception e) {
+                log.error("Get error, key: {}, message: {}", new String(keyBytes), e.getMessage());
+                return null;
+            }
         }
+
         if (buf == null) {
             return null;
         }
@@ -231,6 +241,8 @@ public abstract class BaseCommand {
         }
 
         if (cv.isBigString()) {
+            var oneSlot = localPersist.oneSlot(slot);
+
             var buffer = ByteBuffer.wrap(cv.compressedData);
             var uuid = buffer.getLong();
             var realDictSeq = buffer.getInt();
@@ -454,16 +466,20 @@ public abstract class BaseCommand {
             cv.keyHash = slotWithKeyHash.keyHash;
             cv.expireAt = expireAt;
 
-            var oneSlot = localPersist.oneSlot(slot);
-            try {
-                oneSlot.put(workerId, key, slotWithKeyHash.bucketIndex, cv);
-            } catch (SegmentOverflowException e) {
-                log.error("Set error, key: {}, message: {}", key, e.getMessage());
-                throw e;
-            } catch (Exception e) {
-                var message = e.getMessage();
-                log.error("Set error, key: {}, message: {}", key, message);
-                throw e;
+            if (byPassGetSet != null) {
+                byPassGetSet.put(slot, workerId, key, slotWithKeyHash.bucketIndex, cv);
+            } else {
+                var oneSlot = localPersist.oneSlot(slot);
+                try {
+                    oneSlot.put(workerId, key, slotWithKeyHash.bucketIndex, cv);
+                } catch (SegmentOverflowException e) {
+                    log.error("Set error, key: {}, message: {}", key, e.getMessage());
+                    throw e;
+                } catch (Exception e) {
+                    var message = e.getMessage();
+                    log.error("Set error, key: {}, message: {}", key, message);
+                    throw e;
+                }
             }
 
             // stats
@@ -492,17 +508,21 @@ public abstract class BaseCommand {
             cvRaw.compressedLength = cvRaw.uncompressedLength;
             cvRaw.compressedData = valueBytes;
 
-            var oneSlot = localPersist.oneSlot(slot);
-            try {
-                // uncompressed
-                oneSlot.put(workerId, key, slotWithKeyHash.bucketIndex, cvRaw);
-            } catch (SegmentOverflowException e) {
-                log.error("Set error, key: {}, message: {}", key, e.getMessage());
-                throw e;
-            } catch (IllegalStateException e) {
-                var message = e.getMessage();
-                log.error("Set error, key: {}, message: {}", key, message);
-                throw e;
+            if (byPassGetSet != null) {
+                byPassGetSet.put(slot, workerId, key, slotWithKeyHash.bucketIndex, cvRaw);
+            } else {
+                var oneSlot = localPersist.oneSlot(slot);
+                try {
+                    // uncompressed
+                    oneSlot.put(workerId, key, slotWithKeyHash.bucketIndex, cvRaw);
+                } catch (SegmentOverflowException e) {
+                    log.error("Set error, key: {}, message: {}", key, e.getMessage());
+                    throw e;
+                } catch (IllegalStateException e) {
+                    var message = e.getMessage();
+                    log.error("Set error, key: {}, message: {}", key, message);
+                    throw e;
+                }
             }
 
             // add train sample list
@@ -519,7 +539,6 @@ public abstract class BaseCommand {
             compressStats.rawCount++;
             compressStats.compressedValueBodyTotalLength += valueBytes.length;
         }
-
     }
 
     private synchronized void handleTrainSampleResult(TrainSampleJob.TrainSampleResult trainSampleResult) {

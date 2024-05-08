@@ -42,7 +42,7 @@ public class AGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    private Reply append() {
+    Reply append() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
         }
