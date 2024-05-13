@@ -52,7 +52,15 @@ public class OneSlot implements OfStats {
         this.snowFlake = snowFlake;
         this.persistConfig = persistConfig;
 
-        this.slotDir = new File(persistDir, "slot-" + slot);
+        var volumeDirPath = ConfVolumeDirsForSlot.getVolumeDirBySlot(slot);
+        if (volumeDirPath != null) {
+            // already exists
+            var volumeDir = new File(volumeDirPath);
+            this.slotDir = new File(volumeDir, "slot-" + slot);
+        } else {
+            this.slotDir = new File(persistDir, "slot-" + slot);
+        }
+
         if (!slotDir.exists()) {
             if (!slotDir.mkdirs()) {
                 throw new IOException("Create slot dir error, slot: " + slot);

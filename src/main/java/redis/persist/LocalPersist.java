@@ -7,6 +7,7 @@ import jnr.posix.LibC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.ConfVolumeDirsForSlot;
 import redis.SnowFlake;
 
 import java.io.File;
@@ -83,6 +84,7 @@ public class LocalPersist {
 
         // already created
         this.persistDir = new File(dirFile, "persist");
+        ConfVolumeDirsForSlot.initFromConfig(persistConfig, slotNumber);
 
         boolean reuseNetWorkers = netWorkers == 1 && requestWorkers == 1;
 
