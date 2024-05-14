@@ -156,6 +156,15 @@ public class KeyBucket {
             return cellCount;
         }
 
+        static int calcCellCount(short keyLength, byte valueLength) {
+            int keyWithValueBytesLength = Short.BYTES + keyLength + Byte.BYTES + valueLength;
+            int cellCount = keyWithValueBytesLength / ONE_CELL_LENGTH;
+            if (keyWithValueBytesLength % ONE_CELL_LENGTH != 0) {
+                cellCount++;
+            }
+            return cellCount;
+        }
+
         @Override
         public String toString() {
             return "KVMeta{" +
@@ -378,8 +387,6 @@ public class KeyBucket {
     public boolean put(byte[] keyBytes, long keyHash, long expireAt, byte[] valueBytes, KeyBucket[] afterPutKeyBuckets) {
         if (cellCost == capacity) {
             if (afterPutKeyBuckets == null) {
-                // fix bug here
-                // can not split
                 throw new BucketFullException("Key bucket is full, " + this);
             }
 
@@ -421,8 +428,7 @@ public class KeyBucket {
             return putResult;
         }
 
-        var kvMeta = new KVMeta(0, (short) keyBytes.length, (byte) valueBytes.length);
-        int cellCount = kvMeta.cellCount();
+        int cellCount = KVMeta.calcCellCount((short) keyBytes.length, (byte) valueBytes.length);
         if (cellCount >= INIT_CAPACITY) {
             throw new BucketFullException("Key with value bytes too large, key length=" + keyBytes.length
                     + ", value length=" + valueBytes.length);
@@ -462,10 +468,19 @@ public class KeyBucket {
             buffer.position(buffer.position() + keyLength);
             var valueLength = buffer.get();
 
-            var kvMetaSameKey = new KVMeta(0, keyLength, valueLength);
-            int cellCountSameKey = kvMetaSameKey.cellCount();
-
+            int cellCountSameKey = KVMeta.calcCellCount(keyLength, valueLength);
             clearCell(needRemoveSameKeyCellIndexAfterPut, cellCountSameKey);
+        }
+
+        // clear same key cell after put
+        int nextCellIndex = putToCellIndex + cellCount;
+        for (int i = nextCellIndex; i < capacity; i++) {
+            var kvMetaSameKey = isCellUseTargetKey(keyBytes, keyHash, i);
+            if (kvMetaSameKey != null) {
+                clearCell(i, kvMetaSameKey.cellCount());
+                size--;
+                cellCost -= kvMetaSameKey.cellCount();
+            }
         }
 
         updateSeq();
@@ -506,6 +521,17 @@ public class KeyBucket {
         // number or short value or pvm, 1 byte is enough
         buffer.put((byte) valueBytes.length);
         buffer.put(valueBytes);
+    }
+
+    private KVMeta isCellUseTargetKey(byte[] keyBytes, long keyHash, int cellIndex) {
+        int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+        var cellHashValue = buffer.getLong(metaIndex);
+
+        if (cellHashValue != keyHash) {
+            return null;
+        }
+
+        return keyMatch(keyBytes, oneCellOffset(cellIndex));
     }
 
     private CanPutResult canPut(byte[] keyBytes, long keyHash, int cellIndex, int cellCount) {
@@ -622,6 +648,7 @@ public class KeyBucket {
     }
 
     public boolean del(byte[] keyBytes, long keyHash) {
+        boolean isDeleted = false;
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
             int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
             var cellHashValue = buffer.getLong(metaIndex);
@@ -640,7 +667,8 @@ public class KeyBucket {
                 size--;
                 cellCost -= cellCount;
                 updateSeq();
-                return true;
+
+                isDeleted = true;
             } else {
                 // hash conflict, just continue
                 log.warn("Key hash conflict, key hash={}, target cell index={}, key={}, slot={}, bucket index={}",
@@ -648,7 +676,7 @@ public class KeyBucket {
             }
         }
 
-        return false;
+        return isDeleted;
     }
 
     private KVMeta keyMatch(byte[] keyBytes, int offset) {

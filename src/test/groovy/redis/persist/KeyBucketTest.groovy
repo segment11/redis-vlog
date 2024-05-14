@@ -11,7 +11,7 @@ class KeyBucketTest extends Specification {
         def snowFlake = new SnowFlake(1, 1)
 
         byte[] emptyBytes = []
-        def keyBucket = new KeyBucket((byte) 0, (short) 0, (byte) 0, (byte) 1, emptyBytes, snowFlake)
+        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, emptyBytes, snowFlake)
         keyBucket.initWithCompressStats new CompressStats('test')
 
         and:
@@ -175,5 +175,36 @@ class KeyBucketTest extends Specification {
 
         then:
         Arrays.equals(decompressBytes, decompressBytes2)
+    }
+
+    def 'del then put corner case'() {
+        given:
+        def snowFlake = new SnowFlake(1, 1)
+
+        byte[] emptyBytes = []
+        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, emptyBytes, snowFlake)
+        keyBucket.initWithCompressStats new CompressStats('test')
+
+        when:
+        keyBucket.put('a'.bytes, 97L, 0L, 'a'.bytes, null)
+        keyBucket.put('b'.bytes, 98L, 0L, 'b'.bytes, null)
+        keyBucket.put('c'.bytes, 99L, 0L, 'c'.bytes, null)
+
+        then:
+        keyBucket.size == 3
+        keyBucket.del('a'.bytes, 97L)
+        keyBucket.size == 2
+
+        when:
+        keyBucket.put('b'.bytes, 98L, 0L, 'bb'.bytes, null)
+
+        then:
+        keyBucket.size == 2
+
+        when:
+        keyBucket.put('c'.bytes, 99L, 0L, 'cc'.bytes, null)
+
+        then:
+        keyBucket.size == 2
     }
 }
