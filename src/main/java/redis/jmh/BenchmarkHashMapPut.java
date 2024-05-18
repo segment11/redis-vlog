@@ -6,6 +6,7 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
 import java.util.HashMap;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -54,6 +55,20 @@ BenchmarkHashMapPut.put  10000000  value100--000000000-000000000-000000000-00000
     @Benchmark
     public void put() {
         var map = new HashMap<String, String>(1000000);
+        for (int i = 0; i < size; i++) {
+            var key = keys[i];
+            map.put(key, value);
+        }
+    }
+
+    /*
+Benchmark                        (size)                                                                                               (value)  Mode  Cnt      Score   Error  Units
+BenchmarkHashMapPut.putToTree   1000000  value100--000000000-000000000-000000000-000000000-000000000-000000000-000000000-000000000-000000000-  avgt         612.503          ms/op
+BenchmarkHashMapPut.putToTree  10000000  value100--000000000-000000000-000000000-000000000-000000000-000000000-000000000-000000000-000000000-  avgt       11358.692          ms/op
+     */
+    @Benchmark
+    public void putToTree() {
+        var map = new TreeMap<String, String>();
         for (int i = 0; i < size; i++) {
             var key = keys[i];
             map.put(key, value);
