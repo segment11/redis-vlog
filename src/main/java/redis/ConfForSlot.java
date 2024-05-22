@@ -57,15 +57,17 @@ public enum ConfForSlot {
     }
 
     public static class ConfLru {
-        public ConfLru(long expireAfterWrite, long expireAfterAccess, long maximumBytes) {
+        public ConfLru(long expireAfterWrite, long expireAfterAccess, long maximumBytes, int maxSize) {
             this.expireAfterWrite = expireAfterWrite;
             this.expireAfterAccess = expireAfterAccess;
             this.maximumBytes = maximumBytes;
+            this.maxSize = maxSize;
         }
 
         public long expireAfterWrite;
         public long expireAfterAccess;
         public long maximumBytes;
+        public int maxSize;
     }
 
     public enum ConfBucket {
@@ -77,7 +79,7 @@ public enum ConfForSlot {
 
         public int bucketsPerSlot;
 
-        public ConfLru lru = new ConfLru(300, 300, 100_000_000L);
+        public ConfLru lru = new ConfLru(300, 300, 100_000_000L, 1000 * 25);
 
         public boolean isCompress = false;
 
@@ -112,7 +114,7 @@ public enum ConfForSlot {
         // for better latency, PAGE_SIZE 4K is ok
         public int segmentLength;
 
-        public ConfLru lru = new ConfLru(300, 300, 100_000_000L);
+        public ConfLru lru = new ConfLru(300, 300, 100_000_000L, 1000 * 25);
 
         public int maxSegmentNumber() {
             return segmentNumberPerFd * fdPerChunk;

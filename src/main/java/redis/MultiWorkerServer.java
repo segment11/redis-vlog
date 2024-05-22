@@ -610,6 +610,9 @@ public class MultiWorkerServer extends Launcher {
                         if (config.getChild("chunk.lru.maximumBytes").hasValue()) {
                             c.confChunk.lru.maximumBytes = config.get(ofLong(), "chunk.lru.maximumBytes");
                         }
+                        if (config.getChild("chunk.lru.maxSize").hasValue()) {
+                            c.confChunk.lru.maxSize = config.get(ofInteger(), "chunk.lru.maxSize");
+                        }
 
                         // override wal conf
                         if (config.getChild("wal.oneChargeBucketNumber").hasValue()) {
