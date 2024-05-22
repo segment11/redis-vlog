@@ -22,26 +22,28 @@ import static redis.persist.LocalPersist.PROTECTION;
 
 @BenchmarkMode({Mode.Throughput, Mode.AverageTime})
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
-@Warmup(iterations = 1, time = 5)
-@Measurement(iterations = 1, time = 5)
+@Warmup(iterations = 1, time = 1)
+@Measurement(iterations = 1, time = 1)
 @State(Scope.Thread)
 @Threads(1)
 public class BenchmarkPread {
     final String filePath = "/tmp/test_jnr_libc_pread";
 
     /*
-Benchmark             (batchPages)   Mode  Cnt     Score   Error   Units
-BenchmarkPread.pread             4  thrpt       6297.019          ops/ms
-BenchmarkPread.pread            16  thrpt       6320.210          ops/ms
-BenchmarkPread.pread            64  thrpt       6113.186          ops/ms
-BenchmarkPread.pread           256  thrpt       6217.426          ops/ms
-BenchmarkPread.pread             4   avgt         ≈ 10⁻⁴           ms/op
-BenchmarkPread.pread            16   avgt         ≈ 10⁻⁴           ms/op
-BenchmarkPread.pread            64   avgt         ≈ 10⁻⁴           ms/op
-BenchmarkPread.pread           256   avgt         ≈ 10⁻⁴           ms/op
+Benchmark             (batchPages)   Mode  Cnt  Score   Error   Units
+BenchmarkPread.pread             1  thrpt       6.490          ops/us
+BenchmarkPread.pread             4  thrpt       6.478          ops/us
+BenchmarkPread.pread            16  thrpt       6.565          ops/us
+BenchmarkPread.pread            64  thrpt       6.516          ops/us
+BenchmarkPread.pread           256  thrpt       6.517          ops/us
+BenchmarkPread.pread             1   avgt       0.155           us/op
+BenchmarkPread.pread             4   avgt       0.154           us/op
+BenchmarkPread.pread            16   avgt       0.153           us/op
+BenchmarkPread.pread            64   avgt       0.153           us/op
+BenchmarkPread.pread           256   avgt       0.153           us/op
      */
-    @Param({"4", "16", "64", "256"})
-    int batchPages = 4;
+    @Param({"1", "4", "16", "64", "256"})
+    int batchPages = 1;
 
     long addr;
 

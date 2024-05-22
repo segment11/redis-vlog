@@ -22,8 +22,8 @@ import static redis.persist.LocalPersist.PROTECTION;
 
 @BenchmarkMode({Mode.Throughput, Mode.AverageTime})
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
-@Warmup(iterations = 1, time = 5)
-@Measurement(iterations = 1, time = 5)
+@Warmup(iterations = 1, time = 1)
+@Measurement(iterations = 1, time = 1)
 @State(Scope.Thread)
 @Threads(1)
 public class BenchmarkPwrite {
@@ -31,18 +31,20 @@ public class BenchmarkPwrite {
 
     // 16 is best
     /*
-Benchmark               (batchPages)   Mode  Cnt   Score   Error   Units
-BenchmarkPwrite.pwrite             4  thrpt       73.812          ops/ms
-BenchmarkPwrite.pwrite            16  thrpt       37.561          ops/ms
-BenchmarkPwrite.pwrite            64  thrpt        8.205          ops/ms
-BenchmarkPwrite.pwrite           256  thrpt        2.050          ops/ms
-BenchmarkPwrite.pwrite             4   avgt        0.015           ms/op
-BenchmarkPwrite.pwrite            16   avgt        0.030           ms/op
-BenchmarkPwrite.pwrite            64   avgt        0.123           ms/op
-BenchmarkPwrite.pwrite           256   avgt        0.480           ms/op
+Benchmark               (batchPages)   Mode  Cnt    Score   Error   Units
+BenchmarkPwrite.pwrite             1  thrpt       104.146          ops/ms
+BenchmarkPwrite.pwrite             4  thrpt        77.399          ops/ms
+BenchmarkPwrite.pwrite            16  thrpt        28.831          ops/ms
+BenchmarkPwrite.pwrite            64  thrpt        11.175          ops/ms
+BenchmarkPwrite.pwrite           256  thrpt         3.448          ops/ms
+BenchmarkPwrite.pwrite             1   avgt         0.010           ms/op
+BenchmarkPwrite.pwrite             4   avgt         0.013           ms/op
+BenchmarkPwrite.pwrite            16   avgt         0.033           ms/op
+BenchmarkPwrite.pwrite            64   avgt         0.086           ms/op
+BenchmarkPwrite.pwrite           256   avgt         0.285           ms/op
      */
-    @Param({"4", "16", "64", "256"})
-    int batchPages = 4;
+    @Param({"1", "4", "16", "64", "256"})
+    int batchPages = 1;
 
     long addr;
 
@@ -73,6 +75,15 @@ BenchmarkPwrite.pwrite           256   avgt        0.480           ms/op
         buf = m.newDirectByteBuffer(addr, (int) pageSize * batchPages);
 
         System.out.printf("init buf capacity: %d, addr: %d\n", buf.capacity(), addr);
+
+        long writeN = 0;
+        for (int i = 0; i < maxBatches; i++) {
+            buf.putInt(i);
+            buf.rewind();
+            writeN += libC.pwrite(fd, buf, buf.capacity(), i * pageSize * batchPages);
+            buf.position(0);
+        }
+        System.out.printf("init write done, batches: %d\n", writeN / pageSize / batchPages);
     }
 
     @TearDown
