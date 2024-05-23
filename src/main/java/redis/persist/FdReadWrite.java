@@ -33,14 +33,14 @@ import static redis.persist.LocalPersist.PROTECTION;
 
 public class FdReadWrite implements OfStats {
 
-    public FdReadWrite(String name, LibC libC, File oneFile) throws IOException {
+    public FdReadWrite(String name, LibC libC, File file) throws IOException {
         this.name = name;
         this.libC = libC;
 
-        if (!oneFile.exists()) {
-            FileUtils.touch(oneFile);
+        if (!file.exists()) {
+            FileUtils.touch(file);
         }
-        this.fd = libC.open(oneFile.getAbsolutePath(), LocalPersist.O_DIRECT | OpenFlags.O_RDWR.value(), 00644);
+        this.fd = libC.open(file.getAbsolutePath(), LocalPersist.O_DIRECT | OpenFlags.O_RDWR.value(), 00644);
         log.info("Opened fd: {}, name: {}", fd, name);
 
         this.segmentBytesByIndex = new LRUMap<>(ConfForSlot.global.confChunk.lru.maxSize);
@@ -77,6 +77,16 @@ public class FdReadWrite implements OfStats {
 
     private static final Counter writeBytesCounter = Counter.build().name("pwrite_bytes").
             help("fd write bytes").
+            labelNames("fd_name")
+            .register();
+
+    private static final Counter lruHitCounter = Counter.build().name("lru_hit").
+            help("fd read lru hit").
+            labelNames("fd_name")
+            .register();
+
+    private static final Counter lruMissCounter = Counter.build().name("lru_miss").
+            help("fd read lru miss").
             labelNames("fd_name")
             .register();
 
@@ -302,28 +312,28 @@ public class FdReadWrite implements OfStats {
         void prepare(ByteBuffer buffer);
     }
 
-    private byte[] readInnerNotPureMemory(long offset, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
-        if (offset % segmentLength != 0) {
-            throw new IllegalArgumentException("Offset must be multiple of segment length");
-        }
-
+    private byte[] readInnerNotPureMemory(int segmentIndex, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
         // for from lru cache if only read one segment
         int capacity = buffer.capacity();
         var isOnlyOneSegment = capacity == segmentLength;
-        var segmentIndex = (int) (offset / segmentLength);
         if (isOnlyOneSegment) {
             var bytesCached = segmentBytesByIndex.get(segmentIndex);
             if (bytesCached != null) {
+                lruHitCounter.labels(name).inc();
                 return bytesCached;
             }
         }
 
+        lruMissCounter.labels(name).inc();
+
+        var offset = segmentIndex * segmentLength;
         buffer.clear();
 
         var timer = readTimeSummary.labels(name).startTimer();
         var n = libC.pread(fd, buffer, capacity, offset);
-        timer.observeDuration();
         readBytesCounter.labels(name).inc(n);
+        timer.observeDuration();
+
         if (n != capacity) {
             log.error("Read error, n: {}, buffer capacity: {}, name: {}", n, capacity, name);
             throw new RuntimeException("Read error, n: " + n + ", buffer capacity: " + capacity + ", name: " + name);
@@ -345,16 +355,13 @@ public class FdReadWrite implements OfStats {
         return bytesRead;
     }
 
-    private int writeInnerNotPureMemory(long offset, ByteBuffer buffer, @NotNull WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
-        if (offset % segmentLength != 0) {
-            throw new IllegalArgumentException("Offset must be multiple of segment length");
-        }
-
+    private int writeInnerNotPureMemory(int segmentIndex, ByteBuffer buffer, @NotNull WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
         int capacity = buffer.capacity();
         var segmentCount = capacity / segmentLength;
         var isOnlyOneSegment = segmentCount == 1;
         var isPwriteBatch = segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 
+        int offset = segmentIndex * segmentLength;
         buffer.rewind();
 
         prepare.prepare(buffer);
@@ -371,7 +378,6 @@ public class FdReadWrite implements OfStats {
         // set to lru cache
         // lru bytes may be not full segment length when compress, todo
         if (isRefreshLRUCache && (isOnlyOneSegment || isPwriteBatch)) {
-            var segmentIndex = (int) (offset / segmentLength);
             for (int i = 0; i < segmentCount; i++) {
                 var bytes = new byte[segmentLength];
                 buffer.position(i * segmentLength);
@@ -383,21 +389,16 @@ public class FdReadWrite implements OfStats {
         return (int) n;
     }
 
-    private CompletableFuture<byte[]> readAsyncNotPureMemory(long offset, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
-        return call(() -> readInnerNotPureMemory(offset, buffer, callback, isRefreshLRUCache));
+    private CompletableFuture<byte[]> readAsyncNotPureMemory(int segmentIndex, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
+        return call(() -> readInnerNotPureMemory(segmentIndex, buffer, callback, isRefreshLRUCache));
     }
 
-    private CompletableFuture<Integer> writeAsyncNotPureMemory(long offset, ByteBuffer buffer, WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
-        return call(() -> writeInnerNotPureMemory(offset, buffer, prepare, isRefreshLRUCache));
+    private CompletableFuture<Integer> writeAsyncNotPureMemory(int segmentIndex, ByteBuffer buffer, WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
+        return call(() -> writeInnerNotPureMemory(segmentIndex, buffer, prepare, isRefreshLRUCache));
     }
 
-    private CompletableFuture<byte[]> readSegmentBatchFromMemory(long offset, int segmentCount) {
-        if (offset % segmentLength != 0) {
-            throw new IllegalArgumentException("Offset must be multiple of segment length");
-        }
-
+    private CompletableFuture<byte[]> readSegmentBatchFromMemory(int segmentIndex, int segmentCount) {
         return call(() -> {
-            var segmentIndex = (int) (offset / segmentLength);
             var bytesRead = new byte[segmentLength * segmentCount];
             for (int i = 0; i < segmentCount; i++) {
                 var oneSegmentBytes = allBytesBySegmentIndex[segmentIndex + i];
@@ -409,41 +410,40 @@ public class FdReadWrite implements OfStats {
         });
     }
 
-    public CompletableFuture<byte[]> readSegment(long offset, boolean isRefreshLRUCache) {
+    public CompletableFuture<byte[]> readSegment(int segmentIndex, boolean isRefreshLRUCache) {
         if (ConfForSlot.global.pureMemory) {
-            return readSegmentBatchFromMemory(offset, 1);
+            return readSegmentBatchFromMemory(segmentIndex, 1);
         }
 
-        return readAsyncNotPureMemory(offset, readPageBuffer, null, isRefreshLRUCache);
+        return readAsyncNotPureMemory(segmentIndex, readPageBuffer, null, isRefreshLRUCache);
     }
 
-    public CompletableFuture<byte[]> readSegmentForRepl(long offset) {
+    public CompletableFuture<byte[]> readSegmentForRepl(int segmentIndex) {
         if (ConfForSlot.global.pureMemory) {
-            return readSegmentBatchFromMemory(offset, ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT);
+            return readSegmentBatchFromMemory(segmentIndex, ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT);
         }
 
-        return readAsyncNotPureMemory(offset, readForReplBuffer, null, false);
+        return readAsyncNotPureMemory(segmentIndex, readForReplBuffer, null, false);
     }
 
-    public CompletableFuture<byte[]> readSegmentForMerge(long offset) {
+    public CompletableFuture<byte[]> readSegmentForMerge(int segmentIndex) {
         if (ConfForSlot.global.pureMemory) {
-            return readSegmentBatchFromMemory(offset, BATCH_ONCE_SEGMENT_COUNT_PWRITE);
+            return readSegmentBatchFromMemory(segmentIndex, BATCH_ONCE_SEGMENT_COUNT_PWRITE);
         }
 
-        return readAsyncNotPureMemory(offset, readForMergeBatchBuffer, null, false);
+        return readAsyncNotPureMemory(segmentIndex, readForMergeBatchBuffer, null, false);
     }
 
-    public CompletableFuture<byte[]> readSegmentForTopMerge(long offset) {
-        return readAsyncNotPureMemory(offset, readForTopMergeBatchBuffer, null, false);
+    public CompletableFuture<byte[]> readSegmentForTopMerge(int segmentIndex) {
+        return readAsyncNotPureMemory(segmentIndex, readForTopMergeBatchBuffer, null, false);
     }
 
-    private CompletableFuture<Integer> writeSegmentBatchToMemory(long offset, byte[] bytes) {
+    private CompletableFuture<Integer> writeSegmentBatchToMemory(int segmentIndex, byte[] bytes) {
         if (bytes.length % segmentLength != 0) {
             throw new IllegalArgumentException("Bytes length must be multiple of segment length");
         }
 
         return call(() -> {
-            var segmentIndex = (int) (offset / segmentLength);
             var segmentCount = bytes.length / segmentLength;
             for (int i = 0; i < segmentCount; i++) {
                 allBytesBySegmentIndex[segmentIndex + i] = bytes;
@@ -452,48 +452,48 @@ public class FdReadWrite implements OfStats {
         });
     }
 
-    public CompletableFuture<Integer> writeSegment(long offset, byte[] bytes, boolean isRefreshLRUCache) {
+    public CompletableFuture<Integer> writeSegment(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
         if (bytes.length != segmentLength) {
             throw new IllegalArgumentException("Write bytes length not match segment length");
         }
 
         if (ConfForSlot.global.pureMemory) {
-            return writeSegmentBatchToMemory(offset, bytes);
+            return writeSegmentBatchToMemory(segmentIndex, bytes);
         }
 
-        return writeAsyncNotPureMemory(offset, writePageBuffer, (buffer) -> {
+        return writeAsyncNotPureMemory(segmentIndex, writePageBuffer, (buffer) -> {
             buffer.clear();
             buffer.put(bytes);
         }, isRefreshLRUCache);
     }
 
-    public CompletableFuture<Integer> writeSegmentBatch(long offset, byte[] bytes, boolean isRefreshLRUCache) {
+    public CompletableFuture<Integer> writeSegmentBatch(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
         var segmentCount = bytes.length / segmentLength;
         if (segmentCount != BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
             throw new IllegalArgumentException("Batch write bytes length not match once batch write segment count");
         }
 
         if (ConfForSlot.global.pureMemory) {
-            return writeSegmentBatchToMemory(offset, bytes);
+            return writeSegmentBatchToMemory(segmentIndex, bytes);
         }
 
-        return writeAsyncNotPureMemory(offset, writePageBufferB, (buffer) -> {
+        return writeAsyncNotPureMemory(segmentIndex, writePageBufferB, (buffer) -> {
             buffer.clear();
             buffer.put(bytes);
         }, isRefreshLRUCache);
     }
 
-    public CompletableFuture<Integer> writeSegmentForRepl(long offset, byte[] bytes) {
+    public CompletableFuture<Integer> writeSegmentForRepl(int segmentIndex, byte[] bytes) {
         var segmentCount = bytes.length / segmentLength;
         if (segmentCount != ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT) {
             throw new IllegalArgumentException("Repl write bytes length not match once repl segment count");
         }
 
         if (ConfForSlot.global.pureMemory) {
-            return writeSegmentBatchToMemory(offset, bytes);
+            return writeSegmentBatchToMemory(segmentIndex, bytes);
         }
 
-        return writeAsyncNotPureMemory(offset, writeForReplBuffer, (buffer) -> {
+        return writeAsyncNotPureMemory(segmentIndex, writeForReplBuffer, (buffer) -> {
             buffer.clear();
             buffer.put(bytes);
         }, false);

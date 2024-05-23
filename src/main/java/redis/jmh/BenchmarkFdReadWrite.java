@@ -4,7 +4,6 @@ import jnr.ffi.LibraryLoader;
 import jnr.posix.LibC;
 import net.openhft.affinity.AffinityStrategies;
 import net.openhft.affinity.AffinityThreadFactory;
-import org.apache.commons.io.FileUtils;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
@@ -21,6 +20,9 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
+import static redis.jmh.FileInit.PAGE_NUMBER;
+import static redis.jmh.FileInit.PAGE_SIZE;
+
 @BenchmarkMode({Mode.Throughput, Mode.AverageTime})
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 @Warmup(iterations = 1, time = 1)
@@ -33,7 +35,9 @@ public class BenchmarkFdReadWrite {
     @Param({"1"})
     int fileNumber = 1;
 
-    final int maxSegmentCount = 1024 * 1024 / 2;
+    // single core is same
+//    @Param({"0", "1"})
+    int isUseDifferentCpuCore = 0;
 
     LibC libC;
 
@@ -54,32 +58,12 @@ public class BenchmarkFdReadWrite {
             targetDir.mkdirs();
         }
 
-        var threadFactory = new AffinityThreadFactory("fd-read-write-group-1", AffinityStrategies.SAME_CORE);
-
-        // 2M
-        var bytes = new byte[1024 * 1024 * 2];
-        var buffer = ByteBuffer.wrap(bytes);
-        var pageSize = 4096;
-        var pageNumber = bytes.length / pageSize;
-        for (int i = 0; i < pageNumber; i++) {
-            buffer.position(i * pageSize).putInt(i);
-        }
+        var threadFactory = new AffinityThreadFactory("fd-read-write-group-1",
+                isUseDifferentCpuCore == 0 ? AffinityStrategies.SAME_CORE : AffinityStrategies.DIFFERENT_CORE);
 
         for (int i = 0; i < fileNumber; i++) {
-            var file = new File(targetDir, "test_fd_read_write_jmh_" + i);
-            if (!file.exists()) {
-                FileUtils.touch(file);
-
-                final int maxBatches = 1024;
-                long writeN = 0;
-                for (int j = 0; j < maxBatches; j++) {
-                    FileUtils.writeByteArrayToFile(file, bytes, true);
-                    writeN += bytes.length;
-                }
-                System.out.printf("init write done, size: %d GB\n", writeN / 1024 / 1024);
-            } else {
-                System.out.printf("file exists, size: %d GB\n", file.length() / 1024 / 1024);
-            }
+            var file = new File(targetDir, "/test_fd_read_write_jmh_" + i);
+            FileInit.append2GBFile(file, false);
 
             var fdReadWrite = new FdReadWrite("test" + i, libC, file);
             fdReadWrite.initByteBuffers(false);
@@ -101,27 +85,47 @@ public class BenchmarkFdReadWrite {
 
     private Set<Integer> initIntValueSet = new HashSet<>();
 
+        /*
+    Threads: 16
+Benchmark                   (fileNumber)   Mode  Cnt    Score   Error   Units
+BenchmarkFdReadWrite.read              1  thrpt       287.089          ops/ms
+BenchmarkFdReadWrite.write             1  thrpt       460.825          ops/ms
+BenchmarkFdReadWrite.read              1   avgt         0.110           ms/op
+BenchmarkFdReadWrite.write             1   avgt         0.032           ms/op
+     */
+
+        /*
+    Threads: 8
+Benchmark                   (fileNumber)   Mode  Cnt    Score   Error   Units
+BenchmarkFdReadWrite.read              1  thrpt       144.510          ops/ms
+BenchmarkFdReadWrite.write             1  thrpt       276.889          ops/ms
+BenchmarkFdReadWrite.read              1   avgt         0.055           ms/op
+BenchmarkFdReadWrite.write             1   avgt         0.030           ms/op
+     */
+
     /*
     Threads: 4
 Benchmark                   (fileNumber)   Mode  Cnt    Score   Error   Units
-BenchmarkFdReadWrite.read              1  thrpt        32.542          ops/ms
-BenchmarkFdReadWrite.write             1  thrpt       177.491          ops/ms
-BenchmarkFdReadWrite.read              1   avgt         0.052           ms/op
-BenchmarkFdReadWrite.write             1   avgt         0.022           ms/op
+BenchmarkFdReadWrite.read              1  thrpt        72.053          ops/ms
+BenchmarkFdReadWrite.write             1  thrpt       108.089          ops/ms
+BenchmarkFdReadWrite.read              1   avgt         0.057           ms/op
+BenchmarkFdReadWrite.write             1   avgt         0.038           ms/op
      */
 
     /*
     Threads: 1
-Benchmark                  (fileNumber)   Mode  Cnt   Score   Error   Units
-BenchmarkFdReadWrite.read             1  thrpt       20.702          ops/ms
-BenchmarkFdReadWrite.read             1   avgt        0.049           ms/op
+Benchmark                   (fileNumber)   Mode  Cnt   Score   Error   Units
+BenchmarkFdReadWrite.read              1  thrpt       20.734          ops/ms
+BenchmarkFdReadWrite.write             1  thrpt       23.757          ops/ms
+BenchmarkFdReadWrite.read              1   avgt        0.048           ms/op
+BenchmarkFdReadWrite.write             1   avgt        0.042           ms/op
      */
     @Benchmark
     public void read() {
-        int segmentIndex = random.nextInt(maxSegmentCount);
+        int segmentIndex = random.nextInt(PAGE_NUMBER);
         try {
             for (var fdReadWrite : fdReadWriteList) {
-                var f = fdReadWrite.readSegment(segmentIndex * 4096L, false);
+                var f = fdReadWrite.readSegment(segmentIndex, false);
                 var bytes = f.get();
                 var intValueInit = ByteBuffer.wrap(bytes).getInt();
                 initIntValueSet.add(intValueInit);
@@ -133,22 +137,16 @@ BenchmarkFdReadWrite.read             1   avgt        0.049           ms/op
         }
     }
 
-    private final byte[] writeBytes = new byte[4096];
+    private final byte[] writeBytes = new byte[PAGE_SIZE];
 
-    /*
-    Threads: 1
-Benchmark                   (fileNumber)   Mode  Cnt   Score   Error   Units
-BenchmarkFdReadWrite.write             1  thrpt       47.095          ops/ms
-BenchmarkFdReadWrite.write             1   avgt        0.020           ms/op
-     */
     @Benchmark
     public void write() {
-        int segmentIndex = random.nextInt(maxSegmentCount);
+        int segmentIndex = random.nextInt(PAGE_NUMBER);
         try {
             for (var fdReadWrite : fdReadWriteList) {
-                var f = fdReadWrite.writeSegment(segmentIndex * 4096L, writeBytes, false);
+                var f = fdReadWrite.writeSegment(segmentIndex, writeBytes, false);
                 var n = f.get();
-                if (n != 4096) {
+                if (n != PAGE_SIZE) {
                     throw new RuntimeException("write failed");
                 }
             }
