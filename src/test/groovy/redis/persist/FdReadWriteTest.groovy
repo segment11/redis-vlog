@@ -46,8 +46,8 @@ class FdReadWriteTest extends Specification {
         loop.times { i ->
             var bytes = new byte[segmentLength]
             Arrays.fill(bytes, (byte) i)
-            var f = fdReadWrite.writeSegment(segmentLength * i, bytes, false)
-            var f2 = fdReadWrite2.writeSegment(segmentLength * i, bytes, false)
+            var f = fdReadWrite.writeSegment(i, bytes, false)
+            var f2 = fdReadWrite2.writeSegment(i, bytes, false)
             futures[i] = f
             futures[i + loop] = f2
         }
