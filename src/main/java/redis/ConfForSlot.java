@@ -14,6 +14,8 @@ public enum ConfForSlot {
     public final ConfChunk confChunk;
     public final ConfWal confWal;
 
+    public final ConfLru lruBigString = new ConfLru(300, 300, 100_000_000L, 1000);
+
     public boolean pureMemory = false;
 
     public static ConfForSlot from(long estimateKeyNumber) {
@@ -118,10 +120,6 @@ public enum ConfForSlot {
 
         public int maxSegmentNumber() {
             return segmentNumberPerFd * fdPerChunk;
-        }
-
-        public int maxSegmentIndex() {
-            return maxSegmentNumber() - 1;
         }
 
         @Override

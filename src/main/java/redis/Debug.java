@@ -19,9 +19,5 @@ public class Debug {
 
     public boolean logRestore = false;
 
-    public boolean perfSkipPersist = false;
-
     public boolean perfSkipPvmUpdate = false;
-
-    public boolean perfTestReadSegmentNoCache = false;
 }

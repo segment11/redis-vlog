@@ -634,6 +634,10 @@ public class MultiWorkerServer extends Launcher {
                             c.confWal.shortValueSizeTrigger = config.get(ofInteger(), "wal.shortValueSizeTrigger");
                         }
 
+                        if (config.getChild("big.string.lru.maxSize").hasValue()) {
+                            c.lruBigString.maxSize = config.get(ofInteger(), "big.string.lru.maxSize");
+                        }
+
                         logger.info("ConfForSlot: {}", c);
                         return c;
                     }

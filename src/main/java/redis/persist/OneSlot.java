@@ -1,7 +1,5 @@
 package redis.persist;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.luben.zstd.Zstd;
 import io.activej.async.callback.AsyncComputation;
 import io.activej.common.function.RunnableEx;
@@ -11,8 +9,8 @@ import io.activej.eventloop.Eventloop;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import jnr.posix.LibC;
+import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
-import org.checkerframework.checker.nullness.qual.PolyNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
@@ -36,8 +34,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static io.activej.config.converter.ConfigConverters.ofInteger;
@@ -137,6 +133,8 @@ public class OneSlot implements OfStats {
             }
         }
 
+        this.bigStringBytesByUuidLRU = new LRUMap<>(ConfForSlot.global.lruBigString.maxSize);
+
         // default 2000, I do not know if it is suitable
         var sendOnceMaxCount = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxCount", 2000);
         var sendOnceMaxSize = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxSize", 1024 * 1024);
@@ -170,25 +168,8 @@ public class OneSlot implements OfStats {
 
         this.compressStats = new CompressStats("slot-" + slot);
 
-        this.initSegmentCache();
         this.initTasks();
     }
-
-    private void initSegmentCache() {
-        var lru = ConfForSlot.global.confChunk.lru;
-        // 10MB
-        var maximumBytes = ConfForSlot.global.pureMemory ? Math.min(1024 * 1024 * 10L, lru.maximumBytes) : lru.maximumBytes;
-        this.readPersistedSegmentCache = Caffeine.newBuilder()
-                .recordStats()
-                .expireAfterWrite(lru.expireAfterWrite, TimeUnit.SECONDS)
-                .expireAfterAccess(lru.expireAfterAccess, TimeUnit.SECONDS)
-                .maximumWeight(maximumBytes)
-                .weigher((SegmentCacheKey k, byte[] v) -> v.length)
-                .build();
-        log.info("Read segment cache init, expire after write: {} s, expire after access: {} s, maximum bytes: {}",
-                lru.expireAfterWrite, lru.expireAfterAccess, lru.maximumBytes);
-    }
-
 
     private final Logger log = LoggerFactory.getLogger(OneSlot.class);
 
@@ -602,11 +583,6 @@ public class OneSlot implements OfStats {
         list.addAll(keyLoader.stats());
         list.add(StatKV.split);
 
-        var stats = readPersistedSegmentCache.stats();
-        final String prefix = "segment cache ";
-        OfStats.cacheStatsToList(list, stats, prefix);
-        list.add(StatKV.split);
-
         list.addAll(compressStats.stats());
         list.add(StatKV.split);
 
@@ -637,52 +613,7 @@ public class OneSlot implements OfStats {
         return list;
     }
 
-    private record SegmentCacheKey(byte workerId, byte batchIndex, int segmentIndex, long uuid) {
-        static final byte BIG_STRING_BATCH_INDEX = -1;
-
-        // need hashcode ?
-        @Override
-        public String toString() {
-            return "SegmentCacheKey{" +
-                    "workerId=" + workerId +
-                    ", batchIndex=" + batchIndex +
-                    ", segmentIndex=" + segmentIndex +
-                    ", uuid=" + uuid +
-                    '}';
-        }
-    }
-
-    private final Function<SegmentCacheKey, @PolyNull byte[]> fnLoadPersistedSegmentBytes = (segmentCacheKey) -> {
-        if (segmentCacheKey.batchIndex >= 0) {
-            return preadSegmentTightBytesWithLength(segmentCacheKey.workerId, segmentCacheKey.batchIndex, segmentCacheKey.segmentIndex);
-        }
-
-        if (segmentCacheKey.batchIndex == SegmentCacheKey.BIG_STRING_BATCH_INDEX) {
-            var file = new File(OneSlot.this.bigStringDir, String.valueOf(segmentCacheKey.uuid));
-            if (!file.exists()) {
-                log.warn("Big string file not exists, uuid: {}", segmentCacheKey.uuid);
-                return null;
-            }
-
-            try {
-                return FileUtils.readFileToByteArray(file);
-            } catch (IOException e) {
-                log.error("Read big string file error, uuid: " + segmentCacheKey.uuid, e);
-                return null;
-            }
-        }
-
-        return null;
-    };
-
-    private Cache<SegmentCacheKey, byte[]> readPersistedSegmentCache;
-
-    void refreshReadPersistedSegmentCache(byte workerId, byte batchIndex, int segmentIndex, byte[] tightBytesWithLength) {
-        var k = new SegmentCacheKey(workerId, batchIndex, segmentIndex, 0);
-        readPersistedSegmentCache.put(k, tightBytesWithLength);
-    }
-
-    public ByteBuf get(byte[] keyBytes, int bucketIndex, long keyHash) {
+    public ByteBuf get(byte[] keyBytes, int bucketIndex, long keyHash) throws ExecutionException, InterruptedException {
         var key = new String(keyBytes);
         var tmpValueBytes = getFromWal(key, bucketIndex);
         if (tmpValueBytes != null) {
@@ -746,28 +677,38 @@ public class OneSlot implements OfStats {
         return tmpValueBytes;
     }
 
+    private final LRUMap<Long, byte[]> bigStringBytesByUuidLRU;
+
     public byte[] getBigStringFromCache(long uuid) {
-        var segmentCacheKey = new SegmentCacheKey((byte) 0, SegmentCacheKey.BIG_STRING_BATCH_INDEX, 0, uuid);
-        return readPersistedSegmentCache.get(segmentCacheKey, fnLoadPersistedSegmentBytes);
+        var bytesCached = bigStringBytesByUuidLRU.get(uuid);
+        if (bytesCached != null) {
+            return bytesCached;
+        }
+
+        var bytes = readBigStringBytes(uuid);
+        if (bytes != null) {
+            bigStringBytesByUuidLRU.put(uuid, bytes);
+        }
+        return bytes;
     }
 
-    public ByteBuf getKeyValueBufByPvm(PersistValueMeta pvm) {
-        var perfTestReadSegmentNoCache = Debug.getInstance().perfTestReadSegmentNoCache;
-
-        // load from segment lru cache
-        // one key value pair only store in one segment
-        byte[] tightBytesWithLength;
-        if (!perfTestReadSegmentNoCache) {
-            if (ConfForSlot.global.pureMemory) {
-                tightBytesWithLength = preadSegmentTightBytesWithLength(pvm.workerId, pvm.batchIndex, pvm.segmentIndex);
-            } else {
-                var segmentCacheKey = new SegmentCacheKey(pvm.workerId, pvm.batchIndex, pvm.segmentIndex, 0);
-                tightBytesWithLength = readPersistedSegmentCache.get(segmentCacheKey, fnLoadPersistedSegmentBytes);
-            }
-        } else {
-            // ignore big string, just for no cache, ssd read performance test
-            tightBytesWithLength = preadSegmentTightBytesWithLength(pvm.workerId, pvm.batchIndex, pvm.segmentIndex);
+    private byte[] readBigStringBytes(long uuid) {
+        var file = new File(OneSlot.this.bigStringDir, String.valueOf(uuid));
+        if (!file.exists()) {
+            log.warn("Big string file not exists, uuid: {}", uuid);
+            return null;
         }
+
+        try {
+            return FileUtils.readFileToByteArray(file);
+        } catch (IOException e) {
+            log.error("Read big string file error, uuid: " + uuid, e);
+            return null;
+        }
+    }
+
+    public ByteBuf getKeyValueBufByPvm(PersistValueMeta pvm) throws ExecutionException, InterruptedException {
+        byte[] tightBytesWithLength = preadSegmentTightBytesWithLength(pvm.workerId, pvm.batchIndex, pvm.segmentIndex);
         if (tightBytesWithLength == null) {
             throw new IllegalStateException("Load persisted segment bytes error, pvm: " + pvm);
         }
@@ -1084,19 +1025,20 @@ public class OneSlot implements OfStats {
         // write index mmap crash recovery
         boolean isBreak = false;
         for (int i = 0; i < 10; i++) {
-            boolean canWrite = chunk.initIndex(segmentIndex);
+            boolean canWrite = chunk.initSegmentIndexWhenFirstStart(segmentIndex);
             // when restart server, set persisted flag
             if (!canWrite) {
-                log.warn("Segment can not write, w={}, s={}, b={}, i={}", chunk.workerId, slot, chunk.batchIndex, chunk.segmentIndex);
+                int currentSegmentIndex = chunk.currentSegmentIndex();
+                log.warn("Segment can not write, w={}, s={}, b={}, i={}", chunk.workerId, slot, chunk.batchIndex, currentSegmentIndex);
 
                 // set persisted flag, for next loop reuse
-                setSegmentMergeFlag(chunk.workerId, chunk.batchIndex, chunk.segmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, Chunk.MAIN_WORKER_ID, snowFlake.nextId());
+                setSegmentMergeFlag(chunk.workerId, chunk.batchIndex, currentSegmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, Chunk.MAIN_WORKER_ID, snowFlake.nextId());
                 log.warn("Reset persisted when init");
 
                 chunk.moveIndexNext(1);
-                setChunkWriteSegmentIndex(chunk.workerId, chunk.batchIndex, chunk.segmentIndex);
+                setChunkWriteSegmentIndex(chunk.workerId, chunk.batchIndex, currentSegmentIndex);
 
-                log.warn("Move to next segment, w={}, s={}, b={}, i={}", chunk.workerId, slot, chunk.batchIndex, chunk.segmentIndex);
+                log.warn("Move to next segment, w={}, s={}, b={}, i={}", chunk.workerId, slot, chunk.batchIndex, currentSegmentIndex);
             } else {
                 isBreak = true;
                 break;
@@ -1105,7 +1047,7 @@ public class OneSlot implements OfStats {
 
         if (!isBreak) {
             throw new IllegalStateException("Segment can not write after reset flag, w=" + chunk.workerId +
-                    ", s=" + slot + ", b=" + chunk.batchIndex + ", i=" + chunk.segmentIndex);
+                    ", s=" + slot + ", b=" + chunk.batchIndex + ", i=" + chunk.currentSegmentIndex());
         }
     }
 
@@ -1113,7 +1055,6 @@ public class OneSlot implements OfStats {
         var persistHandleEventloop = persistHandleEventloopArray[chunk.batchIndex];
         persistHandleEventloop.submit(() -> {
             chunk.threadIdProtectedWhenWrite = Thread.currentThread().threadId();
-            chunk.setWorkerType(true, false, false);
             log.warn("Fix request worker chunk chunk thread id, w={}, rw={}, s={}, b={}, tid={}",
                     chunk.workerId, chunk.workerId, slot, chunk.batchIndex, chunk.threadIdProtectedWhenWrite);
         });
@@ -1159,12 +1100,12 @@ public class OneSlot implements OfStats {
         }
     }
 
-    public int preadForMerge(byte workerId, byte batchIndex, int segmentIndex, ByteBuffer buffer, long offset) {
+    public byte[] preadForMerge(byte workerId, byte batchIndex, int segmentIndex) throws ExecutionException, InterruptedException {
         var chunk = chunksArray[workerId][batchIndex];
-        return chunk.preadForMerge(segmentIndex, buffer, offset);
+        return chunk.preadForMerge(segmentIndex);
     }
 
-    public byte[] preadSegmentTightBytesWithLength(byte workerId, byte batchIndex, int segmentIndex) {
+    public byte[] preadSegmentTightBytesWithLength(byte workerId, byte batchIndex, int segmentIndex) throws ExecutionException, InterruptedException {
         var chunk = chunksArray[workerId][batchIndex];
         return chunk.preadSegmentTightBytesWithLength(segmentIndex);
     }
@@ -1221,11 +1162,6 @@ public class OneSlot implements OfStats {
                     }
                 }
             }
-        }
-
-        if (readPersistedSegmentCache != null) {
-            readPersistedSegmentCache.cleanUp();
-            System.out.println("Cleanup read persisted pages cache");
         }
 
         for (var replPair : replPairs) {

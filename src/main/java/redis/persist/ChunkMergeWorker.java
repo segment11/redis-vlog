@@ -22,12 +22,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 
 import static redis.CompressedValue.KEY_HEADER_LENGTH;
 import static redis.CompressedValue.VALUE_HEADER_LENGTH;
-import static redis.persist.Chunk.MERGE_READ_SEGMENT_ONCE_COUNT;
+import static redis.persist.FdReadWrite.MERGE_READ_SEGMENT_ONCE_COUNT;
 import static redis.persist.Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED;
 import static redis.persist.ChunkMerger.*;
 import static redis.persist.LocalPersist.PAGE_SIZE;
@@ -75,7 +76,7 @@ public class ChunkMergeWorker implements OfStats {
         mergedCvListBySlotAndBatchIndex[slot][batchIndex].add(cvWithKey);
     }
 
-    boolean persistMergedCvList(byte slot, byte batchIndex) {
+    boolean persistMergedCvList(byte slot, byte batchIndex) throws ExecutionException, InterruptedException {
         var mergedCvList = mergedCvListBySlotAndBatchIndex[slot][batchIndex];
         var mergedSegmentSet = mergedSegmentSets[batchIndex];
 
@@ -209,7 +210,6 @@ public class ChunkMergeWorker implements OfStats {
     public void fixMergeHandleChunkThreadId(Chunk chunk) {
         this.mergeHandleEventloopArray[chunk.batchIndex].submit(() -> {
             chunk.threadIdProtectedWhenWrite = Thread.currentThread().threadId();
-            chunk.setWorkerType(false, true, isTopMergeWorker);
             log.warn("Fix merge worker chunk thread id, w={}, mw={}, s={}, b={}, tid={}",
                     chunk.workerId, mergeWorkerId, chunk.slot, chunk.batchIndex, chunk.threadIdProtectedWhenWrite);
         });
@@ -387,7 +387,7 @@ public class ChunkMergeWorker implements OfStats {
             final int segmentIndex;
         }
 
-        private void mergeSegments(boolean isTopMergeWorkerSelfMerge, List<Integer> needMergeSegmentIndexList) {
+        private void mergeSegments(boolean isTopMergeWorkerSelfMerge, List<Integer> needMergeSegmentIndexList) throws ExecutionException, InterruptedException {
             if (mergeWorker.isTopMergeWorker) {
                 mergeWorker.log.debug("Add debug point here, w={}, s={}, mw={}", workerId, slot, mergeWorker.mergeWorkerId);
             }
@@ -443,24 +443,15 @@ public class ChunkMergeWorker implements OfStats {
                 return;
             }
 
-            var chunk = oneSlot.chunksArray[mergeWorker.mergeWorkerId][batchIndex];
-            // need synchronized read buffer？ not necessary, because merge worker executor is single thread, need check this
-            var readForMergingBatchBuffer = isTopMergeWorkerSelfMerge ? chunk.readSelfForMergingBatchBuffer :
-                    chunk.readForMergingBatchBuffer;
-
             mergeWorker.lastMergedWorkerId = workerId;
             mergeWorker.lastMergedSlot = slot;
             mergeWorker.lastMergedSegmentIndex = lastSegmentIndex;
 
             mergeWorker.mergedSegmentCount++;
-            readForMergingBatchBuffer.clear();
 
             var beginT = System.nanoTime();
-            int n = oneSlot.preadForMerge(workerId, batchIndex, firstSegmentIndex, readForMergingBatchBuffer, (long) firstSegmentIndex * segmentLength);
-            if (n != npagesMerge * PAGE_SIZE) {
-                throw new IllegalStateException("Read chunk error, w=" + workerId + ", s=" + slot +
-                        ", i=" + firstSegmentIndex + ", n=" + n + ", segmentLength=" + segmentLength + ", npagesMerge=" + npagesMerge);
-            }
+            var segmentBytes = oneSlot.preadForMerge(workerId, batchIndex, firstSegmentIndex);
+            var readForMergingBatchBuffer = ByteBuffer.wrap(segmentBytes);
 
             // only log slot 0, just for less log
             var doLog = (isTopMergeWorkerSelfMerge && firstSegmentIndex % 1000 == 0 && slot == 0) ||
@@ -468,7 +459,6 @@ public class ChunkMergeWorker implements OfStats {
                     (firstSegmentIndex % 10000 == 0 && slot == 0) ||
                     Debug.getInstance().logMerge;
 
-            readForMergingBatchBuffer.rewind();
             // read all segments to memory
             ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(npagesMerge * 20);
 

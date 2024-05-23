@@ -220,9 +220,7 @@ public class MGroup extends BaseCommand {
                 case "logCompress" -> Debug.getInstance().logCompress = isOn;
                 case "logPersist" -> Debug.getInstance().logPersist = isOn;
                 case "logRestore" -> Debug.getInstance().logRestore = isOn;
-                case "perfSkipPersist" -> Debug.getInstance().perfSkipPersist = isOn;
                 case "perfSkipPvmUpdate" -> Debug.getInstance().perfSkipPvmUpdate = isOn;
-                case "perfTestReadSegmentNoCache" -> Debug.getInstance().perfTestReadSegmentNoCache = isOn;
                 default -> {
                     return ErrorReply.FORMAT;
                 }

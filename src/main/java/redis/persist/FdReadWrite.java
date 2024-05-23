@@ -8,6 +8,8 @@ import io.prometheus.client.Counter;
 import io.prometheus.client.Summary;
 import jnr.constants.platform.OpenFlags;
 import jnr.posix.LibC;
+import net.openhft.affinity.AffinityStrategies;
+import net.openhft.affinity.AffinityThreadFactory;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
@@ -98,7 +100,39 @@ public class FdReadWrite implements OfStats {
 
     private final Logger log = LoggerFactory.getLogger(FdReadWrite.class);
 
-    public void initEventloop(ThreadFactory threadFactory) {
+    // one or two ssd volume, one cpu v-core is enough
+    static final ThreadFactory threadFactoryGroup1 = new AffinityThreadFactory("merge-worker-group1",
+            AffinityStrategies.SAME_CORE);
+
+    static final ThreadFactory threadFactoryGroup2 = new AffinityThreadFactory("merge-worker-group1",
+            AffinityStrategies.SAME_CORE);
+
+    static final ThreadFactory threadFactoryGroup3 = new AffinityThreadFactory("merge-worker-group1",
+            AffinityStrategies.SAME_CORE);
+
+    static final ThreadFactory threadFactoryGroup4 = new AffinityThreadFactory("merge-worker-group1",
+            AffinityStrategies.SAME_CORE);
+
+    private static final int THREAD_FACTORY_GROUP_COUNT = 4;
+
+    // need not thread safe
+    // just for init
+    private static int increaseCountForChooseThreadFactory = 0;
+
+    private static ThreadFactory getNextThreadFactory() {
+        int d = increaseCountForChooseThreadFactory % THREAD_FACTORY_GROUP_COUNT;
+        var threadFactory = switch (d) {
+            case 0 -> threadFactoryGroup1;
+            case 1 -> threadFactoryGroup2;
+            case 2 -> threadFactoryGroup3;
+            case 3 -> threadFactoryGroup4;
+            default -> throw new IllegalStateException("Unexpected value: " + d);
+        };
+        increaseCountForChooseThreadFactory++;
+        return threadFactory;
+    }
+
+    public void initEventloop(ThreadFactory threadFactoryGiven) {
         var threadName = "fd-read-write-" + name;
         this.eventloop = Eventloop.builder()
                 .withThreadName(threadName)
@@ -106,6 +140,7 @@ public class FdReadWrite implements OfStats {
                 .build();
         this.eventloop.keepAlive(true);
 
+        var threadFactory = threadFactoryGiven == null ? getNextThreadFactory() : threadFactoryGiven;
         var thread = threadFactory.newThread(this.eventloop);
         thread.start();
         log.info("Init eventloop, thread name: {}", threadName);
@@ -169,6 +204,10 @@ public class FdReadWrite implements OfStats {
     static final int MERGE_READ_SEGMENT_ONCE_COUNT = 10;
 
     private byte[][] allBytesBySegmentIndex;
+
+    public boolean isTargetSegmentIndexNullInMemory(int segmentIndex) {
+        return allBytesBySegmentIndex[segmentIndex] == null;
+    }
 
     private LRUMap<Integer, byte[]> segmentBytesByIndex;
 
@@ -453,8 +492,8 @@ public class FdReadWrite implements OfStats {
     }
 
     public CompletableFuture<Integer> writeSegment(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
-        if (bytes.length != segmentLength) {
-            throw new IllegalArgumentException("Write bytes length not match segment length");
+        if (bytes.length > segmentLength) {
+            throw new IllegalArgumentException("Write bytes length must be less than segment length");
         }
 
         if (ConfForSlot.global.pureMemory) {
