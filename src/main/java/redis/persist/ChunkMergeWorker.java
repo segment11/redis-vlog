@@ -74,7 +74,8 @@ public class ChunkMergeWorker {
         mergedCvListBySlotAndBatchIndex[slot][batchIndex].add(cvWithKey);
     }
 
-    boolean persistMergedCvList(byte slot, byte batchIndex) throws ExecutionException, InterruptedException {
+    boolean persistMergedCvList(byte slot, byte batchIndex)
+            throws ExecutionException, InterruptedException, IOException {
         var mergedCvList = mergedCvListBySlotAndBatchIndex[slot][batchIndex];
         var mergedSegmentSet = mergedSegmentSets[batchIndex];
 
@@ -391,7 +392,8 @@ public class ChunkMergeWorker {
             final int segmentIndex;
         }
 
-        private void mergeSegments(boolean isTopMergeWorkerSelfMerge, List<Integer> needMergeSegmentIndexList) throws ExecutionException, InterruptedException {
+        private void mergeSegments(boolean isTopMergeWorkerSelfMerge, List<Integer> needMergeSegmentIndexList)
+                throws ExecutionException, InterruptedException, IOException {
             if (mergeWorker.isTopMergeWorker) {
                 mergeWorker.log.debug("Add debug point here, w={}, s={}, mw={}", workerId, slot, mergeWorker.mergeWorkerId);
             }

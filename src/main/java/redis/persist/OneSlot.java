@@ -419,7 +419,7 @@ public class OneSlot {
 
     public ArrayList<KeyBucket> getKeyBuckets(int bucketIndex) {
         try {
-            return keyLoader.getKeyBuckets(bucketIndex);
+            return keyLoader.readKeyBuckets(bucketIndex);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -589,7 +589,7 @@ public class OneSlot {
             return Unpooled.wrappedBuffer(tmpValueBytes);
         }
 
-        var valueBytesWithExpireAt = keyLoader.get(bucketIndex, keyBytes, keyHash);
+        var valueBytesWithExpireAt = keyLoader.getValueByKey(bucketIndex, keyBytes, keyHash);
         if (valueBytesWithExpireAt == null) {
             return null;
         }
@@ -705,9 +705,7 @@ public class OneSlot {
         try {
             var isRemovedFromWal = removeFromWal(workerId, bucketIndex, key, keyHash);
             isDeleted = isRemovedFromWal || keyLoader.remove(bucketIndex, key.getBytes(), keyHash);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
         return isDeleted;

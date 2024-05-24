@@ -249,7 +249,8 @@ public class Chunk {
     long threadIdProtectedWhenWrite = -1;
 
     // return need merge segment index array
-    public ArrayList<Integer> persist(ArrayList<Wal.V> list) throws ExecutionException, InterruptedException {
+    public ArrayList<Integer> persist(ArrayList<Wal.V> list)
+            throws ExecutionException, InterruptedException, IOException {
         checkCurrentThread();
 
         moveIndexForPrepare();

@@ -26,7 +26,7 @@ public class KeyLoader {
 
     // one split file max 2GB, 2 * 1024 * 1024 / 4 = 524288
     // one split index one file
-    static final int KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
+    static final int MAX_KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
     public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake,
                      MasterUpdateCallback masterUpdateCallback, DynConfig dynConfig) throws IOException {
@@ -115,20 +115,20 @@ public class KeyLoader {
 
     // need thread safe
     private synchronized void initFds(byte splitNumber) throws IOException {
-        for (int fdIndex = 0; fdIndex < splitNumber; fdIndex++) {
-            if (fdReadWriteArray[fdIndex] != null) {
+        for (int splitIndex = 0; splitIndex < splitNumber; splitIndex++) {
+            if (fdReadWriteArray[splitIndex] != null) {
                 continue;
             }
 
-            var file = new File(slotDir, "key-bucket-split-" + fdIndex + ".dat");
+            var file = new File(slotDir, "key-bucket-split-" + splitIndex + ".dat");
 
             // prometheus metric labels use _ instead of -
-            var name = "key_bucket_split_" + fdIndex + "_slot_" + slot;
+            var name = "key_bucket_split_" + splitIndex + "_slot_" + slot;
             var fdReadWrite = new FdReadWrite(name, libC, file);
             fdReadWrite.initByteBuffers(false);
             fdReadWrite.initEventloop(null);
 
-            fdReadWriteArray[fdIndex] = fdReadWrite;
+            fdReadWriteArray[splitIndex] = fdReadWrite;
         }
         log.info("Persist key bucket files fd opened, split number: {}, slot: {}", splitNumber, slot);
     }
@@ -152,8 +152,10 @@ public class KeyLoader {
 
     public byte[] readKeyBucketBytesBatchToSlaveExists(byte splitIndex, int beginBucketIndex)
             throws ExecutionException, InterruptedException {
-        var fdIndex = splitIndex;
-        var fdReadWrite = fdReadWriteArray[fdIndex];
+        var fdReadWrite = fdReadWriteArray[splitIndex];
+        if (fdReadWrite == null) {
+            return null;
+        }
         return fdReadWrite.readSegmentForRepl(beginBucketIndex).get();
     }
 
@@ -167,11 +169,10 @@ public class KeyLoader {
         // left length may be 0
         var leftLength = contentBytes.length - position;
 
-        var fdIndex = splitIndex;
-        var fdReadWrite = fdReadWriteArray[fdIndex];
+        var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
             initFds((byte) (splitIndex + 1));
-            fdReadWrite = fdReadWriteArray[fdIndex];
+            fdReadWrite = fdReadWriteArray[splitIndex];
         }
 
         if (ConfForSlot.global.pureMemory) {
@@ -195,23 +196,27 @@ public class KeyLoader {
                 slot, splitIndex, beginBucketIndex);
     }
 
-    private boolean isBytesValidKeyBucket(byte[] bytes) {
+    private boolean isBytesValidAsKeyBucket(byte[] bytes) {
         if (bytes == null) {
             return false;
         }
 
-        // init 0, not write yet
-        var firstInt = ByteBuffer.wrap(bytes, 0, 4).getInt();
-        return firstInt != 0;
+        // init is 0, not write yet
+        var firstLong = ByteBuffer.wrap(bytes, 0, 8).getLong();
+        return firstLong != 0;
     }
 
-    private KeyBucket getKeyBucket(int bucketIndex, long keyHash) throws ExecutionException, InterruptedException {
+    private KeyBucket readKeyBucket(int bucketIndex, long keyHash)
+            throws ExecutionException, InterruptedException {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
         var fdReadWrite = fdReadWriteArray[splitIndex];
+        if (fdReadWrite == null) {
+            return null;
+        }
 
         var bytes = fdReadWrite.readSegment(bucketIndex, true).get();
-        if (!isBytesValidKeyBucket(bytes)) {
+        if (!isBytesValidAsKeyBucket(bytes)) {
             return null;
         }
 
@@ -220,28 +225,32 @@ public class KeyLoader {
         return keyBucket;
     }
 
-    public KeyBucket.ValueBytesWithExpireAt get(int bucketIndex, byte[] keyBytes, long keyHash) throws ExecutionException, InterruptedException {
-        var keyBucket = getKeyBucket(bucketIndex, keyHash);
+    public KeyBucket.ValueBytesWithExpireAt getValueByKey(int bucketIndex, byte[] keyBytes, long keyHash)
+            throws ExecutionException, InterruptedException {
+        var keyBucket = readKeyBucket(bucketIndex, keyHash);
         if (keyBucket == null) {
             return null;
         }
         return keyBucket.getValueByKey(keyBytes, keyHash);
     }
 
-    public ArrayList<KeyBucket> getKeyBuckets(int bucketIndex) throws ExecutionException, InterruptedException {
+    public ArrayList<KeyBucket> readKeyBuckets(int bucketIndex)
+            throws ExecutionException, InterruptedException {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         ArrayList<KeyBucket> keyBuckets = new ArrayList<>(splitNumber);
 
-        for (int i = 0; i < splitNumber; i++) {
-            var splitIndex = i;
-            var fdIndex = splitIndex;
-            var fdReadWrite = fdReadWriteArray[fdIndex];
+        for (int splitIndex = 0; splitIndex < splitNumber; splitIndex++) {
+            var fdReadWrite = fdReadWriteArray[splitIndex];
+            if (fdReadWrite == null) {
+                keyBuckets.add(null);
+                continue;
+            }
 
             var bytes = fdReadWrite.readSegment(bucketIndex, false).get();
-            if (!isBytesValidKeyBucket(bytes)) {
+            if (!isBytesValidAsKeyBucket(bytes)) {
                 keyBuckets.add(null);
             } else {
-                var keyBucket = new KeyBucket(slot, bucketIndex, (byte) i, splitNumber, bytes, snowFlake);
+                var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
                 keyBucket.initWithCompressStats(compressStats);
                 keyBuckets.add(keyBucket);
             }
@@ -250,19 +259,22 @@ public class KeyLoader {
     }
 
     public void updateKeyBucketFromMasterNewly(int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes)
-            throws ExecutionException, InterruptedException {
+            throws ExecutionException, InterruptedException, IOException {
         updateKeyBucketInner(bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes);
     }
 
     private void updateKeyBucketInner(int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes)
-            throws ExecutionException, InterruptedException {
+            throws ExecutionException, InterruptedException, IOException {
         if (bytes.length > KEY_BUCKET_ONE_COST_SIZE) {
             throw new IllegalStateException("Key bucket bytes size too large, slot: " + slot +
                     ", bucket index: " + bucketIndex + ", split index: " + splitIndex + ", size: " + bytes.length);
         }
 
-        var fdIndex = splitIndex;
-        var fdReadWrite = fdReadWriteArray[fdIndex];
+        var fdReadWrite = fdReadWriteArray[splitIndex];
+        if (fdReadWrite == null) {
+            initFds(splitNumber);
+            fdReadWrite = fdReadWriteArray[splitIndex];
+        }
 
         fdReadWrite.writeSegment(bucketIndex, bytes, false).get();
 
@@ -271,23 +283,26 @@ public class KeyLoader {
         }
     }
 
-    private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket) throws ExecutionException, InterruptedException {
+    private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket)
+            throws ExecutionException, InterruptedException, IOException {
         updateKeyBucketInner(bucketIndex, keyBucket.splitIndex, keyBucket.splitNumber, keyBucket.lastUpdateSeq, keyBucket.compress());
     }
 
     interface UpdateBatchCallback {
         void call(final ArrayList<KeyBucket> keyBuckets, final boolean[] putFlags, final byte splitNumber, final boolean isLoadedAll)
-                throws ExecutionException, InterruptedException;
+                throws ExecutionException, InterruptedException, IOException;
     }
 
     private long updateBatchCount = 0;
 
     private KeyBucket readOneKeyBucket(int bucketIndex, int splitIndex, byte splitNumber) throws ExecutionException, InterruptedException {
-        var fdIndex = splitIndex;
-        var fdReadWrite = fdReadWriteArray[fdIndex];
+        var fdReadWrite = fdReadWriteArray[splitIndex];
+        if (fdReadWrite == null) {
+            return null;
+        }
 
         var bytes = fdReadWrite.readSegment(bucketIndex, false).get();
-        if (!isBytesValidKeyBucket(bytes)) {
+        if (!isBytesValidAsKeyBucket(bytes)) {
             return null;
         }
 
@@ -296,7 +311,7 @@ public class KeyLoader {
         return keyBucket;
     }
 
-    private void updateBatch(int bucketIndex, long keyHash, UpdateBatchCallback callback) throws ExecutionException, InterruptedException {
+    private void updateBatch(int bucketIndex, long keyHash, UpdateBatchCallback callback) throws ExecutionException, InterruptedException, IOException {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         ArrayList<KeyBucket> keyBuckets = new ArrayList<>(splitNumber);
 
@@ -357,8 +372,38 @@ public class KeyLoader {
         }
     }
 
-    public void updatePvmListAfterWriteSegment(ArrayList<PersistValueMeta> pvmList) throws ExecutionException, InterruptedException {
+    public void updatePvmListAfterWriteSegment(ArrayList<PersistValueMeta> pvmList)
+            throws ExecutionException, InterruptedException, IOException {
         var groupByBucketIndex = pvmList.stream().collect(Collectors.groupingBy(one -> one.bucketIndex));
+
+        // batch read
+//        var minBucketIndex = groupByBucketIndex.keySet().stream().min(Integer::compareTo).orElse(0);
+//        var maxBucketIndex = groupByBucketIndex.keySet().stream().max(Integer::compareTo).orElse(0);
+//        var diff = maxBucketIndex - minBucketIndex;
+//        if (diff > ConfForSlot.global.confWal.oneChargeBucketNumber) {
+//            throw new IllegalStateException("once update key buckets number > ConfForSlot.global.confWal.oneChargeBucketNumber");
+//        }
+//
+//        int maxSplitNumber = 1;
+//        for (var entry : groupByBucketIndex.entrySet()) {
+//            var bucketIndex = entry.getKey();
+//            var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
+//            if (splitNumber > maxSplitNumber) {
+//                maxSplitNumber = splitNumber;
+//            }
+//        }
+//
+//        for (int splitIndex = 0; splitIndex < maxSplitNumber; splitIndex++) {
+//            var fdReadWrite = fdReadWriteArray[splitIndex];
+//            if (fdReadWrite == null) {
+//                initFds((byte) (splitIndex + 1));
+//                fdReadWrite = fdReadWriteArray[splitIndex];
+//            }
+//
+//            var bytesBatch = fdReadWrite.readSegmentForKeyBucketWhenMergeCompare(minBucketIndex).get();
+//            // todo
+//        }
+
         for (var entry : groupByBucketIndex.entrySet()) {
             var bucketIndex = entry.getKey();
             var list = entry.getValue();
@@ -371,7 +416,8 @@ public class KeyLoader {
         }
     }
 
-    private void persistPvmListBatch(int bucketIndex, ArrayList<PvmRow> pvmRowList) throws ExecutionException, InterruptedException {
+    private void persistPvmListBatch(int bucketIndex, ArrayList<PvmRow> pvmRowList)
+            throws ExecutionException, InterruptedException, IOException {
         updateBatch(bucketIndex, 0, (keyBuckets, putBackFlags, splitNumber, isLoadedAll) -> {
             var beforeKeyBuckets = new ArrayList<>(keyBuckets);
             byte[] beforeSplitNumberArr = new byte[]{splitNumber};
@@ -403,7 +449,8 @@ public class KeyLoader {
         });
     }
 
-    public void persistShortValueListBatch(int bucketIndex, List<Wal.V> shortValueList) throws ExecutionException, InterruptedException {
+    public void persistShortValueListBatch(int bucketIndex, List<Wal.V> shortValueList)
+            throws ExecutionException, InterruptedException, IOException {
         updateBatch(bucketIndex, 0, (keyBuckets, putBackFlags, splitNumber, isLoadedAll) -> {
             var beforeKeyBuckets = new ArrayList<>(keyBuckets);
             byte[] beforeSplitNumberArr = new byte[]{splitNumber};
@@ -448,7 +495,7 @@ public class KeyLoader {
     private void splitOthersIfSplit(int bucketIndex, ArrayList<KeyBucket> keyBuckets, boolean[] putBackFlags,
                                     ArrayList<KeyBucket> beforeKeyBuckets, byte[] beforeSplitNumberArr,
                                     int splitIndex, KeyBucket keyBucket, boolean notSplit, KeyBucket[] afterPutKeyBuckets)
-            throws ExecutionException, InterruptedException {
+            throws ExecutionException, InterruptedException, IOException {
         if (notSplit) {
             putBackFlags[splitIndex] = true;
         }
@@ -501,7 +548,8 @@ public class KeyLoader {
         }
     }
 
-    public boolean remove(int bucketIndex, byte[] keyBytes, long keyHash) throws ExecutionException, InterruptedException {
+    public boolean remove(int bucketIndex, byte[] keyBytes, long keyHash)
+            throws ExecutionException, InterruptedException, IOException {
         boolean[] deleteFlags = new boolean[1];
         updateBatch(bucketIndex, keyHash, (keyBuckets, putFlags, splitNumber, isLoadedAll) -> {
             // key hash is not 0, just get one target key bucket
@@ -526,18 +574,18 @@ public class KeyLoader {
         boolean[] ftruncateFlags = new boolean[MAX_SPLIT_NUMBER];
 
         for (int i = 0; i < bucketsPerSlot; i++) {
-            for (int fdIndex = 0; fdIndex < MAX_SPLIT_NUMBER; fdIndex++) {
-                var fdReadWrite = fdReadWriteArray[fdIndex];
+            for (int splitIndex = 0; splitIndex < MAX_SPLIT_NUMBER; splitIndex++) {
+                var fdReadWrite = fdReadWriteArray[splitIndex];
                 if (fdReadWrite == null) {
                     continue;
                 }
 
-                if (ftruncateFlags[fdIndex]) {
+                if (ftruncateFlags[splitIndex]) {
                     continue;
                 }
 
                 fdReadWrite.truncate().get();
-                ftruncateFlags[fdIndex] = true;
+                ftruncateFlags[splitIndex] = true;
             }
         }
     }

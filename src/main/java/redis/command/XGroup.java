@@ -494,6 +494,10 @@ public class XGroup extends BaseCommand {
             return Repl.reply(slot, replPair, ReplType.error, new RawBytesContent((errorMessage + ": " + e.getMessage()).getBytes()));
         }
 
+        if (bytes == null) {
+            return Repl.reply(slot, replPair, ReplType.s_exists_key_buckets, new EmptyContent());
+        }
+
         var responseBytes = new byte[1 + 1 + 4 + bytes.length];
         var buffer = ByteBuffer.wrap(responseBytes);
         buffer.put(splitIndex);
@@ -508,7 +512,14 @@ public class XGroup extends BaseCommand {
 
     private Reply s_exists_key_buckets(byte slot, byte[] contentBytes) {
         // client received from server
+        // empty content means no exist key buckets, next step
         var oneSlot = localPersist.oneSlot(slot);
+        if (contentBytes.length == 1) {
+            // next step, fetch exists chunk segments
+            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeqBytesOneWorkerOneBatchToSlaveExists((byte) 0, (byte) 0);
+            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentMeta((byte) 0, (byte) 0, metaBytes));
+        }
+
         try {
             oneSlot.getKeyLoader().writeKeyBucketBytesBatchFromMaster(contentBytes);
         } catch (Exception e) {

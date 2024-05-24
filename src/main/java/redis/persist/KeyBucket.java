@@ -18,7 +18,7 @@ import static redis.persist.KeyLoader.SPLIT_MULTI_STEP;
 public class KeyBucket {
     private static final short INIT_CAPACITY = 50;
     // if big, wal will cost too much memory
-    public static final int MAX_BUCKETS_PER_SLOT = KeyLoader.KEY_BUCKET_COUNT_PER_FD;
+    public static final int MAX_BUCKETS_PER_SLOT = KeyLoader.MAX_KEY_BUCKET_COUNT_PER_FD;
     public static final int DEFAULT_BUCKETS_PER_SLOT = 16384;
 
     // key length short 2 + key length <= 32 + value length byte 1 + (pvm length 24 or short value case number 17 / string 19 ) < 64
