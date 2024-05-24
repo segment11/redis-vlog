@@ -8,6 +8,7 @@ import io.activej.config.Config;
 import io.activej.eventloop.Eventloop;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.prometheus.client.Summary;
 import jnr.posix.LibC;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
@@ -15,13 +16,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
 import redis.command.XGroup;
+import redis.metric.SimpleGauge;
 import redis.repl.MasterUpdateCallback;
 import redis.repl.ReplPair;
 import redis.repl.SendToSlaveMasterUpdateCallback;
 import redis.repl.content.ToMasterExistsSegmentMeta;
 import redis.repl.content.ToSlaveWalAppendBatch;
-import redis.stats.OfStats;
-import redis.stats.StatKV;
 import redis.task.ITask;
 import redis.task.TaskChain;
 
@@ -39,12 +39,13 @@ import java.util.stream.Collectors;
 import static io.activej.config.converter.ConfigConverters.ofInteger;
 import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
-public class OneSlot implements OfStats {
+public class OneSlot {
     public OneSlot(byte slot, short slotNumber, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
         this.segmentLength = ConfForSlot.global.confChunk.segmentLength;
         this.batchNumber = ConfForSlot.global.confWal.batchNumber;
 
         this.slot = slot;
+        this.slotStr = String.valueOf(slot);
         this.snowFlake = snowFlake;
         this.persistConfig = persistConfig;
 
@@ -166,9 +167,8 @@ public class OneSlot implements OfStats {
             log.info("Slot persist handle eventloop thread started, s={}, b={}", slot, i);
         }
 
-        this.compressStats = new CompressStats("slot-" + slot);
-
         this.initTasks();
+        this.initMetricsCollect();
     }
 
     private final Logger log = LoggerFactory.getLogger(OneSlot.class);
@@ -310,6 +310,7 @@ public class OneSlot implements OfStats {
     }
 
     private final byte slot;
+    private final String slotStr;
 
     public byte slot() {
         return slot;
@@ -475,8 +476,6 @@ public class OneSlot implements OfStats {
         metaChunkSegmentIndex.overwriteInMemoryCachedBytes(bytes);
     }
 
-    private final CompressStats compressStats;
-
     boolean reuseNetWorkers;
 
     private final TaskChain taskChain = new TaskChain();
@@ -573,44 +572,6 @@ public class OneSlot implements OfStats {
                 return 10;
             }
         });
-    }
-
-    @Override
-    public List<StatKV> stats() {
-        ArrayList<StatKV> list = new ArrayList<>();
-
-        list.add(StatKV.split);
-        list.addAll(keyLoader.stats());
-        list.add(StatKV.split);
-
-        list.addAll(compressStats.stats());
-        list.add(StatKV.split);
-
-        var firstChunk = chunksArray[0][0];
-        list.addAll(firstChunk.stats());
-        list.add(StatKV.split);
-
-        list.add(new StatKV("wal-s-" + slot + "-group-0 queue size", walQueueArray[0].size()));
-        list.add(new StatKV("wal-s-" + slot + " take wal cost nanos", takeWalCostNanos));
-        list.add(new StatKV("wal-s-" + slot + " take wal count", takeWalCount));
-        if (takeWalCount > 0) {
-            list.add(new StatKV("wal-s-" + slot + " take wal cost avg nanos", (double) takeWalCostNanos / takeWalCount));
-        }
-        list.add(StatKV.split);
-
-        if (!replPairs.isEmpty()) {
-            list.add(StatKV.split);
-            for (var replPair : replPairs) {
-                if (replPair.isSendBye()) {
-                    continue;
-                }
-
-                list.add(new StatKV("repl pair link up to " + replPair.getHost() + ":" + replPair.getPort(), replPair.isLinkUp() ? 1 : 0));
-            }
-            list.add(StatKV.split);
-        }
-
-        return list;
     }
 
     public ByteBuf get(byte[] keyBytes, int bucketIndex, long keyHash) throws ExecutionException, InterruptedException {
@@ -720,18 +681,15 @@ public class OneSlot implements OfStats {
         var subBlockLength = buffer.getShort();
 
         var uncompressedBytes = new byte[segmentLength];
-        long begin = System.nanoTime();
+
+        var timer = decompressTimeSummary.labels(slotStr).startTimer();
         var d = Zstd.decompressByteArray(uncompressedBytes, 0, segmentLength,
                 tightBytesWithLength, subBlockOffset, subBlockLength);
-        long costT = System.nanoTime() - begin;
+        timer.observeDuration();
         if (d != segmentLength) {
             throw new IllegalStateException("Decompress error, w=" + pvm.workerId + ", s=" + pvm.slot +
                     ", b=" + pvm.batchIndex + ", i=" + pvm.segmentIndex + ", sbi=" + pvm.subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
         }
-
-        // thread safe, need not long adder
-        compressStats.decompressCount2.increment();
-        compressStats.decompressCostTotalTimeNanos2.add(costT);
 
         var buf = Unpooled.wrappedBuffer(uncompressedBytes);
         buf.readerIndex(pvm.segmentOffset);
@@ -1371,5 +1329,55 @@ public class OneSlot implements OfStats {
 
     public void setChunkWriteSegmentIndex(byte workerId, byte batchIndex, int segmentIndex) {
         metaChunkSegmentIndex.put(workerId, batchIndex, segmentIndex);
+    }
+
+    // metrics
+    private final SimpleGauge walDelaySizeGauge = new SimpleGauge("wal_delay_size", "wal delay size",
+            "slot", "group_index", "batch_index");
+
+    private final SimpleGauge slotInnerGauge = new SimpleGauge("slot_inner", "slot inner",
+            "slot");
+
+    private static final Summary decompressTimeSummary = Summary.build().name("decompress_time").
+            help("slot segment decompress time summary").
+            labelNames("worker_id", "slot").
+            quantile(0.5, 0.05).
+            quantile(0.9, 0.01).
+            quantile(0.99, 0.01).
+            quantile(0.999, 0.001)
+            .register();
+
+    private void initMetricsCollect() {
+        walDelaySizeGauge.register();
+        walDelaySizeGauge.setRawGetter(() -> {
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            for (var wals : walsArray) {
+                for (var wal : wals) {
+                    var labelValues = List.of(slotStr, String.valueOf(wal.groupIndex), String.valueOf(wal.batchIndex));
+                    map.put("delay_values_size", new SimpleGauge.ValueWithLabelValues((double) wal.delayToKeyBucketValues.size(), labelValues));
+                    map.put("delay_short_values_size", new SimpleGauge.ValueWithLabelValues((double) wal.delayToKeyBucketShortValues.size(), labelValues));
+                }
+            }
+            return map;
+        });
+
+        slotInnerGauge.register();
+        slotInnerGauge.setRawGetter(() -> {
+            var labelValues = List.of(slotStr);
+
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            map.put("dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
+            map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
+
+            map.put("take_wal_cost_nanos", new SimpleGauge.ValueWithLabelValues((double) takeWalCostNanos, labelValues));
+            map.put("take_wal_count", new SimpleGauge.ValueWithLabelValues((double) takeWalCount, labelValues));
+            if (takeWalCount > 0) {
+                map.put("take_wal_cost_avg_nanos", new SimpleGauge.ValueWithLabelValues(((double) takeWalCostNanos / takeWalCount), labelValues));
+            }
+
+            var replPairSize = replPairs.stream().filter(one -> !one.isSendBye()).count();
+            map.put("repl_pair_size", new SimpleGauge.ValueWithLabelValues((double) replPairSize, labelValues));
+            return map;
+        });
     }
 }

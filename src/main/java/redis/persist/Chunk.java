@@ -7,8 +7,6 @@ import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.SnowFlake;
 import redis.repl.MasterUpdateCallback;
-import redis.stats.OfStats;
-import redis.stats.StatKV;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,7 +19,7 @@ import java.util.concurrent.ExecutionException;
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 import static redis.repl.content.ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
 
-public class Chunk implements OfStats {
+public class Chunk {
     private final int maxSegmentNumberPerFd;
     private final byte maxFdPerChunk;
     private final int maxSegmentIndex;
@@ -528,12 +526,5 @@ public class Chunk implements OfStats {
                     segmentIndex, segmentCount, segmentSeqList, bytes, bytes.length);
         }
         return isNewAppend;
-    }
-
-    @Override
-    public List<StatKV> stats() {
-        List<StatKV> list = new ArrayList<>();
-        list.add(StatKV.split);
-        return list;
     }
 }

@@ -5,16 +5,13 @@ import net.openhft.affinity.AffinityStrategies;
 import net.openhft.affinity.AffinityThreadFactory;
 import redis.SnowFlake;
 import redis.repl.MasterUpdateCallback;
-import redis.stats.OfStats;
-import redis.stats.StatKV;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadFactory;
 
-public class ChunkMerger implements OfStats {
+public class ChunkMerger {
     public static final byte MAX_MERGE_WORKERS = 32;
     public static final byte MAX_TOP_MERGE_WORKERS = 32;
 
@@ -180,26 +177,5 @@ public class ChunkMerger implements OfStats {
         }
         // should not reach here
         return CompletableFuture.completedFuture(job.validCvCountAfterRun);
-    }
-
-    @Override
-    public List<StatKV> stats() {
-        List<StatKV> list = new ArrayList<>();
-
-        final String prefix = "chunk merge ";
-        list.add(new StatKV(prefix + "worker number", chunkMergeWorkers.length));
-        list.add(new StatKV(prefix + "top worker number", topChunkMergeWorkers.length));
-        list.add(StatKV.split);
-
-        for (var worker : chunkMergeWorkers) {
-            list.addAll(worker.stats());
-            list.add(StatKV.split);
-        }
-        for (var topWorker : topChunkMergeWorkers) {
-            list.addAll(topWorker.stats());
-            list.add(StatKV.split);
-        }
-
-        return list;
     }
 }

@@ -5,21 +5,17 @@ import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.ConfForSlot;
 import redis.SnowFlake;
-import redis.stats.OfStats;
-import redis.stats.StatKV;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 
 import static redis.CompressedValue.EXPIRE_NOW;
 
-public class Wal implements OfStats {
+public class Wal {
     public record V(byte workerId, long seq, int bucketIndex, long keyHash, long expireAt,
                     String key, byte[] cvEncoded, int cvEncodedLength) {
         @Override
@@ -159,7 +155,7 @@ public class Wal implements OfStats {
     private final Logger log = LoggerFactory.getLogger(Wal.class);
 
     private final byte slot;
-    private final int groupIndex;
+    final int groupIndex;
     final byte batchIndex;
     private final RandomAccessFile walSharedFile;
     private final RandomAccessFile walSharedFileShortValue;
@@ -346,15 +342,5 @@ public class Wal implements OfStats {
 
         boolean needPersist = delayToKeyBucketValues.size() >= ConfForSlot.global.confWal.valueSizeTrigger;
         return new PutResult(needPersist, false, null, needPersist ? 0 : offset);
-    }
-
-    @Override
-    public List<StatKV> stats() {
-        List<StatKV> list = new ArrayList<>();
-        final String prefix = "wal-s-" + slot + "-batch-" + batchIndex + " ";
-
-        list.add(new StatKV(prefix + "delay list size", delayToKeyBucketValues.size()));
-        list.add(new StatKV(prefix + "delay short list size", delayToKeyBucketShortValues.size()));
-        return list;
     }
 }

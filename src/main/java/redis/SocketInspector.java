@@ -2,6 +2,7 @@ package redis;
 
 import io.activej.bytebuf.ByteBuf;
 import io.activej.net.socket.tcp.TcpSocket;
+import io.prometheus.client.Gauge;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,11 +16,18 @@ public class SocketInspector implements TcpSocket.Inspector {
 
     ConcurrentHashMap<InetSocketAddress, TcpSocket> socketMap = new ConcurrentHashMap<>();
 
+    private Gauge connectedCountGauge = Gauge.build()
+            .name("connected_client_count")
+            .help("connected client count")
+            .register();
+
     @Override
     public void onConnect(TcpSocket socket) {
         var remoteAddress = socket.getRemoteAddress();
         log.info("On connect, remote address: {}", remoteAddress);
         socketMap.put(remoteAddress, socket);
+
+        connectedCountGauge.inc();
     }
 
     @Override
@@ -63,6 +71,8 @@ public class SocketInspector implements TcpSocket.Inspector {
         log.info("On disconnect, remote address: {}", remoteAddress);
         AuthHolder.flagBySocketAddress.remove(remoteAddress);
         socketMap.remove(remoteAddress);
+
+        connectedCountGauge.dec();
     }
 
     @Override

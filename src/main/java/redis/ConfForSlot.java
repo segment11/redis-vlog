@@ -13,10 +13,11 @@ public enum ConfForSlot {
     public final ConfBucket confBucket;
     public final ConfChunk confChunk;
     public final ConfWal confWal;
-
     public final ConfLru lruBigString = new ConfLru(300, 300, 100_000_000L, 1000);
 
     public boolean pureMemory = false;
+    public short slotNumber = 1;
+    public byte allWorkers = 1;
 
     public static ConfForSlot from(long estimateKeyNumber) {
         if (estimateKeyNumber <= 1_000_000L) {

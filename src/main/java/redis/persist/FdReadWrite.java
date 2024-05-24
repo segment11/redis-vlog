@@ -17,15 +17,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.repl.content.ToMasterExistsSegmentMeta;
-import redis.stats.OfStats;
-import redis.stats.StatKV;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadFactory;
@@ -33,7 +29,7 @@ import java.util.concurrent.ThreadFactory;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 import static redis.persist.LocalPersist.PROTECTION;
 
-public class FdReadWrite implements OfStats {
+public class FdReadWrite {
 
     public FdReadWrite(String name, LibC libC, File file) throws IOException {
         this.name = name;
@@ -44,8 +40,6 @@ public class FdReadWrite implements OfStats {
         }
         this.fd = libC.open(file.getAbsolutePath(), LocalPersist.O_DIRECT | OpenFlags.O_RDWR.value(), 00644);
         log.info("Opened fd: {}, name: {}", fd, name);
-
-        this.segmentBytesByIndex = new LRUMap<>(ConfForSlot.global.confChunk.lru.maxSize);
     }
 
     private final String name;
@@ -196,12 +190,9 @@ public class FdReadWrite implements OfStats {
     ByteBuffer readForMergeBatchBuffer;
     private long readForMergeBatchAddress;
 
-    ByteBuffer readForTopMergeBatchBuffer;
-    private long readForTopMergeBatchAddress;
-
     private int segmentLength;
 
-    static final int MERGE_READ_SEGMENT_ONCE_COUNT = 10;
+    static final int MERGE_READ_ONCE_SEGMENT_COUNT = 10;
 
     private byte[][] allBytesBySegmentIndex;
 
@@ -214,6 +205,17 @@ public class FdReadWrite implements OfStats {
     public void initByteBuffers(boolean isChunkFd) {
         var segmentLength = ConfForSlot.global.confChunk.segmentLength;
         this.segmentLength = segmentLength;
+
+        var allWorkers = ConfForSlot.global.allWorkers;
+        var batchNumber = ConfForSlot.global.confWal.batchNumber;
+        var maxSize = ConfForSlot.global.confChunk.lru.maxSize;
+        var fdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;
+
+        // request worker's chunks lru size should be bigger than merge worker's chunks lru size, need dyn recreate lru map, todo
+        int maxSizeOneFd = maxSize / allWorkers / batchNumber / fdPerChunk;
+        log.info("Chunk lru max size for one fd: {}, segment length: {}， total memory require: {}MB",
+                maxSizeOneFd, segmentLength, maxSize * segmentLength / 1024 / 1024);
+        this.segmentBytesByIndex = new LRUMap<>(maxSizeOneFd);
 
         if (ConfForSlot.global.pureMemory) {
             var maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
@@ -242,13 +244,9 @@ public class FdReadWrite implements OfStats {
 
             if (isChunkFd) {
                 // only merge worker need read for merging batch
-                int npagesMerge = oneSegmentPage * MERGE_READ_SEGMENT_ONCE_COUNT;
+                int npagesMerge = oneSegmentPage * MERGE_READ_ONCE_SEGMENT_COUNT;
                 this.readForMergeBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
                 this.readForMergeBatchBuffer = m.newDirectByteBuffer(readForMergeBatchAddress, npagesMerge * PAGE_SIZE);
-
-                // only top merge worker need read self for merging batch
-                this.readForTopMergeBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
-                this.readForTopMergeBatchBuffer = m.newDirectByteBuffer(readForTopMergeBatchAddress, npagesMerge * PAGE_SIZE);
             }
         }
     }
@@ -300,21 +298,13 @@ public class FdReadWrite implements OfStats {
             writeForReplBuffer = null;
         }
 
-        int mergePages = oneSegmentPage * MERGE_READ_SEGMENT_ONCE_COUNT;
+        int mergePages = oneSegmentPage * MERGE_READ_ONCE_SEGMENT_COUNT;
         if (readForMergeBatchAddress != 0) {
             pageManager.freePages(readForMergeBatchAddress, mergePages);
             System.out.println("Clean up fd read merge batch, name: " + name + ", read page address: " + readForMergeBatchAddress);
 
             readForMergeBatchAddress = 0;
             readForMergeBatchBuffer = null;
-        }
-
-        if (readForTopMergeBatchAddress != 0) {
-            pageManager.freePages(readForTopMergeBatchAddress, mergePages);
-            System.out.println("Clean up fd read self merge batch, name: " + name + ", read page address: " + readForTopMergeBatchAddress);
-
-            readForTopMergeBatchAddress = 0;
-            readForTopMergeBatchBuffer = null;
         }
 
         if (fd != 0) {
@@ -326,23 +316,7 @@ public class FdReadWrite implements OfStats {
         }
     }
 
-    @Override
-    public List<StatKV> stats() {
-
-        List<StatKV> list = new ArrayList<>();
-//        final String prefix = name + " ";
-
-        // todo
-        var metricFamilySamples = readTimeSummary.collect();
-        for (var metricFamilySample : metricFamilySamples) {
-            for (var sample : metricFamilySample.samples) {
-                list.add(new StatKV(sample.name, sample.value));
-            }
-        }
-        list.add(StatKV.split);
-        return list;
-    }
-
+    // do not use cpu calculate
     interface ReadBufferCallback {
         byte[] readFrom(ByteBuffer buffer);
     }
@@ -360,10 +334,10 @@ public class FdReadWrite implements OfStats {
             if (bytesCached != null) {
                 lruHitCounter.labels(name).inc();
                 return bytesCached;
+            } else {
+                lruMissCounter.labels(name).inc();
             }
         }
-
-        lruMissCounter.labels(name).inc();
 
         var offset = segmentIndex * segmentLength;
         buffer.clear();
@@ -401,9 +375,10 @@ public class FdReadWrite implements OfStats {
         var isPwriteBatch = segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 
         int offset = segmentIndex * segmentLength;
-        buffer.rewind();
+        buffer.clear();
 
         prepare.prepare(buffer);
+        buffer.rewind();
 
         var timer = writeTimeSummary.labels(name).startTimer();
         var n = libC.pwrite(fd, buffer, capacity, offset);
@@ -457,24 +432,20 @@ public class FdReadWrite implements OfStats {
         return readAsyncNotPureMemory(segmentIndex, readPageBuffer, null, isRefreshLRUCache);
     }
 
+    public CompletableFuture<byte[]> readSegmentForMerge(int segmentIndex) {
+        if (ConfForSlot.global.pureMemory) {
+            return readSegmentBatchFromMemory(segmentIndex, MERGE_READ_ONCE_SEGMENT_COUNT);
+        }
+
+        return readAsyncNotPureMemory(segmentIndex, readForMergeBatchBuffer, null, false);
+    }
+
     public CompletableFuture<byte[]> readSegmentForRepl(int segmentIndex) {
         if (ConfForSlot.global.pureMemory) {
             return readSegmentBatchFromMemory(segmentIndex, ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT);
         }
 
         return readAsyncNotPureMemory(segmentIndex, readForReplBuffer, null, false);
-    }
-
-    public CompletableFuture<byte[]> readSegmentForMerge(int segmentIndex) {
-        if (ConfForSlot.global.pureMemory) {
-            return readSegmentBatchFromMemory(segmentIndex, BATCH_ONCE_SEGMENT_COUNT_PWRITE);
-        }
-
-        return readAsyncNotPureMemory(segmentIndex, readForMergeBatchBuffer, null, false);
-    }
-
-    public CompletableFuture<byte[]> readSegmentForTopMerge(int segmentIndex) {
-        return readAsyncNotPureMemory(segmentIndex, readForTopMergeBatchBuffer, null, false);
     }
 
     private CompletableFuture<Integer> writeSegmentBatchToMemory(int segmentIndex, byte[] bytes) {

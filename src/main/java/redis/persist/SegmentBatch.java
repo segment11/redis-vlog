@@ -1,9 +1,10 @@
 package redis.persist;
 
 import com.github.luben.zstd.Zstd;
+import io.prometheus.client.Counter;
+import io.prometheus.client.Summary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.CompressStats;
 import redis.ConfForSlot;
 import redis.KeyHash;
 import redis.SnowFlake;
@@ -14,7 +15,8 @@ import java.util.Arrays;
 
 import static redis.CompressedValue.KEY_HEADER_LENGTH;
 import static redis.CompressedValue.VALUE_HEADER_LENGTH;
-import static redis.persist.Chunk.*;
+import static redis.persist.Chunk.ONCE_PREPARE_SEGMENT_COUNT;
+import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
 public class SegmentBatch {
     private final byte[] bytes;
@@ -23,10 +25,31 @@ public class SegmentBatch {
     private final byte workerId;
     private final byte slot;
     private final byte batchIndex;
+
+    private final String workerIdStr;
+    private final String slotStr;
+
     private final int segmentLength;
     private final SnowFlake snowFlake;
 
-    private final CompressStats compressStats;
+    private static final Summary compressTimeSummary = Summary.build().name("compress_time").
+            help("segment batch compress time summary").
+            labelNames("worker_id", "slot").
+            quantile(0.5, 0.05).
+            quantile(0.9, 0.01).
+            quantile(0.99, 0.01).
+            quantile(0.999, 0.001)
+            .register();
+
+    private static final Counter compressBytesCounter = Counter.build().name("compress_bytes").
+            help("segment batch compress bytes").
+            labelNames("worker_id", "slot")
+            .register();
+
+    private static final Counter compressedBytesCounter = Counter.build().name("compressed_bytes").
+            help("segment batch compressed bytes").
+            labelNames("worker_id", "slot")
+            .register();
 
     private final Logger log = LoggerFactory.getLogger(SegmentBatch.class);
 
@@ -36,12 +59,14 @@ public class SegmentBatch {
         this.workerId = workerId;
         this.slot = slot;
         this.batchIndex = batchIndex;
+
+        this.workerIdStr = String.valueOf(workerId);
+        this.slotStr = String.valueOf(slot);
+
         this.bytes = new byte[segmentLength];
         this.buffer = ByteBuffer.wrap(bytes);
 
         this.snowFlake = snowFlake;
-
-        this.compressStats = new CompressStats("w-" + workerId + "-s-" + slot);
     }
 
     private record SegmentCompressedBytesWithIndex(byte[] compressedBytes, int segmentIndex, long segmentSeq) {
@@ -251,15 +276,11 @@ public class SegmentBatch {
         // important: 4KB decompress cost ~200us, so use 4KB segment length for better read latency
         // double compress
 
-        long beginT2 = System.nanoTime();
-        var compressedBytes = Zstd.compress(bytes, COMPRESS_LEVEL);
-        long costT2 = System.nanoTime() - beginT2;
-
-        // stats
-        compressStats.compressedCount++;
-        compressStats.rawValueBodyTotalLength += segmentLength;
-        compressStats.compressedValueBodyTotalLength += compressedBytes.length;
-        compressStats.compressedCostTotalTimeNanos += costT2;
+        var timer = compressTimeSummary.labels(workerIdStr, slotStr).startTimer();
+        var compressedBytes = Zstd.compress(bytes);
+        compressBytesCounter.labels(workerIdStr, slotStr).inc(bytes.length);
+        compressedBytesCounter.labels(workerIdStr, slotStr).inc(compressedBytes.length);
+        timer.observeDuration();
 
         buffer.clear();
         Arrays.fill(bytes, (byte) 0);

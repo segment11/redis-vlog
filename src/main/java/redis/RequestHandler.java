@@ -4,28 +4,29 @@ import com.github.luben.zstd.Zstd;
 import io.activej.config.Config;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.net.socket.tcp.TcpSocket;
+import io.prometheus.client.CollectorRegistry;
+import io.prometheus.client.exporter.common.TextFormat;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.command.*;
 import redis.decode.Request;
+import redis.metric.SimpleGauge;
 import redis.persist.ChunkMerger;
 import redis.persist.LocalPersist;
 import redis.persist.ReadonlyException;
 import redis.persist.SegmentOverflowException;
 import redis.reply.*;
-import redis.stats.OfStats;
-import redis.stats.StatKV;
 
+import java.io.IOException;
+import java.io.StringWriter;
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static io.activej.config.converter.ConfigConverters.*;
 
-public class RequestHandler implements OfStats {
+public class RequestHandler {
     private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     public final static byte MAX_REQUEST_WORKERS = 32;
@@ -35,11 +36,11 @@ public class RequestHandler implements OfStats {
     private static final String GET_COMMAND = "get";
     private static final String SET_COMMAND = "set";
     private static final String QUIT_COMMAND = "quit";
-    private static final String STATS_COMMAND = "stats";
 
     private final String password;
 
     final byte workerId;
+    final String workerIdStr;
     final byte requestWorkers;
     final byte mergeWorkers;
     final byte topMergeWorkers;
@@ -72,6 +73,7 @@ public class RequestHandler implements OfStats {
                           short slotNumber, SnowFlake snowFlake, ChunkMerger chunkMerger,
                           Config config, SocketInspector socketInspector) {
         this.workerId = workerId;
+        this.workerIdStr = String.valueOf(workerId);
         this.requestWorkers = requestWorkers;
         this.mergeWorkers = mergeWorkers;
         this.topMergeWorkers = topMergeWorkers;
@@ -110,11 +112,13 @@ public class RequestHandler implements OfStats {
         this.trainSampleJob = new TrainSampleJob(workerId);
         this.trainSampleJob.setDictSize(requestConfig.get(toInt, "dictSize", 1024));
         this.trainSampleJob.setTrainSampleMinBodyLength(requestConfig.get(toInt, "trainSampleMinBodyLength", 4096));
+
+        this.initMetricsCollect();
     }
 
     public static void parseSlots(@NotNull Request request) {
         var cmd = request.cmd();
-        if (cmd.equals(PING_COMMAND) || cmd.equals(QUIT_COMMAND) || cmd.equals(AUTH_COMMAND) || cmd.equals(STATS_COMMAND)) {
+        if (cmd.equals(PING_COMMAND) || cmd.equals(QUIT_COMMAND) || cmd.equals(AUTH_COMMAND)) {
             return;
         }
 
@@ -179,6 +183,8 @@ public class RequestHandler implements OfStats {
         request.setSlotWithKeyHashList(slotWithKeyHashList);
     }
 
+    private final byte[] urlFirstParamBytes = "metrics".getBytes();
+
     public Reply handle(@NotNull Request request, ITcpSocket socket) {
         if (isStopped) {
             return ErrorReply.SERVER_STOPPED;
@@ -191,6 +197,18 @@ public class RequestHandler implements OfStats {
             xGroup.init(this, request);
 
             return xGroup.handleRepl();
+        }
+
+        // metrics, prometheus format
+        // url should be ?metrics
+        if (request.isHttp() && data[0] != null && Arrays.equals(data[0], urlFirstParamBytes)) {
+            var sw = new StringWriter();
+            try {
+                TextFormat.write004(sw, CollectorRegistry.defaultRegistry.metricFamilySamples());
+                return new BulkReply(sw.toString().getBytes());
+            } catch (IOException e) {
+                return new ErrorReply(e.getMessage());
+            }
         }
 
         var cmd = request.cmd();
@@ -275,41 +293,6 @@ public class RequestHandler implements OfStats {
             return OKReply.INSTANCE;
         }
 
-        if (cmd.equals(STATS_COMMAND)) {
-            if (data.length != 3) {
-                return ErrorReply.FORMAT;
-            }
-
-            String subCommand = new String(data[1]);
-            // extend here, todo
-
-            byte workerIdGiven = Byte.parseByte(subCommand);
-            if (workerIdGiven != -1 && workerIdGiven != workerId) {
-                return NilReply.INSTANCE;
-            }
-            byte slotGiven = Byte.parseByte(new String(data[2]));
-            if (slotGiven < 0) {
-                slotGiven = 0;
-            }
-
-            // global stats show first
-            var list = localPersist.oneSlot(slotGiven).stats();
-
-            list.add(new StatKV("global last seq", snowFlake.getLastNextId()));
-            list.add(new StatKV("global connected clients", socketInspector.socketMap.size()));
-            list.add(StatKV.split);
-
-            list.addAll(DictMap.getInstance().stats());
-
-            list.addAll(stats());
-            list.addAll(compressStats.stats());
-
-            list.addAll(chunkMerger.stats());
-
-            System.out.println(Utils.padStats(list, 60));
-            return OKReply.INSTANCE;
-        }
-
         // else, use enum better
         var firstByte = data[0][0];
         try {
@@ -373,14 +356,17 @@ public class RequestHandler implements OfStats {
         return ErrorReply.FORMAT;
     }
 
-    @Override
-    public List<StatKV> stats() {
-        List<StatKV> list = new ArrayList<>();
+    private final SimpleGauge sampleToTrainSizeGauge = new SimpleGauge("sample_to_train_size", "sample to train size",
+            "worker_id");
 
-        final String prefix = "req-w-" + workerId + " ";
-        list.add(new StatKV(prefix + "sample to train size", sampleToTrainList.size()));
+    private void initMetricsCollect() {
+        sampleToTrainSizeGauge.register();
+        sampleToTrainSizeGauge.setRawGetter(() -> {
+            var labelValues = List.of(workerIdStr);
 
-        list.add(StatKV.split);
-        return list;
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            map.put("sample_to_train_size", new SimpleGauge.ValueWithLabelValues((double) sampleToTrainList.size(), labelValues));
+            return map;
+        });
     }
 }

@@ -651,6 +651,7 @@ public class MultiWorkerServer extends Launcher {
                         if (slotNumber != 1 && slotNumber % 2 != 0) {
                             throw new IllegalStateException("Slot number should be 1 or even");
                         }
+                        confForSlot.slotNumber = (short) slotNumber;
 
                         int netWorkers = config.get(toInt, "netWorkers", 1);
                         int requestWorkers = config.get(toInt, "requestWorkers", 1);
@@ -674,6 +675,7 @@ public class MultiWorkerServer extends Launcher {
 
                         // not include net workers
                         byte allWorkers = (byte) (requestWorkers + mergeWorkers + topMergeWorkers);
+                        confForSlot.allWorkers = allWorkers;
 
                         logger.info("netWorkers: {}, requestWorkers: {}, mergeWorkers: {}, topMergeWorkers: {}, slotNumber: {}",
                                 netWorkers, requestWorkers, mergeWorkers, topMergeWorkers, slotNumber);

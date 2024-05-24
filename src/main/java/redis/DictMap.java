@@ -4,17 +4,13 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.repl.MasterUpdateCallback;
-import redis.stats.OfStats;
-import redis.stats.StatKV;
 
 import java.io.*;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class DictMap implements OfStats {
+public class DictMap {
     public static final int TO_COMPRESS_MIN_DATA_LENGTH = 64;
     public static final String ANONYMOUS_DICT_KEY = "x-anonymous";
 
@@ -79,6 +75,10 @@ public class DictMap implements OfStats {
     // if dict retrain, and dict count is large, it will be a problem, need clean not used dict, todo
     private ConcurrentHashMap<Integer, Dict> cacheDictBySeq = new ConcurrentHashMap<>();
 
+    public int dictSize() {
+        return cacheDictBySeq.size();
+    }
+
     private FileOutputStream fos;
 
     public void close() throws IOException {
@@ -141,13 +141,5 @@ public class DictMap implements OfStats {
         log.info("Dict map init, map size: {}, seq map size: {}, n: {}, max seq: {}",
                 cacheDict.size(), cacheDictBySeq.size(), n, maxSeq);
         Dict.seqGenerator.set(maxSeq + 1);
-    }
-
-    @Override
-    public List<StatKV> stats() {
-        List<StatKV> list = new ArrayList<>();
-        list.add(new StatKV("global dict size", cacheDictBySeq.size()));
-        list.add(StatKV.split);
-        return list;
     }
 }

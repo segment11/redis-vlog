@@ -10,17 +10,13 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
-import redis.stats.OfStats;
-import redis.stats.StatKV;
+import redis.metric.SimpleGauge;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadFactory;
@@ -28,13 +24,15 @@ import java.util.stream.Collectors;
 
 import static redis.CompressedValue.KEY_HEADER_LENGTH;
 import static redis.CompressedValue.VALUE_HEADER_LENGTH;
-import static redis.persist.FdReadWrite.MERGE_READ_SEGMENT_ONCE_COUNT;
 import static redis.persist.Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED;
-import static redis.persist.ChunkMerger.*;
+import static redis.persist.ChunkMerger.mergeWorkerThreadFactoryGroup1;
+import static redis.persist.ChunkMerger.topMergeWorkerThreadFactoryGroup1;
+import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
-public class ChunkMergeWorker implements OfStats {
+public class ChunkMergeWorker {
     byte mergeWorkerId;
+    String mergeWorkerIdStr;
     short slotNumber;
     byte requestWorkers;
     byte mergeWorkers;
@@ -253,6 +251,7 @@ public class ChunkMergeWorker implements OfStats {
                             byte requestWorkers, byte mergeWorkers, byte topMergeWorkers,
                             SnowFlake snowFlake, ChunkMerger chunkMerger) {
         this.mergeWorkerId = mergeWorkerId;
+        this.mergeWorkerIdStr = String.valueOf(mergeWorkerId);
         this.slotNumber = slotNumber;
         this.requestWorkers = requestWorkers;
         this.mergeWorkers = mergeWorkers;
@@ -274,6 +273,8 @@ public class ChunkMergeWorker implements OfStats {
         for (int i = 0; i < batchNumber; i++) {
             mergedSegmentSets[i] = new TreeSet<>();
         }
+
+        this.initMetricsCollect();
     }
 
     void start() {
@@ -292,34 +293,37 @@ public class ChunkMergeWorker implements OfStats {
         System.out.println("Stop chunk merge worker " + mergeWorkerId + " eventloop");
     }
 
-    @Override
-    public List<StatKV> stats() {
-        List<StatKV> list = new ArrayList<>();
+    private final SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
+            "merge_worker_id");
 
-        final String prefix = "chunk-merge-w-" + mergeWorkerId + " ";
-        list.add(new StatKV(prefix + "merged segment count", mergedSegmentCount));
+    private void initMetricsCollect() {
+        innerGauge.register();
+        innerGauge.setRawGetter(() -> {
+            var labelValues = List.of(mergeWorkerIdStr);
 
-        if (mergedSegmentCount > 0) {
-            list.add(new StatKV(prefix + "merged segment cost total millis", (double) mergedSegmentCostTotalTimeNanos / 1000 / 1000));
-            double mergedSegmentCostTAvg = (double) mergedSegmentCostTotalTimeNanos / mergedSegmentCount / 1000;
-            list.add(new StatKV(prefix + "merged segment cost avg micros", mergedSegmentCostTAvg));
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
 
-            list.add(new StatKV(prefix + "valid cv count total", validCvCountTotal));
-            list.add(new StatKV(prefix + "invalid cv count total", invalidCvCountTotal));
-            double validCvCountAvg = (double) validCvCountTotal / mergedSegmentCount;
-            list.add(new StatKV(prefix + "valid cv count avg", validCvCountAvg));
+            if (mergedSegmentCount > 0) {
+                map.put("merged_segment_count", new SimpleGauge.ValueWithLabelValues((double) mergedSegmentCount, labelValues));
+                double mergedSegmentCostTAvg = (double) mergedSegmentCostTotalTimeNanos / mergedSegmentCount / 1000;
+                map.put("merged_segment_cost_avg_micros", new SimpleGauge.ValueWithLabelValues(mergedSegmentCostTAvg, labelValues));
 
-            double validCvRate = (double) validCvCountTotal / (validCvCountTotal + invalidCvCountTotal);
-            // if valid cv rate is high > 0.5, need increase fdPerChunk in ConfForSlot
-            list.add(new StatKV(prefix + "valid cv rate", validCvRate));
-        }
+                map.put("valid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) validCvCountTotal, labelValues));
+                map.put("invalid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) invalidCvCountTotal, labelValues));
 
-        list.add(new StatKV(prefix + "last merged worker id", lastMergedWorkerId));
-        list.add(new StatKV(prefix + "last merged slot", lastMergedSlot));
-        list.add(new StatKV(prefix + "last merged segment index", lastMergedSegmentIndex));
+                double validCvCountAvg = (double) validCvCountTotal / mergedSegmentCount;
+                map.put("valid_cv_count_avg", new SimpleGauge.ValueWithLabelValues(validCvCountAvg, labelValues));
 
-        list.add(StatKV.split);
-        return list;
+                double validCvRate = (double) validCvCountTotal / (validCvCountTotal + invalidCvCountTotal);
+                map.put("valid_cv_rate", new SimpleGauge.ValueWithLabelValues(validCvRate, labelValues));
+            }
+
+            map.put("last_merged_worker_id", new SimpleGauge.ValueWithLabelValues((double) lastMergedWorkerId, labelValues));
+            map.put("last_merged_slot", new SimpleGauge.ValueWithLabelValues((double) lastMergedSlot, labelValues));
+            map.put("last_merged_segment_index", new SimpleGauge.ValueWithLabelValues((double) lastMergedSegmentIndex, labelValues));
+
+            return map;
+        });
     }
 
     CompletableFuture<Integer> submit(Job job) {
@@ -342,14 +346,14 @@ public class ChunkMergeWorker implements OfStats {
         public Integer get() {
             boolean isTopMergeWorkerSelfMerge = workerId == mergeWorker.mergeWorkerId;
 
-            var batchCount = needMergeSegmentIndexList.size() / MERGE_READ_SEGMENT_ONCE_COUNT;
-            if (needMergeSegmentIndexList.size() % MERGE_READ_SEGMENT_ONCE_COUNT != 0) {
+            var batchCount = needMergeSegmentIndexList.size() / MERGE_READ_ONCE_SEGMENT_COUNT;
+            if (needMergeSegmentIndexList.size() % MERGE_READ_ONCE_SEGMENT_COUNT != 0) {
                 batchCount++;
             }
             try {
                 for (int i = 0; i < batchCount; i++) {
-                    var subList = needMergeSegmentIndexList.subList(i * MERGE_READ_SEGMENT_ONCE_COUNT,
-                            Math.min((i + 1) * MERGE_READ_SEGMENT_ONCE_COUNT, needMergeSegmentIndexList.size()));
+                    var subList = needMergeSegmentIndexList.subList(i * MERGE_READ_ONCE_SEGMENT_COUNT,
+                            Math.min((i + 1) * MERGE_READ_ONCE_SEGMENT_COUNT, needMergeSegmentIndexList.size()));
                     mergeSegments(isTopMergeWorkerSelfMerge, subList);
                 }
                 return validCvCountAfterRun;
@@ -398,7 +402,7 @@ public class ChunkMergeWorker implements OfStats {
 
             int segmentLength = ConfForSlot.global.confChunk.segmentLength;
             var npages0 = segmentLength / PAGE_SIZE;
-            int npagesMerge = npages0 * MERGE_READ_SEGMENT_ONCE_COUNT;
+            int npagesMerge = npages0 * MERGE_READ_ONCE_SEGMENT_COUNT;
 
             var oneSlot = localPersist.oneSlot(slot);
 
