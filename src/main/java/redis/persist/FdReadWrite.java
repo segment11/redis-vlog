@@ -190,6 +190,10 @@ public class FdReadWrite {
     ByteBuffer readForMergeBatchBuffer;
     private long readForMergeBatchAddress;
 
+    // for key bucket batch read
+    ByteBuffer readForKeyBucketBatchBuffer;
+    private long readForKeyBucketBatchAddress;
+
     private int segmentLength;
 
     static final int MERGE_READ_ONCE_SEGMENT_COUNT = 10;
@@ -206,16 +210,27 @@ public class FdReadWrite {
         var segmentLength = ConfForSlot.global.confChunk.segmentLength;
         this.segmentLength = segmentLength;
 
-        var allWorkers = ConfForSlot.global.allWorkers;
-        var batchNumber = ConfForSlot.global.confWal.batchNumber;
-        var maxSize = ConfForSlot.global.confChunk.lru.maxSize;
-        var fdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;
+        if (isChunkFd) {
+            var allWorkers = ConfForSlot.global.allWorkers;
+            var batchNumber = ConfForSlot.global.confWal.batchNumber;
+            var maxSize = ConfForSlot.global.confChunk.lru.maxSize;
+            var fdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;
 
-        // request worker's chunks lru size should be bigger than merge worker's chunks lru size, need dyn recreate lru map, todo
-        int maxSizeOneFd = maxSize / allWorkers / batchNumber / fdPerChunk;
-        log.info("Chunk lru max size for one fd: {}, segment length: {}， total memory require: {}MB",
-                maxSizeOneFd, segmentLength, maxSize * segmentLength / 1024 / 1024);
-        this.segmentBytesByIndex = new LRUMap<>(maxSizeOneFd);
+            // request worker's chunks lru size should be bigger than merge worker's chunks lru size, need dyn recreate lru map, todo
+            int maxSizeOneFd = maxSize / allWorkers / batchNumber / fdPerChunk;
+            log.info("Chunk lru max size for one worker/batch/fd: {}, segment length: {}, memory require: {}MB, total memory require: {}MB",
+                    maxSizeOneFd, segmentLength, maxSizeOneFd * segmentLength / 1024 / 1024, maxSize * segmentLength / 1024 / 1024);
+            this.segmentBytesByIndex = new LRUMap<>(maxSizeOneFd);
+        } else {
+            // key bucket
+            var slotNumber = ConfForSlot.global.slotNumber;
+            var maxSize = ConfForSlot.global.confBucket.lru.maxSize;
+
+            int maxSizeOneFd = maxSize / slotNumber;
+            log.info("Bucket lru max size for one slot: {}, segment length: {}， memory require: {}MB, total memory require: {}MB",
+                    maxSizeOneFd, segmentLength, maxSizeOneFd * segmentLength / 1024 / 1024, maxSize * segmentLength / 1024 / 1024);
+            this.segmentBytesByIndex = new LRUMap<>(maxSizeOneFd);
+        }
 
         if (ConfForSlot.global.pureMemory) {
             var maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
@@ -247,6 +262,10 @@ public class FdReadWrite {
                 int npagesMerge = oneSegmentPage * MERGE_READ_ONCE_SEGMENT_COUNT;
                 this.readForMergeBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
                 this.readForMergeBatchBuffer = m.newDirectByteBuffer(readForMergeBatchAddress, npagesMerge * PAGE_SIZE);
+            } else {
+                int npagesBucket = ConfForSlot.global.confWal.oneChargeBucketNumber;
+                this.readForKeyBucketBatchAddress = pageManager.allocatePages(npagesBucket, PROTECTION);
+                this.readForKeyBucketBatchBuffer = m.newDirectByteBuffer(readForKeyBucketBatchAddress, npagesBucket * PAGE_SIZE);
             }
         }
     }
@@ -305,6 +324,15 @@ public class FdReadWrite {
 
             readForMergeBatchAddress = 0;
             readForMergeBatchBuffer = null;
+        }
+
+        int bucketPages = oneSegmentPage * ConfForSlot.global.confWal.oneChargeBucketNumber;
+        if (readForKeyBucketBatchAddress != 0) {
+            pageManager.freePages(readForKeyBucketBatchAddress, bucketPages);
+            System.out.println("Clean up fd read key bucket batch, name: " + name + ", read page address: " + readForKeyBucketBatchAddress);
+
+            readForKeyBucketBatchAddress = 0;
+            readForKeyBucketBatchBuffer = null;
         }
 
         if (fd != 0) {
@@ -448,15 +476,36 @@ public class FdReadWrite {
         return readAsyncNotPureMemory(segmentIndex, readForReplBuffer, null, false);
     }
 
-    private CompletableFuture<Integer> writeSegmentBatchToMemory(int segmentIndex, byte[] bytes) {
+    public CompletableFuture<byte[]> readSegmentForKeyBucketWhenMergeCompare(int bucketIndex) {
+        // bucketIndex is segmentIndex when fd is key bucket fd, not chunk fd
+        if (ConfForSlot.global.pureMemory) {
+            return readSegmentBatchFromMemory(bucketIndex, ConfForSlot.global.confWal.oneChargeBucketNumber);
+        }
+
+        return readAsyncNotPureMemory(bucketIndex, readForKeyBucketBatchBuffer, null, false);
+    }
+
+    public CompletableFuture<Integer> clearOneSegmentToMemory(int segmentIndex) {
+        return call(() -> {
+            allBytesBySegmentIndex[segmentIndex] = null;
+            return 0;
+        });
+    }
+
+    public CompletableFuture<Integer> writeSegmentBatchToMemory(int segmentIndex, byte[] bytes, int position) {
         if (bytes.length % segmentLength != 0) {
             throw new IllegalArgumentException("Bytes length must be multiple of segment length");
         }
 
         return call(() -> {
             var segmentCount = bytes.length / segmentLength;
+            var offset = position;
             for (int i = 0; i < segmentCount; i++) {
-                allBytesBySegmentIndex[segmentIndex + i] = bytes;
+                var bytesOneSegment = new byte[segmentLength];
+                System.arraycopy(bytes, offset, bytesOneSegment, 0, segmentLength);
+                offset += segmentLength;
+
+                allBytesBySegmentIndex[segmentIndex + i] = bytesOneSegment;
             }
             return bytes.length;
         });
@@ -468,7 +517,7 @@ public class FdReadWrite {
         }
 
         if (ConfForSlot.global.pureMemory) {
-            return writeSegmentBatchToMemory(segmentIndex, bytes);
+            return writeSegmentBatchToMemory(segmentIndex, bytes, 0);
         }
 
         return writeAsyncNotPureMemory(segmentIndex, writePageBuffer, (buffer) -> {
@@ -478,34 +527,57 @@ public class FdReadWrite {
     }
 
     public CompletableFuture<Integer> writeSegmentBatch(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
+        return writeSegmentBatch(segmentIndex, bytes, 0, isRefreshLRUCache);
+    }
+
+    public CompletableFuture<Integer> writeSegmentBatch(int segmentIndex, byte[] bytes, int position, boolean isRefreshLRUCache) {
         var segmentCount = bytes.length / segmentLength;
         if (segmentCount != BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
             throw new IllegalArgumentException("Batch write bytes length not match once batch write segment count");
         }
 
         if (ConfForSlot.global.pureMemory) {
-            return writeSegmentBatchToMemory(segmentIndex, bytes);
+            return writeSegmentBatchToMemory(segmentIndex, bytes, position);
         }
 
         return writeAsyncNotPureMemory(segmentIndex, writePageBufferB, (buffer) -> {
             buffer.clear();
-            buffer.put(bytes);
+            if (position == 0) {
+                buffer.put(bytes);
+            } else {
+                buffer.put(bytes, position, bytes.length - position);
+            }
         }, isRefreshLRUCache);
     }
 
-    public CompletableFuture<Integer> writeSegmentForRepl(int segmentIndex, byte[] bytes) {
+    public CompletableFuture<Integer> writeSegmentForRepl(int segmentIndex, byte[] bytes, int position) {
         var segmentCount = bytes.length / segmentLength;
         if (segmentCount != ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT) {
             throw new IllegalArgumentException("Repl write bytes length not match once repl segment count");
         }
 
         if (ConfForSlot.global.pureMemory) {
-            return writeSegmentBatchToMemory(segmentIndex, bytes);
+            return writeSegmentBatchToMemory(segmentIndex, bytes, position);
         }
 
         return writeAsyncNotPureMemory(segmentIndex, writeForReplBuffer, (buffer) -> {
             buffer.clear();
-            buffer.put(bytes);
+            if (position == 0) {
+                buffer.put(bytes);
+            } else {
+                buffer.put(bytes, position, bytes.length - position);
+            }
         }, false);
+    }
+
+    public CompletableFuture<Integer> truncate() {
+        return call(() -> {
+            var r = libC.ftruncate(fd, 0);
+            if (r < 0) {
+                throw new RuntimeException("Truncate error: " + libC.strerror(r));
+            }
+            log.info("Truncate fd: {}, name: {}", fd, name);
+            return r;
+        });
     }
 }

@@ -509,7 +509,7 @@ public class Chunk {
         } else if (segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
             fdReadWrite.writeSegmentBatch(segmentIndex, bytes, true).get();
         } else if (segmentCount == ONCE_SEGMENT_COUNT) {
-            fdReadWrite.writeSegmentForRepl(segmentIndex, bytes).get();
+            fdReadWrite.writeSegmentForRepl(segmentIndex, bytes, 0).get();
         } else {
             throw new RuntimeException("Write segment count not support: " + segmentCount);
         }

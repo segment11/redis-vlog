@@ -418,7 +418,11 @@ public class OneSlot {
     }
 
     public ArrayList<KeyBucket> getKeyBuckets(int bucketIndex) {
-        return keyLoader.getKeyBuckets(bucketIndex);
+        try {
+            return keyLoader.getKeyBuckets(bucketIndex);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private final Eventloop[] persistHandleEventloopArray;
@@ -697,12 +701,16 @@ public class OneSlot {
     }
 
     public boolean remove(byte workerId, int bucketIndex, String key, long keyHash) {
-        boolean[] isDeletedArr = {false};
-        keyLoader.bucketLock(bucketIndex, () -> {
+        boolean isDeleted = false;
+        try {
             var isRemovedFromWal = removeFromWal(workerId, bucketIndex, key, keyHash);
-            isDeletedArr[0] = isRemovedFromWal || keyLoader.remove(bucketIndex, key.getBytes(), keyHash);
-        });
-        return isDeletedArr[0];
+            isDeleted = isRemovedFromWal || keyLoader.remove(bucketIndex, key.getBytes(), keyHash);
+        } catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return isDeleted;
     }
 
     public void removeDelay(byte workerId, String key, int bucketIndex, long keyHash) {
@@ -920,7 +928,11 @@ public class OneSlot {
             }
         }
 
-        this.keyLoader.flush();
+        try {
+            this.keyLoader.flush();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         this.metaChunkSegmentFlagSeq.clear();
         this.metaChunkSegmentIndex.clear();
     }
@@ -932,7 +944,7 @@ public class OneSlot {
         this.topMergeWorkers = topMergeWorkers;
 
         this.libC = libC;
-        this.keyLoader.init(libC, persistConfig);
+        this.keyLoader.init(libC);
 
         // meta data
         this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, allWorkers, slotDir);

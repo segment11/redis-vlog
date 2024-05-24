@@ -15,6 +15,7 @@ import redis.repl.Repl;
 import redis.repl.ReplPair;
 import redis.repl.ReplType;
 import redis.repl.content.*;
+import redis.reply.ErrorReply;
 import redis.reply.NilReply;
 import redis.reply.Reply;
 
@@ -232,7 +233,11 @@ public class XGroup extends BaseCommand {
 
         var oneSlot = localPersist.oneSlot(slot);
         // not necessary to submit task, key loader use synchronized block
-        oneSlot.getKeyLoader().updateKeyBucketFromMasterNewly(bucketIndex, splitIndex, splitNumber, seq, bytes);
+        try {
+            oneSlot.getKeyLoader().updateKeyBucketFromMasterNewly(bucketIndex, splitIndex, splitNumber, seq, bytes);
+        } catch (Exception e) {
+            return new ErrorReply(e.getMessage());
+        }
 
         return Repl.emptyReply();
     }
@@ -480,7 +485,14 @@ public class XGroup extends BaseCommand {
 
         var oneSlot = localPersist.oneSlot(slot);
         byte splitNumber = oneSlot.getKeyLoader().maxSplitNumber();
-        var bytes = oneSlot.getKeyLoader().readKeyBucketBytesBatchToSlaveExists(splitIndex, beginBucketIndex);
+        byte[] bytes = null;
+        try {
+            bytes = oneSlot.getKeyLoader().readKeyBucketBytesBatchToSlaveExists(splitIndex, beginBucketIndex);
+        } catch (Exception e) {
+            var errorMessage = "Repl key loader read bytes to slave error";
+            log.error(errorMessage, e);
+            return Repl.reply(slot, replPair, ReplType.error, new RawBytesContent((errorMessage + ": " + e.getMessage()).getBytes()));
+        }
 
         var responseBytes = new byte[1 + 1 + 4 + bytes.length];
         var buffer = ByteBuffer.wrap(responseBytes);
@@ -497,14 +509,20 @@ public class XGroup extends BaseCommand {
     private Reply s_exists_key_buckets(byte slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
-        oneSlot.getKeyLoader().writeKeyBucketBytesBatchFromMaster(contentBytes);
+        try {
+            oneSlot.getKeyLoader().writeKeyBucketBytesBatchFromMaster(contentBytes);
+        } catch (Exception e) {
+            var errorMessage = "Repl key loader write bytes from master error";
+            log.error(errorMessage, e);
+            return Repl.reply(slot, replPair, ReplType.error, new RawBytesContent((errorMessage + ": " + e.getMessage()).getBytes()));
+        }
 
         var splitIndex = contentBytes[0];
         var splitNumber = contentBytes[1];
         var beginBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
         var bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
 
-        boolean isLastBatchInThisSplit = beginBucketIndex == bucketsPerSlot - KeyLoader.READ_BUCKET_FOR_REPL_BATCH_NUMBER;
+        boolean isLastBatchInThisSplit = beginBucketIndex == bucketsPerSlot - KeyLoader.BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL;
         var isAllReceived = splitIndex == splitNumber - 1 && isLastBatchInThisSplit;
         if (isAllReceived) {
             // next step, fetch exists chunk segments
@@ -512,7 +530,7 @@ public class XGroup extends BaseCommand {
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentMeta((byte) 0, (byte) 0, metaBytes));
         } else {
             var nextSplitIndex = isLastBatchInThisSplit ? splitIndex + 1 : splitIndex;
-            var nextBeginBucketIndex = isLastBatchInThisSplit ? 0 : beginBucketIndex + KeyLoader.READ_BUCKET_FOR_REPL_BATCH_NUMBER;
+            var nextBeginBucketIndex = isLastBatchInThisSplit ? 0 : beginBucketIndex + KeyLoader.BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL;
             var requestBytes = new byte[1 + 1 + 4];
             requestBytes[0] = (byte) nextSplitIndex;
             requestBytes[1] = 0;

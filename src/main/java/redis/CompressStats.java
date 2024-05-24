@@ -1,7 +1,5 @@
 package redis;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import redis.stats.OfStats;
 import redis.stats.StatKV;
 
@@ -9,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
 
 public class CompressStats implements OfStats {
@@ -30,28 +27,6 @@ public class CompressStats implements OfStats {
 
     // for key tmp bucket size
     private final ConcurrentMap<Integer, Short> keySizeByBucket = new ConcurrentHashMap<>();
-    // for bucket key access analyze
-    private Cache<Integer, Short> keySizeByBucketLru;
-
-    public void initKeySizeByBucketLru(int expireAfterWrite, int expireAfterAccess, int maximumSize) {
-        keySizeByBucketLru = Caffeine.newBuilder()
-                .expireAfterWrite(expireAfterWrite, TimeUnit.SECONDS)
-                .expireAfterAccess(expireAfterAccess, TimeUnit.SECONDS)
-                .maximumSize(maximumSize)
-                .build();
-    }
-
-    public int getLruBucketSize() {
-        return keySizeByBucketLru.asMap().size();
-    }
-
-    public long getAllLruBucketSize() {
-        long sum = 0;
-        for (var value : keySizeByBucketLru.asMap().values()) {
-            sum += value;
-        }
-        return sum;
-    }
 
     public long getAllTmpBucketSize() {
         long sum = 0;
@@ -65,9 +40,6 @@ public class CompressStats implements OfStats {
     public void updateTmpBucketSize(byte slot, int bucketIndex, byte splitIndex, short size) {
         int key = slot << (Short.SIZE + 4) | bucketIndex << Byte.SIZE | splitIndex;
         keySizeByBucket.put(key, size);
-        if (keySizeByBucketLru != null) {
-            keySizeByBucketLru.put(key, size);
-        }
     }
 
     private final String prefix;
