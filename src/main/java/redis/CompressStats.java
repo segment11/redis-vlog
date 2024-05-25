@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.LongAdder;
 
 public class CompressStats implements OfStats {
     public long rawCount = 0;
@@ -19,11 +18,11 @@ public class CompressStats implements OfStats {
     public long decompressedCostTotalTimeNanos = 0;
 
     // for segment cache, multi-thread
-    public LongAdder decompressCount2 = new LongAdder();
-    public LongAdder decompressCostTotalTimeNanos2 = new LongAdder();
-    public LongAdder compressedValueBodyTotalLength2 = new LongAdder();
-    public LongAdder compressedValueSizeTotalCount2 = new LongAdder();
-    public LongAdder rawValueBodyTotalLength2 = new LongAdder();
+    public long decompressCount2 = 0;
+    public long decompressCostTotalTimeNanos2 = 0;
+    public long compressedValueBodyTotalLength2 = 0;
+    public long compressedValueSizeTotalCount2 = 0;
+    public long rawValueBodyTotalLength2 = 0;
 
     // for key tmp bucket size
     private final ConcurrentMap<Integer, Short> keySizeByBucket = new ConcurrentHashMap<>();
@@ -73,27 +72,22 @@ public class CompressStats implements OfStats {
             list.add(new StatKV(prefix + "decompressed cost avg micros", decompressedCostTAvg));
         }
 
-        long sum2 = decompressCount2.sum();
-        if (sum2 > 0) {
-            list.add(new StatKV(prefix + "decompress count2", sum2));
-            list.add(new StatKV(prefix + "decompress cost total millis2", (double) decompressCostTotalTimeNanos2.sum() / 1000 / 1000));
-            double decompressCostTAvg2 = (double) decompressCostTotalTimeNanos2.sum() / sum2 / 1000;
+        if (decompressCount2 > 0) {
+            list.add(new StatKV(prefix + "decompress count2", decompressCount2));
+            list.add(new StatKV(prefix + "decompress cost total millis2", (double) decompressCostTotalTimeNanos2 / 1000 / 1000));
+            double decompressCostTAvg2 = (double) decompressCostTotalTimeNanos2 / decompressCount2 / 1000;
             list.add(new StatKV(prefix + "decompress cost avg micros2", decompressCostTAvg2));
 
-            long sum3 = rawValueBodyTotalLength2.sum();
-            if (sum3 > 0) {
-                list.add(new StatKV(prefix + "raw total length2", sum3));
-                long sum32 = compressedValueBodyTotalLength2.sum();
-                list.add(new StatKV(prefix + "compressed total length2", sum32));
-                list.add(new StatKV(prefix + "compression ratio2", (double) sum32 / sum3));
+            if (rawValueBodyTotalLength2 > 0) {
+                list.add(new StatKV(prefix + "raw total length2", rawValueBodyTotalLength2));
+                list.add(new StatKV(prefix + "compressed total length2", compressedValueBodyTotalLength2));
+                list.add(new StatKV(prefix + "compression ratio2", (double) compressedValueBodyTotalLength2 / rawValueBodyTotalLength2));
             }
 
-            long sum4 = compressedValueSizeTotalCount2.sum();
-            if (sum4 > 0) {
-                list.add(new StatKV(prefix + "compressed bucket key size total count2", sum4));
-                long sum42 = compressedValueBodyTotalLength2.sum();
-                list.add(new StatKV(prefix + "compressed bucket key length total2", sum42));
-                list.add(new StatKV(prefix + "compressed bucket key length avg2", (double) sum42 / sum4));
+            if (compressedValueSizeTotalCount2 > 0) {
+                list.add(new StatKV(prefix + "compressed bucket key size total count2", compressedValueSizeTotalCount2));
+                list.add(new StatKV(prefix + "compressed bucket key length total2", compressedValueBodyTotalLength2));
+                list.add(new StatKV(prefix + "compressed bucket key length avg2", (double) compressedValueBodyTotalLength2 / compressedValueSizeTotalCount2));
             }
         }
 
