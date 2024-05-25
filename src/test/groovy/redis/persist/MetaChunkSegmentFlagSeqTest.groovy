@@ -2,14 +2,9 @@ package redis.persist
 
 import redis.ConfForSlot
 import spock.lang.Specification
+import static Consts.*
 
 class MetaChunkSegmentFlagSeqTest extends Specification {
-    private static final File slotDir = new File('/tmp/redis-vlog/test-slot')
-
-    def setup() {
-        slotDir.mkdirs()
-    }
-
     def "read write seq"() {
         given:
         ConfForSlot.global.pureMemory = false

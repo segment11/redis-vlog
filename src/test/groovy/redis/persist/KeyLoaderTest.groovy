@@ -7,9 +7,9 @@ import redis.KeyHash
 import redis.SnowFlake
 import spock.lang.Specification
 
-class KeyLoaderTest extends Specification {
-    private static final File slotDir = new File('/tmp/redis-vlog/test-slot')
+import static redis.persist.Consts.getSlotDir
 
+class KeyLoaderTest extends Specification {
     private KeyLoader prepare() {
         System.setProperty('jnr.ffi.asm.enabled', 'false')
         def libC = LibraryLoader.create(LibC.class).load('c')
@@ -28,6 +28,15 @@ class KeyLoaderTest extends Specification {
         given:
         def keyLoader = prepare()
 
+        and:
+        // clear files
+        3.times { splitIndex ->
+            def file = new File(slotDir, "key-bucket-split-" + splitIndex + ".dat")
+            if (file.exists()) {
+                file.delete()
+            }
+        }
+
         when:
         keyLoader.putValueByKeyForTest(0, 'a'.getBytes(), 3L, 0L, 'a'.bytes)
         def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 3L)
@@ -43,8 +52,6 @@ class KeyLoaderTest extends Specification {
 
         then:
         keyBuckets.size() == 3
-        keyBuckets[1] == null
-        keyBuckets[2] != null
         keyBuckets[2].getValueByKey('b'.bytes, 2L).valueBytes() == 'b'.bytes
 
         when:

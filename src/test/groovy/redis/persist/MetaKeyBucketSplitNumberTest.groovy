@@ -1,14 +1,9 @@
 package redis.persist
 
 import spock.lang.Specification
+import static Consts.*
 
 class MetaKeyBucketSplitNumberTest extends Specification {
-    private static final File slotDir = new File('/tmp/redis-vlog/test-slot')
-
-    def setup() {
-        slotDir.mkdirs()
-    }
-
     def "set and get"() {
         given:
         def one = new MetaKeyBucketSplitNumber((byte) 0, 4096, slotDir)

@@ -1,14 +1,9 @@
 package redis.persist
 
 import spock.lang.Specification
+import static Consts.*
 
 class MetaChunkSegmentIndexTest extends Specification {
-    private static final File slotDir = new File('/tmp/redis-vlog/test-slot')
-
-    def setup() {
-        slotDir.mkdirs()
-    }
-
     def "set and get"() {
         given:
         def one = new MetaChunkSegmentIndex((byte) 0, (byte) 2, slotDir)
