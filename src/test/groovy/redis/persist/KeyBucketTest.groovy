@@ -207,4 +207,43 @@ class KeyBucketTest extends Specification {
         then:
         keyBucket.size == 2
     }
+
+    def 'shared bytes'() {
+        given:
+        def snowFlake = new SnowFlake(1, 1)
+
+        def sharedBytes = new byte[4096 * 2]
+
+        byte[] emptyBytes = []
+        def k1 = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, emptyBytes, snowFlake)
+        def k2 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, emptyBytes, snowFlake)
+
+        def stats = new CompressStats('test')
+        k1.initWithCompressStats stats
+        k2.initWithCompressStats stats
+
+        and:
+        k1.put('a'.bytes, 97L, 0L, 'a'.bytes, null)
+        def k1Bytes = k1.compress()
+
+        k2.put('a'.bytes, 97L, 0L, 'a'.bytes, null)
+        def k2Bytes = k2.compress()
+
+        System.arraycopy(k1Bytes, 0, sharedBytes, 0, k1Bytes.length)
+        System.arraycopy(k2Bytes, 0, sharedBytes, 4096, k2Bytes.length)
+
+        when:
+        def k11 = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, sharedBytes, 0, snowFlake)
+        def k22 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, sharedBytes, 4096, snowFlake)
+
+        k11.initWithCompressStats stats
+        k22.initWithCompressStats stats
+
+        then:
+        k11.size == 1
+        k22.size == 1
+
+        k11.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
+        k22.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
+    }
 }

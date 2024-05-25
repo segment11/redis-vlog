@@ -12,8 +12,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import static redis.CompressedValue.NO_EXPIRE;
-import static redis.persist.KeyLoader.MAX_SPLIT_NUMBER;
-import static redis.persist.KeyLoader.SPLIT_MULTI_STEP;
+import static redis.persist.KeyLoader.*;
 
 public class KeyBucket {
     private static final short INIT_CAPACITY = 50;
@@ -32,7 +31,14 @@ public class KeyBucket {
     // seq long + size short + cell count short + uncompressed length short + compressed length short
     static final int HEADER_LENGTH = SEQ_VALUE_LENGTH + 2 + 2 + 2 + 2;
 
+    // just make sure when refactoring
     private static final int INIT_BYTES_LENGTH = HEADER_LENGTH + INIT_CAPACITY * (ONE_CELL_META_LENGTH + ONE_CELL_LENGTH);
+
+    static {
+        if (INIT_BYTES_LENGTH > KEY_BUCKET_ONE_COST_SIZE) {
+            throw new IllegalStateException("INIT_BYTES_LENGTH > KEY_BUCKET_ONE_COST_SIZE");
+        }
+    }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -78,6 +84,7 @@ public class KeyBucket {
 
     // compressed
     private final byte[] compressedData;
+    private final int position;
 
     byte[] decompressBytes;
 
@@ -89,11 +96,16 @@ public class KeyBucket {
     }
 
     public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] compressedData, SnowFlake snowFlake) {
+        this(slot, bucketIndex, splitIndex, splitNumber, compressedData, 0, snowFlake);
+    }
+
+    public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] compressedData, int position, SnowFlake snowFlake) {
         this.slot = slot;
         this.bucketIndex = bucketIndex;
         this.splitIndex = splitIndex;
         this.splitNumber = splitNumber;
         this.compressedData = compressedData;
+        this.position = position;
         this.capacity = INIT_CAPACITY;
         this.size = 0;
         this.cellCost = 0;
@@ -107,12 +119,13 @@ public class KeyBucket {
         this.splitIndex = splitIndex;
         this.splitNumber = splitNumber;
         this.compressedData = null;
+        this.position = 0;
         this.capacity = capacity;
         this.size = 0;
         this.cellCost = 0;
         this.snowFlake = snowFlake;
 
-        this.decompressBytes = new byte[INIT_BYTES_LENGTH];
+        this.decompressBytes = new byte[KEY_BUCKET_ONE_COST_SIZE];
         this.buffer = ByteBuffer.wrap(decompressBytes);
     }
 
@@ -183,11 +196,15 @@ public class KeyBucket {
         }
 
         if (compressedData == null || compressedData.length == 0) {
-            decompressBytes = new byte[INIT_BYTES_LENGTH];
+            decompressBytes = new byte[KEY_BUCKET_ONE_COST_SIZE];
             size = 0;
             cellCost = 0;
         } else {
-            var bufferInner = ByteBuffer.wrap(compressedData);
+            if (compressedData.length % KEY_BUCKET_ONE_COST_SIZE != 0) {
+                throw new IllegalStateException("Key bucket compressed data length must be multiple of " + KEY_BUCKET_ONE_COST_SIZE);
+            }
+
+            var bufferInner = ByteBuffer.wrap(compressedData, position, KEY_BUCKET_ONE_COST_SIZE);
             // first 8 bytes is seq
             lastUpdateSeq = bufferInner.getLong();
 
@@ -212,21 +229,37 @@ public class KeyBucket {
                         compressedData, HEADER_LENGTH, compressedSize);
                 long costT = System.nanoTime() - begin;
 
-                // stats
-                // thread not safe, use long adder
-                compressStats.decompressCount2.increment();
-                compressStats.decompressCostTotalTimeNanos2.add(costT);
+                compressStats.decompressCount2++;
+                compressStats.decompressCostTotalTimeNanos2 += costT;
+
+                if (decompressBytes.length != KEY_BUCKET_ONE_COST_SIZE) {
+                    throw new IllegalStateException("Key bucket decompressed size not match, decompressed size=" + decompressBytes.length +
+                            ", expected size=" + KEY_BUCKET_ONE_COST_SIZE);
+                }
             }
         }
-        buffer = ByteBuffer.wrap(decompressBytes);
+        buffer = ByteBuffer.wrap(decompressBytes, position, KEY_BUCKET_ONE_COST_SIZE);
     }
 
     public byte[] compress() {
         var isCompress = ConfForSlot.global.confBucket.isCompress;
         if (!isCompress) {
-            var bufferInner = ByteBuffer.wrap(decompressBytes);
+            var bufferInner = ByteBuffer.wrap(decompressBytes, position, KEY_BUCKET_ONE_COST_SIZE);
             bufferInner.putLong(lastUpdateSeq).putShort(size).putShort(cellCost);
-            return decompressBytes;
+            // shared bytes
+            if (decompressBytes.length != KEY_BUCKET_ONE_COST_SIZE) {
+                var dst = new byte[KEY_BUCKET_ONE_COST_SIZE];
+                System.arraycopy(decompressBytes, position, dst, 0, KEY_BUCKET_ONE_COST_SIZE);
+                return dst;
+            } else {
+                return decompressBytes;
+            }
+        }
+
+        // when need compress, not share bytes
+        if (decompressBytes.length != KEY_BUCKET_ONE_COST_SIZE) {
+            throw new IllegalStateException("Key bucket decompressed size not match, decompressed size=" + decompressBytes.length +
+                    ", expected size=" + KEY_BUCKET_ONE_COST_SIZE);
         }
 
         var maxDstSize = (int) Zstd.compressBound(decompressBytes.length - HEADER_LENGTH);
@@ -247,8 +280,8 @@ public class KeyBucket {
                 .putShort((short) decompressBytes.length).putShort((short) compressedSize);
 
         // stats
-        compressStats.compressedValueSizeTotalCount2.add(size);
-        compressStats.compressedValueBodyTotalLength2.add(compressedSize);
+        compressStats.compressedValueSizeTotalCount2 += size;
+        compressStats.compressedValueBodyTotalLength2 += compressedSize;
 
         compressStats.updateTmpBucketSize(slot, bucketIndex, splitIndex, size);
         return r;
