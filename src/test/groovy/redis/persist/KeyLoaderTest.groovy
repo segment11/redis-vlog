@@ -23,10 +23,11 @@ class KeyLoaderTest extends Specification {
         keyLoader.initAfterEventloopReady()
 
         when:
-        keyLoader.putValueByKeyForTest(0, 'a'.getBytes(), 0L, 0L, 'a'.bytes)
+        keyLoader.putValueByKeyForTest(0, 'a'.getBytes(), 1L, 0L, 'a'.bytes)
+        def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 1L)
 
         then:
-        keyLoader.getValueByKey(0, 'a'.bytes, 0L).valueBytes() == 'a'.bytes
+        valueBytesWithExpireAt.valueBytes() == 'a'.bytes
 
         cleanup:
         keyLoader.cleanUp()
