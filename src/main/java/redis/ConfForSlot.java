@@ -18,6 +18,7 @@ public enum ConfForSlot {
     public boolean pureMemory = false;
     public short slotNumber = 1;
     public byte allWorkers = 1;
+    public int eventLoopIdleMillis = 10;
 
     public static ConfForSlot from(long estimateKeyNumber) {
         if (estimateKeyNumber <= 1_000_000L) {

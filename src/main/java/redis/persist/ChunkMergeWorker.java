@@ -18,7 +18,6 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 
@@ -74,8 +73,7 @@ public class ChunkMergeWorker {
         mergedCvListBySlotAndBatchIndex[slot][batchIndex].add(cvWithKey);
     }
 
-    boolean persistMergedCvList(byte slot, byte batchIndex)
-            throws ExecutionException, InterruptedException, IOException {
+    boolean persistMergedCvList(byte slot, byte batchIndex) {
         var mergedCvList = mergedCvListBySlotAndBatchIndex[slot][batchIndex];
         var mergedSegmentSet = mergedSegmentSets[batchIndex];
 
@@ -194,11 +192,10 @@ public class ChunkMergeWorker {
         var batchNumber = ConfForSlot.global.confWal.batchNumber;
 
         this.mergeHandleEventloopArray = new Eventloop[batchNumber];
-        final int idleMillis = 10;
         for (int i = 0; i < batchNumber; i++) {
             var mergeHandleEventloop = Eventloop.builder()
                     .withThreadName("chunk-merge-worker-" + i)
-                    .withIdleInterval(Duration.ofMillis(idleMillis))
+                    .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
                     .build();
             mergeHandleEventloop.keepAlive(true);
             this.mergeHandleEventloopArray[i] = mergeHandleEventloop;
@@ -392,8 +389,7 @@ public class ChunkMergeWorker {
             final int segmentIndex;
         }
 
-        private void mergeSegments(boolean isTopMergeWorkerSelfMerge, List<Integer> needMergeSegmentIndexList)
-                throws ExecutionException, InterruptedException, IOException {
+        private void mergeSegments(boolean isTopMergeWorkerSelfMerge, List<Integer> needMergeSegmentIndexList) {
             if (mergeWorker.isTopMergeWorker) {
                 mergeWorker.log.debug("Add debug point here, w={}, s={}, mw={}", workerId, slot, mergeWorker.mergeWorkerId);
             }

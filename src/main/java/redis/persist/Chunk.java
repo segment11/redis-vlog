@@ -14,7 +14,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 import static redis.repl.content.ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
@@ -121,7 +120,7 @@ public class Chunk {
 
             var fdReadWrite = new FdReadWrite(name, libC, file);
             fdReadWrite.initByteBuffers(true);
-            fdReadWrite.initEventloop(null);
+            fdReadWrite.initEventloop();
 
             this.fdReadWriteArray[i] = fdReadWrite;
         }
@@ -135,29 +134,29 @@ public class Chunk {
         }
     }
 
-    byte[] preadForMerge(int targetSegmentIndex) throws ExecutionException, InterruptedException {
+    byte[] preadForMerge(int targetSegmentIndex) {
         var fdIndex = targetFdIndex(targetSegmentIndex);
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
-        return fdReadWrite.readSegmentForMerge(segmentIndexTargetFd).get();
+        return fdReadWrite.readSegmentForMerge(segmentIndexTargetFd);
     }
 
-    byte[] preadForRepl(int targetSegmentIndex) throws ExecutionException, InterruptedException {
+    byte[] preadForRepl(int targetSegmentIndex) {
         var fdIndex = targetFdIndex(targetSegmentIndex);
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
-        return fdReadWrite.readSegmentForRepl(segmentIndexTargetFd).get();
+        return fdReadWrite.readSegmentForRepl(segmentIndexTargetFd);
     }
 
-    byte[] preadSegmentTightBytesWithLength(int targetSegmentIndex) throws ExecutionException, InterruptedException {
+    byte[] preadSegmentTightBytesWithLength(int targetSegmentIndex) {
         var fdIndex = targetFdIndex(targetSegmentIndex);
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
 
-        var segmentBytes = fdReadWrite.readSegment(segmentIndexTargetFd, true).get();
+        var segmentBytes = fdReadWrite.readSegment(segmentIndexTargetFd, true);
         return segmentBytes;
 
 //        var buffer = ByteBuffer.wrap(segmentBytes);
@@ -249,8 +248,7 @@ public class Chunk {
     long threadIdProtectedWhenWrite = -1;
 
     // return need merge segment index array
-    public ArrayList<Integer> persist(ArrayList<Wal.V> list)
-            throws ExecutionException, InterruptedException, IOException {
+    public ArrayList<Integer> persist(ArrayList<Wal.V> list) {
         checkCurrentThread();
 
         moveIndexForPrepare();
@@ -289,7 +287,7 @@ public class Chunk {
             isNewAppendAfterBatch = fdReadWrite.isTargetSegmentIndexNullInMemory(segmentIndexTargetFd);
             for (var segment : segments) {
                 byte[] bytes = segment.tightBytesWithLength();
-                fdReadWrite.writeSegment(targetFdIndex(segment.segmentIndex()), bytes, false).get();
+                fdReadWrite.writeSegment(targetFdIndex(segment.segmentIndex()), bytes, false);
 
                 if (masterUpdateCallback != null) {
                     List<Long> segmentSeqList = new ArrayList<>();
@@ -453,7 +451,7 @@ public class Chunk {
         return segmentIndexToMerge;
     }
 
-    public boolean writeSegmentsFromMasterNewly(byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) throws ExecutionException, InterruptedException {
+    public boolean writeSegmentsFromMasterNewly(byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
         if (ConfForSlot.global.pureMemory) {
             if (capacity != bytes.length) {
                 throw new RuntimeException("Write buffer capacity not match, expect: " + capacity + ", actual: " + bytes.length);
@@ -466,7 +464,7 @@ public class Chunk {
 
             var isNewAppend = fdReadWrite.isTargetSegmentIndexNullInMemory(segmentIndexTargetFd);
             if (segmentCount == 1) {
-                fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, false).join();
+                fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, false);
 
                 oneSlot.setSegmentMergeFlag(workerId, batchIndex, segmentIndex,
                         isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, workerId, segmentSeqList.getFirst());
@@ -476,7 +474,7 @@ public class Chunk {
                     var oneSegmentBytes = new byte[segmentLength];
                     System.arraycopy(bytes, i * segmentLength, oneSegmentBytes, 0, segmentLength);
 
-                    fdReadWrite.writeSegment(segmentIndexTargetFd + i, oneSegmentBytes, false).join();
+                    fdReadWrite.writeSegment(segmentIndexTargetFd + i, oneSegmentBytes, false);
                 }
 
                 oneSlot.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, segmentCount,
@@ -500,17 +498,17 @@ public class Chunk {
         }
     }
 
-    private boolean writeSegments(byte[] bytes, int segmentCount, List<Long> segmentSeqList) throws ExecutionException, InterruptedException {
+    private boolean writeSegments(byte[] bytes, int segmentCount, List<Long> segmentSeqList) {
         var fdIndex = targetFdIndex();
         var segmentIndexTargetFd = targetSegmentIndexTargetFd();
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
         if (segmentCount == 1) {
-            fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, true).get();
+            fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, true);
         } else if (segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
-            fdReadWrite.writeSegmentBatch(segmentIndex, bytes, true).get();
+            fdReadWrite.writeSegmentBatch(segmentIndex, bytes, true);
         } else if (segmentCount == ONCE_SEGMENT_COUNT) {
-            fdReadWrite.writeSegmentForRepl(segmentIndex, bytes, 0).get();
+            fdReadWrite.writeSegmentForRepl(segmentIndex, bytes, 0);
         } else {
             throw new RuntimeException("Write segment count not support: " + segmentCount);
         }

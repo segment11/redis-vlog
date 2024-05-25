@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static redis.jmh.FileInit.PAGE_NUMBER;
@@ -123,17 +122,10 @@ BenchmarkFdReadWrite.write             1   avgt        0.042           ms/op
     @Benchmark
     public void read() {
         int segmentIndex = random.nextInt(PAGE_NUMBER);
-        try {
-            for (var fdReadWrite : fdReadWriteList) {
-                var f = fdReadWrite.readSegment(segmentIndex, false);
-                var bytes = f.get();
-                var intValueInit = ByteBuffer.wrap(bytes).getInt();
-                initIntValueSet.add(intValueInit);
-            }
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
+        for (var fdReadWrite : fdReadWriteList) {
+            var bytes = fdReadWrite.readSegment(segmentIndex, false);
+            var intValueInit = ByteBuffer.wrap(bytes).getInt();
+            initIntValueSet.add(intValueInit);
         }
     }
 
@@ -142,18 +134,11 @@ BenchmarkFdReadWrite.write             1   avgt        0.042           ms/op
     @Benchmark
     public void write() {
         int segmentIndex = random.nextInt(PAGE_NUMBER);
-        try {
-            for (var fdReadWrite : fdReadWriteList) {
-                var f = fdReadWrite.writeSegment(segmentIndex, writeBytes, false);
-                var n = f.get();
-                if (n != PAGE_SIZE) {
-                    throw new RuntimeException("write failed");
-                }
+        for (var fdReadWrite : fdReadWriteList) {
+            var n = fdReadWrite.writeSegment(segmentIndex, writeBytes, false);
+            if (n != PAGE_SIZE) {
+                throw new RuntimeException("write failed");
             }
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
         }
     }
 

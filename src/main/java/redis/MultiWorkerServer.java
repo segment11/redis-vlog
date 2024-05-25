@@ -132,10 +132,9 @@ public class MultiWorkerServer extends Launcher {
     @Provides
     NioReactor primaryReactor(Config config) {
         // default 10ms
-        int idleMillis = config.get(toInt, "idleMillis", 10);
         return Eventloop.builder()
                 .withThreadName("primary")
-                .withIdleInterval(Duration.ofMillis(idleMillis))
+                .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
                 .initialize(Initializers.ofEventloop(config.getChild("eventloop.primary")))
                 .build();
     }
@@ -143,11 +142,9 @@ public class MultiWorkerServer extends Launcher {
     @Provides
     @Worker
     NioReactor workerReactor(@WorkerId int workerId, OptionalDependency<ThrottlingController> throttlingController, Config config) {
-        // default 10ms
-        int idleMillis = config.get(toInt, "idleMillis", 10);
         var netHandleEventloop = Eventloop.builder()
                 .withThreadName("net-worker-" + workerId)
-                .withIdleInterval(Duration.ofMillis(idleMillis))
+                .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
                 .initialize(ofEventloop(config.getChild("net.eventloop.worker")))
                 .withInspector(throttlingController.orElse(null))
                 .build();
@@ -555,6 +552,9 @@ public class MultiWorkerServer extends Launcher {
                             c.pureMemory = config.get(ofBoolean(), "pureMemory");
                         }
 
+                        int idleMillis = config.get(toInt, "eventloop.idleMillis", 10);
+                        c.eventLoopIdleMillis = idleMillis;
+
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
                         if (debugMode) {
                             c.confBucket.bucketsPerSlot = ConfForSlot.ConfBucket.debugMode.bucketsPerSlot;
@@ -725,10 +725,9 @@ public class MultiWorkerServer extends Launcher {
                         int requestWorkers = config.get(toInt, "requestWorkers", 1);
                         var requestHandleEventloopArray = new Eventloop[requestWorkers];
                         for (int i = 0; i < requestWorkers; i++) {
-                            int idleMillis = config.get(toInt, "eventloop.idleMillis", 10);
                             var requestHandleEventloop = Eventloop.builder()
                                     .withThreadName("request-" + i)
-                                    .withIdleInterval(Duration.ofMillis(idleMillis))
+                                    .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
                                     .build();
                             requestHandleEventloop.keepAlive(true);
 
@@ -770,10 +769,9 @@ public class MultiWorkerServer extends Launcher {
                         int multiSlotMultiThreadNumber = config.get(toInt, "multiSlotMultiThreadNumber", 1);
                         var multiSlotEventloopArray = new Eventloop[multiSlotMultiThreadNumber];
                         for (int i = 0; i < multiSlotMultiThreadNumber; i++) {
-                            int idleMillis = config.get(toInt, "eventloop.idleMillis", 10);
                             var multiSlotEventloop = Eventloop.builder()
                                     .withThreadName("multi-slot-multi-thread-" + i)
-                                    .withIdleInterval(Duration.ofMillis(idleMillis))
+                                    .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
                                     .build();
                             multiSlotEventloop.keepAlive(true);
 

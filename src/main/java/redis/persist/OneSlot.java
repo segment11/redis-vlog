@@ -153,11 +153,10 @@ public class OneSlot {
         DictMap.getInstance().setMasterUpdateCallback(masterUpdateCallback);
 
         this.persistHandleEventloopArray = new Eventloop[batchNumber];
-        final int idleMillis = 10;
         for (int i = 0; i < batchNumber; i++) {
             var persistHandleEventloop = Eventloop.builder()
                     .withThreadName("persist-worker-slot-" + slot + "-batch-" + i)
-                    .withIdleInterval(Duration.ofMillis(idleMillis))
+                    .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
                     .build();
             persistHandleEventloop.keepAlive(true);
             this.persistHandleEventloopArray[i] = persistHandleEventloop;
@@ -578,7 +577,7 @@ public class OneSlot {
         });
     }
 
-    public ByteBuf get(byte[] keyBytes, int bucketIndex, long keyHash) throws ExecutionException, InterruptedException {
+    public ByteBuf get(byte[] keyBytes, int bucketIndex, long keyHash) {
         var key = new String(keyBytes);
         var tmpValueBytes = getFromWal(key, bucketIndex);
         if (tmpValueBytes != null) {
@@ -672,7 +671,7 @@ public class OneSlot {
         }
     }
 
-    public ByteBuf getKeyValueBufByPvm(PersistValueMeta pvm) throws ExecutionException, InterruptedException {
+    public ByteBuf getKeyValueBufByPvm(PersistValueMeta pvm) {
         byte[] tightBytesWithLength = preadSegmentTightBytesWithLength(pvm.workerId, pvm.batchIndex, pvm.segmentIndex);
         if (tightBytesWithLength == null) {
             throw new IllegalStateException("Load persisted segment bytes error, pvm: " + pvm);
@@ -1068,12 +1067,12 @@ public class OneSlot {
         }
     }
 
-    public byte[] preadForMerge(byte workerId, byte batchIndex, int segmentIndex) throws ExecutionException, InterruptedException {
+    public byte[] preadForMerge(byte workerId, byte batchIndex, int segmentIndex) {
         var chunk = chunksArray[workerId][batchIndex];
         return chunk.preadForMerge(segmentIndex);
     }
 
-    public byte[] preadSegmentTightBytesWithLength(byte workerId, byte batchIndex, int segmentIndex) throws ExecutionException, InterruptedException {
+    public byte[] preadSegmentTightBytesWithLength(byte workerId, byte batchIndex, int segmentIndex) {
         var chunk = chunksArray[workerId][batchIndex];
         return chunk.preadSegmentTightBytesWithLength(segmentIndex);
     }
@@ -1274,7 +1273,7 @@ public class OneSlot {
         metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, bytes);
     }
 
-    public void persistMergeSegmentsUndone() throws Exception {
+    public void persistMergeSegmentsUndone() throws ExecutionException, InterruptedException {
         ArrayList<Integer>[][] needMergeSegmentIndexListArray = new ArrayList[allWorkers][batchNumber];
         for (int i = 0; i < allWorkers; i++) {
             for (int j = 0; j < batchNumber; j++) {

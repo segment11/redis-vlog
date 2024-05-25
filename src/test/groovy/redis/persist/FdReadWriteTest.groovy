@@ -1,17 +1,11 @@
 package redis.persist
 
-import io.prometheus.client.CollectorRegistry
-import io.prometheus.client.exporter.common.TextFormat
 import jnr.ffi.LibraryLoader
 import jnr.posix.LibC
-import net.openhft.affinity.AffinityStrategies
-import net.openhft.affinity.AffinityThreadFactory
 import redis.ConfForSlot
-import redis.Utils
 import spock.lang.Specification
 
 import java.nio.ByteBuffer
-import java.util.concurrent.CompletableFuture
 
 class FdReadWriteTest extends Specification {
     def "test multi read write"() {
@@ -28,46 +22,35 @@ class FdReadWriteTest extends Specification {
         }
 
         and:
-        def threadFactory = new AffinityThreadFactory('fd-read-write-group-1', AffinityStrategies.SAME_CORE)
-
         def fdReadWrite = new FdReadWrite('test', libC, oneFile)
         fdReadWrite.initByteBuffers(true)
-        fdReadWrite.initEventloop(threadFactory)
+        fdReadWrite.initEventloop()
 
         def fdReadWrite2 = new FdReadWrite('test2', libC, oneFile2)
         fdReadWrite2.initByteBuffers(true)
-        fdReadWrite2.initEventloop(threadFactory)
+        fdReadWrite2.initEventloop()
 
         def segmentLength = ConfForSlot.global.confChunk.segmentLength
 
         int loop = 10
 
         when:
-        CompletableFuture<Integer>[] futures = new CompletableFuture<Integer>[loop * 2]
+        int[] array = new int[loop * 2]
         loop.times { i ->
             var bytes = new byte[segmentLength]
             Arrays.fill(bytes, (byte) i)
             var f = fdReadWrite.writeSegment(i, bytes, false)
             var f2 = fdReadWrite2.writeSegment(i, bytes, false)
-            futures[i] = f
-            futures[i + loop] = f2
+            array[i] = f
+            array[i + loop] = f2
         }
 
-        CompletableFuture.allOf(futures).join()
-
         then:
-        futures.every { it.get() == segmentLength }
+        array.every { it == segmentLength }
 
         cleanup:
         fdReadWrite.cleanUp()
         fdReadWrite2.cleanUp()
-
-        def stats = fdReadWrite.stats()
-        println Utils.padStats(stats, 60)
-
-        def sw = new StringWriter()
-        TextFormat.write004(sw, CollectorRegistry.defaultRegistry.metricFamilySamples())
-        println sw.toString()
     }
 
     def "test read write batch"() {
@@ -82,7 +65,7 @@ class FdReadWriteTest extends Specification {
         and:
         def fdReadWrite = new FdReadWrite('test', libC, oneFile)
         fdReadWrite.initByteBuffers(true)
-        fdReadWrite.initEventloop(null)
+        fdReadWrite.initEventloop()
 
         def segmentLength = ConfForSlot.global.confChunk.segmentLength
 
@@ -90,14 +73,14 @@ class FdReadWriteTest extends Specification {
         var bytesBatch = new byte[segmentLength * FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE]
         ByteBuffer.wrap(bytesBatch).putInt(0, 100)
 
-        println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(0, bytesBatch, false).get()
-        println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(100, bytesBatch, false).get()
-        println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(104, bytesBatch, false).get()
-        println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(108, bytesBatch, false).get()
+        println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(0, bytesBatch, false)
+        println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(100, bytesBatch, false)
+        println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(104, bytesBatch, false)
+        println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(108, bytesBatch, false)
 
-        def firstSegmentBytes = fdReadWrite.readSegment(0, false).get()
-        def index100SegmentBytesForMerge = fdReadWrite.readSegmentForMerge(100).get()
-        def index100SegmentBytes = fdReadWrite.readSegment(100, false).get()
+        def firstSegmentBytes = fdReadWrite.readSegment(0, false)
+        def index100SegmentBytesForMerge = fdReadWrite.readSegmentForMerge(100)
+        def index100SegmentBytes = fdReadWrite.readSegment(100, false)
 
         then:
         firstSegmentBytes.length == segmentLength

@@ -2,8 +2,6 @@ package redis.persist;
 
 import com.kenai.jffi.MemoryIO;
 import com.kenai.jffi.PageManager;
-import io.activej.async.callback.AsyncComputation;
-import io.activej.eventloop.Eventloop;
 import io.prometheus.client.Counter;
 import io.prometheus.client.Summary;
 import jnr.constants.platform.OpenFlags;
@@ -13,23 +11,18 @@ import net.openhft.affinity.AffinityThreadFactory;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.repl.content.ToMasterExistsSegmentMeta;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.time.Duration;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadFactory;
 
 import static redis.persist.LocalPersist.PAGE_SIZE;
 import static redis.persist.LocalPersist.PROTECTION;
 
-public class FdReadWrite {
+public class FdReadWrite extends ThreadSafeCaller {
 
     public FdReadWrite(String name, LibC libC, File file) throws IOException {
         this.name = name;
@@ -86,86 +79,42 @@ public class FdReadWrite {
             labelNames("fd_name")
             .register();
 
-    private Eventloop eventloop;
+    // one or two ssd volume, one cpu v-core is enough, suppose there are at most 8 ssd volumes
+    private static final ThreadFactory[] threadFactories = new ThreadFactory[8];
 
-    private long threadId;
+    static {
+        for (int i = 0; i < threadFactories.length; i++) {
+            threadFactories[i] = new AffinityThreadFactory("fd-read-write-chunk-group-" + i,
+                    AffinityStrategies.SAME_CORE);
+        }
+    }
 
-    private final int idleMillis = 10;
-
-    private final Logger log = LoggerFactory.getLogger(FdReadWrite.class);
-
-    // one or two ssd volume, one cpu v-core is enough
-    static final ThreadFactory threadFactoryGroup1 = new AffinityThreadFactory("merge-worker-group1",
-            AffinityStrategies.SAME_CORE);
-
-    static final ThreadFactory threadFactoryGroup2 = new AffinityThreadFactory("merge-worker-group1",
-            AffinityStrategies.SAME_CORE);
-
-    static final ThreadFactory threadFactoryGroup3 = new AffinityThreadFactory("merge-worker-group1",
-            AffinityStrategies.SAME_CORE);
-
-    static final ThreadFactory threadFactoryGroup4 = new AffinityThreadFactory("merge-worker-group1",
-            AffinityStrategies.SAME_CORE);
-
-    private static final int THREAD_FACTORY_GROUP_COUNT = 4;
-
+    private static final int THREAD_NUMBER_PER_GROUP_FOR_CHUNK_FD = 16;
     // need not thread safe
     // just for init
     private static int increaseCountForChooseThreadFactory = 0;
 
-    private static ThreadFactory getNextThreadFactory() {
-        int d = increaseCountForChooseThreadFactory % THREAD_FACTORY_GROUP_COUNT;
-        var threadFactory = switch (d) {
-            case 0 -> threadFactoryGroup1;
-            case 1 -> threadFactoryGroup2;
-            case 2 -> threadFactoryGroup3;
-            case 3 -> threadFactoryGroup4;
-            default -> throw new IllegalStateException("Unexpected value: " + d);
-        };
+    private static ThreadFactory getNextThreadFactoryInner() {
         increaseCountForChooseThreadFactory++;
-        return threadFactory;
-    }
 
-    public void initEventloop(ThreadFactory threadFactoryGiven) {
-        var threadName = "fd-read-write-" + name;
-        this.eventloop = Eventloop.builder()
-                .withThreadName(threadName)
-                .withIdleInterval(Duration.ofMillis(idleMillis))
-                .build();
-        this.eventloop.keepAlive(true);
-
-        var threadFactory = threadFactoryGiven == null ? getNextThreadFactory() : threadFactoryGiven;
-        var thread = threadFactory.newThread(this.eventloop);
-        thread.start();
-        log.info("Init eventloop, thread name: {}", threadName);
-
-        this.threadId = thread.threadId();
-    }
-
-    void stopEventLoop() {
-        if (this.eventloop != null) {
-            var threadName = "fd-read-write-" + name;
-            this.eventloop.breakEventloop();
-            System.out.println("Eventloop stopped, thread name: " + threadName);
-
-            this.eventloop = null;
-        }
-    }
-
-    // make sure in the same thread
-    private <T> CompletableFuture<T> call(Callable<T> callable) {
-        var currentThreadId = Thread.currentThread().getId();
-        if (currentThreadId == threadId) {
-            CompletableFuture<T> future = new CompletableFuture<>();
-            try {
-                future.complete(callable.call());
-            } catch (Exception e) {
-                future.completeExceptionally(e);
+        for (int i = 0; i < threadFactories.length; i++) {
+            if (increaseCountForChooseThreadFactory <= THREAD_NUMBER_PER_GROUP_FOR_CHUNK_FD * (i + 1)) {
+                return threadFactories[i];
             }
-            return future;
-        } else {
-            return eventloop.submit(AsyncComputation.of(callable::call));
         }
+
+        increaseCountForChooseThreadFactory = 1;
+        return threadFactories[0];
+    }
+
+    @Override
+    String threadName() {
+        return "fd-read-write-" + name;
+    }
+
+    @Override
+    ThreadFactory getNextThreadFactory() {
+        return getNextThreadFactoryInner();
     }
 
     public static final int BATCH_ONCE_SEGMENT_COUNT_PWRITE = 4;
@@ -431,16 +380,16 @@ public class FdReadWrite {
         return (int) n;
     }
 
-    private CompletableFuture<byte[]> readAsyncNotPureMemory(int segmentIndex, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
-        return call(() -> readInnerNotPureMemory(segmentIndex, buffer, callback, isRefreshLRUCache));
+    private byte[] readAsyncNotPureMemory(int segmentIndex, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
+        return callSync(() -> readInnerNotPureMemory(segmentIndex, buffer, callback, isRefreshLRUCache));
     }
 
-    private CompletableFuture<Integer> writeAsyncNotPureMemory(int segmentIndex, ByteBuffer buffer, WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
-        return call(() -> writeInnerNotPureMemory(segmentIndex, buffer, prepare, isRefreshLRUCache));
+    private int writeAsyncNotPureMemory(int segmentIndex, ByteBuffer buffer, WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
+        return callSync(() -> writeInnerNotPureMemory(segmentIndex, buffer, prepare, isRefreshLRUCache));
     }
 
-    private CompletableFuture<byte[]> readSegmentBatchFromMemory(int segmentIndex, int segmentCount) {
-        return call(() -> {
+    private byte[] readSegmentBatchFromMemory(int segmentIndex, int segmentCount) {
+        return callSync(() -> {
             var bytesRead = new byte[segmentLength * segmentCount];
             for (int i = 0; i < segmentCount; i++) {
                 var oneSegmentBytes = allBytesBySegmentIndex[segmentIndex + i];
@@ -452,7 +401,7 @@ public class FdReadWrite {
         });
     }
 
-    public CompletableFuture<byte[]> readSegment(int segmentIndex, boolean isRefreshLRUCache) {
+    public byte[] readSegment(int segmentIndex, boolean isRefreshLRUCache) {
         if (ConfForSlot.global.pureMemory) {
             return readSegmentBatchFromMemory(segmentIndex, 1);
         }
@@ -460,7 +409,7 @@ public class FdReadWrite {
         return readAsyncNotPureMemory(segmentIndex, readPageBuffer, null, isRefreshLRUCache);
     }
 
-    public CompletableFuture<byte[]> readSegmentForMerge(int segmentIndex) {
+    public byte[] readSegmentForMerge(int segmentIndex) {
         if (ConfForSlot.global.pureMemory) {
             return readSegmentBatchFromMemory(segmentIndex, MERGE_READ_ONCE_SEGMENT_COUNT);
         }
@@ -468,7 +417,7 @@ public class FdReadWrite {
         return readAsyncNotPureMemory(segmentIndex, readForMergeBatchBuffer, null, false);
     }
 
-    public CompletableFuture<byte[]> readSegmentForRepl(int segmentIndex) {
+    public byte[] readSegmentForRepl(int segmentIndex) {
         if (ConfForSlot.global.pureMemory) {
             return readSegmentBatchFromMemory(segmentIndex, ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT);
         }
@@ -476,7 +425,7 @@ public class FdReadWrite {
         return readAsyncNotPureMemory(segmentIndex, readForReplBuffer, null, false);
     }
 
-    public CompletableFuture<byte[]> readSegmentForKeyBucketWhenMergeCompare(int bucketIndex) {
+    public byte[] readSegmentForKeyBucketWhenMergeCompare(int bucketIndex) {
         // bucketIndex is segmentIndex when fd is key bucket fd, not chunk fd
         if (ConfForSlot.global.pureMemory) {
             return readSegmentBatchFromMemory(bucketIndex, ConfForSlot.global.confWal.oneChargeBucketNumber);
@@ -485,19 +434,19 @@ public class FdReadWrite {
         return readAsyncNotPureMemory(bucketIndex, readForKeyBucketBatchBuffer, null, false);
     }
 
-    public CompletableFuture<Integer> clearOneSegmentToMemory(int segmentIndex) {
-        return call(() -> {
+    public int clearOneSegmentToMemory(int segmentIndex) {
+        return callSync(() -> {
             allBytesBySegmentIndex[segmentIndex] = null;
             return 0;
         });
     }
 
-    public CompletableFuture<Integer> writeSegmentBatchToMemory(int segmentIndex, byte[] bytes, int position) {
+    public int writeSegmentBatchToMemory(int segmentIndex, byte[] bytes, int position) {
         if (bytes.length % segmentLength != 0) {
             throw new IllegalArgumentException("Bytes length must be multiple of segment length");
         }
 
-        return call(() -> {
+        return callSync(() -> {
             var segmentCount = bytes.length / segmentLength;
             var offset = position;
             for (int i = 0; i < segmentCount; i++) {
@@ -511,7 +460,7 @@ public class FdReadWrite {
         });
     }
 
-    public CompletableFuture<Integer> writeSegment(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
+    public int writeSegment(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
         if (bytes.length > segmentLength) {
             throw new IllegalArgumentException("Write bytes length must be less than segment length");
         }
@@ -526,11 +475,11 @@ public class FdReadWrite {
         }, isRefreshLRUCache);
     }
 
-    public CompletableFuture<Integer> writeSegmentBatch(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
+    public int writeSegmentBatch(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
         return writeSegmentBatch(segmentIndex, bytes, 0, isRefreshLRUCache);
     }
 
-    public CompletableFuture<Integer> writeSegmentBatch(int segmentIndex, byte[] bytes, int position, boolean isRefreshLRUCache) {
+    public int writeSegmentBatch(int segmentIndex, byte[] bytes, int position, boolean isRefreshLRUCache) {
         var segmentCount = bytes.length / segmentLength;
         if (segmentCount != BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
             throw new IllegalArgumentException("Batch write bytes length not match once batch write segment count");
@@ -550,7 +499,7 @@ public class FdReadWrite {
         }, isRefreshLRUCache);
     }
 
-    public CompletableFuture<Integer> writeSegmentForRepl(int segmentIndex, byte[] bytes, int position) {
+    public int writeSegmentForRepl(int segmentIndex, byte[] bytes, int position) {
         var segmentCount = bytes.length / segmentLength;
         if (segmentCount != ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT) {
             throw new IllegalArgumentException("Repl write bytes length not match once repl segment count");
@@ -570,8 +519,8 @@ public class FdReadWrite {
         }, false);
     }
 
-    public CompletableFuture<Integer> truncate() {
-        return call(() -> {
+    public int truncate() {
+        return callSync(() -> {
             var r = libC.ftruncate(fd, 0);
             if (r < 0) {
                 throw new RuntimeException("Truncate error: " + libC.strerror(r));
