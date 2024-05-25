@@ -92,7 +92,7 @@ public class LocalPersist {
         for (short i = 0; i < slotNumber; i++) {
             var oneSlot = new OneSlot((byte) i, slotNumber, snowFlake, persistDir, persistConfig);
             oneSlot.reuseNetWorkers = reuseNetWorkers;
-            oneSlot.initChunks(libC, allWorkers, requestWorkers, mergeWorkers, topMergeWorkers);
+            oneSlot.initFds(libC, allWorkers, requestWorkers, mergeWorkers, topMergeWorkers);
 
             oneSlots[i] = oneSlot;
         }

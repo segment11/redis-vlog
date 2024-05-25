@@ -1,15 +1,12 @@
 package redis.persist;
 
 import io.activej.config.Config;
-import net.openhft.affinity.AffinityStrategies;
-import net.openhft.affinity.AffinityThreadFactory;
 import redis.SnowFlake;
 import redis.repl.MasterUpdateCallback;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadFactory;
 
 public class ChunkMerger {
     public static final byte MAX_MERGE_WORKERS = 32;
@@ -34,50 +31,6 @@ public class ChunkMerger {
 
     public void setCompressLevel(int compressLevel) {
         this.compressLevel = compressLevel;
-    }
-
-    // decompress is cpu intensive
-    static final ThreadFactory persistWorkerThreadFactoryGroup1 = new AffinityThreadFactory("persist-worker-group1",
-            AffinityStrategies.SAME_CORE);
-    static final ThreadFactory persistWorkerThreadFactoryGroup2 = new AffinityThreadFactory("persist-worker-group2",
-            AffinityStrategies.SAME_CORE);
-    static final ThreadFactory persistWorkerThreadFactoryGroup3 = new AffinityThreadFactory("persist-worker-group3",
-            AffinityStrategies.SAME_CORE);
-    static final ThreadFactory persistWorkerThreadFactoryGroup4 = new AffinityThreadFactory("persist-worker-group4",
-            AffinityStrategies.SAME_CORE);
-
-    static final ThreadFactory mergeWorkerThreadFactoryGroup1 = new AffinityThreadFactory("merge-worker-group1",
-            AffinityStrategies.SAME_CORE);
-    static final ThreadFactory mergeWorkerThreadFactoryGroup2 = new AffinityThreadFactory("merge-worker-group2",
-            AffinityStrategies.SAME_CORE);
-    static final ThreadFactory mergeWorkerThreadFactoryGroup3 = new AffinityThreadFactory("merge-worker-group3",
-            AffinityStrategies.SAME_CORE);
-    static final ThreadFactory mergeWorkerThreadFactoryGroup4 = new AffinityThreadFactory("merge-worker-group4",
-            AffinityStrategies.SAME_CORE);
-
-    static final ThreadFactory topMergeWorkerThreadFactoryGroup1 = new AffinityThreadFactory("top-merge-worker-group1",
-            AffinityStrategies.SAME_CORE);
-    static final ThreadFactory topMergeWorkerThreadFactoryGroup2 = new AffinityThreadFactory("top-merge-worker-group2",
-            AffinityStrategies.SAME_CORE);
-
-    static ThreadFactory getPersistThreadFactoryForSlot(byte slot, short slotNumber) {
-        final int step = 10;
-        if (slotNumber <= step) {
-            return persistWorkerThreadFactoryGroup1;
-        }
-
-        if (slotNumber <= step * 2) {
-            return slot < step ? persistWorkerThreadFactoryGroup1 : persistWorkerThreadFactoryGroup2;
-        }
-
-        int diff = slot % 4;
-        return switch (diff) {
-            case 0 -> persistWorkerThreadFactoryGroup1;
-            case 1 -> persistWorkerThreadFactoryGroup2;
-            case 2 -> persistWorkerThreadFactoryGroup3;
-            case 3 -> persistWorkerThreadFactoryGroup4;
-            default -> throw new IllegalStateException("Unexpected value: " + diff);
-        };
     }
 
     public ChunkMerger(byte requestWorkers, byte mergeWorkers, byte topMergeWorkers, short slotNumber,

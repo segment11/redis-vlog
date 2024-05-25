@@ -161,9 +161,10 @@ public class OneSlot {
             persistHandleEventloop.keepAlive(true);
             this.persistHandleEventloopArray[i] = persistHandleEventloop;
 
-            var thread = chunkMerger.getPersistThreadFactoryForSlot(slot, slotNumber).newThread(persistHandleEventloop);
+            var threadFactory = ThreadFactoryAssignSupport.getInstance().ForSlotWalBatchPersist.getNextThreadFactory();
+            var thread = threadFactory.newThread(persistHandleEventloop);
             thread.start();
-            log.info("Slot persist handle eventloop thread started, s={}, b={}", slot, i);
+            log.info("Slot persist handle eventloop thread started, s={}, b={}, thread name={}", slot, i, thread.getName());
         }
 
         this.initTasks();
@@ -934,7 +935,7 @@ public class OneSlot {
         this.metaChunkSegmentIndex.clear();
     }
 
-    public void initChunks(LibC libC, byte allWorkers, byte requestWorkers, byte mergeWorkers, byte topMergeWorkers) throws IOException {
+    public void initFds(LibC libC, byte allWorkers, byte requestWorkers, byte mergeWorkers, byte topMergeWorkers) throws IOException {
         this.allWorkers = allWorkers;
         this.requestWorkers = requestWorkers;
         this.mergeWorkers = mergeWorkers;
@@ -942,6 +943,7 @@ public class OneSlot {
 
         this.libC = libC;
         this.keyLoader.init(libC);
+        this.keyLoader.initEventloop();
 
         // meta data
         this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, allWorkers, slotDir);

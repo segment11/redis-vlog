@@ -6,8 +6,6 @@ import io.prometheus.client.Counter;
 import io.prometheus.client.Summary;
 import jnr.constants.platform.OpenFlags;
 import jnr.posix.LibC;
-import net.openhft.affinity.AffinityStrategies;
-import net.openhft.affinity.AffinityThreadFactory;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
@@ -79,34 +77,6 @@ public class FdReadWrite extends ThreadSafeCaller {
             labelNames("fd_name")
             .register();
 
-    // one or two ssd volume, one cpu v-core is enough, suppose there are at most 8 ssd volumes
-    private static final ThreadFactory[] threadFactories = new ThreadFactory[8];
-
-    static {
-        for (int i = 0; i < threadFactories.length; i++) {
-            threadFactories[i] = new AffinityThreadFactory("fd-read-write-chunk-group-" + i,
-                    AffinityStrategies.SAME_CORE);
-        }
-    }
-
-    private static final int THREAD_NUMBER_PER_GROUP_FOR_CHUNK_FD = 16;
-    // need not thread safe
-    // just for init
-    private static int increaseCountForChooseThreadFactory = 0;
-
-    private static ThreadFactory getNextThreadFactoryInner() {
-        increaseCountForChooseThreadFactory++;
-
-        for (int i = 0; i < threadFactories.length; i++) {
-            if (increaseCountForChooseThreadFactory <= THREAD_NUMBER_PER_GROUP_FOR_CHUNK_FD * (i + 1)) {
-                return threadFactories[i];
-            }
-        }
-
-        increaseCountForChooseThreadFactory = 1;
-        return threadFactories[0];
-    }
-
     @Override
     String threadName() {
         return "fd-read-write-" + name;
@@ -114,7 +84,7 @@ public class FdReadWrite extends ThreadSafeCaller {
 
     @Override
     ThreadFactory getNextThreadFactory() {
-        return getNextThreadFactoryInner();
+        return ThreadFactoryAssignSupport.getInstance().ForFdReadWrite.getNextThreadFactory();
     }
 
     public static final int BATCH_ONCE_SEGMENT_COUNT_PWRITE = 4;

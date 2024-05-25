@@ -1,8 +1,6 @@
 package redis.persist;
 
 import jnr.posix.LibC;
-import net.openhft.affinity.AffinityStrategies;
-import net.openhft.affinity.AffinityThreadFactory;
 import redis.CompressStats;
 import redis.ConfForSlot;
 import redis.SnowFlake;
@@ -98,32 +96,6 @@ public class KeyLoader extends ThreadSafeCaller {
         return statKeyBucketLastUpdateCount.getKeyCount();
     }
 
-    private static final ThreadFactory[] threadFactoriesForKeyLoader = new ThreadFactory[16];
-
-    static {
-        for (int i = 0; i < threadFactoriesForKeyLoader.length; i++) {
-            threadFactoriesForKeyLoader[i] = new AffinityThreadFactory("fd-read-write-key-loader-group-" + i,
-                    AffinityStrategies.SAME_CORE);
-        }
-    }
-
-    // key bucket add/update/del need cost more time, so use more cpu core
-    private static final int THREAD_NUMBER_PER_GROUP_FOR_KEY_LOADER = 4;
-    private static int increaseCountForChooseThreadFactoryForKeyLoader = 0;
-
-    private static ThreadFactory getNextThreadFactoryInner() {
-        increaseCountForChooseThreadFactoryForKeyLoader++;
-
-        for (int i = 0; i < threadFactoriesForKeyLoader.length; i++) {
-            if (increaseCountForChooseThreadFactoryForKeyLoader <= THREAD_NUMBER_PER_GROUP_FOR_KEY_LOADER * (i + 1)) {
-                return threadFactoriesForKeyLoader[i];
-            }
-        }
-
-        increaseCountForChooseThreadFactoryForKeyLoader = 1;
-        return threadFactoriesForKeyLoader[0];
-    }
-
     @Override
     String threadName() {
         return "key-loader-" + slot;
@@ -131,7 +103,7 @@ public class KeyLoader extends ThreadSafeCaller {
 
     @Override
     ThreadFactory getNextThreadFactory() {
-        return getNextThreadFactoryInner();
+        return ThreadFactoryAssignSupport.getInstance().ForKeyLoader.getNextThreadFactory();
     }
 
     public void init(LibC libC) throws IOException {

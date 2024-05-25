@@ -18,14 +18,11 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 
 import static redis.CompressedValue.KEY_HEADER_LENGTH;
 import static redis.CompressedValue.VALUE_HEADER_LENGTH;
 import static redis.persist.Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED;
-import static redis.persist.ChunkMerger.mergeWorkerThreadFactoryGroup1;
-import static redis.persist.ChunkMerger.topMergeWorkerThreadFactoryGroup1;
 import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
@@ -217,34 +214,6 @@ public class ChunkMergeWorker {
         });
     }
 
-    private ThreadFactory getMergeThreadFactoryForMergeWorker(byte mergeWorkerId) {
-        // every cpu vCore has 10 threads
-        // one core decompress usually 1000MB/s, 1 thread can handle 100MB/s
-        // 4KB usually compress/decompress cost 10us
-        // each 4KB includes 10+ compressed kv, 100MB = 25000 pages, qps is 25000+
-        final int step = 10;
-        int beginWorkerId = isTopMergeWorker ? requestWorkers + mergeWorkers : requestWorkers;
-        int diff = mergeWorkerId - beginWorkerId;
-
-        if (isTopMergeWorker) {
-            if (diff < step) {
-                return topMergeWorkerThreadFactoryGroup1;
-            } else {
-                return ChunkMerger.topMergeWorkerThreadFactoryGroup2;
-            }
-        }
-
-        if (diff < step) {
-            return mergeWorkerThreadFactoryGroup1;
-        } else if (diff < step * 2) {
-            return ChunkMerger.mergeWorkerThreadFactoryGroup2;
-        } else if (diff < step * 3) {
-            return ChunkMerger.mergeWorkerThreadFactoryGroup3;
-        } else {
-            return ChunkMerger.mergeWorkerThreadFactoryGroup4;
-        }
-    }
-
     public ChunkMergeWorker(byte mergeWorkerId, short slotNumber,
                             byte requestWorkers, byte mergeWorkers, byte topMergeWorkers,
                             SnowFlake snowFlake, ChunkMerger chunkMerger) {
@@ -278,9 +247,10 @@ public class ChunkMergeWorker {
     void start() {
         for (int i = 0; i < mergeHandleEventloopArray.length; i++) {
             var mergeHandleEventloop = mergeHandleEventloopArray[i];
-            var thread = getMergeThreadFactoryForMergeWorker(mergeWorkerId).newThread(mergeHandleEventloop);
+            var threadFactory = ThreadFactoryAssignSupport.getInstance().ForChunkMerge.getNextThreadFactory();
+            var thread = threadFactory.newThread(mergeHandleEventloop);
             thread.start();
-            log.info("Chunk merge handle eventloop thread started, w={}, b={}", mergeWorkerId, i);
+            log.info("Chunk merge handle eventloop thread started, w={}, b={}, thread name={}", mergeWorkerId, i, thread.getName());
         }
     }
 
