@@ -27,7 +27,7 @@ public class KeyLoader extends ThreadSafeCaller {
     static final int MAX_KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
     public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake,
-                     MasterUpdateCallback masterUpdateCallback, DynConfig dynConfig) throws IOException {
+                     MasterUpdateCallback masterUpdateCallback, DynConfig dynConfig) {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
         this.bucketsPerSlot = bucketsPerSlot;
@@ -114,7 +114,9 @@ public class KeyLoader extends ThreadSafeCaller {
 
         var fdLength = MAX_SPLIT_NUMBER;
         this.fdReadWriteArray = new FdReadWrite[fdLength];
+    }
 
+    public void initAfterEventloopReady() {
         var maxSplitNumber = metaKeyBucketSplitNumber.maxSplitNumber();
         this.initFds(maxSplitNumber);
     }
@@ -146,7 +148,9 @@ public class KeyLoader extends ThreadSafeCaller {
 
         if (fdReadWriteArray != null) {
             for (var fdReadWrite : fdReadWriteArray) {
-                fdReadWrite.cleanUp();
+                if (fdReadWrite != null) {
+                    fdReadWrite.cleanUp();
+                }
             }
         }
 
@@ -218,7 +222,7 @@ public class KeyLoader extends ThreadSafeCaller {
         return firstLong != 0;
     }
 
-    private KeyBucket readKeyBucket(int bucketIndex, long keyHash) {
+    private KeyBucket readKeyBucketForSingleKey(int bucketIndex, long keyHash) {
         return callSync(() -> {
             var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
             var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
@@ -239,11 +243,31 @@ public class KeyLoader extends ThreadSafeCaller {
     }
 
     public KeyBucket.ValueBytesWithExpireAt getValueByKey(int bucketIndex, byte[] keyBytes, long keyHash) {
-        var keyBucket = readKeyBucket(bucketIndex, keyHash);
-        if (keyBucket == null) {
-            return null;
-        }
-        return keyBucket.getValueByKey(keyBytes, keyHash);
+        return callSync(() -> {
+            var keyBucket = readKeyBucketForSingleKey(bucketIndex, keyHash);
+            if (keyBucket == null) {
+                return null;
+            }
+
+            return keyBucket.getValueByKey(keyBytes, keyHash);
+        });
+    }
+
+    public void putValueByKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash, long expireAt, byte[] valueBytes) {
+        callSync(() -> {
+            var keyBucket = readKeyBucketForSingleKey(bucketIndex, keyHash);
+            if (keyBucket == null) {
+                var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
+                var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
+
+                keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, null, snowFlake);
+                keyBucket.initWithCompressStats(compressStats);
+            }
+
+            keyBucket.put(keyBytes, keyHash, expireAt, valueBytes, null);
+            updateKeyBucketInner(bucketIndex, keyBucket, true);
+            return 0;
+        });
     }
 
     public ArrayList<KeyBucket> readKeyBuckets(int bucketIndex) {
@@ -272,10 +296,10 @@ public class KeyLoader extends ThreadSafeCaller {
     }
 
     public void updateKeyBucketFromMasterNewly(int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes) {
-        updateKeyBucketInner(bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes);
+        updateKeyBucketInner(bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes, false);
     }
 
-    private void updateKeyBucketInner(int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes) {
+    private void updateKeyBucketInner(int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes, boolean isRefreshLRUCache) {
         if (bytes.length > KEY_BUCKET_ONE_COST_SIZE) {
             throw new IllegalStateException("Key bucket bytes size too large, slot: " + slot +
                     ", bucket index: " + bucketIndex + ", split index: " + splitIndex + ", size: " + bytes.length);
@@ -288,7 +312,7 @@ public class KeyLoader extends ThreadSafeCaller {
                 fdReadWrite = fdReadWriteArray[splitIndex];
             }
 
-            fdReadWrite.writeSegment(bucketIndex, bytes, false);
+            fdReadWrite.writeSegment(bucketIndex, bytes, isRefreshLRUCache);
 
             if (masterUpdateCallback != null) {
                 masterUpdateCallback.onKeyBucketUpdate(slot, bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes);
@@ -297,8 +321,8 @@ public class KeyLoader extends ThreadSafeCaller {
         });
     }
 
-    private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket) {
-        updateKeyBucketInner(bucketIndex, keyBucket.splitIndex, keyBucket.splitNumber, keyBucket.lastUpdateSeq, keyBucket.compress());
+    private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket, boolean isRefreshLRUCache) {
+        updateKeyBucketInner(bucketIndex, keyBucket.splitIndex, keyBucket.splitNumber, keyBucket.lastUpdateSeq, keyBucket.compress(), isRefreshLRUCache);
     }
 
     interface UpdateBatchCallback {
@@ -307,7 +331,7 @@ public class KeyLoader extends ThreadSafeCaller {
 
     private long updateBatchCount = 0;
 
-    private KeyBucket readOneKeyBucket(int bucketIndex, int splitIndex, byte splitNumber) {
+    private KeyBucket readKeyBucket(int bucketIndex, int splitIndex, byte splitNumber) {
         return callSync(() -> {
             var fdReadWrite = fdReadWriteArray[splitIndex];
             if (fdReadWrite == null) {
@@ -325,7 +349,7 @@ public class KeyLoader extends ThreadSafeCaller {
         });
     }
 
-    private void updateBatch(int bucketIndex, long keyHash, UpdateBatchCallback callback) {
+    private void updateBatch(int bucketIndex, long keyHash, UpdateBatchCallback callback, boolean isRefreshLRUCache) {
         callSync(() -> {
             var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
             ArrayList<KeyBucket> keyBuckets = new ArrayList<>(splitNumber);
@@ -334,16 +358,16 @@ public class KeyLoader extends ThreadSafeCaller {
             // just get one key bucket
             if (isSingleKeyUpdate) {
                 var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
-                var oneKeyBucket = readOneKeyBucket(bucketIndex, splitIndex, splitNumber);
-                if (oneKeyBucket != null) {
-                    keyBuckets.add(oneKeyBucket);
+                var keyBucket = readKeyBucket(bucketIndex, splitIndex, splitNumber);
+                if (keyBucket != null) {
+                    keyBuckets.add(keyBucket);
                 }
             } else {
                 for (int i = 0; i < splitNumber; i++) {
                     var splitIndex = i;
-                    var oneKeyBucket = readOneKeyBucket(bucketIndex, splitIndex, splitNumber);
-                    if (oneKeyBucket != null) {
-                        keyBuckets.add(oneKeyBucket);
+                    var keyBucket = readKeyBucket(bucketIndex, splitIndex, splitNumber);
+                    if (keyBucket != null) {
+                        keyBuckets.add(keyBucket);
                     }
                 }
             }
@@ -355,7 +379,7 @@ public class KeyLoader extends ThreadSafeCaller {
             for (int i = 0; i < splitNumber; i++) {
                 if (putBackFlags[i]) {
                     var keyBucket = keyBuckets.get(i);
-                    updateKeyBucketInner(bucketIndex, keyBucket);
+                    updateKeyBucketInner(bucketIndex, keyBucket, isRefreshLRUCache);
                     sizeChanged = true;
                 }
             }
@@ -390,37 +414,8 @@ public class KeyLoader extends ThreadSafeCaller {
     }
 
     public void updatePvmListAfterWriteSegment(ArrayList<PersistValueMeta> pvmList) {
-        var groupByBucketIndex = pvmList.stream().collect(Collectors.groupingBy(one -> one.bucketIndex));
-
-        // batch read
-//        var minBucketIndex = groupByBucketIndex.keySet().stream().min(Integer::compareTo).orElse(0);
-//        var maxBucketIndex = groupByBucketIndex.keySet().stream().max(Integer::compareTo).orElse(0);
-//        var diff = maxBucketIndex - minBucketIndex;
-//        if (diff > ConfForSlot.global.confWal.oneChargeBucketNumber) {
-//            throw new IllegalStateException("once update key buckets number > ConfForSlot.global.confWal.oneChargeBucketNumber");
-//        }
-//
-//        int maxSplitNumber = 1;
-//        for (var entry : groupByBucketIndex.entrySet()) {
-//            var bucketIndex = entry.getKey();
-//            var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
-//            if (splitNumber > maxSplitNumber) {
-//                maxSplitNumber = splitNumber;
-//            }
-//        }
-//
-//        for (int splitIndex = 0; splitIndex < maxSplitNumber; splitIndex++) {
-//            var fdReadWrite = fdReadWriteArray[splitIndex];
-//            if (fdReadWrite == null) {
-//                initFds((byte) (splitIndex + 1));
-//                fdReadWrite = fdReadWriteArray[splitIndex];
-//            }
-//
-//            var bytesBatch = fdReadWrite.readSegmentForKeyBucketWhenMergeCompare(minBucketIndex).get();
-//            // todo
-//        }
-
         callSync(() -> {
+            var groupByBucketIndex = pvmList.stream().collect(Collectors.groupingBy(one -> one.bucketIndex));
             for (var entry : groupByBucketIndex.entrySet()) {
                 var bucketIndex = entry.getKey();
                 var list = entry.getValue();
@@ -435,6 +430,91 @@ public class KeyLoader extends ThreadSafeCaller {
         });
     }
 
+    private void updatePvmListAfterWriteSegmentBatchRead(ArrayList<PersistValueMeta> pvmList) {
+        callSync(() -> {
+            var groupByBucketIndex = pvmList.stream().collect(Collectors.groupingBy(one -> one.bucketIndex));
+            // batch read
+            var minBucketIndex = groupByBucketIndex.keySet().stream().min(Integer::compareTo).orElse(0);
+            var maxBucketIndex = groupByBucketIndex.keySet().stream().max(Integer::compareTo).orElse(0);
+            var diff = maxBucketIndex - minBucketIndex;
+            if (diff > ConfForSlot.global.confWal.oneChargeBucketNumber) {
+                throw new IllegalStateException("once update key buckets number > ConfForSlot.global.confWal.oneChargeBucketNumber");
+            }
+
+            int maxSplitNumber = 1;
+            for (var entry : groupByBucketIndex.entrySet()) {
+                var bucketIndex = entry.getKey();
+                var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
+                if (splitNumber > maxSplitNumber) {
+                    maxSplitNumber = splitNumber;
+                }
+            }
+
+            var isCompress = ConfForSlot.global.confBucket.isCompress;
+
+            HashMap<Integer, ArrayList<KeyBucket>> keyBucketsByBucketIndex = new HashMap<>();
+            for (int splitIndex = 0; splitIndex < maxSplitNumber; splitIndex++) {
+                var fdReadWrite = fdReadWriteArray[splitIndex];
+                if (fdReadWrite == null) {
+                    initFds((byte) (splitIndex + 1));
+                    fdReadWrite = fdReadWriteArray[splitIndex];
+                }
+
+                var bytesBatch = fdReadWrite.readSegmentForKeyBucketWhenMergeCompare(minBucketIndex);
+                if (bytesBatch == null) {
+                    continue;
+                }
+                var bucketCount = bytesBatch.length / KEY_BUCKET_ONE_COST_SIZE;
+
+                if (isCompress) {
+                    for (int i = 0; i < bucketCount; i++) {
+                        var bucketIndex = minBucketIndex + i;
+                        var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
+
+                        var bytes = new byte[KEY_BUCKET_ONE_COST_SIZE];
+                        System.arraycopy(bytesBatch, i * KEY_BUCKET_ONE_COST_SIZE, bytes, 0, KEY_BUCKET_ONE_COST_SIZE);
+                        if (!isBytesValidAsKeyBucket(bytes)) {
+                            continue;
+                        }
+
+                        var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
+                        keyBucket.initWithCompressStats(compressStats);
+
+                        var list = keyBucketsByBucketIndex.computeIfAbsent(bucketIndex, k -> new ArrayList<>());
+                        list.add(keyBucket);
+                    }
+                } else {
+                    // share bytes
+                    for (int i = 0; i < bucketCount; i++) {
+                        var bucketIndex = minBucketIndex + i;
+                        var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
+
+                        var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytesBatch, i * KEY_BUCKET_ONE_COST_SIZE, snowFlake);
+                        keyBucket.initWithCompressStats(compressStats);
+
+                        var list = keyBucketsByBucketIndex.computeIfAbsent(bucketIndex, k -> new ArrayList<>());
+                        list.add(keyBucket);
+                    }
+                }
+            }
+
+            for (var entry : groupByBucketIndex.entrySet()) {
+                var bucketIndex = entry.getKey();
+                var subPvmList = entry.getValue();
+
+                ArrayList<PvmRow> pvmRowList = new ArrayList<>(subPvmList.size());
+                for (var pvm : subPvmList) {
+                    pvmRowList.add(new PvmRow(pvm.keyHash, pvm.expireAt, pvm.keyBytes, pvm.encode()));
+                }
+
+                var keyBucketList = keyBucketsByBucketIndex.get(bucketIndex);
+                // todo
+//                persistPvmListBatch2(bucketIndex, pvmRowList, keyBucketList);
+            }
+            return 0;
+        });
+    }
+
     private void persistPvmListBatch(int bucketIndex, ArrayList<PvmRow> pvmRowList) {
         updateBatch(bucketIndex, 0, (keyBuckets, putBackFlags, splitNumber, isLoadedAll) -> {
             var beforeKeyBuckets = new ArrayList<>(keyBuckets);
@@ -444,6 +524,10 @@ public class KeyLoader extends ThreadSafeCaller {
                 var pvmRow = pvmRowList.get(i);
                 int splitIndex = beforeSplitNumberArr[0] == 1 ? 0 : (int) Math.abs(pvmRow.keyHash() % beforeSplitNumberArr[0]);
                 var keyBucket = beforeKeyBuckets.get(splitIndex);
+                if (keyBucket == null) {
+                    keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, null, snowFlake);
+                    keyBucket.initWithCompressStats(compressStats);
+                }
 
                 boolean notSplit = beforeSplitNumberArr[0] == splitNumber;
                 var afterPutKeyBuckets = notSplit ? new KeyBucket[SPLIT_MULTI_STEP] : null;
@@ -464,7 +548,7 @@ public class KeyLoader extends ThreadSafeCaller {
                 splitOthersIfSplit(bucketIndex, keyBuckets, putBackFlags,
                         beforeKeyBuckets, beforeSplitNumberArr, splitIndex, keyBucket, notSplit, afterPutKeyBuckets);
             }
-        });
+        }, true);
     }
 
     public void persistShortValueListBatch(int bucketIndex, List<Wal.V> shortValueList) {
@@ -506,7 +590,7 @@ public class KeyLoader extends ThreadSafeCaller {
                         beforeKeyBuckets, beforeSplitNumberArr,
                         splitIndex, keyBucket, notSplit, afterPutKeyBuckets);
             }
-        });
+        }, true);
     }
 
     private void splitOthersIfSplit(int bucketIndex, ArrayList<KeyBucket> keyBuckets, boolean[] putBackFlags,
@@ -523,7 +607,7 @@ public class KeyLoader extends ThreadSafeCaller {
 
             // save all these
             for (var afterPutKeyBucket : afterPutKeyBuckets) {
-                updateKeyBucketInner(bucketIndex, afterPutKeyBucket);
+                updateKeyBucketInner(bucketIndex, afterPutKeyBucket, true);
             }
             // already saved
             putBackFlags[splitIndex] = false;
@@ -539,7 +623,7 @@ public class KeyLoader extends ThreadSafeCaller {
 
                 var kbArray = kb.split();
                 for (var bucket : kbArray) {
-                    updateKeyBucketInner(bucketIndex, bucket);
+                    updateKeyBucketInner(bucketIndex, bucket, true);
                     beforeKeyBuckets.add(bucket);
                 }
             }
@@ -578,7 +662,7 @@ public class KeyLoader extends ThreadSafeCaller {
                 putFlags[0] = true;
             }
             deleteFlags[0] = isDel;
-        });
+        }, false);
         return deleteFlags[0];
     }
 
