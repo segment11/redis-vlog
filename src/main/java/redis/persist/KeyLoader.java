@@ -325,7 +325,7 @@ public class KeyLoader extends ThreadSafeCaller {
         updateKeyBucketInner(bucketIndex, keyBucket.splitIndex, keyBucket.splitNumber, keyBucket.lastUpdateSeq, keyBucket.compress(), isRefreshLRUCache);
     }
 
-    interface UpdateBatchCallback {
+    private interface UpdateBatchCallback {
         void call(final ArrayList<KeyBucket> keyBuckets, final boolean[] putFlags, final byte splitNumber, final boolean isLoadedAll);
     }
 
@@ -367,6 +367,11 @@ public class KeyLoader extends ThreadSafeCaller {
                     var splitIndex = i;
                     var keyBucket = readKeyBucket(bucketIndex, splitIndex, splitNumber);
                     if (keyBucket != null) {
+                        keyBuckets.add(keyBucket);
+                    } else {
+                        // create one empty key bucket
+                        keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, null, snowFlake);
+                        keyBucket.initWithCompressStats(compressStats);
                         keyBuckets.add(keyBucket);
                     }
                 }
