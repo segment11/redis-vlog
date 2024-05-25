@@ -944,6 +944,7 @@ public class OneSlot {
         this.libC = libC;
         this.keyLoader.init(libC);
         this.keyLoader.initEventloop();
+        this.keyLoader.initAfterEventloopReady();
 
         // meta data
         this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, allWorkers, slotDir);
