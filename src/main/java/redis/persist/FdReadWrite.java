@@ -31,6 +31,8 @@ public class FdReadWrite extends ThreadSafeCaller {
         }
         this.fd = libC.open(file.getAbsolutePath(), LocalPersist.O_DIRECT | OpenFlags.O_RDWR.value(), 00644);
         log.info("Opened fd: {}, name: {}", fd, name);
+
+        this.fdLength = (int) file.length();
     }
 
     private final String name;
@@ -38,6 +40,8 @@ public class FdReadWrite extends ThreadSafeCaller {
     private final LibC libC;
 
     private final int fd;
+
+    private int fdLength;
 
     private static final Summary readTimeSummary = Summary.build().name("pread_time").
             help("fd read time summary").
@@ -287,6 +291,10 @@ public class FdReadWrite extends ThreadSafeCaller {
         }
 
         var offset = segmentIndex * segmentLength;
+        if (offset >= fdLength) {
+            return null;
+        }
+
         buffer.clear();
 
         var timer = readTimeSummary.labels(name).startTimer();
@@ -325,6 +333,11 @@ public class FdReadWrite extends ThreadSafeCaller {
         buffer.clear();
 
         prepare.prepare(buffer);
+        if (buffer.limit() != capacity) {
+            // append 0
+            var bytes0 = new byte[capacity - buffer.limit()];
+            buffer.put(bytes0);
+        }
         buffer.rewind();
 
         var timer = writeTimeSummary.labels(name).startTimer();
@@ -334,6 +347,10 @@ public class FdReadWrite extends ThreadSafeCaller {
         if (n != capacity) {
             log.error("Write error, n: {}, buffer capacity: {}, name: {}", n, capacity, name);
             throw new RuntimeException("Write error, n: " + n + ", buffer capacity: " + capacity + ", name: " + name);
+        }
+
+        if (offset + capacity > fdLength) {
+            fdLength = offset + capacity;
         }
 
         // set to lru cache
@@ -412,11 +429,17 @@ public class FdReadWrite extends ThreadSafeCaller {
     }
 
     public int writeSegmentBatchToMemory(int segmentIndex, byte[] bytes, int position) {
-        if (bytes.length % segmentLength != 0) {
+        var isSmallerThanOneSegment = bytes.length < segmentLength;
+        if (!isSmallerThanOneSegment && bytes.length % segmentLength != 0) {
             throw new IllegalArgumentException("Bytes length must be multiple of segment length");
         }
 
         return callSync(() -> {
+            if (isSmallerThanOneSegment) {
+                allBytesBySegmentIndex[segmentIndex] = bytes;
+                return bytes.length;
+            }
+
             var segmentCount = bytes.length / segmentLength;
             var offset = position;
             for (int i = 0; i < segmentCount; i++) {
