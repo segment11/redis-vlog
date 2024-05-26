@@ -163,10 +163,12 @@ class KeyBucketTest extends Specification {
         when:
         def k11 = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, sharedBytes, 0, snowFlake)
         def k22 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, sharedBytes, 4096, snowFlake)
+        def k33 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, sharedBytes, sharedBytes.length, snowFlake)
 
         then:
         k11.size == 1
         k22.size == 1
+        k33.size == 0
 
         k11.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
         k22.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes

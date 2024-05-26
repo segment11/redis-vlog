@@ -10,7 +10,15 @@ import spock.lang.Specification
 import static redis.persist.Consts.getSlotDir
 
 class KeyLoaderTest extends Specification {
-    private KeyLoader prepare() {
+    static KeyLoader prepareKeyLoader(boolean deleteFiles = true) {
+        if (deleteFiles && slotDir.exists()) {
+            for (f in slotDir.listFiles()) {
+                if (f.name.startsWith('key-bucket-split-')) {
+                    f.delete()
+                }
+            }
+        }
+
         System.setProperty('jnr.ffi.asm.enabled', 'false')
         def libC = LibraryLoader.create(LibC.class).load('c')
 
@@ -18,15 +26,13 @@ class KeyLoaderTest extends Specification {
 
         byte slot = 0
         def keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, null, null)
-        keyLoader.init(libC)
-        keyLoader.initEventloop()
-        keyLoader.initAfterEventloopReady()
+        keyLoader.initFds(libC)
         keyLoader
     }
 
     def 'test write and read one key'() {
         given:
-        def keyLoader = prepare()
+        def keyLoader = prepareKeyLoader()
 
         and:
         // clear files
@@ -67,7 +73,7 @@ class KeyLoaderTest extends Specification {
 
     def 'persist short value list'() {
         given:
-        def keyLoader = prepare()
+        def keyLoader = prepareKeyLoader()
 
         and:
         List<Wal.V> shortValueList = []
@@ -85,7 +91,7 @@ class KeyLoaderTest extends Specification {
         }
 
         when:
-        keyLoader.persistShortValueListBatch(0, shortValueList)
+        keyLoader.persistShortValueListBatchInOneWalGroup(0, shortValueList)
 
         then:
         shortValueList.every {
@@ -98,10 +104,10 @@ class KeyLoaderTest extends Specification {
 
     def 'persist pvm list'() {
         given:
-        def keyLoader = prepare()
+        def keyLoader = prepareKeyLoader()
 
         and:
-        List<KeyLoader.PvmRow> pvmList = []
+        List<PersistValueMeta> pvmList = []
         10.times {
             def key = "key:" + it.toString().padLeft(12, '0')
             def keyBytes = key.bytes
@@ -110,12 +116,11 @@ class KeyLoaderTest extends Specification {
 
             def pvm = new PersistValueMeta()
             pvm.segmentOffset = it
-            def v = new KeyLoader.PvmRow(keyHash, 0L, keyBytes, pvm.encode())
-            pvmList << v
+            pvmList << pvm
         }
 
         when:
-        keyLoader.persistPvmListBatch(0, pvmList)
+        keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList)
 
         then:
         pvmList.every {

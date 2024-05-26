@@ -97,7 +97,9 @@ public class ChunkMergeWorker {
                     key, cv.encode(), cv.compressedLength()));
 
             if (list.size() >= MERGING_CV_SIZE_THRESHOLD) {
-                var needMergeSegmentIndexList = targetChunk.persist(list);
+                // todo, need re group by wal group index
+                var walGroupIndex = 0;
+                var needMergeSegmentIndexList = targetChunk.persist(walGroupIndex, list);
                 if (needMergeSegmentIndexList == null) {
                     log.error("Merge worker persist merged cv list error, w={}, s={}", mergeWorkerId, slot);
                     return false;
@@ -108,7 +110,9 @@ public class ChunkMergeWorker {
             }
         }
         if (!list.isEmpty()) {
-            var needMergeSegmentIndexList = targetChunk.persist(list);
+            // todo, need re group by wal group index
+            var walGroupIndex = 0;
+            var needMergeSegmentIndexList = targetChunk.persist(walGroupIndex, list);
             if (needMergeSegmentIndexList == null) {
                 log.error("Merge worker persist merged cv list error, w={}, s={}", mergeWorkerId, slot);
                 return false;

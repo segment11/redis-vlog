@@ -32,6 +32,8 @@ public class PersistValueMeta {
     long keyHash;
     int bucketIndex;
 
+    byte[] extendBytes;
+
     @Override
     public String toString() {
         return "PersistValueMeta{" +

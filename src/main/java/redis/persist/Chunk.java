@@ -248,7 +248,7 @@ public class Chunk {
     long threadIdProtectedWhenWrite = -1;
 
     // return need merge segment index array
-    public ArrayList<Integer> persist(ArrayList<Wal.V> list) {
+    public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list) {
         checkCurrentThread();
 
         moveIndexForPrepare();
@@ -375,7 +375,7 @@ public class Chunk {
         }
 
         var beginT = System.currentTimeMillis();
-        keyLoader.updatePvmListAfterWriteSegment(pvmList);
+        keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, pvmList);
         var costT = System.currentTimeMillis() - beginT;
         updatePvmBatchCostMillisCounter.labels(workerIdStr, batchIndexStr, slotStr).inc(costT);
 

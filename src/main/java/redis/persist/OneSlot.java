@@ -942,9 +942,7 @@ public class OneSlot {
         this.topMergeWorkers = topMergeWorkers;
 
         this.libC = libC;
-        this.keyLoader.init(libC);
-        this.keyLoader.initEventloop();
-        this.keyLoader.initAfterEventloopReady();
+        this.keyLoader.initFds(libC);
 
         // meta data
         this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, allWorkers, slotDir);
@@ -1160,15 +1158,7 @@ public class OneSlot {
             boolean isError = false;
             try {
                 if (params.isShortValue) {
-                    var groupByBucketIndex = targetWal.delayToKeyBucketShortValues.values().stream()
-                            .collect(Collectors.groupingBy(Wal.V::bucketIndex));
-                    log.info("Batch update short value to key bucket, group by bucket index size: {}", groupByBucketIndex.size());
-
-                    for (var entry : groupByBucketIndex.entrySet()) {
-                        var bucketIndex = entry.getKey();
-                        var list = entry.getValue();
-                        keyLoader.persistShortValueListBatch(bucketIndex, list);
-                    }
+                    keyLoader.persistShortValueListBatchInOneWalGroup(targetWal.groupIndex, targetWal.delayToKeyBucketShortValues.values());
                 } else {
                     var list = new ArrayList<>(targetWal.delayToKeyBucketValues.values());
                     // sort by bucket index for future merge better
@@ -1178,7 +1168,7 @@ public class OneSlot {
                     var workerId = list.get(0).workerId();
                     var chunk = chunksArray[workerId][batchIndex];
 
-                    var needMergeSegmentIndexList = chunk.persist(list);
+                    var needMergeSegmentIndexList = chunk.persist(targetWal.groupIndex, list);
                     if (needMergeSegmentIndexList == null) {
                         isError = true;
                         return;
