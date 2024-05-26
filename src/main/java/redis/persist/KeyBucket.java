@@ -11,7 +11,7 @@ import static redis.CompressedValue.NO_EXPIRE;
 import static redis.persist.KeyLoader.*;
 
 public class KeyBucket {
-    private static final short INIT_CAPACITY = 46;
+    public static final short INIT_CAPACITY = 46;
     // if big, wal will cost too much memory
     public static final int MAX_BUCKETS_PER_SLOT = KeyLoader.MAX_KEY_BUCKET_COUNT_PER_FD;
     public static final int DEFAULT_BUCKETS_PER_SLOT = 16384;
