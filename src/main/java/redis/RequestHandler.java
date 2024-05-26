@@ -361,7 +361,7 @@ public class RequestHandler {
 
     private void initMetricsCollect() {
         sampleToTrainSizeGauge.register();
-        sampleToTrainSizeGauge.setRawGetter(() -> {
+        sampleToTrainSizeGauge.addRawGetter(() -> {
             var labelValues = List.of(workerIdStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();

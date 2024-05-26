@@ -8,7 +8,7 @@ def labelValues = ['0']
 def labelValues2 = ['1']
 
 g.register()
-g.setRawGetter {
+g.addRawGetter {
     Map<String, SimpleGauge.ValueWithLabelValues> map = [:]
     map.put('a', new SimpleGauge.ValueWithLabelValues(1.0, labelValues))
     map.put('b', new SimpleGauge.ValueWithLabelValues(2.0, labelValues2))

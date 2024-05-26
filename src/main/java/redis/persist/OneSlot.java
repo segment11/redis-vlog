@@ -1334,11 +1334,16 @@ public class OneSlot {
     }
 
     // metrics
-    private final SimpleGauge walDelaySizeGauge = new SimpleGauge("wal_delay_size", "wal delay size",
+    private final static SimpleGauge walDelaySizeGauge = new SimpleGauge("wal_delay_size", "wal delay size",
             "slot", "group_index", "batch_index");
 
-    private final SimpleGauge slotInnerGauge = new SimpleGauge("slot_inner", "slot inner",
+    private final static SimpleGauge slotInnerGauge = new SimpleGauge("slot_inner", "slot inner",
             "slot");
+
+    static {
+        walDelaySizeGauge.register();
+        slotInnerGauge.register();
+    }
 
     private static final Summary decompressTimeSummary = Summary.build().name("decompress_time").
             help("slot segment decompress time summary").
@@ -1350,8 +1355,7 @@ public class OneSlot {
             .register();
 
     private void initMetricsCollect() {
-        walDelaySizeGauge.register();
-        walDelaySizeGauge.setRawGetter(() -> {
+        walDelaySizeGauge.addRawGetter(() -> {
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
             for (var wals : walsArray) {
                 for (var wal : wals) {
@@ -1363,8 +1367,7 @@ public class OneSlot {
             return map;
         });
 
-        slotInnerGauge.register();
-        slotInnerGauge.setRawGetter(() -> {
+        slotInnerGauge.addRawGetter(() -> {
             var labelValues = List.of(slotStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();

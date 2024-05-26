@@ -15,10 +15,10 @@ public class SimpleGauge extends Collector {
         Map<String, ValueWithLabelValues> get();
     }
 
-    private RawGetter rawGetter;
+    private ArrayList<RawGetter> rawGetterList = new ArrayList<>();
 
-    public void setRawGetter(RawGetter rawGetter) {
-        this.rawGetter = rawGetter;
+    public void addRawGetter(RawGetter rawGetter) {
+        rawGetterList.add(rawGetter);
     }
 
     private Map<String, ValueWithLabelValues> gauges = new HashMap<>();
@@ -52,7 +52,7 @@ public class SimpleGauge extends Collector {
             samples.add(new MetricFamilySamples.Sample(entry.getKey(), labels, entryValue.labelValues, entryValue.value));
         }
 
-        if (rawGetter != null) {
+        for (var rawGetter : rawGetterList) {
             var raw = rawGetter.get();
             for (var entry : raw.entrySet()) {
                 var entryValue = entry.getValue();

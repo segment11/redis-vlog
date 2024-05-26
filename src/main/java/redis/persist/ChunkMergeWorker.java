@@ -265,12 +265,15 @@ public class ChunkMergeWorker {
         System.out.println("Stop chunk merge worker " + mergeWorkerId + " eventloop");
     }
 
-    private final SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
+    private static final SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
             "merge_worker_id");
 
-    private void initMetricsCollect() {
+    static {
         innerGauge.register();
-        innerGauge.setRawGetter(() -> {
+    }
+
+    private void initMetricsCollect() {
+        innerGauge.addRawGetter(() -> {
             var labelValues = List.of(mergeWorkerIdStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
