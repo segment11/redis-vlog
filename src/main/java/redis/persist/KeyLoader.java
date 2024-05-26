@@ -237,7 +237,6 @@ public class KeyLoader extends ThreadSafeCaller {
             }
 
             var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
-            keyBucket.initWithCompressStats(compressStats);
             return keyBucket;
         });
     }
@@ -261,7 +260,6 @@ public class KeyLoader extends ThreadSafeCaller {
                 var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
 
                 keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, null, snowFlake);
-                keyBucket.initWithCompressStats(compressStats);
             }
 
             keyBucket.put(keyBytes, keyHash, expireAt, valueBytes, null);
@@ -287,7 +285,6 @@ public class KeyLoader extends ThreadSafeCaller {
                     keyBuckets.add(null);
                 } else {
                     var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
-                    keyBucket.initWithCompressStats(compressStats);
                     keyBuckets.add(keyBucket);
                 }
             }
@@ -322,7 +319,7 @@ public class KeyLoader extends ThreadSafeCaller {
     }
 
     private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket, boolean isRefreshLRUCache) {
-        updateKeyBucketInner(bucketIndex, keyBucket.splitIndex, keyBucket.splitNumber, keyBucket.lastUpdateSeq, keyBucket.compress(), isRefreshLRUCache);
+        updateKeyBucketInner(bucketIndex, keyBucket.splitIndex, keyBucket.splitNumber, keyBucket.lastUpdateSeq, keyBucket.encode(), isRefreshLRUCache);
     }
 
     private interface UpdateBatchCallback {
@@ -344,7 +341,6 @@ public class KeyLoader extends ThreadSafeCaller {
             }
 
             var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
-            keyBucket.initWithCompressStats(compressStats);
             return keyBucket;
         });
     }
@@ -371,7 +367,6 @@ public class KeyLoader extends ThreadSafeCaller {
                     } else {
                         // create one empty key bucket
                         keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, null, snowFlake);
-                        keyBucket.initWithCompressStats(compressStats);
                         keyBuckets.add(keyBucket);
                     }
                 }
@@ -483,7 +478,6 @@ public class KeyLoader extends ThreadSafeCaller {
                         }
 
                         var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
-                        keyBucket.initWithCompressStats(compressStats);
 
                         var list = keyBucketsByBucketIndex.computeIfAbsent(bucketIndex, k -> new ArrayList<>());
                         list.add(keyBucket);
@@ -495,7 +489,6 @@ public class KeyLoader extends ThreadSafeCaller {
                         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
 
                         var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytesBatch, i * KEY_BUCKET_ONE_COST_SIZE, snowFlake);
-                        keyBucket.initWithCompressStats(compressStats);
 
                         var list = keyBucketsByBucketIndex.computeIfAbsent(bucketIndex, k -> new ArrayList<>());
                         list.add(keyBucket);
@@ -531,7 +524,6 @@ public class KeyLoader extends ThreadSafeCaller {
                 var keyBucket = beforeKeyBuckets.get(splitIndex);
                 if (keyBucket == null) {
                     keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, null, snowFlake);
-                    keyBucket.initWithCompressStats(compressStats);
                 }
 
                 boolean notSplit = beforeSplitNumberArr[0] == splitNumber;
@@ -709,7 +701,6 @@ public class KeyLoader extends ThreadSafeCaller {
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
             map.put("bucket_count", new SimpleGauge.ValueWithLabelValues((double) bucketsPerSlot, labelValues));
             map.put("persist_key_count", new SimpleGauge.ValueWithLabelValues((double) getKeyCount(), labelValues));
-            map.put("loaded_key_count", new SimpleGauge.ValueWithLabelValues((double) compressStats.getAllTmpBucketSize(), labelValues));
 
             map.put("split_count", new SimpleGauge.ValueWithLabelValues((double) splitCount, labelValues));
             if (splitCount > 0) {

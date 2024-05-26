@@ -1,15 +1,11 @@
 package redis.persist;
 
-import com.github.luben.zstd.Zstd;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.CompressStats;
-import redis.ConfForSlot;
 import redis.SnowFlake;
 
 import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 
 import static redis.CompressedValue.NO_EXPIRE;
 import static redis.persist.KeyLoader.*;
@@ -27,9 +23,8 @@ public class KeyBucket {
     private static final int HASH_VALUE_LENGTH = 8;
     private static final int EXPIRE_AT_VALUE_LENGTH = 8;
     private static final int ONE_CELL_META_LENGTH = HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH;
-    private static final int SEQ_VALUE_LENGTH = 8;
-    // seq long + size short + cell count short + uncompressed length short + compressed length short
-    static final int HEADER_LENGTH = SEQ_VALUE_LENGTH + 2 + 2 + 2 + 2;
+    // seq long + size short + cell count short
+    private static final int HEADER_LENGTH = 8 + 2 + 2;
 
     // just make sure when refactoring
     private static final int INIT_BYTES_LENGTH = HEADER_LENGTH + INIT_CAPACITY * (ONE_CELL_META_LENGTH + ONE_CELL_LENGTH);
@@ -60,6 +55,10 @@ public class KeyBucket {
         return HEADER_LENGTH + capacity * ONE_CELL_META_LENGTH + cellIndex * ONE_CELL_LENGTH;
     }
 
+    private int metaIndex(int cellIndex) {
+        return HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+    }
+
     static final long NO_KEY = 0;
     static final long PRE_KEY = -1;
 
@@ -83,50 +82,37 @@ public class KeyBucket {
     }
 
     // compressed
-    private final byte[] compressedData;
+    private final byte[] bytes;
     private final int position;
 
-    byte[] decompressBytes;
-
-    CompressStats compressStats;
-
-    public void initWithCompressStats(CompressStats compressStats) {
-        this.compressStats = compressStats;
-        this.init();
+    public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] bytes, SnowFlake snowFlake) {
+        this(slot, bucketIndex, splitIndex, splitNumber, bytes, 0, snowFlake);
     }
 
-    public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] compressedData, SnowFlake snowFlake) {
-        this(slot, bucketIndex, splitIndex, splitNumber, compressedData, 0, snowFlake);
-    }
-
-    public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] compressedData, int position, SnowFlake snowFlake) {
+    public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] sharedBytes, int position, SnowFlake snowFlake) {
         this.slot = slot;
         this.bucketIndex = bucketIndex;
         this.splitIndex = splitIndex;
         this.splitNumber = splitNumber;
-        this.compressedData = compressedData;
         this.position = position;
         this.capacity = INIT_CAPACITY;
         this.size = 0;
         this.cellCost = 0;
         this.snowFlake = snowFlake;
-    }
 
-    // for split
-    private KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, int capacity, SnowFlake snowFlake) {
-        this.slot = slot;
-        this.bucketIndex = bucketIndex;
-        this.splitIndex = splitIndex;
-        this.splitNumber = splitNumber;
-        this.compressedData = null;
-        this.position = 0;
-        this.capacity = capacity;
-        this.size = 0;
-        this.cellCost = 0;
-        this.snowFlake = snowFlake;
+        if (sharedBytes == null) {
+            this.bytes = new byte[KEY_BUCKET_ONE_COST_SIZE];
+        } else {
+            if (sharedBytes.length % KEY_BUCKET_ONE_COST_SIZE != 0) {
+                throw new IllegalStateException("Key bucket shared bytes length must be multiple of " + KEY_BUCKET_ONE_COST_SIZE);
+            }
+            this.bytes = sharedBytes;
+        }
+        this.buffer = ByteBuffer.wrap(this.bytes, position, KEY_BUCKET_ONE_COST_SIZE);
 
-        this.decompressBytes = new byte[KEY_BUCKET_ONE_COST_SIZE];
-        this.buffer = ByteBuffer.wrap(decompressBytes);
+        this.lastUpdateSeq = buffer.getLong();
+        this.size = buffer.getShort();
+        this.cellCost = buffer.getShort();
     }
 
     interface IterateCallBack {
@@ -135,7 +121,7 @@ public class KeyBucket {
 
     void iterate(IterateCallBack callBack) {
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
-            int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+            int metaIndex = metaIndex(cellIndex);
             var cellHashValue = buffer.getLong(metaIndex);
             if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
                 continue;
@@ -190,107 +176,22 @@ public class KeyBucket {
 
     private ByteBuffer buffer;
 
-    private void init() {
-        if (buffer != null) {
-            return;
-        }
-
-        if (compressedData == null || compressedData.length == 0) {
-            decompressBytes = new byte[KEY_BUCKET_ONE_COST_SIZE];
-            size = 0;
-            cellCost = 0;
+    public byte[] encode() {
+        buffer.position(0).putLong(lastUpdateSeq).putShort(size).putShort(cellCost);
+        // shared bytes
+        if (bytes.length != KEY_BUCKET_ONE_COST_SIZE) {
+            var dst = new byte[KEY_BUCKET_ONE_COST_SIZE];
+            System.arraycopy(bytes, position, dst, 0, KEY_BUCKET_ONE_COST_SIZE);
+            return dst;
         } else {
-            if (compressedData.length % KEY_BUCKET_ONE_COST_SIZE != 0) {
-                throw new IllegalStateException("Key bucket compressed data length must be multiple of " + KEY_BUCKET_ONE_COST_SIZE);
-            }
-
-            var bufferInner = ByteBuffer.wrap(compressedData, position, KEY_BUCKET_ONE_COST_SIZE);
-            // first 8 bytes is seq
-            lastUpdateSeq = bufferInner.getLong();
-
-            // then 2 bytes is size
-            size = bufferInner.getShort();
-            cellCost = bufferInner.getShort();
-            compressStats.updateTmpBucketSize(slot, bucketIndex, splitIndex, size);
-
-            var isCompress = ConfForSlot.global.confBucket.isCompress;
-            if (!isCompress) {
-                decompressBytes = compressedData;
-            } else {
-                // then 2 bytes is uncompressed length
-                var uncompressedLength = bufferInner.getShort();
-                // fix this, Destination buffer is too small, todo
-                decompressBytes = new byte[uncompressedLength];
-
-                var compressedSize = bufferInner.getShort();
-
-                long begin = System.nanoTime();
-                Zstd.decompressByteArray(decompressBytes, HEADER_LENGTH, uncompressedLength - HEADER_LENGTH,
-                        compressedData, HEADER_LENGTH, compressedSize);
-                long costT = System.nanoTime() - begin;
-
-                compressStats.decompressCount2++;
-                compressStats.decompressCostTotalTimeNanos2 += costT;
-
-                if (decompressBytes.length != KEY_BUCKET_ONE_COST_SIZE) {
-                    throw new IllegalStateException("Key bucket decompressed size not match, decompressed size=" + decompressBytes.length +
-                            ", expected size=" + KEY_BUCKET_ONE_COST_SIZE);
-                }
-            }
+            return bytes;
         }
-        buffer = ByteBuffer.wrap(decompressBytes, position, KEY_BUCKET_ONE_COST_SIZE);
-    }
-
-    public byte[] compress() {
-        var isCompress = ConfForSlot.global.confBucket.isCompress;
-        if (!isCompress) {
-            var bufferInner = ByteBuffer.wrap(decompressBytes, position, KEY_BUCKET_ONE_COST_SIZE);
-            bufferInner.putLong(lastUpdateSeq).putShort(size).putShort(cellCost);
-            // shared bytes
-            if (decompressBytes.length != KEY_BUCKET_ONE_COST_SIZE) {
-                var dst = new byte[KEY_BUCKET_ONE_COST_SIZE];
-                System.arraycopy(decompressBytes, position, dst, 0, KEY_BUCKET_ONE_COST_SIZE);
-                return dst;
-            } else {
-                return decompressBytes;
-            }
-        }
-
-        // when need compress, not share bytes
-        if (decompressBytes.length != KEY_BUCKET_ONE_COST_SIZE) {
-            throw new IllegalStateException("Key bucket decompressed size not match, decompressed size=" + decompressBytes.length +
-                    ", expected size=" + KEY_BUCKET_ONE_COST_SIZE);
-        }
-
-        var maxDstSize = (int) Zstd.compressBound(decompressBytes.length - HEADER_LENGTH);
-        var dst = new byte[maxDstSize + HEADER_LENGTH];
-        int compressedSize = (int) Zstd.compressByteArray(dst, HEADER_LENGTH, maxDstSize,
-                decompressBytes, HEADER_LENGTH, decompressBytes.length - HEADER_LENGTH, Zstd.defaultCompressionLevel());
-
-        int afterCompressPersistSize = compressedSize + HEADER_LENGTH;
-        if (afterCompressPersistSize > KeyLoader.KEY_BUCKET_ONE_COST_SIZE) {
-            throw new IllegalStateException("Compressed size too large, compressed size=" + afterCompressPersistSize);
-        }
-
-        // put to cache use minimize size
-        // dst include too many 0
-        var r = Arrays.copyOfRange(dst, 0, afterCompressPersistSize);
-        var bufferInner = ByteBuffer.wrap(r);
-        bufferInner.putLong(lastUpdateSeq).putShort(size).putShort(cellCost)
-                .putShort((short) decompressBytes.length).putShort((short) compressedSize);
-
-        // stats
-        compressStats.compressedValueSizeTotalCount2 += size;
-        compressStats.compressedValueBodyTotalLength2 += compressedSize;
-
-        compressStats.updateTmpBucketSize(slot, bucketIndex, splitIndex, size);
-        return r;
     }
 
     private void clearOneExpired(int i) {
         int cellCount = 1;
         for (int cellIndex = i + 1; cellIndex < capacity; cellIndex++) {
-            int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+            int metaIndex = metaIndex(cellIndex);
             var nextCellHashValue = buffer.getLong(metaIndex);
             if (nextCellHashValue == PRE_KEY) {
                 cellCount++;
@@ -333,13 +234,12 @@ public class KeyBucket {
             // split others
             // split index change
             var splitKeyBucket = new KeyBucket(slot, bucketIndex, (byte) (splitIndex + i * oldSplitNumber),
-                    newSplitNumber, this.capacity, this.snowFlake);
-            splitKeyBucket.compressStats = compressStats;
+                    newSplitNumber, null, 0, this.snowFlake);
             keyBuckets[i] = splitKeyBucket;
         }
 
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
-            int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+            int metaIndex = metaIndex(cellIndex);
             var cellHashValue = buffer.getLong(metaIndex);
             if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
                 continue;
@@ -521,19 +421,19 @@ public class KeyBucket {
     }
 
     private void putTo(int putToCellIndex, int cellCount, long keyHash, long expireAt, byte[] keyBytes, byte[] valueBytes) {
-        int metaIndex = HEADER_LENGTH + putToCellIndex * ONE_CELL_META_LENGTH;
+        int metaIndex = metaIndex(putToCellIndex);
         buffer.putLong(metaIndex, keyHash);
         buffer.putLong(metaIndex + HASH_VALUE_LENGTH, expireAt);
 
         for (int i = 1; i < cellCount; i++) {
-            int nextIndex = HEADER_LENGTH + (putToCellIndex + i) * ONE_CELL_META_LENGTH;
+            int nextIndex = metaIndex(putToCellIndex + i);
             buffer.putLong(nextIndex, PRE_KEY);
             buffer.putLong(nextIndex + HASH_VALUE_LENGTH, NO_EXPIRE);
         }
 
         // reset old PRE_KEY to NO_KEY
         int beginResetOldCellIndex = putToCellIndex + cellCount;
-        buffer.position(HEADER_LENGTH + beginResetOldCellIndex * ONE_CELL_META_LENGTH);
+        buffer.position(metaIndex(beginResetOldCellIndex));
         while (beginResetOldCellIndex < capacity) {
             var targetCellHashValue = buffer.getLong();
             buffer.position(buffer.position() + EXPIRE_AT_VALUE_LENGTH);
@@ -557,7 +457,7 @@ public class KeyBucket {
     }
 
     private KVMeta isCellUseTargetKey(byte[] keyBytes, long keyHash, int cellIndex) {
-        int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+        int metaIndex = metaIndex(cellIndex);
         var cellHashValue = buffer.getLong(metaIndex);
 
         if (cellHashValue != keyHash) {
@@ -568,7 +468,7 @@ public class KeyBucket {
     }
 
     private CanPutResult canPut(byte[] keyBytes, long keyHash, int cellIndex, int cellCount) {
-        int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+        int metaIndex = metaIndex(cellIndex);
         var cellHashValue = buffer.getLong(metaIndex);
         var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
 
@@ -608,7 +508,7 @@ public class KeyBucket {
                 return false;
             }
 
-            int metaIndex = HEADER_LENGTH + nextCellIndex * ONE_CELL_META_LENGTH;
+            int metaIndex = metaIndex(nextCellIndex);
             var cellHashValue = buffer.getLong(metaIndex);
             if (isForUpdate) {
                 if (cellHashValue != PRE_KEY && cellHashValue != NO_KEY) {
@@ -643,7 +543,7 @@ public class KeyBucket {
     }
 
     private ValueBytesWithExpireAt getValueByKeyWithCellIndex(byte[] keyBytes, long keyHash, int cellIndex) {
-        int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+        int metaIndex = metaIndex(cellIndex);
         var cellHashValue = buffer.getLong(metaIndex);
         // NO_KEY or PRE_KEY
         if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
@@ -668,7 +568,7 @@ public class KeyBucket {
     private void clearCell(int beginCellIndex, int cellCount) {
         for (int i = 0; i < cellCount; i++) {
             var nextCellIndex = beginCellIndex + i;
-            int metaIndex = HEADER_LENGTH + nextCellIndex * ONE_CELL_META_LENGTH;
+            int metaIndex = metaIndex(nextCellIndex);
             buffer.putLong(metaIndex, NO_KEY);
             buffer.putLong(metaIndex + HASH_VALUE_LENGTH, NO_EXPIRE);
         }
@@ -683,7 +583,7 @@ public class KeyBucket {
     public boolean del(byte[] keyBytes, long keyHash) {
         boolean isDeleted = false;
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
-            int metaIndex = HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
+            int metaIndex = metaIndex(cellIndex);
             var cellHashValue = buffer.getLong(metaIndex);
             if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
                 continue;

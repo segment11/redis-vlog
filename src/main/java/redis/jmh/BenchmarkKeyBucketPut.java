@@ -4,8 +4,6 @@ import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
-import redis.CompressStats;
-import redis.ConfForSlot;
 import redis.KeyHash;
 import redis.SnowFlake;
 import redis.persist.KeyBucket;
@@ -39,28 +37,25 @@ public class BenchmarkKeyBucketPut {
         System.out.printf("init keys / keys hash, size: %d\n", size);
 
         snowFlake = new SnowFlake(1, 1);
-        ConfForSlot.global.confBucket.isCompress = false;
     }
 
     /*
 Benchmark                        (size)  Mode  Cnt   Score   Error  Units
-BenchmarkKeyBucketPut.put         10000  avgt        2.444          ms/op
-BenchmarkKeyBucketPut.put        100000  avgt       24.472          ms/op
-BenchmarkKeyBucketPut.putAndGet   10000  avgt        2.450          ms/op
-BenchmarkKeyBucketPut.putAndGet  100000  avgt       24.527          ms/op
+BenchmarkKeyBucketPut.put         10000  avgt        2.458          ms/op
+BenchmarkKeyBucketPut.put        100000  avgt       24.519          ms/op
+BenchmarkKeyBucketPut.putAndGet   10000  avgt        2.456          ms/op
+BenchmarkKeyBucketPut.putAndGet  100000  avgt       24.516          ms/op
      */
 
     @Benchmark
     public void put() {
         final int capacity = 50;
         final byte[] valueBytes = "value-test".getBytes();
-        final CompressStats compressStats = new CompressStats("test");
 
         KeyBucket keyBucket = null;
         for (int i = 0; i < size; i++) {
             if (i % capacity == 0) {
                 keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake);
-                keyBucket.initWithCompressStats(compressStats);
             }
 
             var key = keys[i];
@@ -70,16 +65,14 @@ BenchmarkKeyBucketPut.putAndGet  100000  avgt       24.527          ms/op
     }
 
     @Benchmark
-    public void putAndGet(){
+    public void putAndGet() {
         final int capacity = 50;
         final byte[] valueBytes = "value-test".getBytes();
-        final CompressStats compressStats = new CompressStats("test");
 
         KeyBucket keyBucket = null;
         for (int i = 0; i < size; i++) {
             if (i % capacity == 0) {
                 keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake);
-                keyBucket.initWithCompressStats(compressStats);
             }
 
             var key = keys[i];
