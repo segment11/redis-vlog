@@ -257,6 +257,7 @@ public class SegmentBatch {
             pvm.segmentIndex = segmentIndex;
             pvm.segmentOffset = offsetInThisSegment;
             pvm.expireAt = v.expireAt();
+            pvm.seq = v.seq();
             returnPvmList.add(pvm);
 
             offsetInThisSegment += length;

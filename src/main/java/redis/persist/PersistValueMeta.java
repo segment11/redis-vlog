@@ -26,6 +26,7 @@ public class PersistValueMeta {
     int segmentOffset;
     // need remove expired pvm in key loader to compress better, or reduce split
     long expireAt = NO_EXPIRE;
+    long seq;
 
     // for reset compare with old CompressedValue
     byte[] keyBytes;

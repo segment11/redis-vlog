@@ -243,7 +243,7 @@ public class KeyLoader {
         return keyBucket.getValueByKey(keyBytes, keyHash);
     }
 
-    public synchronized void putValueByKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash, long expireAt, byte[] valueBytes) {
+    public synchronized void putValueByKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
 
@@ -252,7 +252,7 @@ public class KeyLoader {
             keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, null, snowFlake);
         }
 
-        keyBucket.put(keyBytes, keyHash, expireAt, valueBytes, null);
+        keyBucket.put(keyBytes, keyHash, expireAt, seq, valueBytes, null);
         updateKeyBucketInner(bucketIndex, keyBucket, true);
     }
 
@@ -497,13 +497,15 @@ public class KeyLoader {
         }
     }
 
-    private final SimpleGauge keyLoaderInnerGauge = new SimpleGauge("key_loader_inner", "key loader inner",
+    private static final SimpleGauge keyLoaderInnerGauge = new SimpleGauge("key_loader_inner", "key loader inner",
             "slot");
 
-    private void initMetricsCollect() {
+    static {
         keyLoaderInnerGauge.register();
+    }
 
-        keyLoaderInnerGauge.setRawGetter(() -> {
+    private void initMetricsCollect() {
+        keyLoaderInnerGauge.addRawGetter(() -> {
             var labelValues = List.of(slotStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();

@@ -164,7 +164,8 @@ public class KeyBucketsInOneWalGroup {
                 list.set(relativeBucketIndex, keyBucket);
             }
 
-            boolean isPut = keyBucket.put(pvm.keyBytes, pvm.keyHash, pvm.expireAt, pvm.extendBytes != null ? pvm.extendBytes : pvm.encode(), afterPutKeyBuckets);
+            boolean isPut = keyBucket.put(pvm.keyBytes, pvm.keyHash, pvm.expireAt, pvm.seq,
+                    pvm.extendBytes != null ? pvm.extendBytes : pvm.encode(), afterPutKeyBuckets);
             if (!isPut) {
                 throw new RuntimeException("Key buckets put batch short value list failed");
             }
@@ -195,6 +196,7 @@ public class KeyBucketsInOneWalGroup {
         for (var v : shortValueList) {
             var pvm = new PersistValueMeta();
             pvm.expireAt = v.expireAt();
+            pvm.seq = v.seq();
             pvm.keyBytes = v.key().getBytes();
             pvm.keyHash = v.keyHash();
             pvm.bucketIndex = v.bucketIndex();

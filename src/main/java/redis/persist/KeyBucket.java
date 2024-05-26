@@ -11,7 +11,7 @@ import static redis.CompressedValue.NO_EXPIRE;
 import static redis.persist.KeyLoader.*;
 
 public class KeyBucket {
-    private static final short INIT_CAPACITY = 50;
+    private static final short INIT_CAPACITY = 46;
     // if big, wal will cost too much memory
     public static final int MAX_BUCKETS_PER_SLOT = KeyLoader.MAX_KEY_BUCKET_COUNT_PER_FD;
     public static final int DEFAULT_BUCKETS_PER_SLOT = 16384;
@@ -22,7 +22,8 @@ public class KeyBucket {
     private static final int ONE_CELL_LENGTH = 64;
     private static final int HASH_VALUE_LENGTH = 8;
     private static final int EXPIRE_AT_VALUE_LENGTH = 8;
-    private static final int ONE_CELL_META_LENGTH = HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH;
+    private static final int SEQ_VALUE_LENGTH = 8;
+    private static final int ONE_CELL_META_LENGTH = HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH + SEQ_VALUE_LENGTH;
     // seq long + size short + cell count short
     private static final int HEADER_LENGTH = 8 + 2 + 2;
 
@@ -263,6 +264,8 @@ public class KeyBucket {
                 continue;
             }
 
+            var seq = buffer.getLong(metaIndex + HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
+
             int newSplitIndex = (int) Math.abs(cellHashValue % newSplitNumber);
             boolean isStillInCurrentSplit = newSplitIndex == splitIndex;
             if (isStillInCurrentSplit) {
@@ -291,7 +294,7 @@ public class KeyBucket {
 
             var kvMeta = new KVMeta(cellOffset, keyLength, valueLength);
 
-            boolean isPut = targetKeyBucket.put(keyBytes, cellHashValue, expireAt, valueBytes, null);
+            boolean isPut = targetKeyBucket.put(keyBytes, cellHashValue, expireAt, seq, valueBytes, null);
             if (!isPut) {
                 throw new BucketFullException("Split put fail, key=" + new String(keyBytes));
             }
@@ -329,7 +332,7 @@ public class KeyBucket {
     private record CanPutResult(boolean flag, boolean isUpdate, int needRemoveSameKeyCellIndexAfterPut) {
     }
 
-    public synchronized boolean put(byte[] keyBytes, long keyHash, long expireAt, byte[] valueBytes, KeyBucket[] afterPutKeyBuckets) {
+    public synchronized boolean put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, KeyBucket[] afterPutKeyBuckets) {
         if (cellCost == capacity) {
             if (afterPutKeyBuckets == null) {
                 throw new BucketFullException("Key bucket is full, " + this);
@@ -359,7 +362,7 @@ public class KeyBucket {
             for (var keyBucket : kbArray) {
                 if (newSplitIndex == keyBucket.splitIndex) {
                     isPut = true;
-                    putResult = keyBucket.put(keyBytes, keyHash, expireAt, valueBytes, null);
+                    putResult = keyBucket.put(keyBytes, keyHash, expireAt, seq, valueBytes, null);
                     if (putResult) {
                         keyBucket.updateSeq();
                     }
@@ -400,7 +403,7 @@ public class KeyBucket {
             throw new BucketFullException("Key bucket is full, slot=" + slot + ", bucket index=" + bucketIndex);
         }
 
-        putTo(putToCellIndex, cellCount, keyHash, expireAt, keyBytes, valueBytes);
+        putTo(putToCellIndex, cellCount, keyHash, expireAt, seq, keyBytes, valueBytes);
         if (!isUpdate) {
             size++;
             cellCost += cellCount;
@@ -432,10 +435,11 @@ public class KeyBucket {
         return true;
     }
 
-    private void putTo(int putToCellIndex, int cellCount, long keyHash, long expireAt, byte[] keyBytes, byte[] valueBytes) {
+    private void putTo(int putToCellIndex, int cellCount, long keyHash, long expireAt, long seq, byte[] keyBytes, byte[] valueBytes) {
         int metaIndex = metaIndex(putToCellIndex);
         buffer.putLong(metaIndex, keyHash);
         buffer.putLong(metaIndex + HASH_VALUE_LENGTH, expireAt);
+        buffer.putLong(metaIndex + HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH, seq);
 
         for (int i = 1; i < cellCount; i++) {
             int nextIndex = metaIndex(putToCellIndex + i);
@@ -584,6 +588,7 @@ public class KeyBucket {
             int metaIndex = metaIndex(nextCellIndex);
             buffer.putLong(metaIndex, NO_KEY);
             buffer.putLong(metaIndex + HASH_VALUE_LENGTH, NO_EXPIRE);
+            buffer.putLong(metaIndex + HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH, 0L);
         }
 
         // set 0 for better compress ratio

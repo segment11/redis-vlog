@@ -55,7 +55,7 @@ class KeyBucketTest extends Specification {
             }
 
             var kbArr = afterSplitKeyBucketList ? null : new KeyBucket[3]
-            boolean isPutDone = targetKeyBucket.put(keyBytes, v.keyHash, v.expireAt(), v.cvEncoded, kbArr)
+            boolean isPutDone = targetKeyBucket.put(keyBytes, v.keyHash, v.expireAt, v.seq, v.cvEncoded, kbArr)
 
             if (kbArr && kbArr[0] != null) {
                 println 'after split key buckets: '
@@ -120,9 +120,9 @@ class KeyBucketTest extends Specification {
         def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
 
         when:
-        keyBucket.put('a'.bytes, 97L, 0L, 'a'.bytes, null)
-        keyBucket.put('b'.bytes, 98L, 0L, 'b'.bytes, null)
-        keyBucket.put('c'.bytes, 99L, 0L, 'c'.bytes, null)
+        keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes, null)
+        keyBucket.put('b'.bytes, 98L, 0L, 1L, 'b'.bytes, null)
+        keyBucket.put('c'.bytes, 99L, 0L, 1L, 'c'.bytes, null)
 
         then:
         keyBucket.size == 3
@@ -130,13 +130,13 @@ class KeyBucketTest extends Specification {
         keyBucket.size == 2
 
         when:
-        keyBucket.put('b'.bytes, 98L, 0L, 'bb'.bytes, null)
+        keyBucket.put('b'.bytes, 98L, 0L, 1L, 'bb'.bytes, null)
 
         then:
         keyBucket.size == 2
 
         when:
-        keyBucket.put('c'.bytes, 99L, 0L, 'cc'.bytes, null)
+        keyBucket.put('c'.bytes, 99L, 0L, 1L, 'cc'.bytes, null)
 
         then:
         keyBucket.size == 2
@@ -150,10 +150,10 @@ class KeyBucketTest extends Specification {
         def k2 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, null, snowFlake)
 
         and:
-        k1.put('a'.bytes, 97L, 0L, 'a'.bytes, null)
+        k1.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes, null)
         def k1Bytes = k1.encode()
 
-        k2.put('a'.bytes, 97L, 0L, 'a'.bytes, null)
+        k2.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes, null)
         def k2Bytes = k2.encode()
 
         def sharedBytes = new byte[4096 * 2]

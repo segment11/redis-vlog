@@ -44,7 +44,7 @@ class KeyLoaderTest extends Specification {
         }
 
         when:
-        keyLoader.putValueByKeyForTest(0, 'a'.getBytes(), 3L, 0L, 'a'.bytes)
+        keyLoader.putValueByKeyForTest(0, 'a'.getBytes(), 3L, 0L, 1L, 'a'.bytes)
         def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 3L)
 
         then:
@@ -52,7 +52,7 @@ class KeyLoaderTest extends Specification {
 
         when:
         keyLoader.setMetaKeyBucketSplitNumberFromMasterNewly(0, (byte) 3)
-        keyLoader.putValueByKeyForTest(0, 'b'.getBytes(), 2L, 0L, 'b'.bytes)
+        keyLoader.putValueByKeyForTest(0, 'b'.getBytes(), 2L, 0L, 1L, 'b'.bytes)
 
         def keyBuckets = keyLoader.readKeyBuckets(0)
 
@@ -115,6 +115,9 @@ class KeyLoaderTest extends Specification {
             def keyHash = KeyHash.hash(keyBytes)
 
             def pvm = new PersistValueMeta()
+            pvm.keyBytes = keyBytes
+            pvm.keyHash = keyHash
+            pvm.bucketIndex = 0
             pvm.segmentOffset = it
             pvmList << pvm
         }
@@ -124,7 +127,7 @@ class KeyLoaderTest extends Specification {
 
         then:
         pvmList.every {
-            keyLoader.getValueByKey(0, it.keyBytes, it.keyHash).valueBytes() == it.encoded
+            keyLoader.getValueByKey(0, it.keyBytes, it.keyHash).valueBytes() == it.encode()
         }
 
         cleanup:

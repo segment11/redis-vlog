@@ -60,7 +60,7 @@ BenchmarkKeyBucketPut.putAndGet  100000  avgt       24.516          ms/op
 
             var key = keys[i];
             var keyHash = keysHash[i];
-            keyBucket.put(key.getBytes(), keyHash, 0L, valueBytes, null);
+            keyBucket.put(key.getBytes(), keyHash, 0L, 1L, valueBytes, null);
         }
     }
 
@@ -77,7 +77,7 @@ BenchmarkKeyBucketPut.putAndGet  100000  avgt       24.516          ms/op
 
             var key = keys[i];
             var keyHash = keysHash[i];
-            keyBucket.put(key.getBytes(), keyHash, 0L, valueBytes, null);
+            keyBucket.put(key.getBytes(), keyHash, 0L, 1L, valueBytes, null);
             keyBucket.getValueByKey(key.getBytes(), keyHash);
         }
     }
