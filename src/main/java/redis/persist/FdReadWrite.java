@@ -127,7 +127,7 @@ public class FdReadWrite extends ThreadSafeCaller {
         return allBytesBySegmentIndex[segmentIndex] == null;
     }
 
-    private LRUMap<Integer, byte[]> segmentBytesByIndex;
+    private LRUMap<Integer, byte[]> segmentBytesByIndexLRU;
 
     public void initByteBuffers(boolean isChunkFd) {
         var segmentLength = ConfForSlot.global.confChunk.segmentLength;
@@ -143,7 +143,7 @@ public class FdReadWrite extends ThreadSafeCaller {
             int maxSizeOneFd = maxSize / allWorkers / batchNumber / fdPerChunk;
             log.info("Chunk lru max size for one worker/batch/fd: {}, segment length: {}, memory require: {}MB, total memory require: {}MB",
                     maxSizeOneFd, segmentLength, maxSizeOneFd * segmentLength / 1024 / 1024, maxSize * segmentLength / 1024 / 1024);
-            this.segmentBytesByIndex = new LRUMap<>(maxSizeOneFd);
+            this.segmentBytesByIndexLRU = new LRUMap<>(maxSizeOneFd);
         } else {
             // key bucket
             var slotNumber = ConfForSlot.global.slotNumber;
@@ -152,7 +152,7 @@ public class FdReadWrite extends ThreadSafeCaller {
             int maxSizeOneFd = maxSize / slotNumber;
             log.info("Bucket lru max size for one slot: {}, segment length: {}， memory require: {}MB, total memory require: {}MB",
                     maxSizeOneFd, segmentLength, maxSizeOneFd * segmentLength / 1024 / 1024, maxSize * segmentLength / 1024 / 1024);
-            this.segmentBytesByIndex = new LRUMap<>(maxSizeOneFd);
+            this.segmentBytesByIndexLRU = new LRUMap<>(maxSizeOneFd);
         }
 
         if (ConfForSlot.global.pureMemory) {
@@ -281,7 +281,7 @@ public class FdReadWrite extends ThreadSafeCaller {
         int capacity = buffer.capacity();
         var isOnlyOneSegment = capacity == segmentLength;
         if (isOnlyOneSegment) {
-            var bytesCached = segmentBytesByIndex.get(segmentIndex);
+            var bytesCached = segmentBytesByIndexLRU.get(segmentIndex);
             if (bytesCached != null) {
                 lruHitCounter.labels(name).inc();
                 return bytesCached;
@@ -318,7 +318,7 @@ public class FdReadWrite extends ThreadSafeCaller {
         }
 
         if (isOnlyOneSegment && isRefreshLRUCache) {
-            segmentBytesByIndex.put(segmentIndex, bytesRead);
+            segmentBytesByIndexLRU.put(segmentIndex, bytesRead);
         }
         return bytesRead;
     }
@@ -360,11 +360,15 @@ public class FdReadWrite extends ThreadSafeCaller {
                 var bytes = new byte[segmentLength];
                 buffer.position(i * segmentLength);
                 buffer.get(bytes);
-                segmentBytesByIndex.put(segmentIndex + i, bytes);
+                segmentBytesByIndexLRU.put(segmentIndex + i, bytes);
+            }
+        } else {
+            for (int i = 0; i < segmentCount; i++) {
+                segmentBytesByIndexLRU.remove(segmentIndex + i);
             }
         }
 
-        return (int) n;
+        return n;
     }
 
     private byte[] readAsyncNotPureMemory(int segmentIndex, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
