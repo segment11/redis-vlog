@@ -158,7 +158,7 @@ public class KeyBucketsInOneWalGroup {
 
     boolean isSplit = false;
 
-    void putAllPvmList(Collection<PersistValueMeta> pvmList) {
+    void putAllPvmList(Collection<PersistValueMeta> pvmList, boolean isMerge) {
         for (var pvm : pvmList) {
             int bucketIndex = pvm.bucketIndex;
             int relativeBucketIndex = bucketIndex - beginBucketIndex;
@@ -173,6 +173,20 @@ public class KeyBucketsInOneWalGroup {
             if (keyBucket == null) {
                 keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, currentSplitNumber, null, 0, keyLoader.snowFlake);
                 list.set(relativeBucketIndex, keyBucket);
+            }
+
+            if (isMerge) {
+                // only put if seq match, as between merge worker compare and persist, the value may be updated
+                var currentOne = keyBucket.getValueByKey(pvm.keyBytes, pvm.keyHash);
+                if (currentOne == null) {
+                    // already removed
+                    continue;
+                }
+
+                if (currentOne.seq() != pvm.seq) {
+                    // already updated
+                    continue;
+                }
             }
 
             boolean isPut = keyBucket.put(pvm.keyBytes, pvm.keyHash, pvm.expireAt, pvm.seq,
@@ -214,6 +228,6 @@ public class KeyBucketsInOneWalGroup {
             pvm.extendBytes = v.cvEncoded();
             pvmList.add(pvm);
         }
-        putAllPvmList(pvmList);
+        putAllPvmList(pvmList, false);
     }
 }

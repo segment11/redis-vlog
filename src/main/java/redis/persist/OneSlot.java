@@ -1092,7 +1092,7 @@ public class OneSlot {
                     var workerId = list.get(0).workerId();
                     var chunk = chunksArray[workerId][batchIndex];
 
-                    var needMergeSegmentIndexList = chunk.persist(targetWal.groupIndex, list);
+                    var needMergeSegmentIndexList = chunk.persist(targetWal.groupIndex, list, false);
                     if (needMergeSegmentIndexList == null) {
                         isError = true;
                         return;

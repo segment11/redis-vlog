@@ -202,6 +202,12 @@ public class ChunkMergeJob implements SupplierEx<Integer> {
         for (var segmentIndex : needMergeSegmentIndexList) {
             validCvCountRecordList.add(new ValidCvCountRecord(segmentIndex));
         }
+
+        // calc bucket index and wal group index
+        for (var one : cvList) {
+            one.bucketIndex = localPersist.bucketIndex(one.cv.getKeyHash());
+            one.walGroupIndex = Wal.calWalGroupIndex(one.bucketIndex);
+        }
         // compare to current wal or persist value meta in key buckets, remove those deleted or expired
         removeOld(oneSlot, cvList, validCvCountRecordList);
 
@@ -213,7 +219,7 @@ public class ChunkMergeJob implements SupplierEx<Integer> {
         HashSet<Integer> hasValidCvSegmentIndexSet = new HashSet<>();
         for (var one : cvList) {
             // use memory list, and threshold, then persist to merge worker's chunk
-            mergeWorker.addMergedCv(slot, batchIndex, new ChunkMergeWorker.CvWithKey(one.cv, one.key));
+            mergeWorker.addMergedCv(slot, batchIndex, new ChunkMergeWorker.CvWithKeyAndBucketIndex(one.cv, one.key, one.bucketIndex));
             hasValidCvSegmentIndexSet.add(one.segmentIndex);
         }
 
@@ -263,11 +269,6 @@ public class ChunkMergeJob implements SupplierEx<Integer> {
         var dictMap = DictMap.getInstance();
         var firstSegmentIndex = validCvCountRecordList.get(0).segmentIndex;
         ArrayList<CvWithKeyAndSegmentOffset> toRemoveCvList = new ArrayList<>(cvList.size());
-
-        for (var cv : cvList) {
-            cv.bucketIndex = localPersist.bucketIndex(cv.cv.getKeyHash());
-            cv.walGroupIndex = Wal.calWalGroupIndex(cv.bucketIndex);
-        }
 
         var groupByWalGroupIndex = cvList.stream().collect(Collectors.groupingBy(one -> one.walGroupIndex));
         for (var entry : groupByWalGroupIndex.entrySet()) {

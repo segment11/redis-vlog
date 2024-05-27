@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import static redis.persist.Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED;
 
@@ -51,16 +52,16 @@ public class ChunkMergeWorker {
     // just for config parameter
     int compressLevel;
 
-    record CvWithKey(CompressedValue cv, String key) {
+    record CvWithKeyAndBucketIndex(CompressedValue cv, String key, int bucketIndex) {
     }
 
     private static final int MERGING_CV_SIZE_THRESHOLD = 1000;
     private static final int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 100;
 
-    private final List<CvWithKey>[][] mergedCvListBySlotAndBatchIndex;
+    private final List<CvWithKeyAndBucketIndex>[][] mergedCvListBySlotAndBatchIndex;
 
-    void addMergedCv(byte slot, byte batchIndex, CvWithKey cvWithKey) {
-        mergedCvListBySlotAndBatchIndex[slot][batchIndex].add(cvWithKey);
+    void addMergedCv(byte slot, byte batchIndex, CvWithKeyAndBucketIndex cvWithKeyAndBucketIndex) {
+        mergedCvListBySlotAndBatchIndex[slot][batchIndex].add(cvWithKeyAndBucketIndex);
     }
 
     boolean persistMergedCvList(byte slot, byte batchIndex) {
@@ -80,35 +81,26 @@ public class ChunkMergeWorker {
 
         ArrayList<Integer> needMergeSegmentIndexListAll = new ArrayList<>();
 
-        ArrayList<Wal.V> list = new ArrayList<>();
-        for (var cvWithKey : mergedCvList) {
-            var cv = cvWithKey.cv;
-            var key = cvWithKey.key;
+        var groupByWalGroupIndex = mergedCvList.stream().collect(Collectors.groupingBy(one -> Wal.calWalGroupIndex(one.bucketIndex)));
+        for (var entry : groupByWalGroupIndex.entrySet()) {
+            var walGroupIndex = entry.getKey();
+            var cvList = entry.getValue();
 
-            var bucketIndex = localPersist.bucketIndex(cv.getKeyHash());
-            list.add(new Wal.V(mergeWorkerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                    key, cv.encode(), cv.compressedLength()));
+            ArrayList<Wal.V> list = new ArrayList<>();
+            for (var cvWithKeyAndBucketIndex : cvList) {
+                var cv = cvWithKeyAndBucketIndex.cv;
+                var key = cvWithKeyAndBucketIndex.key;
+                var bucketIndex = cvWithKeyAndBucketIndex.bucketIndex;
 
-            if (list.size() >= MERGING_CV_SIZE_THRESHOLD) {
-                // todo, need re group by wal group index
-                var walGroupIndex = 0;
-                var needMergeSegmentIndexList = targetChunk.persist(walGroupIndex, list);
-                if (needMergeSegmentIndexList == null) {
-                    log.error("Merge worker persist merged cv list error, w={}, s={}", mergeWorkerId, slot);
-                    return false;
-                }
-
-                needMergeSegmentIndexListAll.addAll(needMergeSegmentIndexList);
-                list.clear();
+                list.add(new Wal.V(mergeWorkerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+                        key, cv.encode(), cv.compressedLength()));
             }
-        }
-        if (!list.isEmpty()) {
-            // todo, need re group by wal group index
-            var walGroupIndex = 0;
-            var needMergeSegmentIndexList = targetChunk.persist(walGroupIndex, list);
+
+            // if list size is too large, need multi batch persist, todo
+            var needMergeSegmentIndexList = targetChunk.persist(walGroupIndex, list, true);
             if (needMergeSegmentIndexList == null) {
                 log.error("Merge worker persist merged cv list error, w={}, s={}", mergeWorkerId, slot);
-                return false;
+                throw new RuntimeException("Merge worker persist merged cv list error, w=" + mergeWorkerId + ", s=" + slot);
             }
 
             needMergeSegmentIndexListAll.addAll(needMergeSegmentIndexList);

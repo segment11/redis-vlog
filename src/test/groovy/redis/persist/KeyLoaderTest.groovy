@@ -111,7 +111,7 @@ class KeyLoaderTest extends Specification {
         }
 
         when:
-        keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList)
+        keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList, false)
 
         then:
         pvmList.every {

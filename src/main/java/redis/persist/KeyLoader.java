@@ -338,10 +338,10 @@ public class KeyLoader {
         return fdReadWrite.readSegmentForKeyBucketsInOneWalGroup(beginBucketIndex);
     }
 
-    public synchronized void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList) {
+    public synchronized void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList, boolean isMerge) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
         inner.readBeforePutBatch();
-        inner.putAllPvmList(pvmList);
+        inner.putAllPvmList(pvmList, isMerge);
 
         if (inner.isSplit) {
             tmpViewAsSplitHappenedAfterPutBatch = inner;
