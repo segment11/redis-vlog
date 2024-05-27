@@ -248,7 +248,7 @@ public abstract class BaseCommand {
             var realDictSeq = buffer.getInt();
 
             cv.dictSeqOrSpType = realDictSeq;
-            cv.compressedData = oneSlot.getBigStringFromCache(uuid);
+            cv.compressedData = oneSlot.getBigStringFiles().getBigStringBytesFromCache(uuid);
             if (cv.compressedData == null) {
                 return null;
             }

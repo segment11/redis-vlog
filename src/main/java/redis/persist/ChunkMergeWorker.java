@@ -5,15 +5,12 @@ import io.activej.async.callback.AsyncComputation;
 import io.activej.common.function.SupplierEx;
 import io.activej.eventloop.Eventloop;
 import io.netty.buffer.Unpooled;
-import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
 import redis.metric.SimpleGauge;
 
-import java.io.File;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.*;
@@ -685,20 +682,14 @@ public class ChunkMergeWorker {
                                     var buffer = ByteBuffer.wrap(cv.getCompressedData());
                                     var uuid = buffer.getLong();
 
-                                    var file = new File(oneSlot.getBigStringDir(), String.valueOf(uuid));
-                                    if (!file.exists()) {
-                                        mergeWorker.log.warn("Big string file not exists, w={}, s={}, b={}, i={}, mw={}, key={}, uuid={}",
-                                                workerId, slot, batchIndex, segmentIndex, mergeWorker.mergeWorkerId, key, uuid);
+                                    var isDeleted = oneSlot.getBigStringFiles().deleteBigStringFileIfExist(uuid);
+                                    if (!isDeleted) {
+                                        throw new RuntimeException("Delete big string file error, w=" + workerId + ", s=" + slot +
+                                                ", b=" + batchIndex + ", i=" + segmentIndex + ", mw=" + mergeWorker.mergeWorkerId +
+                                                ", key=" + key + ", uuid=" + uuid);
                                     } else {
-                                        try {
-                                            FileUtils.delete(file);
-                                            mergeWorker.log.warn("Delete big string file, w={}, s={}, b={}, i={}, mw={}, key={}, uuid={}",
-                                                    workerId, slot, batchIndex, segmentIndex, mergeWorker.mergeWorkerId, key, uuid);
-                                        } catch (IOException e) {
-                                            throw new RuntimeException("Delete big string file error, w=" + workerId + ", s=" + slot +
-                                                    ", b=" + batchIndex + ", i=" + segmentIndex + ", mw=" + mergeWorker.mergeWorkerId +
-                                                    ", key=" + key + ", uuid=" + uuid, e);
-                                        }
+                                        mergeWorker.log.warn("Delete big string file, w={}, s={}, b={}, i={}, mw={}, key={}, uuid={}",
+                                                workerId, slot, batchIndex, segmentIndex, mergeWorker.mergeWorkerId, key, uuid);
                                     }
                                 }
                             } else {

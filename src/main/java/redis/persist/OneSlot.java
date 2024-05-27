@@ -10,7 +10,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.prometheus.client.Summary;
 import jnr.posix.LibC;
-import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,12 +63,7 @@ public class OneSlot {
             }
         }
 
-        this.bigStringDir = new File(slotDir, BIG_STRING_DIR_NAME);
-        if (!bigStringDir.exists()) {
-            if (!bigStringDir.mkdirs()) {
-                throw new IOException("Create big string dir error, slot: " + slot);
-            }
-        }
+        this.bigStringFiles = new BigStringFiles(slot, slotDir);
 
         var dynConfigFile = new File(slotDir, DYN_CONFIG_FILE_NAME);
         this.dynConfig = new DynConfig(slot, dynConfigFile);
@@ -133,8 +127,6 @@ public class OneSlot {
                 }
             }
         }
-
-        this.bigStringBytesByUuidLRU = new LRUMap<>(ConfForSlot.global.lruBigString.maxSize);
 
         // default 2000, I do not know if it is suitable
         var sendOnceMaxCount = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxCount", 2000);
@@ -322,16 +314,10 @@ public class OneSlot {
     private final Config persistConfig;
     private final File slotDir;
 
-    private static final String BIG_STRING_DIR_NAME = "big-string";
-    private final File bigStringDir;
+    private final BigStringFiles bigStringFiles;
 
-    public List<Long> getBigStringFileUuidList() {
-        var list = new ArrayList<Long>();
-        File[] files = bigStringDir.listFiles();
-        for (File file : files) {
-            list.add(Long.parseLong(file.getName()));
-        }
-        return list;
+    public BigStringFiles getBigStringFiles() {
+        return bigStringFiles;
     }
 
     private static final String DYN_CONFIG_FILE_NAME = "dyn-config.json";
@@ -378,7 +364,7 @@ public class OneSlot {
     }
 
     public File getBigStringDir() {
-        return bigStringDir;
+        return bigStringFiles.bigStringDir;
     }
 
     // index is group index
@@ -642,36 +628,6 @@ public class OneSlot {
         return tmpValueBytes;
     }
 
-    private final LRUMap<Long, byte[]> bigStringBytesByUuidLRU;
-
-    public byte[] getBigStringFromCache(long uuid) {
-        var bytesCached = bigStringBytesByUuidLRU.get(uuid);
-        if (bytesCached != null) {
-            return bytesCached;
-        }
-
-        var bytes = readBigStringBytes(uuid);
-        if (bytes != null) {
-            bigStringBytesByUuidLRU.put(uuid, bytes);
-        }
-        return bytes;
-    }
-
-    private byte[] readBigStringBytes(long uuid) {
-        var file = new File(OneSlot.this.bigStringDir, String.valueOf(uuid));
-        if (!file.exists()) {
-            log.warn("Big string file not exists, uuid: {}", uuid);
-            return null;
-        }
-
-        try {
-            return FileUtils.readFileToByteArray(file);
-        } catch (IOException e) {
-            log.error("Read big string file error, uuid: " + uuid, e);
-            return null;
-        }
-    }
-
     public ByteBuf getKeyValueBufByPvm(PersistValueMeta pvm) {
         byte[] tightBytesWithLength = preadSegmentTightBytesWithLength(pvm.workerId, pvm.batchIndex, pvm.segmentIndex);
         if (tightBytesWithLength == null) {
@@ -774,14 +730,7 @@ public class OneSlot {
         if (isPersistLengthOverSegmentLength || key.startsWith("kerry-test-big-string-")) {
             var uuid = snowFlake.nextId();
             var bytes = cv.getCompressedData();
-
-            var uuidAsFileName = String.valueOf(uuid);
-            var file = new File(bigStringDir, uuidAsFileName);
-            try {
-                FileUtils.writeByteArrayToFile(file, bytes);
-            } catch (IOException e) {
-                throw new RuntimeException("Write big string error, key=" + key, e);
-            }
+            bigStringFiles.writeBigStringBytes(uuid, key, bytes);
 
             if (masterUpdateCallback != null) {
                 masterUpdateCallback.onBigStringFileWrite(slot, uuid, bytes);

@@ -597,7 +597,7 @@ public class XGroup extends BaseCommand {
         }
 
         var oneSlot = localPersist.oneSlot(slot);
-        var uuidListInMaster = oneSlot.getBigStringFileUuidList();
+        var uuidListInMaster = oneSlot.getBigStringFiles().getBigStringFileUuidList();
         if (uuidListInMaster.isEmpty()) {
             return Repl.reply(slot, replPair, ReplType.s_exists_big_string, new EmptyContent());
         }
@@ -649,7 +649,7 @@ public class XGroup extends BaseCommand {
     }
 
     private Reply fetchExistsBigString(byte slot, OneSlot oneSlot) {
-        var uuidListLocal = oneSlot.getBigStringFileUuidList();
+        var uuidListLocal = oneSlot.getBigStringFiles().getBigStringFileUuidList();
         if (uuidListLocal.isEmpty()) {
             return Repl.reply(slot, replPair, ReplType.exists_big_string, new EmptyContent());
         }
