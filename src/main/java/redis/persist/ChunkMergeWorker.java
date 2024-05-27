@@ -184,19 +184,19 @@ public class ChunkMergeWorker {
     // index is batch index
     final TreeSet<MergedSegment>[] mergedSegmentSets;
 
-    public void initExecutor(boolean isTopMergeWorker) {
+    public void initEventloop(boolean isTopMergeWorker) {
         this.isTopMergeWorker = isTopMergeWorker;
 
         var batchNumber = ConfForSlot.global.confWal.batchNumber;
 
         this.mergeHandleEventloopArray = new Eventloop[batchNumber];
-        for (int i = 0; i < batchNumber; i++) {
+        for (int batchIndex = 0; batchIndex < batchNumber; batchIndex++) {
             var mergeHandleEventloop = Eventloop.builder()
-                    .withThreadName("chunk-merge-worker-" + i)
+                    .withThreadName("chunk-merge-worker-batch-" + batchIndex)
                     .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
                     .build();
             mergeHandleEventloop.keepAlive(true);
-            this.mergeHandleEventloopArray[i] = mergeHandleEventloop;
+            this.mergeHandleEventloopArray[batchIndex] = mergeHandleEventloop;
         }
         log.info("Create chunk merge handle eventloop {}", mergeWorkerId);
     }
@@ -209,9 +209,9 @@ public class ChunkMergeWorker {
         });
     }
 
-    public void submitWriteSegmentsMasterNewly(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
+    public void submitWriteSegmentsFromMasterExists(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
         this.mergeHandleEventloopArray[chunk.batchIndex].submit(() -> {
-            chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
+            chunk.writeSegmentsFromMasterExists(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
         });
     }
 

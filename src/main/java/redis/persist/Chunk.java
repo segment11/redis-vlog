@@ -446,7 +446,7 @@ public class Chunk {
         return segmentIndexToMerge;
     }
 
-    public boolean writeSegmentsFromMasterNewly(byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
+    public boolean writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
         if (ConfForSlot.global.pureMemory) {
             if (capacity != bytes.length) {
                 throw new RuntimeException("Write buffer capacity not match, expect: " + capacity + ", actual: " + bytes.length);

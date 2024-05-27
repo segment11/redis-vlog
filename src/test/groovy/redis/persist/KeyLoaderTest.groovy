@@ -51,7 +51,7 @@ class KeyLoaderTest extends Specification {
         valueBytesWithExpireAt.valueBytes() == 'a'.bytes
 
         when:
-        keyLoader.setMetaKeyBucketSplitNumberFromMasterNewly(0, (byte) 3)
+        keyLoader.setMetaKeyBucketSplitNumberForTest(0, (byte) 3)
         keyLoader.putValueByKeyForTest(0, 'b'.getBytes(), 2L, 0L, 1L, 'b'.bytes)
 
         def keyBuckets = keyLoader.readKeyBuckets(0)

@@ -1,11 +1,8 @@
 package redis.persist;
 
-import io.activej.config.Config;
 import redis.SnowFlake;
-import redis.repl.MasterUpdateCallback;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 
 public class ChunkMerger {
@@ -21,20 +18,13 @@ public class ChunkMerger {
     private final byte topMergeWorkers;
     private final SnowFlake snowFlake;
 
-    private final HashMap<Byte, MasterUpdateCallback> masterUpdateCallbackBySlot = new HashMap<>();
-
-    void putMasterUpdateCallback(byte slot, MasterUpdateCallback masterUpdateCallback) {
-        masterUpdateCallbackBySlot.put(slot, masterUpdateCallback);
-    }
-
     private int compressLevel;
 
     public void setCompressLevel(int compressLevel) {
         this.compressLevel = compressLevel;
     }
 
-    public ChunkMerger(byte requestWorkers, byte mergeWorkers, byte topMergeWorkers, short slotNumber,
-                       SnowFlake snowFlake, Config chunkConfig) {
+    public ChunkMerger(byte requestWorkers, byte mergeWorkers, byte topMergeWorkers, short slotNumber, SnowFlake snowFlake) {
         this.slotNumber = slotNumber;
         this.requestWorkers = requestWorkers;
         this.mergeWorkers = mergeWorkers;
@@ -46,7 +36,7 @@ public class ChunkMerger {
             this.chunkMergeWorkers[i] = new ChunkMergeWorker((byte) (requestWorkers + i), slotNumber,
                     requestWorkers, mergeWorkers, topMergeWorkers,
                     snowFlake, this);
-            this.chunkMergeWorkers[i].initExecutor(false);
+            this.chunkMergeWorkers[i].initEventloop(false);
 
             this.chunkMergeWorkers[i].compressLevel = compressLevel;
         }
@@ -56,7 +46,7 @@ public class ChunkMerger {
             this.topChunkMergeWorkers[i] = new ChunkMergeWorker((byte) (requestWorkers + mergeWorkers + i), slotNumber,
                     requestWorkers, mergeWorkers, topMergeWorkers,
                     snowFlake, this);
-            this.topChunkMergeWorkers[i].initExecutor(true);
+            this.topChunkMergeWorkers[i].initEventloop(true);
 
             this.topChunkMergeWorkers[i].compressLevel = compressLevel;
         }
@@ -104,13 +94,15 @@ public class ChunkMerger {
         job.snowFlake = snowFlake;
 
         // begin with 0
+        // merge worker handle request worker chunks
         if (workerId < requestWorkers) {
-            // by slot or by worker id?
+            // by slot
             int chooseIndex = slot % chunkMergeWorkers.length;
             var mergeWorker = chunkMergeWorkers[chooseIndex];
             job.mergeWorker = mergeWorker;
             return mergeWorker.submit(job);
         } else {
+            // top merge worker handle self chunks
             if (workerId >= requestWorkers + chunkMergeWorkers.length) {
                 for (var topMergeWorker : topChunkMergeWorkers) {
                     if (topMergeWorker.mergeWorkerId == workerId) {
@@ -121,6 +113,7 @@ public class ChunkMerger {
                     }
                 }
             } else {
+                // top merge worker handle merge worker chunks
                 // by slot
                 int chooseIndex = slot % topChunkMergeWorkers.length;
                 var topMergeWorker = topChunkMergeWorkers[chooseIndex];

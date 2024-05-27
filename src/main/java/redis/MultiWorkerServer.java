@@ -52,8 +52,8 @@ import static io.activej.config.converter.ConfigConverters.*;
 import static io.activej.inject.module.Modules.combine;
 import static io.activej.launchers.initializers.Initializers.ofEventloop;
 import static io.activej.launchers.initializers.Initializers.ofPrimaryServer;
-import static redis.decode.HttpHeaderBody.*;
 import static redis.ThreadFactoryAssignSupport.requestWorkerThreadFactory;
+import static redis.decode.HttpHeaderBody.*;
 
 public class MultiWorkerServer extends Launcher {
 //    static {
@@ -381,16 +381,15 @@ public class MultiWorkerServer extends Launcher {
     }
 
     @Provides
-    ChunkMerger chunkMerger(SnowFlake snowFlake, Config config) throws IOException {
+    ChunkMerger chunkMerger(SnowFlake snowFlake, Config config) {
         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
 
         int requestWorkers = config.get(toInt, "requestWorkers", 1);
         int mergeWorkers = config.get(toInt, "mergeWorkers", slotNumber);
         int topMergeWorkers = config.get(toInt, "topMergeWorkers", slotNumber);
 
-        var chunkConfig = config.getChild("chunk");
         var chunkMerger = new ChunkMerger((byte) requestWorkers, (byte) mergeWorkers, (byte) topMergeWorkers,
-                (short) slotNumber, snowFlake, chunkConfig);
+                (short) slotNumber, snowFlake);
         return chunkMerger;
     }
 

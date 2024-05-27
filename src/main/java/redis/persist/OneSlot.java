@@ -438,8 +438,6 @@ public class OneSlot {
                 chunkMerger.getChunkMergeWorker((byte) i).fixMergeHandleChunkThreadId(chunk);
             }
         }
-
-        chunkMerger.putMasterUpdateCallback(slot, masterUpdateCallback);
     }
 
     // first index is worker id, second index is batch index
@@ -977,26 +975,6 @@ public class OneSlot {
         });
     }
 
-    public void submitPersistTaskFromMasterNewly(byte workerId, byte batchIndex, int segmentLength, int segmentIndex, int segmentCount,
-                                                 List<Long> segmentSeqList, byte[] bytes, int capacity) {
-        var chunk = chunksArray[workerId][batchIndex];
-        if (chunk.segmentLength != segmentLength) {
-            throw new IllegalStateException("Segment length not match, chunk segment length: " + chunk.segmentLength +
-                    ", repl segment length: " + segmentLength);
-        }
-
-        if (workerId < requestWorkers) {
-            var persistHandleEventloop = persistHandleEventloopArray[batchIndex];
-            persistHandleEventloop.submit(() -> {
-                chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
-            });
-        } else {
-            // merge worker
-            chunkMerger.getChunkMergeWorker(workerId).submitWriteSegmentsMasterNewly(chunk,
-                    bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
-        }
-    }
-
     public void submitPersistTaskFromMasterExists(byte workerId, byte batchIndex, int segmentIndex, int segmentCount,
                                                   List<Long> segmentSeqList, byte[] bytes) {
         var chunk = chunksArray[workerId][batchIndex];
@@ -1008,11 +986,11 @@ public class OneSlot {
         if (workerId < requestWorkers) {
             var persistHandleEventloop = persistHandleEventloopArray[batchIndex];
             persistHandleEventloop.submit(() -> {
-                chunk.writeSegmentsFromMasterNewly(bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);
+                chunk.writeSegmentsFromMasterExists(bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);
             });
         } else {
             // merge worker
-            chunkMerger.getChunkMergeWorker(workerId).submitWriteSegmentsMasterNewly(chunk,
+            chunkMerger.getChunkMergeWorker(workerId).submitWriteSegmentsFromMasterExists(chunk,
                     bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);
         }
     }

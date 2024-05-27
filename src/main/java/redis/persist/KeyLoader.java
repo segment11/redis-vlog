@@ -71,7 +71,7 @@ public class KeyLoader {
         metaKeyBucketSplitNumber.overwriteInMemoryCachedBytes(bytes);
     }
 
-    public void setMetaKeyBucketSplitNumberFromMasterNewly(int bucketIndex, byte splitNumber) {
+    void setMetaKeyBucketSplitNumberForTest(int bucketIndex, byte splitNumber) {
         metaKeyBucketSplitNumber.set(bucketIndex, splitNumber);
     }
 
