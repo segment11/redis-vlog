@@ -212,7 +212,9 @@ public class KeyLoader {
     }
 
     private KeyBucket readKeyBucketForSingleKey(int bucketIndex, byte splitIndex, byte splitNumber, long keyHash, boolean isRefreshLRUCache) {
+        // if split happened after put batch, read from file is not correct
         if (tmpViewAsSplitHappenedAfterPutBatch != null && tmpViewAsSplitHappenedAfterPutBatch.isBucketIndexInThisWalGroup(bucketIndex)) {
+            // already put all pvm list or short value list, may be not write to files yet, get one key bucket is newest, need not synchronized
             var keyBucket = tmpViewAsSplitHappenedAfterPutBatch.getKeyBucket(bucketIndex, splitIndex, splitNumber, keyHash);
             return keyBucket;
         }
