@@ -2,7 +2,6 @@ package redis.persist;
 
 import com.github.luben.zstd.Zstd;
 import io.activej.common.function.SupplierEx;
-import io.netty.buffer.Unpooled;
 import redis.*;
 
 import java.nio.ByteBuffer;
@@ -11,8 +10,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static redis.CompressedValue.KEY_HEADER_LENGTH;
-import static redis.CompressedValue.VALUE_HEADER_LENGTH;
 import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
@@ -145,7 +142,6 @@ public class ChunkMergeJob implements SupplierEx<Integer> {
 
         var beginT = System.nanoTime();
         var segmentBytesBatchRead = oneSlot.preadForMerge(workerId, batchIndex, firstSegmentIndex);
-        var readForMergingBatchBuffer = ByteBuffer.wrap(segmentBytesBatchRead);
 
         // only log slot 0, just for less log
         var doLog = (isTopMergeWorkerSelfMerge && firstSegmentIndex % 1000 == 0 && slot == 0) ||
@@ -161,7 +157,6 @@ public class ChunkMergeJob implements SupplierEx<Integer> {
             if (skipSegmentIndexSet.contains(segmentIndex)) {
                 // move to next segment
                 i++;
-                readForMergingBatchBuffer.position(i * segmentLength);
                 continue;
             }
 
@@ -171,23 +166,14 @@ public class ChunkMergeJob implements SupplierEx<Integer> {
                         mergeWorker.mergeWorkerId);
             }
 
-            // decompress
-            var tightBytesLength = readForMergingBatchBuffer.getInt();
-            // why? need check, todo
-            if (tightBytesLength == 0) {
-                i++;
-                readForMergingBatchBuffer.position(i * segmentLength);
-                continue;
-            }
-
-            var tightBytesWithLength = new byte[4 + tightBytesLength];
-            readForMergingBatchBuffer.position(readForMergingBatchBuffer.position() - 4).get(tightBytesWithLength);
-
-            var buffer = ByteBuffer.wrap(tightBytesWithLength);
+            int relativeOffsetInBatchBytes = i * segmentLength;
+            var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength);
             // sub blocks
             // refer to SegmentBatch tight HEADER_LENGTH
             for (int j = 0; j < SegmentBatch.MAX_BLOCK_NUMBER; j++) {
-                buffer.position(4 + j * 4);
+                // seq long + total bytes length int + each sub block * (offset short + length short)
+                // position to target sub block
+                buffer.position(8 + 4 + j * (2 + 2));
                 var subBlockOffset = buffer.getShort();
                 if (subBlockOffset == 0) {
                     break;
@@ -197,51 +183,19 @@ public class ChunkMergeJob implements SupplierEx<Integer> {
 
                 var uncompressedBytes = new byte[segmentLength];
                 var d = Zstd.decompressByteArray(uncompressedBytes, 0, segmentLength,
-                        tightBytesWithLength, subBlockOffset, subBlockLength);
+                        segmentBytesBatchRead, relativeOffsetInBatchBytes + subBlockOffset, subBlockLength);
                 if (d != segmentLength) {
                     throw new IllegalStateException("Decompress error, w=" + workerId + ", s=" + slot +
                             ", b=" + batchIndex + ", i=" + segmentIndex + ", sbi=" + j + ", d=" + d + ", segmentLength=" + segmentLength);
                 }
 
-                var buf = Unpooled.wrappedBuffer(uncompressedBytes);
-                buf.skipBytes(8 + 4 + 4);
-                // check segment crc, todo
-//                long segmentSeq = buf.readLong();
-//                int cvCount = buf.readInt();
-//                int segmentMaskedValue = buf.readInt();
-
-                int offsetInThisSegment = Chunk.SEGMENT_HEADER_LENGTH;
-                while (true) {
-                    if (buf.readableBytes() < 2) {
-                        break;
-                    }
-
-                    var keyLength = buf.readByte();
-                    if (keyLength == 0) {
-                        break;
-                    }
-
-                    var keyBytes = new byte[keyLength];
-                    buf.readBytes(keyBytes);
-                    var key = new String(keyBytes);
-
-                    var cv = CompressedValue.decode(buf, keyBytes, 0, false);
-
-                    int offsetForThisCv = offsetInThisSegment;
-
-                    int lenKey = KEY_HEADER_LENGTH + keyLength;
-                    int lenValue = VALUE_HEADER_LENGTH + cv.compressedLength();
-                    int length = lenKey + lenValue;
-
-                    offsetInThisSegment += length;
-
-                    cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetForThisCv, segmentIndex, (byte) j));
-                }
+                int finalJ = j;
+                SegmentBatch.iterateFromSegmentBytes(uncompressedBytes, (key, cv, offsetInThisSegment) -> {
+                    cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetInThisSegment, segmentIndex, (byte) finalJ));
+                });
             }
 
             i++;
-            // move to next segment
-            readForMergingBatchBuffer.position(i * segmentLength);
         }
 
         ArrayList<ValidCvCountRecord> validCvCountRecordList = new ArrayList<>(needMergeSegmentIndexList.size());

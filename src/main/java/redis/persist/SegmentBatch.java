@@ -1,10 +1,12 @@
 package redis.persist;
 
 import com.github.luben.zstd.Zstd;
+import io.netty.buffer.Unpooled;
 import io.prometheus.client.Counter;
 import io.prometheus.client.Summary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.CompressedValue;
 import redis.ConfForSlot;
 import redis.KeyHash;
 import redis.SnowFlake;
@@ -95,7 +97,7 @@ public class SegmentBatch {
 
     // zstd compress ratio usually < 0.25, max 4 blocks tight to one segment
     static final int MAX_BLOCK_NUMBER = 4;
-    // seq long + total bytes length int + each sub block * (offset short / length short)
+    // seq long + total bytes length int + each sub block * (offset short + length short)
     private static final int HEADER_LENGTH = 8 + 4 + MAX_BLOCK_NUMBER * (2 + 2);
 
     private SegmentTightBytesWithLengthAndSegmentIndex tightSegments(int afterTightSegmentIndex, ArrayList<SegmentCompressedBytesWithIndex> onceList, ArrayList<PersistValueMeta> returnPvmList) {
@@ -287,5 +289,45 @@ public class SegmentBatch {
         Arrays.fill(bytes, (byte) 0);
 
         return new SegmentCompressedBytesWithIndex(compressedBytes, segmentIndex, segmentSeq);
+    }
+
+    interface CvCallback {
+        void callback(String key, CompressedValue cv, int offsetInThisSegment);
+    }
+
+    static void iterateFromSegmentBytes(byte[] uncompressedBytes, CvCallback cvCallback) {
+        var buf = Unpooled.wrappedBuffer(uncompressedBytes);
+        buf.skipBytes(SEGMENT_HEADER_LENGTH);
+        // check segment crc, todo
+//                long segmentSeq = buf.readLong();
+//                int cvCount = buf.readInt();
+//                int segmentMaskedValue = buf.readInt();
+
+        int offsetInThisSegment = Chunk.SEGMENT_HEADER_LENGTH;
+        while (true) {
+            // refer to comment: write 0 int, so merge loop can break, because reuse old bytes
+            if (buf.readableBytes() < 4 || buf.getInt(buf.readerIndex()) == 0) {
+                break;
+            }
+
+            var keyLength = buf.readByte();
+            if (keyLength == 0) {
+                break;
+            }
+
+            var keyBytes = new byte[keyLength];
+            buf.readBytes(keyBytes);
+            var key = new String(keyBytes);
+
+            var cv = CompressedValue.decode(buf, keyBytes, 0, false);
+
+            int lenKey = KEY_HEADER_LENGTH + keyLength;
+            int lenValue = VALUE_HEADER_LENGTH + cv.compressedLength();
+            int length = lenKey + lenValue;
+
+            offsetInThisSegment += length;
+
+            cvCallback.callback(key, cv, offsetInThisSegment);
+        }
     }
 }
