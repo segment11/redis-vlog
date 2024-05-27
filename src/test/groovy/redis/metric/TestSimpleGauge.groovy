@@ -1,8 +1,5 @@
 package redis.metric
 
-import io.prometheus.client.CollectorRegistry
-import io.prometheus.client.exporter.common.TextFormat
-
 def g = new SimpleGauge('test', 'test', 'slot')
 def labelValues = ['0']
 def labelValues2 = ['1']
@@ -15,6 +12,4 @@ g.addRawGetter {
     map
 }
 
-def sw = new StringWriter()
-TextFormat.write004(sw, CollectorRegistry.defaultRegistry.metricFamilySamples())
-println sw.toString()
+println ViewSupport.format()
