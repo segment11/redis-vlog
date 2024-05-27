@@ -89,6 +89,17 @@ public class KeyBucketsInOneWalGroup {
         }
     }
 
+    KeyBucket.ValueBytesWithExpireAtAndSeq getValue(int bucketIndex, byte[] keyBytes, long keyHash) {
+        var currentSplitNumber = splitNumberTmp[bucketIndex - beginBucketIndex];
+        var splitIndex = currentSplitNumber == 1 ? 0 : (int) Math.abs(keyHash % currentSplitNumber);
+        var keyBucket = getKeyBucket(bucketIndex, (byte) splitIndex, currentSplitNumber, keyHash);
+        if (keyBucket == null) {
+            return null;
+        }
+
+        return keyBucket.getValueByKey(keyBytes, keyHash);
+    }
+
     private final byte[] emptyBytes;
 
     byte[][] writeAfterPutBatch() {

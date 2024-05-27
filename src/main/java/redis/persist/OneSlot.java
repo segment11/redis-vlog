@@ -603,7 +603,7 @@ public class OneSlot {
     }
 
     byte[] getFromWal(String key, int bucketIndex) {
-        var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
         byte[] tmpValueBytes = currentWalArray[walGroupIndex].get(key);
         long lastUsedTimeMillis = currentWalArray[walGroupIndex].lastUsedTimeMillis;
         for (var wal : walsArray[walGroupIndex]) {
@@ -666,7 +666,7 @@ public class OneSlot {
     }
 
     public void removeDelay(byte workerId, String key, int bucketIndex, long keyHash) {
-        var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
         var currentWal = currentWalArray[walGroupIndex];
         var putResult = currentWal.removeDelay(workerId, key, bucketIndex, keyHash);
 
@@ -681,7 +681,7 @@ public class OneSlot {
     }
 
     private boolean removeFromWal(byte workerId, int bucketIndex, String key, long keyHash) {
-        var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
 
         boolean isRemoved = false;
         for (var wal : walsArray[walGroupIndex]) {
@@ -706,7 +706,7 @@ public class OneSlot {
             throw new ReadonlyException();
         }
 
-        var walGroupIndex = bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
         var currentWal = currentWalArray[walGroupIndex];
 
         byte[] cvEncoded;

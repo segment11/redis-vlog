@@ -34,8 +34,7 @@ public class ChunkMerger {
         this.chunkMergeWorkers = new ChunkMergeWorker[mergeWorkers];
         for (int i = 0; i < mergeWorkers; i++) {
             this.chunkMergeWorkers[i] = new ChunkMergeWorker((byte) (requestWorkers + i), slotNumber,
-                    requestWorkers, mergeWorkers, topMergeWorkers,
-                    snowFlake, this);
+                    requestWorkers, mergeWorkers, topMergeWorkers, this);
             this.chunkMergeWorkers[i].initEventloop(false);
 
             this.chunkMergeWorkers[i].compressLevel = compressLevel;
@@ -44,8 +43,7 @@ public class ChunkMerger {
         this.topChunkMergeWorkers = new ChunkMergeWorker[topMergeWorkers];
         for (int i = 0; i < topMergeWorkers; i++) {
             this.topChunkMergeWorkers[i] = new ChunkMergeWorker((byte) (requestWorkers + mergeWorkers + i), slotNumber,
-                    requestWorkers, mergeWorkers, topMergeWorkers,
-                    snowFlake, this);
+                    requestWorkers, mergeWorkers, topMergeWorkers, this);
             this.topChunkMergeWorkers[i].initEventloop(true);
 
             this.topChunkMergeWorkers[i].compressLevel = compressLevel;
@@ -86,7 +84,7 @@ public class ChunkMerger {
     }
 
     CompletableFuture<Integer> submit(byte workerId, byte slot, byte batchIndex, ArrayList<Integer> needMergeSegmentIndexList) {
-        var job = new ChunkMergeWorker.Job();
+        var job = new ChunkMergeJob();
         job.workerId = workerId;
         job.slot = slot;
         job.batchIndex = batchIndex;

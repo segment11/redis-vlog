@@ -156,6 +156,11 @@ public class Wal {
 
     private final byte slot;
     final int groupIndex;
+
+    static int calWalGroupIndex(int bucketIndex) {
+        return bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
+    }
+
     final byte batchIndex;
     private final RandomAccessFile walSharedFile;
     private final RandomAccessFile walSharedFileShortValue;
