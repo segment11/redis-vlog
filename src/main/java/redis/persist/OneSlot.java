@@ -642,10 +642,17 @@ public class OneSlot {
         return buf;
     }
 
-    public boolean remove(byte workerId, int bucketIndex, String key, long keyHash) {
+    public boolean remove(byte workerId, int bucketIndex, String key, long keyHash, boolean isDelayUpdateKeyBucket) {
+        if (isDelayUpdateKeyBucket) {
+            removeDelay(workerId, key, bucketIndex, keyHash);
+            return true;
+        }
+
         boolean isDeleted = false;
         try {
             var isRemovedFromWal = removeFromWal(workerId, bucketIndex, key, keyHash);
+            // if is removed from wal, means, wal add a removed flag value, key loader need not immediately update target key bucket
+            // if remove too frequently, key loader will be blocked, performance will be bad, important!!!
             isDeleted = isRemovedFromWal || keyLoader.remove(bucketIndex, key.getBytes(), keyHash);
         } catch (Exception e) {
             throw new RuntimeException(e);

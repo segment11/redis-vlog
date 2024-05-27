@@ -84,7 +84,9 @@ public class DGroup extends BaseCommand {
             var keyHash = slotWithKeyHash.keyHash();
 
             var oneSlot = localPersist.oneSlot(slot);
-            var isRemoved = oneSlot.remove(workerId, bucketIndex, key, keyHash);
+
+            // remove delay, perf better
+            var isRemoved = oneSlot.remove(workerId, bucketIndex, key, keyHash, true);
             return isRemoved ? IntegerReply.REPLY_1 : IntegerReply.REPLY_0;
         }
 
@@ -94,6 +96,7 @@ public class DGroup extends BaseCommand {
             if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
                 return ErrorReply.KEY_TOO_LONG;
             }
+            var key = new String(keyBytes);
 
             var slotWithKeyHash = slot(keyBytes);
             var slot = slotWithKeyHash.slot();
@@ -101,9 +104,9 @@ public class DGroup extends BaseCommand {
             var keyHash = slotWithKeyHash.keyHash();
 
             var oneSlot = localPersist.oneSlot(slot);
-            var key = new String(keyBytes);
 
-            var isRemoved = oneSlot.remove(workerId, bucketIndex, key, keyHash);
+            // remove delay, perf better
+            var isRemoved = oneSlot.remove(workerId, bucketIndex, key, keyHash, true);
             if (isRemoved) {
                 nArr[0]++;
             }
