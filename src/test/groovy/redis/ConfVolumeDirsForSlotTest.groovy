@@ -1,37 +1,21 @@
 package redis
 
 import io.activej.config.Config
-import org.jetbrains.annotations.Nullable
 import spock.lang.Specification
 
 class ConfVolumeDirsForSlotTest extends Specification {
     def "init"() {
         given:
-        def persistConfig = new Config() {
-            private final Map<String, String> inner = [:]
+        def persistConfig = Config.create().with('volumeDirsBySlot',
+                '/tmp/data0:0-31,/tmp/data1:32-63,/tmp/data2:64-95,/tmp/data3:96-127')
 
-            void add(String key, String value) {
-                inner.put(key, value)
-            }
-
-            @Override
-            String getValue(@Nullable String defaultValue) {
-                inner[defaultValue]
-            }
-
-            @Override
-            Map<String, Config> getChildren() {
-                [:]
-            }
-        }
+        when:
 
         new File('/tmp/data0').mkdir()
         new File('/tmp/data1').mkdir()
         new File('/tmp/data2').mkdir()
         new File('/tmp/data3').mkdir()
 
-        when:
-        persistConfig.add('volumeDirsBySlot', '/tmp/data0:0-31,/tmp/data1:32-63,/tmp/data2:64-95,/tmp/data3:96-127')
         ConfVolumeDirsForSlot.initFromConfig(persistConfig, (short) 128)
 
         then:

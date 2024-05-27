@@ -19,8 +19,8 @@ public class ConfVolumeDirsForSlot {
         volumeDirsBySlot = new String[slotNumber];
 
         // eg. persist.volumeDirsBySlot=/mnt/data0:0-32,/mnt/data1:33-64,/mnt/data2:65-96,/mnt/data3:97-128
-        var value = persistConfig.getValue("volumeDirsBySlot");
-        if (value != null) {
+        if (persistConfig.getChild("volumeDirsBySlot").hasValue()) {
+            var value = persistConfig.get("volumeDirsBySlot");
             var volumeDirs = value.split(",");
             for (var volumeDir : volumeDirs) {
                 var parts = volumeDir.split(":");
