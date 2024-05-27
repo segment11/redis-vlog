@@ -76,19 +76,7 @@ class KeyLoaderTest extends Specification {
         def keyLoader = prepareKeyLoader()
 
         and:
-        List<Wal.V> shortValueList = []
-        10.times {
-            def key = "key:" + it.toString().padLeft(12, '0')
-            def keyBytes = key.bytes
-            def putValueBytes = ("value" + it).bytes
-
-            def keyHash = KeyHash.hash(keyBytes)
-
-            def v = new Wal.V((byte) 0, 0L, 0, keyHash, 0L,
-                    key, putValueBytes, putValueBytes.length)
-
-            shortValueList << v
-        }
+        var shortValueList = Mock.prepareShortValueList(10)
 
         when:
         keyLoader.persistShortValueListBatchInOneWalGroup(0, shortValueList)
