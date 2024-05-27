@@ -13,7 +13,6 @@ import redis.command.*;
 import redis.decode.Request;
 import redis.metric.SimpleGauge;
 import redis.persist.ChunkMerger;
-import redis.persist.LocalPersist;
 import redis.persist.ReadonlyException;
 import redis.persist.SegmentOverflowException;
 import redis.reply.*;
@@ -51,8 +50,6 @@ public class RequestHandler {
     final boolean localTest;
     final int localTestRandomValueListSize;
     final ArrayList<byte[]> localTestRandomValueList;
-
-    private final LocalPersist localPersist = LocalPersist.getInstance();
 
     int compressLevel;
     int trainSampleListMaxSize;
