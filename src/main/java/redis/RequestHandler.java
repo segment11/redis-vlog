@@ -353,11 +353,14 @@ public class RequestHandler {
         return ErrorReply.FORMAT;
     }
 
-    private final SimpleGauge sampleToTrainSizeGauge = new SimpleGauge("sample_to_train_size", "sample to train size",
+    private static final SimpleGauge sampleToTrainSizeGauge = new SimpleGauge("sample_to_train_size", "sample to train size",
             "worker_id");
 
-    private void initMetricsCollect() {
+    static {
         sampleToTrainSizeGauge.register();
+    }
+
+    private void initMetricsCollect() {
         sampleToTrainSizeGauge.addRawGetter(() -> {
             var labelValues = List.of(workerIdStr);
 
