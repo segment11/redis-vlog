@@ -15,7 +15,6 @@ import redis.repl.Repl;
 import redis.repl.ReplPair;
 import redis.repl.ReplType;
 import redis.repl.content.*;
-import redis.reply.ErrorReply;
 import redis.reply.NilReply;
 import redis.reply.Reply;
 
@@ -136,13 +135,9 @@ public class XGroup extends BaseCommand {
                 oneSlot.addDelayNeedCloseReplPair(replPair);
                 yield Repl.emptyReply();
             }
-            case key_bucket_update -> key_bucket_update(slot, contentBytes);
-            case key_bucket_split -> key_bucket_split(slot, contentBytes);
             case wal_append_batch -> wal_append_batch(slot, contentBytes);
             case dict_create -> dict_create(slot, contentBytes);
-            case segment_write -> segment_write(slot, contentBytes);
             case big_string_file_write -> big_string_file_write(slot, contentBytes);
-            case segment_index_change -> segment_index_change(slot, contentBytes);
             case exists_chunk_segments -> exists_chunk_segments(slot, contentBytes);
             case exists_key_buckets -> exists_key_buckets(slot, contentBytes);
             case meta_chunk_segment_index -> meta_chunk_segment_index(slot, contentBytes);
@@ -216,48 +211,6 @@ public class XGroup extends BaseCommand {
         }
     }
 
-    private Reply key_bucket_update(byte slot, byte[] contentBytes) {
-        // client received from server
-        log.debug("Repl handle key bucket update, slot={}, slave uuid={}, {}:{}", slot,
-                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
-
-        // refer to ToSlaveKeyBucketUpdate.encodeTo
-        var buffer = ByteBuffer.wrap(contentBytes);
-        var bucketIndex = buffer.getInt();
-        var splitIndex = buffer.get();
-        var splitNumber = buffer.get();
-        var seq = buffer.getLong();
-        var bytesLength = buffer.getInt();
-        var bytes = new byte[bytesLength];
-        buffer.get(bytes);
-
-        var oneSlot = localPersist.oneSlot(slot);
-        // not necessary to submit task, key loader use synchronized block
-        try {
-            oneSlot.getKeyLoader().updateKeyBucketFromMasterNewly(bucketIndex, splitIndex, splitNumber, seq, bytes);
-        } catch (Exception e) {
-            return new ErrorReply(e.getMessage());
-        }
-
-        return Repl.emptyReply();
-    }
-
-    private Reply key_bucket_split(byte slot, byte[] contentBytes) {
-        // client received from server
-        log.debug("Repl handle key bucket split, slot={}, slave uuid={}, {}:{}", slot,
-                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
-        // refer to ToSlaveKeyBucketSplit.encodeTo
-        var buffer = ByteBuffer.wrap(contentBytes);
-        var bucketIndex = buffer.getInt();
-        var splitNumber = buffer.get();
-
-        var oneSlot = localPersist.oneSlot(slot);
-        // not necessary to submit task, key loader use synchronized block
-        oneSlot.getKeyLoader().setMetaKeyBucketSplitNumberFromMasterNewly(bucketIndex, splitNumber);
-
-        return Repl.emptyReply();
-    }
-
     public record ExtV(byte batchIndex, boolean isValueShort, int offset, Wal.V v) {
 
     }
@@ -319,32 +272,6 @@ public class XGroup extends BaseCommand {
         return Repl.emptyReply();
     }
 
-    private Reply segment_write(byte slot, byte[] contentBytes) {
-        log.debug("Repl handle segment write, slot={}, slave uuid={}, {}:{}", slot,
-                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
-        // refer to ToSlaveSegmentWrite.encodeTo
-        var buffer = ByteBuffer.wrap(contentBytes);
-        var workerId = buffer.get();
-        var batchIndex = buffer.get();
-        var segmentLength = buffer.getInt();
-        var segmentIndex = buffer.getInt();
-        var segmentCount = buffer.getInt();
-        var segmentSeqList = new ArrayList<Long>();
-        for (int i = 0; i < segmentCount; i++) {
-            segmentSeqList.add(buffer.getLong());
-        }
-        var bytesLength = buffer.getInt();
-        var bytes = new byte[bytesLength];
-        buffer.get(bytes);
-        var capacity = buffer.getInt();
-
-        var oneSlot = localPersist.oneSlot(slot);
-        oneSlot.submitPersistTaskFromMasterNewly(workerId, batchIndex, segmentLength, segmentIndex, segmentCount,
-                segmentSeqList, bytes, capacity);
-
-        return Repl.emptyReply();
-    }
-
     private Reply big_string_file_write(byte slot, byte[] contentBytes) {
         log.debug("Repl handle big string file write, slot={}, slave uuid={}, {}:{}", slot,
                 replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
@@ -365,20 +292,6 @@ public class XGroup extends BaseCommand {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-
-        return Repl.emptyReply();
-    }
-
-    private Reply segment_index_change(byte slot, byte[] contentBytes) {
-        log.debug("Repl handle segment index change, slot={}, slave uuid={}, {}:{}", slot,
-                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
-        var buffer = ByteBuffer.wrap(contentBytes);
-        var workerId = buffer.get();
-        var batchIndex = buffer.get();
-        var segmentIndex = buffer.getInt();
-
-        var oneSlot = localPersist.oneSlot(slot);
-        oneSlot.setChunkWriteSegmentIndex(workerId, batchIndex, segmentIndex);
 
         return Repl.emptyReply();
     }

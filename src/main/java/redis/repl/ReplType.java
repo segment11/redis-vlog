@@ -10,13 +10,9 @@ public enum ReplType {
     bye(true, true, (byte) 5),
     byeBye(true, false, (byte) 6),
 
-    key_bucket_update(true, false, (byte) 10),
-    key_bucket_split(true, false, (byte) 11),
-    wal_append_batch(true, false, (byte) 12),
-    dict_create(true, false, (byte) 13),
-    segment_write(true, false, (byte) 14),
-    big_string_file_write(true, false, (byte) 15),
-    segment_index_change(true, false, (byte) 16),
+    wal_append_batch(true, false, (byte) 10),
+    dict_create(true, false, (byte) 11),
+    big_string_file_write(true, false, (byte) 12),
 
     exists_chunk_segments(false, true, (byte) 20),
     exists_key_buckets(false, true, (byte) 21),

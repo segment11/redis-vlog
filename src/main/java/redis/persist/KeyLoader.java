@@ -278,10 +278,6 @@ public class KeyLoader {
         return keyBuckets;
     }
 
-    public void updateKeyBucketFromMasterNewly(int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes) {
-        updateKeyBucketInner(bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes, false);
-    }
-
     private void updateKeyBucketInner(int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes, boolean isRefreshLRUCache) {
         if (bytes.length > KEY_BUCKET_ONE_COST_SIZE) {
             throw new IllegalStateException("Key bucket bytes size too large, slot: " + slot +
@@ -295,10 +291,6 @@ public class KeyLoader {
         }
 
         fdReadWrite.writeSegment(bucketIndex, bytes, isRefreshLRUCache);
-
-        if (masterUpdateCallback != null) {
-            masterUpdateCallback.onKeyBucketUpdate(slot, bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes);
-        }
     }
 
     private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket, boolean isRefreshLRUCache) {

@@ -5,32 +5,9 @@ import org.slf4j.LoggerFactory;
 import redis.Dict;
 import redis.persist.Wal;
 
-import java.util.List;
-
 // for debug and test
 public class NoopMasterUpdateCallback implements MasterUpdateCallback {
     private final Logger log = LoggerFactory.getLogger(NoopMasterUpdateCallback.class);
-
-    private long keyBucketUpdateCount = 0;
-
-    @Override
-    public void onKeyBucketUpdate(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, long lastUpdateSeq, byte[] bytes) {
-        keyBucketUpdateCount++;
-        if (keyBucketUpdateCount % 10000 == 0) {
-            log.warn("onKeyBucketUpdate called with slot: {}, bucketIndex: {}, splitIndex: {}, splitNumber: {}, seq: {}, bytes.length: {}",
-                    slot, bucketIndex, splitIndex, splitNumber, lastUpdateSeq, bytes.length);
-        }
-    }
-
-    private long keyBucketSplitCount = 0;
-
-    @Override
-    public void onKeyBucketSplit(byte slot, int bucketIndex, byte splitNumber) {
-        keyBucketSplitCount++;
-        if (keyBucketSplitCount % 1000 == 0) {
-            log.warn("onKeyBucketSplit called with slot: {}, bucketIndex: {}, splitNumber: {}", slot, bucketIndex, splitNumber);
-        }
-    }
 
     private long walAppendCount = 0;
 
@@ -58,18 +35,6 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
         log.warn("onDictCreate called with key: {}, dict: {}", key, dict);
     }
 
-    private long segmentWriteCount = 0;
-
-    @Override
-    public void onSegmentWrite(byte workerId, byte batchIndex, byte slot, int segmentLength,
-                               int segmentIndex, int segmentCount, List<Long> segmentSeqList, byte[] bytes, int capacity) {
-        segmentWriteCount++;
-        if (segmentWriteCount % 1000 == 0) {
-            log.warn("onSegmentWrite called with workerId: {}, batchIndex: {}, slot: {}, segmentLength: {}, segmentIndex: {}, segmentCount: {}, segmentSeqList: {}, bytes.length: {}, capacity: {}",
-                    workerId, batchIndex, slot, segmentLength, segmentIndex, segmentCount, segmentSeqList, bytes.length, capacity);
-        }
-    }
-
     private long bigStringFileWriteCount = 0;
 
     @Override
@@ -78,10 +43,5 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
         if (bigStringFileWriteCount % 100 == 0) {
             log.warn("onBigStringFileWrite called with slot: {}, uuid: {}, bytes.length: {}", slot, uuid, bytes.length);
         }
-    }
-
-    @Override
-    public void onSegmentIndexChange(byte workerId, byte batchIndex, int segmentIndex) {
-
     }
 }

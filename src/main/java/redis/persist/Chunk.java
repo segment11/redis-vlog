@@ -292,8 +292,6 @@ public class Chunk {
                 if (masterUpdateCallback != null) {
                     List<Long> segmentSeqList = new ArrayList<>();
                     segmentSeqList.add(segment.segmentSeq());
-                    masterUpdateCallback.onSegmentWrite(workerId, batchIndex, slot, segmentLength,
-                            segment.segmentIndex(), 1, segmentSeqList, bytes, bytes.length);
                 }
             }
             segmentIndex += segments.size();
@@ -388,9 +386,6 @@ public class Chunk {
         }
 
         oneSlot.setChunkWriteSegmentIndex(workerId, batchIndex, segmentIndex);
-        if (masterUpdateCallback != null) {
-            masterUpdateCallback.onSegmentIndexChange(workerId, batchIndex, segmentIndex);
-        }
         return needMergeSegmentIndexList;
     }
 
@@ -520,10 +515,6 @@ public class Chunk {
             isNewAppend = true;
         }
 
-        if (masterUpdateCallback != null) {
-            masterUpdateCallback.onSegmentWrite(workerId, batchIndex, slot, segmentLength,
-                    segmentIndex, segmentCount, segmentSeqList, bytes, bytes.length);
-        }
         return isNewAppend;
     }
 }
