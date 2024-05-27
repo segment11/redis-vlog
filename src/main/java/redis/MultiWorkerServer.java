@@ -27,8 +27,6 @@ import io.activej.worker.WorkerPoolModule;
 import io.activej.worker.WorkerPools;
 import io.activej.worker.annotation.Worker;
 import io.activej.worker.annotation.WorkerId;
-import net.openhft.affinity.AffinityStrategies;
-import net.openhft.affinity.AffinityThreadFactory;
 import redis.decode.Request;
 import redis.decode.RequestDecoder;
 import redis.persist.ChunkMerger;
@@ -47,7 +45,6 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ThreadFactory;
 
 import static io.activej.config.Config.ofClassPathProperties;
 import static io.activej.config.Config.ofSystemProperties;
@@ -56,6 +53,7 @@ import static io.activej.inject.module.Modules.combine;
 import static io.activej.launchers.initializers.Initializers.ofEventloop;
 import static io.activej.launchers.initializers.Initializers.ofPrimaryServer;
 import static redis.decode.HttpHeaderBody.*;
+import static redis.ThreadFactoryAssignSupport.requestWorkerThreadFactory;
 
 public class MultiWorkerServer extends Launcher {
 //    static {
@@ -76,9 +74,6 @@ public class MultiWorkerServer extends Launcher {
 
     @Inject
     ChunkMerger chunkMerger;
-
-    private static final ThreadFactory requestWorkerThreadFactory = new AffinityThreadFactory("request-worker",
-            AffinityStrategies.DIFFERENT_CORE);
 
     @Inject
     RequestHandler[] requestHandlerArray;

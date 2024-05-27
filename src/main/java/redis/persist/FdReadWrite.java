@@ -10,6 +10,7 @@ import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
 import redis.ConfForSlot;
+import redis.ThreadFactoryAssignSupport;
 import redis.repl.content.ToMasterExistsSegmentMeta;
 
 import java.io.File;

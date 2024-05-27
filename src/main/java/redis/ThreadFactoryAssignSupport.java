@@ -1,4 +1,4 @@
-package redis.persist;
+package redis;
 
 import net.openhft.affinity.AffinityStrategies;
 import net.openhft.affinity.AffinityThreadFactory;
@@ -13,23 +13,25 @@ public class ThreadFactoryAssignSupport {
         return instance;
     }
 
+    public static final ThreadFactory requestWorkerThreadFactory = new AffinityThreadFactory("request-worker",
+            AffinityStrategies.DIFFERENT_CORE);
+
     // one or two ssd volume, one cpu v-core is enough, suppose there are at most 8 ssd volumes
     public Inner ForFdReadWrite = new Inner(8, 16, "fd-read-write-group-", true);
-
-    public Inner ForKeyLoader = new Inner(16, 4, "key-loader-", true);
 
     public Inner ForSlotWalBatchPersist = new Inner(4, 8, "slot-wal-persist-", true);
 
     public Inner ForChunkMerge = new Inner(4, 8, "chunk-merge-", true);
 
-    class Inner {
+    public class Inner {
+        final int number;
+        final int threadNumberPerGroup;
         private final ThreadFactory[] threadFactories;
 
-        private final int threadNumberPerGroup;
-
         public Inner(int number, int threadNumberPerGroup, String threadGroupPrefix, boolean isThreadGroupUseSameCore) {
-            this.threadFactories = new ThreadFactory[number];
+            this.number = number;
             this.threadNumberPerGroup = threadNumberPerGroup;
+            this.threadFactories = new ThreadFactory[number];
             for (int i = 0; i < number; i++) {
                 this.threadFactories[i] = new AffinityThreadFactory(threadGroupPrefix + i,
                         isThreadGroupUseSameCore ? AffinityStrategies.SAME_CORE : AffinityStrategies.DIFFERENT_CORE);
