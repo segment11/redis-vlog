@@ -14,9 +14,9 @@ class SegmentBatchTest extends Specification {
         def snowFlake = new SnowFlake(1, 1)
         def segmentBatch = new SegmentBatch((byte) 0, (byte) 0, (byte) 0, snowFlake)
 
-        var list = Mock.prepareValueList(100)
+        var list = Mock.prepareValueList(400)
 
-        int[] nextNSegmentIndex = [0, 1, 2, 3, 4, 5]
+        int[] nextNSegmentIndex = [0, 1, 2, 3, 4, 5, 6]
         ArrayList<PersistValueMeta> returnPvmList = []
 
         when:
@@ -53,7 +53,9 @@ class SegmentBatchTest extends Specification {
             println "decompressed bytes length: ${decompressedBytes.length}"
 
             SegmentBatch.iterateFromSegmentBytes(decompressedBytes, { key, cv, offsetInThisSegment ->
-                println "key: $key, cv: $cv, offset in this segment: $offsetInThisSegment"
+                if (cv.seq % 10 == 0) {
+                    println "key: $key, cv: $cv, offset in this segment: $offsetInThisSegment"
+                }
                 loaded << cv
             })
         }
