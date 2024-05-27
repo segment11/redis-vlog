@@ -445,6 +445,7 @@ public class KeyBucket {
             int nextIndex = metaIndex(putToCellIndex + i);
             buffer.putLong(nextIndex, PRE_KEY);
             buffer.putLong(nextIndex + HASH_VALUE_LENGTH, NO_EXPIRE);
+            buffer.putLong(nextIndex + HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH, 0L);
         }
 
         // reset old PRE_KEY to NO_KEY
@@ -537,14 +538,14 @@ public class KeyBucket {
         return true;
     }
 
-    record ValueBytesWithExpireAt(byte[] valueBytes, long expireAt) {
+    record ValueBytesWithExpireAtAndSeq(byte[] valueBytes, long expireAt, long seq) {
         boolean isExpired() {
             return expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis();
         }
     }
 
     // add synchronized as when key loader batch update pvm list or short value list, can also be read in another thread
-    public synchronized ValueBytesWithExpireAt getValueByKey(byte[] keyBytes, long keyHash) {
+    public synchronized ValueBytesWithExpireAtAndSeq getValueByKey(byte[] keyBytes, long keyHash) {
         if (size == 0) {
             return null;
         }
@@ -559,7 +560,7 @@ public class KeyBucket {
         return null;
     }
 
-    private ValueBytesWithExpireAt getValueByKeyWithCellIndex(byte[] keyBytes, long keyHash, int cellIndex) {
+    private ValueBytesWithExpireAtAndSeq getValueByKeyWithCellIndex(byte[] keyBytes, long keyHash, int cellIndex) {
         int metaIndex = metaIndex(cellIndex);
         var cellHashValue = buffer.getLong(metaIndex);
         // NO_KEY or PRE_KEY
@@ -571,6 +572,7 @@ public class KeyBucket {
         }
 
         var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
+        var seq = buffer.getLong(metaIndex + HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
 
         var matchMeta = keyMatch(keyBytes, oneCellOffset(cellIndex));
         if (matchMeta == null) {
@@ -579,7 +581,7 @@ public class KeyBucket {
 
         byte[] valueBytes = new byte[matchMeta.valueLength];
         buffer.position(matchMeta.valueOffset()).get(valueBytes);
-        return new ValueBytesWithExpireAt(valueBytes, expireAt);
+        return new ValueBytesWithExpireAtAndSeq(valueBytes, expireAt, seq);
     }
 
     private void clearCell(int beginCellIndex, int cellCount) {

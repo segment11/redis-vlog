@@ -31,7 +31,7 @@ class KeyBucketTest extends Specification {
                 def pvm = new PersistValueMeta()
                 pvm.segmentOffset = it
                 def encode = pvm.encode()
-                def v = new Wal.V((byte) 0, 0L, 0, keyHash, CompressedValue.EXPIRE_NOW,
+                def v = new Wal.V((byte) 0, it, 0, keyHash, CompressedValue.EXPIRE_NOW,
                         key, pvm.encode(), encode.length)
                 list << v
             } else {
@@ -74,8 +74,8 @@ class KeyBucketTest extends Specification {
                     targetKeyBucket = afterSplitKeyBucketList.find { it.splitIndex == targetSplitIndex }
                 }
 
-                var valueBytesWithExpireAt = targetKeyBucket.getValueByKey(keyBytes, v.keyHash)
-                if (valueBytesWithExpireAt == null) {
+                var valueBytesWithExpireAtAndSeq = targetKeyBucket.getValueByKey(keyBytes, v.keyHash)
+                if (valueBytesWithExpireAtAndSeq == null) {
                     def isClearExpired = (v.key[-3..-1] as int) % 10 == 0
                     if (isClearExpired) {
                         println 'clear expired when put or split: ' + v.key
@@ -83,8 +83,11 @@ class KeyBucketTest extends Specification {
                         throw new RuntimeException("value not found after put for key: " + v.key)
                     }
                 } else {
-                    if (!Arrays.equals(valueBytesWithExpireAt.valueBytes(), v.cvEncoded)) {
+                    if (!Arrays.equals(valueBytesWithExpireAtAndSeq.valueBytes, v.cvEncoded)) {
                         throw new RuntimeException("value not match after put for key: " + v.key)
+                    }
+                    if (valueBytesWithExpireAtAndSeq.seq != v.seq) {
+                        throw new RuntimeException("seq not match after put for key: " + v.key)
                     }
                 }
             } else {
@@ -121,8 +124,8 @@ class KeyBucketTest extends Specification {
 
         when:
         keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes, null)
-        keyBucket.put('b'.bytes, 98L, 0L, 1L, 'b'.bytes, null)
-        keyBucket.put('c'.bytes, 99L, 0L, 1L, 'c'.bytes, null)
+        keyBucket.put('b'.bytes, 98L, 0L, 2L, 'b'.bytes, null)
+        keyBucket.put('c'.bytes, 99L, 0L, 3L, 'c'.bytes, null)
 
         then:
         keyBucket.size == 3
@@ -130,13 +133,13 @@ class KeyBucketTest extends Specification {
         keyBucket.size == 2
 
         when:
-        keyBucket.put('b'.bytes, 98L, 0L, 1L, 'bb'.bytes, null)
+        keyBucket.put('b'.bytes, 98L, 0L, 2L, 'bb'.bytes, null)
 
         then:
         keyBucket.size == 2
 
         when:
-        keyBucket.put('c'.bytes, 99L, 0L, 1L, 'cc'.bytes, null)
+        keyBucket.put('c'.bytes, 99L, 0L, 3L, 'cc'.bytes, null)
 
         then:
         keyBucket.size == 2
@@ -170,7 +173,7 @@ class KeyBucketTest extends Specification {
         k22.size == 1
         k33.size == 0
 
-        k11.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
-        k22.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
+        k11.getValueByKey('a'.bytes, 97L).valueBytes == 'a'.bytes
+        k22.getValueByKey('a'.bytes, 97L).valueBytes == 'a'.bytes
     }
 }

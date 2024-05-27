@@ -13,7 +13,7 @@ class KeyLoaderTest extends Specification {
     static KeyLoader prepareKeyLoader(boolean deleteFiles = true) {
         if (deleteFiles && slotDir.exists()) {
             for (f in slotDir.listFiles()) {
-                if (f.name.startsWith('key-bucket-split-')) {
+                if (f.name.startsWith('key-bucket-split-') || f.name.startsWith('meta_key_bucket_split_number')) {
                     f.delete()
                 }
             }

@@ -231,7 +231,7 @@ public class KeyLoader {
         return keyBucket;
     }
 
-    public KeyBucket.ValueBytesWithExpireAt getValueByKey(int bucketIndex, byte[] keyBytes, long keyHash) {
+    public KeyBucket.ValueBytesWithExpireAtAndSeq getValueByKey(int bucketIndex, byte[] keyBytes, long keyHash) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
 
@@ -243,7 +243,7 @@ public class KeyLoader {
         return keyBucket.getValueByKey(keyBytes, keyHash);
     }
 
-    public synchronized void putValueByKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes) {
+    synchronized void putValueByKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
 

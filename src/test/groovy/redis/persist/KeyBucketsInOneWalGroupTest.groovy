@@ -1,6 +1,6 @@
 package redis.persist
 
-import redis.KeyHash
+
 import spock.lang.Specification
 
 class KeyBucketsInOneWalGroupTest extends Specification {
@@ -13,19 +13,8 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         inner.readBeforePutBatch();
 
         and:
-        List<Wal.V> shortValueList = []
-        10.times {
-            def key = "key:" + it.toString().padLeft(12, '0')
-            def keyBytes = key.bytes
-            def putValueBytes = ("value" + it).bytes
-
-            def keyHash = KeyHash.hash(keyBytes)
-
-            def v = new Wal.V((byte) 0, 0L, 0, keyHash, 0L,
-                    key, putValueBytes, putValueBytes.length)
-
-            shortValueList << v
-        }
+        def n = KeyBucket.INIT_CAPACITY + 1
+        def shortValueList = Mock.prepareShortValueList(n)
 
         when:
         inner.putAll(shortValueList)
@@ -33,10 +22,10 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         then:
         shortValueList.every {
             def splitNumber = inner.splitNumberTmp[it.bucketIndex]
-            def splitInder = splitNumber == 1 ? 0 : (int) Math.abs(it.keyHash % splitNumber)
-            inner.getKeyBucket(it.bucketIndex, (byte) splitInder, splitNumber, it.keyHash).getValueByKey(it.key.bytes, it.keyHash).valueBytes() == it.cvEncoded()
+            def splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(it.keyHash % splitNumber)
+            inner.getKeyBucket(it.bucketIndex, (byte) splitIndex, splitNumber, it.keyHash).getValueByKey(it.key.bytes, it.keyHash).valueBytes() == it.cvEncoded()
         }
-        !inner.isSplit
+        inner.isSplit == (n > KeyBucket.INIT_CAPACITY)
 
         when:
         def sharedBytesList = inner.writeAfterPutBatch()
