@@ -371,7 +371,7 @@ public class XGroup extends BaseCommand {
     @NotNull
     private Reply nextExistsSegmentMetaReply(OneSlot oneSlot, byte workerId, byte batchIndex) {
         var slot = oneSlot.slot();
-        int batchNumber = ConfForSlot.global.confWal.batchNumber;
+        var batchNumber = ConfForSlot.global.confWal.batchNumber;
         if (batchIndex < batchNumber - 1) {
             // next batch
             var nextBatchIndex = (byte) (batchIndex + 1);
@@ -434,7 +434,7 @@ public class XGroup extends BaseCommand {
         }
 
         try {
-            oneSlot.getKeyLoader().writeKeyBucketBytesBatchFromMaster(contentBytes);
+            oneSlot.getKeyLoader().writeKeyBucketBytesBatchFromMasterExists(contentBytes);
         } catch (Exception e) {
             var errorMessage = "Repl key loader write bytes from master error";
             log.error(errorMessage, e);

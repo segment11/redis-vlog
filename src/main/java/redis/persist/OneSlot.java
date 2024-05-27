@@ -399,18 +399,6 @@ public class OneSlot {
         return r;
     }
 
-    public short getKeyCountInBucketIndex(int bucketIndex) {
-        return keyLoader.getKeyCountInBucketIndex(bucketIndex);
-    }
-
-    public ArrayList<KeyBucket> getKeyBuckets(int bucketIndex) {
-        try {
-            return keyLoader.readKeyBuckets(bucketIndex);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     private final Eventloop[] persistHandleEventloopArray;
 
     private LibC libC;
@@ -866,6 +854,8 @@ public class OneSlot {
     }
 
     public void flush() {
+        checkCurrentThread((byte) -1);
+        
         // can truncate all batch for better perf, todo
         for (var wals : walsArray) {
             for (var wal : wals) {

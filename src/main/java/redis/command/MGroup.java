@@ -292,7 +292,7 @@ public class MGroup extends BaseCommand {
 
             var oneSlot = localPersist.oneSlot(slot);
 
-            var keyCount = bucketIndex == -1 ? oneSlot.getKeyCount() : oneSlot.getKeyCountInBucketIndex(bucketIndex);
+            var keyCount = bucketIndex == -1 ? oneSlot.getKeyCount() : oneSlot.getKeyLoader().getKeyCountInBucketIndex(bucketIndex);
             return new IntegerReply(keyCount);
         }
 
@@ -429,13 +429,8 @@ public class MGroup extends BaseCommand {
 
             var oneSlot = localPersist.oneSlot(slot);
 
-            var keyBuckets = oneSlot.getKeyBuckets(bucketIndex);
-            var sb = new StringBuilder();
-            for (var one : keyBuckets) {
-                sb.append(one).append("\n");
-            }
-
-            return new BulkReply(sb.toString().getBytes());
+            var str = oneSlot.getKeyLoader().readKeyBucketsToStringForDebug(bucketIndex);
+            return new BulkReply(str.getBytes());
         }
 
         if (subCmd.equals("get-slot-with-key-hash")) {
