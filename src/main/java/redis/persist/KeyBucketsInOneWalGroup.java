@@ -14,6 +14,7 @@ public class KeyBucketsInOneWalGroup {
         var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber;
         this.oneChargeBucketNumber = oneChargeBucketNumber;
         this.splitNumberTmp = new byte[oneChargeBucketNumber];
+        this.keyCountTmp = new int[oneChargeBucketNumber];
         this.beginBucketIndex = oneChargeBucketNumber * groupIndex;
 
         this.emptyBytes = new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE];
@@ -24,6 +25,7 @@ public class KeyBucketsInOneWalGroup {
     private final int oneChargeBucketNumber;
     // index is bucket index - begin bucket index
     final byte[] splitNumberTmp;
+    final int[] keyCountTmp;
     final int beginBucketIndex;
 
     private final KeyLoader keyLoader;
@@ -84,6 +86,7 @@ public class KeyBucketsInOneWalGroup {
                 var bucketIndex = beginBucketIndex + i;
                 var currentSplitNumber = splitNumberTmp[i];
                 var bucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, currentSplitNumber, sharedBytes, KeyLoader.KEY_BUCKET_ONE_COST_SIZE * i, keyLoader.snowFlake);
+                keyCountTmp[i] += bucket.size;
                 list.set(i, bucket);
             }
         }
@@ -194,6 +197,7 @@ public class KeyBucketsInOneWalGroup {
             if (!isPut) {
                 throw new RuntimeException("Key buckets put batch short value list failed");
             }
+            keyCountTmp[relativeBucketIndex]++;
             if (afterPutKeyBuckets[0] != null) {
                 isSplit = true;
                 splitNumberTmp[relativeBucketIndex] = (byte) afterPutKeyBuckets.length;

@@ -132,7 +132,7 @@ public class KeyBucket {
         void call(long cellHashValue, long expireAt, byte[] keyBytes, byte[] valueBytes);
     }
 
-    void iterate(IterateCallBack callBack) {
+    synchronized void iterate(IterateCallBack callBack) {
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
             int metaIndex = metaIndex(cellIndex);
             var cellHashValue = buffer.getLong(metaIndex);

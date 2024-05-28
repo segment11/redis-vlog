@@ -74,39 +74,24 @@ public class StatKeyBucketLastUpdateCount {
         void call(byte slot, int bucketIndex, short size);
     }
 
-    public void iterate(IterateCallBack callBack) {
+    public synchronized void iterate(IterateCallBack callBack) {
         for (int bucketIndex = 0; bucketIndex < bucketsPerSlot; bucketIndex++) {
             var size = inMemoryCachedByteBuffer.getShort(bucketIndex);
             callBack.call(slot, bucketIndex, size);
         }
     }
 
-    public void setKeyCountInBucketIndex(int bucketIndex, short keyCount, boolean isSync) {
+    public synchronized void setKeyCountInBucketIndex(int bucketIndex, short keyCount) {
         var offset = bucketIndex * ONE_LENGTH;
         inMemoryCachedByteBuffer.putShort(offset, keyCount);
-
-        if (ConfForSlot.global.pureMemory) {
-            return;
-        }
-
-        if (isSync) {
-            var bytes = new byte[2];
-            ByteBuffer.wrap(bytes).putShort(keyCount);
-            try {
-                raf.seek(offset);
-                raf.write(bytes);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
     }
 
-    public short getKeyCountInBucketIndex(int bucketIndex) {
+    public synchronized short getKeyCountInBucketIndex(int bucketIndex) {
         var offset = bucketIndex * ONE_LENGTH;
         return inMemoryCachedByteBuffer.getShort(offset);
     }
 
-    public long getKeyCount() {
+    public synchronized long getKeyCount() {
         long keyCount = 0;
         for (int i = 0; i < bucketsPerSlot; i++) {
             var offset = i * ONE_LENGTH;
@@ -141,7 +126,11 @@ public class StatKeyBucketLastUpdateCount {
             return;
         }
 
+        // sync all
         try {
+            raf.seek(0);
+            raf.write(inMemoryCachedBytes);
+            System.out.println("Stat key count in buckets sync all done");
             raf.close();
         } catch (IOException e) {
             throw new RuntimeException(e);

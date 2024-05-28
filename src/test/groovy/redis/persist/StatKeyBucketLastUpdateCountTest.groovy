@@ -8,8 +8,8 @@ class StatKeyBucketLastUpdateCountTest extends Specification {
         given:
         def one = new StatKeyBucketLastUpdateCount((byte) 0, 4096, slotDir)
         when:
-        one.setKeyCountInBucketIndex(10, (short) 10, true)
-        one.setKeyCountInBucketIndex(20, (short) 20, true)
+        one.setKeyCountInBucketIndex(10, (short) 10)
+        one.setKeyCountInBucketIndex(20, (short) 20)
         then:
         one.getKeyCountInBucketIndex(10) == 10
         one.getKeyCountInBucketIndex(20) == 20
