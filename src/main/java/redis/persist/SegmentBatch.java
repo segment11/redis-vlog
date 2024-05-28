@@ -34,8 +34,8 @@ public class SegmentBatch {
     private final int segmentLength;
     private final SnowFlake snowFlake;
 
-    private static final Summary compressTimeSummary = Summary.build().name("compress_time").
-            help("segment batch compress time summary").
+    private static final Summary segmentCompressTimeSummary = Summary.build().name("segment_compress_time").
+            help("segment compress time summary").
             labelNames("worker_id", "slot").
             quantile(0.5, 0.05).
             quantile(0.9, 0.01).
@@ -279,7 +279,7 @@ public class SegmentBatch {
         // important: 4KB decompress cost ~200us, so use 4KB segment length for better read latency
         // double compress
 
-        var timer = compressTimeSummary.labels(workerIdStr, slotStr).startTimer();
+        var timer = segmentCompressTimeSummary.labels(workerIdStr, slotStr).startTimer();
         var compressedBytes = Zstd.compress(bytes);
         compressBytesCounter.labels(workerIdStr, slotStr).inc(bytes.length);
         compressedBytesCounter.labels(workerIdStr, slotStr).inc(compressedBytes.length);

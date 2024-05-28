@@ -54,7 +54,7 @@ public abstract class BaseCommand {
     protected boolean isCrossRequestWorker;
 
     public static AGroup mockAGroup(byte workerId, byte requestWorkers, short slotNumber) {
-        return mockAGroup(workerId, requestWorkers, slotNumber, new CompressStats(""),
+        return mockAGroup(workerId, requestWorkers, slotNumber, new CompressStats("mock"),
                 Zstd.defaultCompressionLevel(), 100, new SnowFlake(1, 1),
                 new TrainSampleJob(workerId), new ArrayList<>(),
                 false, 0, new ArrayList<>(),
@@ -283,7 +283,7 @@ public abstract class BaseCommand {
 
             // stats
             compressStats.decompressedCount++;
-            compressStats.decompressedCostTotalTimeNanos += costT;
+            compressStats.decompressedCostTotalNanos += costT;
 
             return decompressed;
         } else {
@@ -415,7 +415,7 @@ public abstract class BaseCommand {
     }
 
     public void set(byte[] keyBytes, byte[] valueBytes, SlotWithKeyHash slotWithKeyHashReuse, int spType, long expireAt) {
-        compressStats.rawValueBodyTotalLength += valueBytes.length;
+        compressStats.compressRawTotalLength += valueBytes.length;
 
         // prefer store as number type
         boolean isTypeNumber = CompressedValue.isTypeNumber(spType);
@@ -484,8 +484,8 @@ public abstract class BaseCommand {
 
             // stats
             compressStats.compressedCount++;
-            compressStats.compressedValueBodyTotalLength += cv.compressedLength;
-            compressStats.compressedCostTotalTimeNanos += costT;
+            compressStats.compressedTotalLength += cv.compressedLength;
+            compressStats.compressedCostTotalNanos += costT;
 
             if (dict != null && dict == Dict.SELF_ZSTD_DICT) {
                 // add train sample list
@@ -536,8 +536,8 @@ public abstract class BaseCommand {
             }
 
             // stats
-            compressStats.rawCount++;
-            compressStats.compressedValueBodyTotalLength += valueBytes.length;
+            compressStats.compressRawCount++;
+            compressStats.compressedTotalLength += valueBytes.length;
         }
     }
 

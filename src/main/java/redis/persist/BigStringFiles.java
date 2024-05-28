@@ -21,7 +21,7 @@ public class BigStringFiles {
 
     private final LRUMap<Long, byte[]> bigStringBytesByUuidLRU;
 
-    private Gauge bigStringFilesCountGauge = Gauge.build()
+    private static final Gauge bigStringFilesCountGauge = Gauge.build()
             .name("big_string_files_count")
             .help("big string files count")
             .labelNames("slot")

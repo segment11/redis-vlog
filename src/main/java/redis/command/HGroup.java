@@ -449,8 +449,8 @@ public class HGroup extends BaseCommand {
 
                 // stats
                 compressStats.compressedCount++;
-                compressStats.compressedValueBodyTotalLength += compressedLength;
-                compressStats.compressedCostTotalTimeNanos += costT;
+                compressStats.compressedTotalLength += compressedLength;
+                compressStats.compressedCostTotalNanos += costT;
 
                 int encodedCvLength = RedisHH.PREFER_COMPRESS_FIELD_MAGIC_PREFIX.length + CompressedValue.VALUE_HEADER_LENGTH + compressedLength;
                 if (encodedCvLength < fieldValueBytes.length) {

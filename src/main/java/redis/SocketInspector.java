@@ -16,7 +16,8 @@ public class SocketInspector implements TcpSocket.Inspector {
 
     ConcurrentHashMap<InetSocketAddress, TcpSocket> socketMap = new ConcurrentHashMap<>();
 
-    private Gauge connectedCountGauge = Gauge.build()
+    // inject, singleton, need not static
+    private final Gauge connectedCountGauge = Gauge.build()
             .name("connected_client_count")
             .help("connected client count")
             .register();

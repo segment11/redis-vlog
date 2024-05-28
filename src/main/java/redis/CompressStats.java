@@ -1,52 +1,57 @@
 package redis;
 
-import redis.stats.OfStats;
-import redis.stats.StatKV;
+import redis.metric.SimpleGauge;
 
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
-public class CompressStats implements OfStats {
-    public long rawCount = 0;
+public class CompressStats {
+    public long compressRawCount = 0;
     public long compressedCount = 0;
-    public long rawValueBodyTotalLength = 0;
-    public long compressedValueBodyTotalLength = 0;
-    public long compressedCostTotalTimeNanos = 0;
+    public long compressRawTotalLength = 0;
+    public long compressedTotalLength = 0;
+    public long compressedCostTotalNanos = 0;
     public long decompressedCount = 0;
-    public long decompressedCostTotalTimeNanos = 0;
+    public long decompressedCostTotalNanos = 0;
 
-    private final String prefix;
+    private final String name;
 
-    public CompressStats(String prefix) {
-        this.prefix = prefix.endsWith(" ") ? prefix : prefix + " ";
+    public CompressStats(String name) {
+        this.name = name;
+
+        compressStatsGauge.addRawGetter(() -> {
+            var labelValues = List.of(name);
+
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            if (compressedCount > 0) {
+                map.put("compress_raw_count", new SimpleGauge.ValueWithLabelValues((double) compressRawCount, labelValues));
+                map.put("compressed_count", new SimpleGauge.ValueWithLabelValues((double) compressedCount, labelValues));
+                map.put("compressed_cost_total_millis", new SimpleGauge.ValueWithLabelValues((double) compressedCostTotalNanos / 1000 / 1000, labelValues));
+                double costTAvg = (double) compressedCostTotalNanos / compressedCount / 1000;
+                map.put("compressed_cost_avg_micros", new SimpleGauge.ValueWithLabelValues(costTAvg, labelValues));
+
+                map.put("compress_raw_total_length", new SimpleGauge.ValueWithLabelValues((double) compressRawTotalLength, labelValues));
+                map.put("compressed_total_length", new SimpleGauge.ValueWithLabelValues((double) compressedTotalLength, labelValues));
+                if (compressedTotalLength > 0) {
+                    map.put("compression_ratio", new SimpleGauge.ValueWithLabelValues((double) compressedTotalLength / compressRawTotalLength, labelValues));
+                }
+            }
+
+            if (decompressedCount > 0) {
+                map.put("decompressed_count", new SimpleGauge.ValueWithLabelValues((double) decompressedCount, labelValues));
+                map.put("decompressed_cost_total_millis", new SimpleGauge.ValueWithLabelValues((double) decompressedCostTotalNanos / 1000 / 1000, labelValues));
+                double decompressedCostTAvg = (double) decompressedCostTotalNanos / decompressedCount / 1000;
+                map.put("decompressed_cost_avg_micros", new SimpleGauge.ValueWithLabelValues(decompressedCostTAvg, labelValues));
+            }
+
+            return map;
+        });
     }
 
-    @Override
-    public List<StatKV> stats() {
-        List<StatKV> list = new ArrayList<>();
+    private final static SimpleGauge compressStatsGauge = new SimpleGauge("compress_stats", "compress stats",
+            "name");
 
-        if (compressedCount > 0) {
-            list.add(new StatKV(prefix + "raw count", rawCount));
-            list.add(new StatKV(prefix + "compressed count", compressedCount));
-            list.add(new StatKV(prefix + "compressed cost total millis", (double) compressedCostTotalTimeNanos / 1000 / 1000));
-            double costTAvg = (double) compressedCostTotalTimeNanos / compressedCount / 1000;
-            list.add(new StatKV(prefix + "compressed cost avg micros", costTAvg));
-
-            long sum = rawValueBodyTotalLength;
-            long sum1 = compressedValueBodyTotalLength;
-            list.add(new StatKV(prefix + "raw total length", sum));
-            list.add(new StatKV(prefix + "compressed total length", sum1));
-            list.add(new StatKV(prefix + "compression ratio", (double) sum1 / sum));
-        }
-
-        if (decompressedCount > 0) {
-            list.add(new StatKV(prefix + "decompressed count", decompressedCount));
-            list.add(new StatKV(prefix + "decompressed cost total millis", (double) decompressedCostTotalTimeNanos / 1000 / 1000));
-            double decompressedCostTAvg = (double) decompressedCostTotalTimeNanos / decompressedCount / 1000;
-            list.add(new StatKV(prefix + "decompressed cost avg micros", decompressedCostTAvg));
-        }
-
-        list.add(StatKV.split);
-        return list;
+    static {
+        compressStatsGauge.register();
     }
 }

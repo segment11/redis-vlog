@@ -628,7 +628,7 @@ public class OneSlot {
 
         var uncompressedBytes = new byte[segmentLength];
 
-        var timer = decompressTimeSummary.labels(slotStr).startTimer();
+        var timer = segmentDecompressTimeSummary.labels(slotStr).startTimer();
         var d = Zstd.decompressByteArray(uncompressedBytes, 0, segmentLength,
                 tightBytesWithLength, subBlockOffset, subBlockLength);
         timer.observeDuration();
@@ -862,7 +862,7 @@ public class OneSlot {
 
     public void flush() {
         checkCurrentThread((byte) -1);
-        
+
         // can truncate all batch for better perf, todo
         for (var wals : walsArray) {
             for (var wal : wals) {
@@ -1269,9 +1269,9 @@ public class OneSlot {
         slotInnerGauge.register();
     }
 
-    private static final Summary decompressTimeSummary = Summary.build().name("decompress_time").
-            help("slot segment decompress time summary").
-            labelNames("worker_id", "slot").
+    private static final Summary segmentDecompressTimeSummary = Summary.build().name("segment_decompress_time").
+            help("segment decompress time summary").
+            labelNames("slot").
             quantile(0.5, 0.05).
             quantile(0.9, 0.01).
             quantile(0.99, 0.01).

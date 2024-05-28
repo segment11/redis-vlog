@@ -2,13 +2,11 @@ package redis.persist;
 
 import jnr.posix.LibC;
 import org.slf4j.Logger;
-import redis.CompressStats;
 import redis.ConfForSlot;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
 import redis.repl.MasterUpdateCallback;
 import redis.repl.content.ToMasterExistsSegmentMeta;
-import redis.stats.StatKV;
 
 import java.io.File;
 import java.io.IOException;
@@ -82,8 +80,6 @@ public class KeyLoader {
     public static final byte MAX_SPLIT_NUMBER = 27;
     static final int SPLIT_MULTI_STEP = 3;
 
-    private final CompressStats compressStats = new CompressStats("key bucket");
-
     private LibC libC;
     // index is split index
     private FdReadWrite[] fdReadWriteArray;
@@ -100,6 +96,14 @@ public class KeyLoader {
 
     public long getKeyCount() {
         return statKeyBucketLastUpdateCount.getKeyCount();
+    }
+
+    private void updateKeyCountBatchCached(int[] keyCountTmp, int beginBucketIndex) {
+        for (int i = 0; i < keyCountTmp.length; i++) {
+            var bucketIndex = beginBucketIndex + i;
+            var keyCount = keyCountTmp[i];
+            statKeyBucketLastUpdateCount.setKeyCountInBucketIndex(bucketIndex, (short) keyCount);
+        }
     }
 
     public void initFds(LibC libC) throws IOException {
@@ -342,6 +346,7 @@ public class KeyLoader {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
         inner.readBeforePutBatch();
         inner.putAllPvmList(pvmList, isMerge);
+        updateKeyCountBatchCached(inner.keyCountTmp, inner.beginBucketIndex);
 
         if (inner.isSplit) {
             tmpViewAsSplitHappenedAfterPutBatch = inner;
@@ -360,6 +365,7 @@ public class KeyLoader {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
         inner.readBeforePutBatch();
         inner.putAll(shortValueList);
+        updateKeyCountBatchCached(inner.keyCountTmp, inner.beginBucketIndex);
 
         if (inner.isSplit) {
             tmpViewAsSplitHappenedAfterPutBatch = inner;
@@ -438,15 +444,6 @@ public class KeyLoader {
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
             map.put("bucket_count", new SimpleGauge.ValueWithLabelValues((double) bucketsPerSlot, labelValues));
             map.put("persist_key_count", new SimpleGauge.ValueWithLabelValues((double) getKeyCount(), labelValues));
-
-            var stats = compressStats.stats();
-            for (var stat : stats) {
-                if (stat == StatKV.split) {
-                    continue;
-                }
-                map.put(stat.key().replaceAll(" ", "_"),
-                        new SimpleGauge.ValueWithLabelValues(stat.value(), labelValues));
-            }
             return map;
         });
     }

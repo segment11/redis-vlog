@@ -101,7 +101,7 @@ public class RequestHandler {
 
         var requestConfig = config.getChild("request");
 
-        this.compressStats = new CompressStats("req-w-" + workerId);
+        this.compressStats = new CompressStats("req_worker_" + workerId);
         // compress and train sample dict requestConfig
         this.compressLevel = requestConfig.get(toInt, "compressLevel", Zstd.defaultCompressionLevel());
         this.trainSampleListMaxSize = requestConfig.get(toInt, "trainSampleListMaxSize", 1000);
