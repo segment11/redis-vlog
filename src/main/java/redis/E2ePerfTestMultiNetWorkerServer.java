@@ -16,6 +16,8 @@ import io.activej.launcher.Launcher;
 import io.activej.net.PrimaryServer;
 import io.activej.net.SimpleServer;
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.promise.Promise;
+import io.activej.promise.Promises;
 import io.activej.reactor.nio.NioReactor;
 import io.activej.service.ServiceGraphModule;
 import io.activej.worker.WorkerPool;
@@ -28,6 +30,7 @@ import redis.reply.OKReply;
 import redis.reply.PongReply;
 
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 
 import static io.activej.config.Config.ofClassPathProperties;
 import static io.activej.config.Config.ofSystemProperties;
@@ -37,7 +40,7 @@ import static io.activej.inject.module.Modules.combine;
 import static io.activej.launchers.initializers.Initializers.ofEventloop;
 import static io.activej.launchers.initializers.Initializers.ofPrimaryServer;
 
-public class E2ePerfTestMultiNetWorkerServer extends Launcher {
+public abstract class E2ePerfTestMultiNetWorkerServer extends Launcher {
     private final int PORT = 7379;
     public static final int WORKERS = 1;
 
@@ -82,11 +85,35 @@ public class E2ePerfTestMultiNetWorkerServer extends Launcher {
                 .overrideWith(ofSystemProperties("redis-vlog-config"));
     }
 
-    protected ByteBuf handleRequest(Request request, ITcpSocket socket) {
-        if (request.cmd().equals("ping")) {
-            return PongReply.INSTANCE.buffer();
+    abstract Promise<ByteBuf> handleRequest(Request request, ITcpSocket socket);
+
+    private Promise<ByteBuf> handlePipeline(ArrayList<Request> pipeline, ITcpSocket socket) {
+        if (pipeline == null) {
+            return Promise.of(null);
         }
-        return OKReply.INSTANCE.buffer();
+
+        if (pipeline.size() == 1) {
+            return handleRequest(pipeline.get(0), socket);
+        }
+
+        Promise<ByteBuf>[] promiseN = new Promise[pipeline.size()];
+        for (int i = 0; i < pipeline.size(); i++) {
+            var promiseI = handleRequest(pipeline.get(i), socket);
+            promiseN[i] = promiseI;
+        }
+
+        return Promises.toArray(ByteBuf.class, promiseN)
+                .map(bufs -> {
+                    int totalN = 0;
+                    for (var buf : bufs) {
+                        totalN += buf.readRemaining();
+                    }
+                    var multiBuf = ByteBuf.wrapForWriting(new byte[totalN]);
+                    for (var buf : bufs) {
+                        multiBuf.put(buf);
+                    }
+                    return multiBuf;
+                });
     }
 
     @Provides
@@ -95,34 +122,7 @@ public class E2ePerfTestMultiNetWorkerServer extends Launcher {
         return SimpleServer.builder(reactor, socket ->
                         BinaryChannelSupplier.of(ChannelSuppliers.ofSocket(socket))
                                 .decodeStream(new RequestDecoder())
-                                .map(pipeline -> {
-                                    if (pipeline == null) {
-                                        return null;
-                                    }
-
-                                    if (pipeline.size() == 1) {
-                                        return handleRequest(pipeline.get(0), socket);
-                                    }
-
-                                    var multiArrays = new byte[pipeline.size()][];
-                                    int totalN = 0;
-                                    for (int i = 0; i < pipeline.size(); i++) {
-                                        var buf = handleRequest(pipeline.get(i), socket);
-                                        if (buf != null) {
-                                            multiArrays[i] = buf.array();
-                                            totalN += multiArrays[i].length;
-                                        }
-                                    }
-
-                                    var multiBuf = ByteBuf.wrapForWriting(new byte[totalN]);
-                                    for (int i = 0; i < multiArrays.length; i++) {
-                                        var array = multiArrays[i];
-                                        if (array != null) {
-                                            multiBuf.write(array);
-                                        }
-                                    }
-                                    return multiBuf;
-                                })
+                                .mapAsync(pipeline -> handlePipeline(pipeline, socket))
                                 .streamTo(ChannelConsumers.ofSocket(socket)))
                 .build();
     }
@@ -166,7 +166,15 @@ Summary:
         0.013     0.000     0.015     0.023     0.023     2.663
      */
     public static void main(String[] args) throws Exception {
-        Launcher launcher = new E2ePerfTestMultiNetWorkerServer();
+        Launcher launcher = new E2ePerfTestMultiNetWorkerServer() {
+            @Override
+            Promise<ByteBuf> handleRequest(Request request, ITcpSocket socket) {
+                if (request.cmd().equals("ping")) {
+                    return Promise.of(PongReply.INSTANCE.buffer());
+                }
+                return Promise.of(OKReply.INSTANCE.buffer());
+            }
+        };
         launcher.launch(args);
     }
 }

@@ -20,6 +20,8 @@ import io.activej.launchers.initializers.Initializers;
 import io.activej.net.PrimaryServer;
 import io.activej.net.SimpleServer;
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.promise.Promise;
+import io.activej.promise.Promises;
 import io.activej.reactor.nio.NioReactor;
 import io.activej.service.ServiceGraphModule;
 import io.activej.worker.WorkerPool;
@@ -42,9 +44,9 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
-import java.util.concurrent.ExecutionException;
 
 import static io.activej.config.Config.ofClassPathProperties;
 import static io.activej.config.Config.ofSystemProperties;
@@ -187,18 +189,15 @@ public class MultiWorkerServer extends Launcher {
         return httpBuf;
     }
 
-    private ByteBuf handleRequest(Request request, int slotNumber, ITcpSocket socket) throws ExecutionException, InterruptedException {
-        request.setSlotNumber((short) slotNumber);
-        RequestHandler.parseSlots(request);
-
+    private Promise<ByteBuf> handleRequest(Request request, ITcpSocket socket) {
         if (reuseNetWorkers) {
             var targetHandler = requestHandlerArray[0];
 
             var reply = targetHandler.handle(request, socket);
             if (request.isHttp()) {
-                return wrapHttpResponse(reply);
+                return Promise.of(wrapHttpResponse(reply));
             } else {
-                return reply.buffer();
+                return Promise.of(reply.buffer());
             }
         }
 
@@ -237,39 +236,7 @@ public class MultiWorkerServer extends Launcher {
                 multiSlotEventloop = multiSlotEventloopArray[i];
             }
 
-//            var netWorkerThreadId = Thread.currentThread().threadId();
-//            var netWorkerWorkerId = netWorkerWorkerIdByThreadId.get(netWorkerThreadId);
-//            var netWorkerEventloop = netWorkerEventloopArray[netWorkerWorkerId];
-
-            var future = multiSlotEventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
-//            future.whenComplete((reply, e) -> {
-//                if (e != null) {
-//                    logger.error("Multi slot multi thread handle request error", e);
-////                    netWorkerEventloop.submit(AsyncComputation.of(() -> {
-//                    socket.close();
-////                    }));
-//                    return;
-//                }
-//
-//                if (reply == null) {
-//                    socket.close();
-//                    return;
-//                }
-//
-//                var buffer = request.isHttp() ? wrapHttpResponse(reply) : reply.buffer();
-//                socket.write(buffer);
-//            });
-
-            var reply = future.get();
-            if (reply == null) {
-                return null;
-            }
-
-            if (request.isHttp()) {
-                return wrapHttpResponse(reply);
-            } else {
-                return reply.buffer();
-            }
+            return getByteBufPromise(request, socket, targetHandler, multiSlotEventloop);
         }
 
         var slot = request.getSingleSlot();
@@ -284,9 +251,9 @@ public class MultiWorkerServer extends Launcher {
             }
             var reply = targetHandler.handle(request, socket);
             if (request.isHttp()) {
-                return wrapHttpResponse(reply);
+                return Promise.of(wrapHttpResponse(reply));
             } else {
-                return reply.buffer();
+                return Promise.of(reply.buffer());
             }
         }
 
@@ -294,72 +261,65 @@ public class MultiWorkerServer extends Launcher {
         var targetHandler = requestHandlerArray[i];
         var requestEventloop = requestEventloopArray[i];
 
-        // use mapAsync, SettableFuture better, but exception happened, to be fixed, todo
+        return getByteBufPromise(request, socket, targetHandler, requestEventloop);
+    }
+
+    private Promise<ByteBuf> getByteBufPromise(Request request, ITcpSocket socket, RequestHandler targetHandler, Eventloop requestEventloop) {
         var future = requestEventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
-//        future.whenComplete((reply, e) -> {
-//            if (e != null) {
-//                logger.error("Target slot thread handle request error", e);
-//                socket.close();
-//                return;
-//            }
-//
-//            if (reply == null) {
-//                socket.close();
-//                return;
-//            }
-//
-//            var buffer = request.isHttp() ? wrapHttpResponse(reply) : reply.buffer();
-//            socket.write(buffer);
-//        });
+        return Promise.ofFuture(future).map(reply -> {
+            if (reply == null) {
+                return null;
+            }
+            if (request.isHttp()) {
+                return wrapHttpResponse(reply);
+            } else {
+                return reply.buffer();
+            }
+        });
+    }
 
-        var reply = future.get();
-        if (reply == null) {
-            return null;
+    private Promise<ByteBuf> handlePipeline(ArrayList<Request> pipeline, ITcpSocket socket, short slotNumber) {
+        if (pipeline == null) {
+            return Promise.of(null);
         }
 
-        if (request.isHttp()) {
-            return wrapHttpResponse(reply);
-        } else {
-            return reply.buffer();
+        for (var request : pipeline) {
+            request.setSlotNumber((short) slotNumber);
+            RequestHandler.parseSlots(request);
         }
+
+        if (pipeline.size() == 1) {
+            return handleRequest(pipeline.get(0), socket);
+        }
+
+        Promise<ByteBuf>[] promiseN = new Promise[pipeline.size()];
+        for (int i = 0; i < pipeline.size(); i++) {
+            var promiseI = handleRequest(pipeline.get(i), socket);
+            promiseN[i] = promiseI;
+        }
+
+        return Promises.toArray(ByteBuf.class, promiseN)
+                .map(bufs -> {
+                    int totalN = 0;
+                    for (var buf : bufs) {
+                        totalN += buf.readRemaining();
+                    }
+                    var multiBuf = ByteBuf.wrapForWriting(new byte[totalN]);
+                    for (var buf : bufs) {
+                        multiBuf.put(buf);
+                    }
+                    return multiBuf;
+                });
     }
 
     @Provides
     @Worker
     SimpleServer workerServer(NioReactor reactor, SocketInspector socketInspector, Config config) {
         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
-
         return SimpleServer.builder(reactor, socket ->
                         BinaryChannelSupplier.of(ChannelSuppliers.ofSocket(socket))
                                 .decodeStream(new RequestDecoder())
-                                .map(pipeline -> {
-                                    if (pipeline == null) {
-                                        return null;
-                                    }
-
-                                    if (pipeline.size() == 1) {
-                                        return handleRequest(pipeline.get(0), slotNumber, socket);
-                                    }
-
-                                    var multiArrays = new byte[pipeline.size()][];
-                                    int totalN = 0;
-                                    for (int i = 0; i < pipeline.size(); i++) {
-                                        var buf = handleRequest(pipeline.get(i), slotNumber, socket);
-                                        if (buf != null) {
-                                            multiArrays[i] = buf.array();
-                                            totalN += multiArrays[i].length;
-                                        }
-                                    }
-
-                                    var multiBuf = ByteBuf.wrapForWriting(new byte[totalN]);
-                                    for (int i = 0; i < multiArrays.length; i++) {
-                                        var array = multiArrays[i];
-                                        if (array != null) {
-                                            multiBuf.write(array);
-                                        }
-                                    }
-                                    return multiBuf;
-                                })
+                                .mapAsync(pipeline -> handlePipeline(pipeline, socket, (short) slotNumber))
                                 .streamTo(ChannelConsumers.ofSocket(socket)))
                 .withSocketInspector(socketInspector)
                 .build();
