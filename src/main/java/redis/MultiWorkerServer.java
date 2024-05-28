@@ -238,27 +238,20 @@ public class MultiWorkerServer extends Launcher {
         int i = slot % requestHandlerArray.length;
         var targetHandler = requestHandlerArray[i];
 
-        return getByteBufPromise(request, socket, targetHandler);
+        var currentThreadId = Thread.currentThread().threadId();
+        if (currentThreadId == threadIds[i]) {
+            return getByteBufPromiseByCurrentEventloop(request, socket, targetHandler);
+        } else {
+            var otherNetWorkerEventloop = netWorkerEventloopArray[i];
+            return getByteBufPromiseByOtherEventloop(request, socket, targetHandler, otherNetWorkerEventloop);
+        }
     }
 
     private Promise<ByteBuf> getByteBufPromiseByOtherEventloop(Request request, ITcpSocket socket, RequestHandler targetHandler,
                                                                Eventloop targetEventloop) {
-        var future = targetEventloop.submit(AsyncComputation.of(() -> targetHandler.handleAndReturnPromise(request, socket)));
-        return Promise.ofFuture(future).getResult().map(reply -> {
-            if (reply == null) {
-                return null;
-            }
-            if (request.isHttp()) {
-                return wrapHttpResponse(reply);
-            } else {
-                return reply.buffer();
-            }
-        });
-    }
-
-    private Promise<ByteBuf> getByteBufPromise(Request request, ITcpSocket socket, RequestHandler targetHandler) {
-        var promise = Promises.first(AsyncSupplier.of(() -> targetHandler.handle(request, socket)));
-        return promise.map(reply -> {
+        var p = targetEventloop == null ? Promises.first(AsyncSupplier.of(() -> targetHandler.handle(request, socket))) :
+                Promise.ofFuture(targetEventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket))));
+        return p.map(reply -> {
             if (reply == null) {
                 return null;
             }
@@ -273,13 +266,17 @@ public class MultiWorkerServer extends Launcher {
         });
     }
 
+    private Promise<ByteBuf> getByteBufPromiseByCurrentEventloop(Request request, ITcpSocket socket, RequestHandler targetHandler) {
+        return getByteBufPromiseByOtherEventloop(request, socket, targetHandler, null);
+    }
+
     private Promise<ByteBuf> handlePipeline(ArrayList<Request> pipeline, ITcpSocket socket, short slotNumber) {
         if (pipeline == null) {
             return Promise.of(null);
         }
 
         for (var request : pipeline) {
-            request.setSlotNumber((short) slotNumber);
+            request.setSlotNumber(slotNumber);
             RequestHandler.parseSlots(request);
         }
 
@@ -381,6 +378,8 @@ public class MultiWorkerServer extends Launcher {
         netWorkerEventloop.delay(1000L, taskRunnable);
     }
 
+    long[] threadIds;
+
     @Override
     protected void onStart() throws Exception {
         var localPersist = LocalPersist.getInstance();
@@ -390,7 +389,7 @@ public class MultiWorkerServer extends Launcher {
         chunkMerger.setCompressLevel(requestHandlerArray[0].compressLevel);
         chunkMerger.start();
 
-        long[] threadIds = new long[netWorkerEventloopArray.length];
+        threadIds = new long[netWorkerEventloopArray.length];
 
         for (int i = 0; i < netWorkerEventloopArray.length; i++) {
             var netWorkerEventloop = netWorkerEventloopArray[i];

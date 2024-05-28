@@ -186,7 +186,7 @@ public class RequestHandler {
         return null;
     }
 
-    public Reply handle(@NotNull Request request, ITcpSocket socket) {
+    Reply handle(@NotNull Request request, ITcpSocket socket) {
         if (isStopped) {
             return ErrorReply.SERVER_STOPPED;
         }
