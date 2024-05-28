@@ -82,10 +82,16 @@ public class SocketInspector implements TcpSocket.Inspector {
     }
 
     public void closeAll() {
-        for (var socket : socketMap.values()) {
-            socket.close();
+        try {
+            for (var socket : socketMap.values()) {
+                if (!socket.isClosed()) {
+                    socket.close();
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("Error in close all sockets: " + e.getMessage());
         }
-        log.info("All sockets closed");
+        System.out.println("All sockets closed");
     }
 
     public void clearAll() {
