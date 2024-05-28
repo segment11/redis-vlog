@@ -277,13 +277,16 @@ public abstract class BaseCommand {
                 }
             }
 
-            long beginT = System.nanoTime();
+            var beginT = System.nanoTime();
             var decompressed = cv.decompress(dict);
-            long costT = System.nanoTime() - beginT;
+            var costT = (System.nanoTime() - beginT) / 1000;
+            if (costT == 0) {
+                costT = 1;
+            }
 
             // stats
             compressStats.decompressedCount++;
-            compressStats.decompressedCostTotalNanos += costT;
+            compressStats.decompressedCostTimeTotalUs += costT;
 
             return decompressed;
         } else {
@@ -457,10 +460,13 @@ public abstract class BaseCommand {
         }
 
         if (valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH && (CompressedValue.preferCompress(spType) || dict != null)) {
-            long beginT = System.nanoTime();
+            var beginT = System.nanoTime();
             // dict may be null
             var cv = CompressedValue.compress(valueBytes, dict, compressLevel);
-            long costT = System.nanoTime() - beginT;
+            var costT = (System.nanoTime() - beginT) / 1000;
+            if (costT == 0) {
+                costT = 1;
+            }
             cv.seq = snowFlake.nextId();
             cv.dictSeqOrSpType = dict != null ? dict.seq : spType;
             cv.keyHash = slotWithKeyHash.keyHash;
@@ -485,7 +491,7 @@ public abstract class BaseCommand {
             // stats
             compressStats.compressedCount++;
             compressStats.compressedTotalLength += cv.compressedLength;
-            compressStats.compressedCostTotalNanos += costT;
+            compressStats.compressedCostTimeTotalUs += costT;
 
             if (dict != null && dict == Dict.SELF_ZSTD_DICT) {
                 // add train sample list

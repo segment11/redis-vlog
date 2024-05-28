@@ -3,7 +3,6 @@ package redis.persist;
 import com.kenai.jffi.MemoryIO;
 import com.kenai.jffi.PageManager;
 import io.prometheus.client.Counter;
-import io.prometheus.client.Summary;
 import jnr.constants.platform.OpenFlags;
 import jnr.posix.LibC;
 import org.apache.commons.collections4.map.LRUMap;
@@ -44,40 +43,42 @@ public class FdReadWrite extends ThreadSafeCaller {
 
     private int fdLength;
 
-    private static final Summary readTimeSummary = Summary.build().name("pread_time").
-            help("fd read time summary").
-            labelNames("fd_name").
-            quantile(0.5, 0.05).
-            quantile(0.9, 0.01).
-            quantile(0.99, 0.01).
-            quantile(0.999, 0.001)
-            .register();
-
-    private static final Counter readBytesCounter = Counter.build().name("pread_bytes").
-            help("fd read bytes").
+    private static final Counter readTimeTotalUs = Counter.build().name("pread_time_total_us").
+            help("fd read time total us").
             labelNames("fd_name")
             .register();
 
-    private static final Summary writeTimeSummary = Summary.build().name("write_time").
-            help("fd write time summary").
-            labelNames("fd_name").
-            quantile(0.5, 0.05).
-            quantile(0.9, 0.01).
-            quantile(0.99, 0.01).
-            quantile(0.999, 0.001)
-            .register();
-
-    private static final Counter writeBytesCounter = Counter.build().name("pwrite_bytes").
-            help("fd write bytes").
+    private static final Counter readCountTotal = Counter.build().name("pread_count_total").
+            help("fd read count total").
             labelNames("fd_name")
             .register();
 
-    private static final Counter lruHitCounter = Counter.build().name("lru_hit").
+    private static final Counter readBytesCounter = Counter.build().name("pread_bytes_total").
+            help("fd read bytes total").
+            labelNames("fd_name")
+            .register();
+
+    private static final Counter writeTimeTotalUs = Counter.build().name("pwrite_time_total_us").
+            help("fd write time total us").
+            labelNames("fd_name")
+            .register();
+
+    private static final Counter writeCountTotal = Counter.build().name("pwrite_count_total").
+            help("fd write count total").
+            labelNames("fd_name")
+            .register();
+
+    private static final Counter writeBytesCounter = Counter.build().name("pwrite_bytes_total").
+            help("fd write bytes total").
+            labelNames("fd_name")
+            .register();
+
+    private static final Counter lruHitCounter = Counter.build().name("pread_lru_hit").
             help("fd read lru hit").
             labelNames("fd_name")
             .register();
 
-    private static final Counter lruMissCounter = Counter.build().name("lru_miss").
+    private static final Counter lruMissCounter = Counter.build().name("pread_lru_miss").
             help("fd read lru miss").
             labelNames("fd_name")
             .register();
@@ -321,10 +322,15 @@ public class FdReadWrite extends ThreadSafeCaller {
 
         buffer.clear();
 
-        var timer = readTimeSummary.labels(name).startTimer();
+        readCountTotal.labels(name).inc();
+        var beginT = System.nanoTime();
         var n = libC.pread(fd, buffer, readLength, offset);
+        var costT = (System.nanoTime() - beginT) / 1000;
+        if (costT == 0) {
+            costT = 1;
+        }
+        readTimeTotalUs.labels(name).inc(costT);
         readBytesCounter.labels(name).inc(n);
-        timer.observeDuration();
 
         if (n != readLength) {
             log.error("Read error, n: {}, read length: {}, name: {}", n, readLength, name);
@@ -364,10 +370,16 @@ public class FdReadWrite extends ThreadSafeCaller {
         }
         buffer.rewind();
 
-        var timer = writeTimeSummary.labels(name).startTimer();
+        writeCountTotal.labels(name).inc();
+        var beginT = System.nanoTime();
         var n = libC.pwrite(fd, buffer, capacity, offset);
+        var costT = (System.nanoTime() - beginT) / 1000;
+        if (costT == 0) {
+            costT = 1;
+        }
+        writeTimeTotalUs.labels(name).inc(costT);
         writeBytesCounter.labels(name).inc(n);
-        timer.observeDuration();
+
         if (n != capacity) {
             log.error("Write error, n: {}, buffer capacity: {}, name: {}", n, capacity, name);
             throw new RuntimeException("Write error, n: " + n + ", buffer capacity: " + capacity + ", name: " + name);

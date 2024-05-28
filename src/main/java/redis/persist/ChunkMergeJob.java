@@ -258,8 +258,11 @@ public class ChunkMergeJob implements SupplierEx<Integer> {
             }
         }
 
-        var costT = System.nanoTime() - beginT;
-        mergeWorker.mergedSegmentCostTotalTimeNanos += costT;
+        var costT = (System.nanoTime() - beginT) / 1000;
+        if (costT == 0) {
+            costT = 1;
+        }
+        mergeWorker.mergedSegmentCostTimeTotalUs += costT;
 
         mergeWorker.validCvCountTotal += validCvCountAfterRun;
         mergeWorker.invalidCvCountTotal += invalidCvCountAfterRun;

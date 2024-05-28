@@ -51,18 +51,18 @@ public class Chunk {
     final SnowFlake snowFlake;
     private final File slotDir;
 
-    private static final Counter persistCounter = Counter.build().name("persist_count").
+    private static final Counter persistCounter = Counter.build().name("chunk_persist_count").
             help("chunk persist count").
             labelNames("worker_id", "batch_index", "slot")
             .register();
 
-    private static final Counter persistCvCounter = Counter.build().name("persist_cv_count").
+    private static final Counter persistCvCounter = Counter.build().name("chunk_persist_cv_count").
             help("chunk persist cv count").
             labelNames("worker_id", "batch_index", "slot")
             .register();
 
-    private static final Counter updatePvmBatchCostMillisCounter = Counter.build().name("pvm_update_ms").
-            help("key loader update pvm batch cost in millis").
+    private static final Counter updatePvmBatchCostTimeTotalUs = Counter.build().name("pvm_update_cost_time_total_us").
+            help("key loader pvm update cost time total us").
             labelNames("worker_id", "batch_index", "slot")
             .register();
 
@@ -367,15 +367,19 @@ public class Chunk {
                     moveIndexNext(1);
                 }
             }
-
-            persistCounter.labels(workerIdStr, batchIndexStr, slotStr).inc();
-            persistCvCounter.labels(workerIdStr, batchIndexStr, slotStr).inc(list.size());
         }
 
-        var beginT = System.currentTimeMillis();
+        // stats
+        persistCounter.labels(workerIdStr, batchIndexStr, slotStr).inc();
+        persistCvCounter.labels(workerIdStr, batchIndexStr, slotStr).inc(list.size());
+
+        var beginT = System.nanoTime();
         keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, pvmList, isMerge);
-        var costT = System.currentTimeMillis() - beginT;
-        updatePvmBatchCostMillisCounter.labels(workerIdStr, batchIndexStr, slotStr).inc(costT);
+        var costT = (System.nanoTime() - beginT) / 1000;
+        if (costT == 0) {
+            costT = 1;
+        }
+        updatePvmBatchCostTimeTotalUs.labels(workerIdStr, batchIndexStr, slotStr).inc(costT);
 
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
         for (var segment : segments) {

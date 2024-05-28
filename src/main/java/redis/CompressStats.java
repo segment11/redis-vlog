@@ -10,9 +10,9 @@ public class CompressStats {
     public long compressedCount = 0;
     public long rawTotalLength = 0;
     public long compressedTotalLength = 0;
-    public long compressedCostTotalNanos = 0;
+    public long compressedCostTimeTotalUs = 0;
     public long decompressedCount = 0;
-    public long decompressedCostTotalNanos = 0;
+    public long decompressedCostTimeTotalUs = 0;
 
     private final String name;
 
@@ -26,9 +26,9 @@ public class CompressStats {
             if (compressedCount > 0) {
                 map.put("raw_count", new SimpleGauge.ValueWithLabelValues((double) rawCount, labelValues));
                 map.put("compressed_count", new SimpleGauge.ValueWithLabelValues((double) compressedCount, labelValues));
-                map.put("compressed_cost_total_millis", new SimpleGauge.ValueWithLabelValues((double) compressedCostTotalNanos / 1000 / 1000, labelValues));
-                double costTAvg = (double) compressedCostTotalNanos / compressedCount / 1000;
-                map.put("compressed_cost_avg_micros", new SimpleGauge.ValueWithLabelValues(costTAvg, labelValues));
+                map.put("compressed_cost_time_total_ms", new SimpleGauge.ValueWithLabelValues((double) compressedCostTimeTotalUs / 1000, labelValues));
+                double costTAvg = (double) compressedCostTimeTotalUs / compressedCount;
+                map.put("compressed_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(costTAvg, labelValues));
 
                 map.put("raw_total_length", new SimpleGauge.ValueWithLabelValues((double) rawTotalLength, labelValues));
                 map.put("compressed_total_length", new SimpleGauge.ValueWithLabelValues((double) compressedTotalLength, labelValues));
@@ -39,9 +39,9 @@ public class CompressStats {
 
             if (decompressedCount > 0) {
                 map.put("decompressed_count", new SimpleGauge.ValueWithLabelValues((double) decompressedCount, labelValues));
-                map.put("decompressed_cost_total_millis", new SimpleGauge.ValueWithLabelValues((double) decompressedCostTotalNanos / 1000 / 1000, labelValues));
-                double decompressedCostTAvg = (double) decompressedCostTotalNanos / decompressedCount / 1000;
-                map.put("decompressed_cost_avg_micros", new SimpleGauge.ValueWithLabelValues(decompressedCostTAvg, labelValues));
+                map.put("decompressed_cost_time_total_ms", new SimpleGauge.ValueWithLabelValues((double) decompressedCostTimeTotalUs / 1000, labelValues));
+                double decompressedCostTAvg = (double) decompressedCostTimeTotalUs / decompressedCount;
+                map.put("decompressed_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(decompressedCostTAvg, labelValues));
             }
 
             return map;

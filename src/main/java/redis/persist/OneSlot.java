@@ -10,7 +10,7 @@ import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.prometheus.client.Summary;
+import io.prometheus.client.Counter;
 import jnr.posix.LibC;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -619,10 +619,16 @@ public class OneSlot {
 
         var uncompressedBytes = new byte[segmentLength];
 
-        var timer = segmentDecompressTimeSummary.labels(slotStr).startTimer();
+        var beginT = System.nanoTime();
         var d = Zstd.decompressByteArray(uncompressedBytes, 0, segmentLength,
                 tightBytesWithLength, subBlockOffset, subBlockLength);
-        timer.observeDuration();
+        var costT = (System.nanoTime() - beginT) / 1000;
+        if (costT == 0) {
+            costT = 1;
+        }
+        segmentDecompressTimeTotalUs.labels(slotStr).inc(costT);
+        segmentDecompressCountTotal.labels(slotStr).inc();
+
         if (d != segmentLength) {
             throw new IllegalStateException("Decompress error, w=" + pvm.workerId + ", s=" + pvm.slot +
                     ", b=" + pvm.batchIndex + ", i=" + pvm.segmentIndex + ", sbi=" + pvm.subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
@@ -1260,13 +1266,14 @@ public class OneSlot {
         slotInnerGauge.register();
     }
 
-    private static final Summary segmentDecompressTimeSummary = Summary.build().name("segment_decompress_time").
-            help("segment decompress time summary").
-            labelNames("slot").
-            quantile(0.5, 0.05).
-            quantile(0.9, 0.01).
-            quantile(0.99, 0.01).
-            quantile(0.999, 0.001)
+    private static final Counter segmentDecompressTimeTotalUs = Counter.build().name("segment_decompress_time_total_us").
+            help("segment decompress time total us").
+            labelNames("slot")
+            .register();
+
+    private static final Counter segmentDecompressCountTotal = Counter.build().name("segment_decompress_count_total_us").
+            help("segment decompress count total").
+            labelNames("slot")
             .register();
 
     private void initMetricsCollect() {

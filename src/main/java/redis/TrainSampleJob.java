@@ -82,10 +82,9 @@ public class TrainSampleJob {
 
         byte[] dictBytes;
         try {
-            long beginT = System.currentTimeMillis();
+            var beginT = System.currentTimeMillis();
             dictBytes = trainer.trainSamples();
-            long endT = System.currentTimeMillis();
-            long costT = endT - beginT;
+            var costT = System.currentTimeMillis() - beginT;
 
             log.info("Train sample, w={} train dict ok, sample size: {}, dict size: {}, cost time: {} ms",
                     workerId, sampleBodyLength, dictBytes.length, costT);

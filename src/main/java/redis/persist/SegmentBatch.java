@@ -3,7 +3,6 @@ package redis.persist;
 import com.github.luben.zstd.Zstd;
 import io.netty.buffer.Unpooled;
 import io.prometheus.client.Counter;
-import io.prometheus.client.Summary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
@@ -34,14 +33,16 @@ public class SegmentBatch {
     private final int segmentLength;
     private final SnowFlake snowFlake;
 
-    private static final Summary segmentCompressTimeSummary = Summary.build().name("segment_compress_time").
-            help("segment compress time summary").
-            labelNames("worker_id", "slot").
-            quantile(0.5, 0.05).
-            quantile(0.9, 0.01).
-            quantile(0.99, 0.01).
-            quantile(0.999, 0.001)
+    private static final Counter segmentCompressTimeTotalUs = Counter.build().name("segment_compress_time_total_us").
+            help("segment compress time total us").
+            labelNames("worker_id", "slot")
             .register();
+
+    private static final Counter segmentCompressCountTotal = Counter.build().name("segment_compress_count_total").
+            help("segment compress count total").
+            labelNames("worker_id", "slot")
+            .register();
+
 
     private static final Counter compressBytesCounter = Counter.build().name("compress_bytes").
             help("segment batch compress bytes").
@@ -279,11 +280,16 @@ public class SegmentBatch {
         // important: 4KB decompress cost ~200us, so use 4KB segment length for better read latency
         // double compress
 
-        var timer = segmentCompressTimeSummary.labels(workerIdStr, slotStr).startTimer();
+        segmentCompressCountTotal.labels(workerIdStr, slotStr).inc();
+        var beginT = System.nanoTime();
         var compressedBytes = Zstd.compress(bytes);
+        var costT = (System.nanoTime() - beginT) / 1000;
+        if (costT == 0) {
+            costT = 1;
+        }
+        segmentCompressTimeTotalUs.labels(workerIdStr, slotStr).inc(costT);
         compressBytesCounter.labels(workerIdStr, slotStr).inc(bytes.length);
         compressedBytesCounter.labels(workerIdStr, slotStr).inc(compressedBytes.length);
-        timer.observeDuration();
 
         buffer.clear();
         Arrays.fill(bytes, (byte) 0);

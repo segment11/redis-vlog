@@ -441,16 +441,19 @@ public class HGroup extends BaseCommand {
                 final String keyPrefixGiven = new String(fieldBytes);
 
                 var dict = dictMap.getDict(keyPrefixGiven);
-                long beginT = System.nanoTime();
+                var beginT = System.nanoTime();
                 var fieldCv = CompressedValue.compress(fieldValueBytes, dict, compressLevel);
-                long costT = System.nanoTime() - beginT;
+                var costT = (System.nanoTime() - beginT) / 1000;
+                if (costT == 0) {
+                    costT = 1;
+                }
 
                 int compressedLength = fieldCv.getCompressedLength();
 
                 // stats
                 compressStats.compressedCount++;
                 compressStats.compressedTotalLength += compressedLength;
-                compressStats.compressedCostTotalNanos += costT;
+                compressStats.compressedCostTimeTotalUs += costT;
 
                 int encodedCvLength = RedisHH.PREFER_COMPRESS_FIELD_MAGIC_PREFIX.length + CompressedValue.VALUE_HEADER_LENGTH + compressedLength;
                 if (encodedCvLength < fieldValueBytes.length) {

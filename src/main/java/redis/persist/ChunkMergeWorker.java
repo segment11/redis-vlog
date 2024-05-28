@@ -32,7 +32,7 @@ public class ChunkMergeWorker {
     private ChunkMerger chunkMerger;
 
     long mergedSegmentCount = 0;
-    long mergedSegmentCostTotalTimeNanos = 0;
+    long mergedSegmentCostTimeTotalUs = 0;
     byte lastMergedWorkerId = -1;
     byte lastMergedSlot = -1;
     int lastMergedSegmentIndex = -1;
@@ -264,8 +264,8 @@ public class ChunkMergeWorker {
 
             if (mergedSegmentCount > 0) {
                 map.put("merged_segment_count", new SimpleGauge.ValueWithLabelValues((double) mergedSegmentCount, labelValues));
-                double mergedSegmentCostTAvg = (double) mergedSegmentCostTotalTimeNanos / mergedSegmentCount / 1000;
-                map.put("merged_segment_cost_avg_micros", new SimpleGauge.ValueWithLabelValues(mergedSegmentCostTAvg, labelValues));
+                double mergedSegmentCostTAvg = (double) mergedSegmentCostTimeTotalUs / mergedSegmentCount;
+                map.put("merged_segment_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(mergedSegmentCostTAvg, labelValues));
 
                 map.put("valid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) validCvCountTotal, labelValues));
                 map.put("invalid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) invalidCvCountTotal, labelValues));
