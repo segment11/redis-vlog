@@ -124,7 +124,7 @@ public class TrainSampleJob {
 
     public TrainSampleResult train() {
         trainCount++;
-        if (trainCount % 100 == 0 || Debug.getInstance().logCompress) {
+        if (trainCount % 100 == 0 || Debug.getInstance().logTrainDict) {
             log.info("Train sample, worker {} train sample list size: {}, dict size: {}, i am alive",
                     workerId, sampleToTrainListCopy.size(), cacheDict.size());
         }

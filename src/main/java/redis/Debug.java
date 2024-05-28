@@ -13,11 +13,9 @@ public class Debug {
 
     public boolean logMerge = false;
 
-    public boolean logCompress = false;
-
-    public boolean logPersist = false;
+    public boolean logTrainDict = false;
 
     public boolean logRestore = false;
 
-    public boolean perfSkipPvmUpdate = false;
+    public boolean bulkLoad = false;
 }

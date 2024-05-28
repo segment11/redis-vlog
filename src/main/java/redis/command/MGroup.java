@@ -217,10 +217,9 @@ public class MGroup extends BaseCommand {
 
             switch (field) {
                 case "logMerge" -> Debug.getInstance().logMerge = isOn;
-                case "logCompress" -> Debug.getInstance().logCompress = isOn;
-                case "logPersist" -> Debug.getInstance().logPersist = isOn;
+                case "logTrainDict" -> Debug.getInstance().logTrainDict = isOn;
                 case "logRestore" -> Debug.getInstance().logRestore = isOn;
-                case "perfSkipPvmUpdate" -> Debug.getInstance().perfSkipPvmUpdate = isOn;
+                case "bulkLoad" -> Debug.getInstance().bulkLoad = isOn;
                 default -> {
                     return ErrorReply.FORMAT;
                 }

@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.ConfForSlot;
+import redis.Debug;
 import redis.SnowFlake;
 
 import java.io.ByteArrayInputStream;
@@ -320,7 +321,9 @@ public class Wal {
             return new PutResult(true, isValueShort, v, 0);
         }
 
-        if (!ConfForSlot.global.pureMemory) {
+        var bulkLoad = Debug.getInstance().bulkLoad;
+        // bulk load need not wal write
+        if (!ConfForSlot.global.pureMemory && !bulkLoad) {
             var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
             synchronized (raf) {
                 try {
