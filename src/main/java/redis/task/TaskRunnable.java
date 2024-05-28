@@ -7,31 +7,31 @@ import redis.persist.OneSlot;
 import java.util.ArrayList;
 
 public class TaskRunnable implements Runnable {
-    private final byte requestWorkerId;
-    private final byte requestWorkers;
+    private final byte netWorkerId;
+    private final byte netWorkers;
 
-    public TaskRunnable(byte requestWorkerId, byte requestWorkers) {
-        this.requestWorkerId = requestWorkerId;
-        this.requestWorkers = requestWorkers;
+    public TaskRunnable(byte netWorkerId, byte netWorkers) {
+        this.netWorkerId = netWorkerId;
+        this.netWorkers = netWorkers;
     }
 
     private final ArrayList<OneSlot> oneSlots = new ArrayList<>();
 
     public void chargeOneSlots(OneSlot[] oneSlots) {
         for (var oneSlot : oneSlots) {
-            if (oneSlot.slot() % requestWorkers == requestWorkerId) {
+            if (oneSlot.slot() % netWorkers == netWorkerId) {
                 this.oneSlots.add(oneSlot);
 
-                oneSlot.setRequestHandleEventloop(requestHandleEventloop);
+                oneSlot.setNetWorkerEventloop(netWorkerEventloop);
                 oneSlot.setRequestHandler(requestHandler);
             }
         }
     }
 
-    private Eventloop requestHandleEventloop;
+    private Eventloop netWorkerEventloop;
 
-    public void setRequestHandleEventloop(Eventloop requestHandleEventloop) {
-        this.requestHandleEventloop = requestHandleEventloop;
+    public void setNetWorkerEventloop(Eventloop netWorkerEventloop) {
+        this.netWorkerEventloop = netWorkerEventloop;
     }
 
     private RequestHandler requestHandler;
@@ -53,13 +53,13 @@ public class TaskRunnable implements Runnable {
             return;
         }
 
-        requestHandleEventloop.delay(1000L, this);
+        netWorkerEventloop.delay(1000L, this);
     }
 
     private boolean isStopped = false;
 
     public void stop() {
         isStopped = true;
-        System.out.println("Task delay stopped. index: " + requestWorkerId);
+        System.out.println("Task delay stopped for net worker eventloop, net worker id: " + netWorkerId);
     }
 }

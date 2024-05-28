@@ -74,7 +74,7 @@ public class Chunk {
     private int[] fdLengths;
     private FdReadWrite[] fdReadWriteArray;
 
-    public Chunk(byte workerId, byte slot, byte batchIndex, byte requestWorkers,
+    public Chunk(byte workerId, byte slot, byte batchIndex, byte netWorkers,
                  SnowFlake snowFlake, File slotDir, OneSlot oneSlot, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {
         this.maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
         this.maxFdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;

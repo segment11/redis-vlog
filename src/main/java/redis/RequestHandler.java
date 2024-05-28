@@ -4,6 +4,7 @@ import com.github.luben.zstd.Zstd;
 import io.activej.config.Config;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.net.socket.tcp.TcpSocket;
+import io.activej.promise.Promise;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
 import org.jetbrains.annotations.NotNull;
@@ -28,8 +29,6 @@ import static io.activej.config.converter.ConfigConverters.*;
 public class RequestHandler {
     private final Logger log = LoggerFactory.getLogger(this.getClass());
 
-    public final static byte MAX_REQUEST_WORKERS = 32;
-
     private static final String PING_COMMAND = "ping";
     private static final String AUTH_COMMAND = "auth";
     private static final String GET_COMMAND = "get";
@@ -40,7 +39,7 @@ public class RequestHandler {
 
     final byte workerId;
     final String workerIdStr;
-    final byte requestWorkers;
+    final byte netWorkers;
     final byte mergeWorkers;
     final byte topMergeWorkers;
     final short slotNumber;
@@ -66,12 +65,12 @@ public class RequestHandler {
         isStopped = true;
     }
 
-    public RequestHandler(byte workerId, byte requestWorkers, byte mergeWorkers, byte topMergeWorkers,
+    public RequestHandler(byte workerId, byte netWorkers, byte mergeWorkers, byte topMergeWorkers,
                           short slotNumber, SnowFlake snowFlake, ChunkMerger chunkMerger,
                           Config config, SocketInspector socketInspector) {
         this.workerId = workerId;
         this.workerIdStr = String.valueOf(workerId);
-        this.requestWorkers = requestWorkers;
+        this.netWorkers = netWorkers;
         this.mergeWorkers = mergeWorkers;
         this.topMergeWorkers = topMergeWorkers;
         this.slotNumber = slotNumber;
@@ -181,6 +180,11 @@ public class RequestHandler {
     }
 
     private final byte[] urlFirstParamBytes = "metrics".getBytes();
+
+    public Promise<Reply> handleAndReturnPromise(@NotNull Request request, ITcpSocket socket) {
+        // todo
+        return null;
+    }
 
     public Reply handle(@NotNull Request request, ITcpSocket socket) {
         if (isStopped) {

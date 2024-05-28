@@ -1,6 +1,7 @@
 package redis;
 
 import io.activej.async.callback.AsyncComputation;
+import io.activej.async.function.AsyncSupplier;
 import io.activej.bytebuf.ByteBuf;
 import io.activej.config.Config;
 import io.activej.config.ConfigModule;
@@ -45,7 +46,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Random;
 
 import static io.activej.config.Config.ofClassPathProperties;
@@ -54,7 +54,6 @@ import static io.activej.config.converter.ConfigConverters.*;
 import static io.activej.inject.module.Modules.combine;
 import static io.activej.launchers.initializers.Initializers.ofEventloop;
 import static io.activej.launchers.initializers.Initializers.ofPrimaryServer;
-import static redis.ThreadFactoryAssignSupport.requestWorkerThreadFactory;
 import static redis.decode.HttpHeaderBody.*;
 
 public class MultiWorkerServer extends Launcher {
@@ -80,16 +79,9 @@ public class MultiWorkerServer extends Launcher {
     @Inject
     RequestHandler[] requestHandlerArray;
 
-    @Inject
-    Eventloop[] requestEventloopArray;
-
-    private Eventloop firstNetWorkerEventloop;
-
     Eventloop[] netWorkerEventloopArray;
-    HashMap<Long, Integer> netWorkerWorkerIdByThreadId = new HashMap<>();
 
-    private static boolean reuseNetWorkers = false;
-
+    // for cross net workers' eventloop
     record WrapRequestHandlerArray(RequestHandler[] requestHandlerArray) {
     }
 
@@ -146,9 +138,6 @@ public class MultiWorkerServer extends Launcher {
                 .withInspector(throttlingController.orElse(null))
                 .build();
 
-        if (firstNetWorkerEventloop == null) {
-            firstNetWorkerEventloop = netHandleEventloop;
-        }
         netWorkerEventloopArray[workerId] = netHandleEventloop;
 
         return netHandleEventloop;
@@ -190,17 +179,6 @@ public class MultiWorkerServer extends Launcher {
     }
 
     private Promise<ByteBuf> handleRequest(Request request, ITcpSocket socket) {
-        if (reuseNetWorkers) {
-            var targetHandler = requestHandlerArray[0];
-
-            var reply = targetHandler.handle(request, socket);
-            if (request.isHttp()) {
-                return Promise.of(wrapHttpResponse(reply));
-            } else {
-                return Promise.of(reply.buffer());
-            }
-        }
-
         boolean isCrossRequestWorker = false;
         var slotWithKeyHashList = request.getSlotWithKeyHashList();
         // cross slots
@@ -236,11 +214,11 @@ public class MultiWorkerServer extends Launcher {
                 multiSlotEventloop = multiSlotEventloopArray[i];
             }
 
-            return getByteBufPromise(request, socket, targetHandler, multiSlotEventloop);
+            return getByteBufPromiseByOtherEventloop(request, socket, targetHandler, multiSlotEventloop);
         }
 
         var slot = request.getSingleSlot();
-        // slot == -1 means net worker can handle it
+        // slot == -1 means any net worker can handle it
         if (slot == -1) {
             RequestHandler targetHandler;
             if (requestHandlerArray.length == 1) {
@@ -259,14 +237,14 @@ public class MultiWorkerServer extends Launcher {
 
         int i = slot % requestHandlerArray.length;
         var targetHandler = requestHandlerArray[i];
-        var requestEventloop = requestEventloopArray[i];
 
-        return getByteBufPromise(request, socket, targetHandler, requestEventloop);
+        return getByteBufPromise(request, socket, targetHandler);
     }
 
-    private Promise<ByteBuf> getByteBufPromise(Request request, ITcpSocket socket, RequestHandler targetHandler, Eventloop requestEventloop) {
-        var future = requestEventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket)));
-        return Promise.ofFuture(future).map(reply -> {
+    private Promise<ByteBuf> getByteBufPromiseByOtherEventloop(Request request, ITcpSocket socket, RequestHandler targetHandler,
+                                                               Eventloop targetEventloop) {
+        var future = targetEventloop.submit(AsyncComputation.of(() -> targetHandler.handleAndReturnPromise(request, socket)));
+        return Promise.ofFuture(future).getResult().map(reply -> {
             if (reply == null) {
                 return null;
             }
@@ -275,6 +253,23 @@ public class MultiWorkerServer extends Launcher {
             } else {
                 return reply.buffer();
             }
+        });
+    }
+
+    private Promise<ByteBuf> getByteBufPromise(Request request, ITcpSocket socket, RequestHandler targetHandler) {
+        var promise = Promises.first(AsyncSupplier.of(() -> targetHandler.handle(request, socket)));
+        return promise.map(reply -> {
+            if (reply == null) {
+                return null;
+            }
+            if (request.isHttp()) {
+                return wrapHttpResponse(reply);
+            } else {
+                return reply.buffer();
+            }
+        }, err -> {
+            logger.error("Handle request error", err);
+            return null;
         });
     }
 
@@ -344,11 +339,11 @@ public class MultiWorkerServer extends Launcher {
     ChunkMerger chunkMerger(SnowFlake snowFlake, Config config) {
         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
 
-        int requestWorkers = config.get(toInt, "requestWorkers", 1);
+        int netWorkers = config.get(toInt, "netWorkers", 1);
         int mergeWorkers = config.get(toInt, "mergeWorkers", slotNumber);
         int topMergeWorkers = config.get(toInt, "topMergeWorkers", slotNumber);
 
-        var chunkMerger = new ChunkMerger((byte) requestWorkers, (byte) mergeWorkers, (byte) topMergeWorkers,
+        var chunkMerger = new ChunkMerger((byte) netWorkers, (byte) mergeWorkers, (byte) topMergeWorkers,
                 (short) slotNumber, snowFlake);
         return chunkMerger;
     }
@@ -375,15 +370,15 @@ public class MultiWorkerServer extends Launcher {
     @Inject
     TaskRunnable[] scheduleRunnableArray;
 
-    private void eventloopAsScheduler(Eventloop requestHandleEventloop, int index) {
+    private void eventloopAsScheduler(Eventloop netWorkerEventloop, int index) {
         var taskRunnable = scheduleRunnableArray[index];
-        taskRunnable.setRequestHandleEventloop(requestHandleEventloop);
+        taskRunnable.setNetWorkerEventloop(netWorkerEventloop);
         taskRunnable.setRequestHandler(requestHandlerArray[index]);
 
         taskRunnable.chargeOneSlots(LocalPersist.getInstance().oneSlots());
 
         // interval 1s
-        requestHandleEventloop.delay(1000L, taskRunnable);
+        netWorkerEventloop.delay(1000L, taskRunnable);
     }
 
     @Override
@@ -395,52 +390,33 @@ public class MultiWorkerServer extends Launcher {
         chunkMerger.setCompressLevel(requestHandlerArray[0].compressLevel);
         chunkMerger.start();
 
-        if (reuseNetWorkers) {
-            logger.warn("Net workers and request workers are both 1, no need to create request workers");
-            eventloopAsScheduler(firstNetWorkerEventloop, 0);
-        } else {
-            long[] threadIds = new long[requestEventloopArray.length];
+        long[] threadIds = new long[netWorkerEventloopArray.length];
 
-            for (int i = 0; i < requestEventloopArray.length; i++) {
-                var requestHandleEventloop = requestEventloopArray[i];
-                eventloopAsScheduler(requestHandleEventloop, i);
-
-                var thread = requestWorkerThreadFactory.newThread(requestHandleEventloop);
-                thread.start();
-
-                threadIds[i] = thread.getId();
-            }
-            logger.info("Request handle eventloop threads started");
-
-            // fix slot thread id
-            int slotNumber = configInject.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
-            for (int slot = 0; slot < slotNumber; slot++) {
-                int i = slot % requestHandlerArray.length;
-                localPersist.fixSlotThreadId((byte) slot, threadIds[i]);
-            }
-
-            // cross request worker threads, need use this eventloop
-            // init
-            var multiSlotEventloopArray = multiSlotMultiThreadRequestEventloopArray.multiSlotEventloopArray;
-            for (int i = 0; i < multiSlotEventloopArray.length; i++) {
-                var multiSlotEventloop = multiSlotEventloopArray[i];
-
-                var thread = requestWorkerThreadFactory.newThread(multiSlotEventloop);
-                thread.start();
-            }
-            logger.info("Multi slot multi thread eventloop threads started");
-
-            for (int i = 0; i < netWorkerEventloopArray.length; i++) {
-                final int finalI = i;
-                var f = netWorkerEventloopArray[i].submit(AsyncComputation.of(() -> {
-                    long threadId = Thread.currentThread().getId();
-                    netWorkerWorkerIdByThreadId.put(threadId, finalI);
-                    return threadId;
-                }));
-                var threadId = f.get();
-                logger.info("Net worker thread id get, threadId: {}, workerId: {}", threadId, finalI);
-            }
+        for (int i = 0; i < netWorkerEventloopArray.length; i++) {
+            var netWorkerEventloop = netWorkerEventloopArray[i];
+            eventloopAsScheduler(netWorkerEventloop, i);
+            threadIds[i] = netWorkerEventloop.getEventloopThread().threadId();
         }
+        logger.info("Net worker eventloop scheduler started");
+
+        // fix slot thread id
+        int slotNumber = configInject.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
+        for (int slot = 0; slot < slotNumber; slot++) {
+            int i = slot % requestHandlerArray.length;
+            localPersist.fixSlotThreadId((byte) slot, threadIds[i]);
+        }
+
+        // cross request worker threads, need use this eventloop
+        // init
+        var multiSlotRequestThreadFactory = ThreadFactoryAssignSupport.getInstance().ForMultiSlotRequest.getNextThreadFactory();
+        var multiSlotEventloopArray = multiSlotMultiThreadRequestEventloopArray.multiSlotEventloopArray;
+        for (int i = 0; i < multiSlotEventloopArray.length; i++) {
+            var multiSlotEventloop = multiSlotEventloopArray[i];
+
+            var thread = multiSlotRequestThreadFactory.newThread(multiSlotEventloop);
+            thread.start();
+        }
+        logger.info("Multi slot request eventloop threads started");
     }
 
     @Override
@@ -465,10 +441,6 @@ public class MultiWorkerServer extends Launcher {
 
             for (var multiSlotEventloop : multiSlotMultiThreadRequestEventloopArray.multiSlotEventloopArray) {
                 multiSlotEventloop.breakEventloop();
-            }
-
-            for (var requestHandleEventloop : requestEventloopArray) {
-                requestHandleEventloop.breakEventloop();
             }
 
             // need stop chunk merge threads first
@@ -604,15 +576,11 @@ public class MultiWorkerServer extends Launcher {
                         confForSlot.slotNumber = (short) slotNumber;
 
                         int netWorkers = config.get(toInt, "netWorkers", 1);
-                        int requestWorkers = config.get(toInt, "requestWorkers", 1);
                         int mergeWorkers = config.get(toInt, "mergeWorkers", slotNumber);
                         int topMergeWorkers = config.get(toInt, "topMergeWorkers", slotNumber);
 
                         if (netWorkers > MAX_NET_WORKERS) {
                             throw new IllegalStateException("Net workers too large, net workers should be less than " + MAX_NET_WORKERS);
-                        }
-                        if (requestWorkers > RequestHandler.MAX_REQUEST_WORKERS) {
-                            throw new IllegalStateException("Request workers too large, request workers should be less than " + RequestHandler.MAX_REQUEST_WORKERS);
                         }
                         if (mergeWorkers > ChunkMerger.MAX_MERGE_WORKERS) {
                             throw new IllegalStateException("Merge workers too large, merge workers should be less than " + ChunkMerger.MAX_MERGE_WORKERS);
@@ -621,14 +589,12 @@ public class MultiWorkerServer extends Launcher {
                             throw new IllegalStateException("Top merge workers too large, top merge workers should be less than " + ChunkMerger.MAX_TOP_MERGE_WORKERS);
                         }
 
-                        reuseNetWorkers = netWorkers == 1 && requestWorkers == 1;
-
                         // not include net workers
-                        byte allWorkers = (byte) (requestWorkers + mergeWorkers + topMergeWorkers);
+                        byte allWorkers = (byte) (netWorkers + mergeWorkers + topMergeWorkers);
                         confForSlot.allWorkers = allWorkers;
 
-                        logger.info("netWorkers: {}, requestWorkers: {}, mergeWorkers: {}, topMergeWorkers: {}, slotNumber: {}",
-                                netWorkers, requestWorkers, mergeWorkers, topMergeWorkers, slotNumber);
+                        logger.info("netWorkers: {}, mergeWorkers: {}, topMergeWorkers: {}, slotNumber: {}",
+                                netWorkers, mergeWorkers, topMergeWorkers, slotNumber);
 
                         var dirFile = dirFile(config);
 
@@ -638,7 +604,7 @@ public class MultiWorkerServer extends Launcher {
                         TrainSampleJob.setDictPrefixKeyMaxLen(configCompress.get(toInt, "dictPrefixKeyMaxLen", 5));
 
                         // init local persist
-                        LocalPersist.getInstance().init(allWorkers, (byte) netWorkers, (byte) requestWorkers, (byte) mergeWorkers, (byte) topMergeWorkers, (short) slotNumber,
+                        LocalPersist.getInstance().init(allWorkers, (byte) netWorkers, (byte) mergeWorkers, (byte) topMergeWorkers, (short) slotNumber,
                                 snowFlake, dirFile, config.getChild("persist"));
 
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
@@ -654,44 +620,24 @@ public class MultiWorkerServer extends Launcher {
                                                          Integer beforeCreateHandler, SocketInspector socketInspector, Config config) {
                         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
 
-                        int requestWorkers = config.get(toInt, "requestWorkers", 1);
+                        int netWorkers = config.get(toInt, "netWorkers", 1);
                         int mergeWorkers = config.get(toInt, "mergeWorkers", slotNumber);
                         int topMergeWorkers = config.get(toInt, "topMergeWorkers", slotNumber);
 
-                        var list = new RequestHandler[requestWorkers];
-                        for (int i = 0; i < requestWorkers; i++) {
-                            list[i] = new RequestHandler((byte) i, (byte) requestWorkers, (byte) mergeWorkers, (byte) topMergeWorkers,
+                        var list = new RequestHandler[netWorkers];
+                        for (int i = 0; i < netWorkers; i++) {
+                            list[i] = new RequestHandler((byte) i, (byte) netWorkers, (byte) mergeWorkers, (byte) topMergeWorkers,
                                     (short) slotNumber, snowFlake, chunkMerger, config, socketInspector);
                         }
                         return list;
                     }
 
                     @Provides
-                    Eventloop[] requestEventloopArray(Integer beforeCreateHandler, Config config) {
-                        if (reuseNetWorkers) {
-                            return new Eventloop[0];
-                        }
-
-                        int requestWorkers = config.get(toInt, "requestWorkers", 1);
-                        var requestHandleEventloopArray = new Eventloop[requestWorkers];
-                        for (int i = 0; i < requestWorkers; i++) {
-                            var requestHandleEventloop = Eventloop.builder()
-                                    .withThreadName("request-" + i)
-                                    .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
-                                    .build();
-                            requestHandleEventloop.keepAlive(true);
-
-                            requestHandleEventloopArray[i] = requestHandleEventloop;
-                        }
-                        return requestHandleEventloopArray;
-                    }
-
-                    @Provides
                     TaskRunnable[] scheduleRunnableArray(Integer beforeCreateHandler, Config config) {
-                        int requestWorkers = config.get(toInt, "requestWorkers", 1);
-                        var list = new TaskRunnable[requestWorkers];
-                        for (int i = 0; i < requestWorkers; i++) {
-                            list[i] = new TaskRunnable((byte) i, (byte) requestWorkers);
+                        int netWorkers = config.get(toInt, "netWorkers", 1);
+                        var list = new TaskRunnable[netWorkers];
+                        for (int i = 0; i < netWorkers; i++) {
+                            list[i] = new TaskRunnable((byte) i, (byte) netWorkers);
                         }
                         return list;
                     }
@@ -712,10 +658,6 @@ public class MultiWorkerServer extends Launcher {
 
                     @Provides
                     WrapEventloopArray multiSlotMultiThreadRequestEventloopArray(Integer beforeCreateHandler, Config config) {
-                        if (reuseNetWorkers) {
-                            return new WrapEventloopArray(new Eventloop[0]);
-                        }
-
                         int multiSlotMultiThreadNumber = config.get(toInt, "multiSlotMultiThreadNumber", 1);
                         var multiSlotEventloopArray = new Eventloop[multiSlotMultiThreadNumber];
                         for (int i = 0; i < multiSlotMultiThreadNumber; i++) {

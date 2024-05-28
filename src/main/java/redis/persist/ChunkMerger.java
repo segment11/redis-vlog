@@ -13,7 +13,7 @@ public class ChunkMerger {
     private final ChunkMergeWorker[] topChunkMergeWorkers;
 
     private final short slotNumber;
-    private final byte requestWorkers;
+    private final byte netWorkers;
     private final byte mergeWorkers;
     private final byte topMergeWorkers;
     private final SnowFlake snowFlake;
@@ -24,17 +24,17 @@ public class ChunkMerger {
         this.compressLevel = compressLevel;
     }
 
-    public ChunkMerger(byte requestWorkers, byte mergeWorkers, byte topMergeWorkers, short slotNumber, SnowFlake snowFlake) {
+    public ChunkMerger(byte netWorkers, byte mergeWorkers, byte topMergeWorkers, short slotNumber, SnowFlake snowFlake) {
         this.slotNumber = slotNumber;
-        this.requestWorkers = requestWorkers;
+        this.netWorkers = netWorkers;
         this.mergeWorkers = mergeWorkers;
         this.topMergeWorkers = topMergeWorkers;
         this.snowFlake = snowFlake;
 
         this.chunkMergeWorkers = new ChunkMergeWorker[mergeWorkers];
         for (int i = 0; i < mergeWorkers; i++) {
-            this.chunkMergeWorkers[i] = new ChunkMergeWorker((byte) (requestWorkers + i), slotNumber,
-                    requestWorkers, mergeWorkers, topMergeWorkers, this);
+            this.chunkMergeWorkers[i] = new ChunkMergeWorker((byte) (netWorkers + i), slotNumber,
+                    netWorkers, mergeWorkers, topMergeWorkers, this);
             this.chunkMergeWorkers[i].initEventloop(false);
 
             this.chunkMergeWorkers[i].compressLevel = compressLevel;
@@ -42,8 +42,8 @@ public class ChunkMerger {
 
         this.topChunkMergeWorkers = new ChunkMergeWorker[topMergeWorkers];
         for (int i = 0; i < topMergeWorkers; i++) {
-            this.topChunkMergeWorkers[i] = new ChunkMergeWorker((byte) (requestWorkers + mergeWorkers + i), slotNumber,
-                    requestWorkers, mergeWorkers, topMergeWorkers, this);
+            this.topChunkMergeWorkers[i] = new ChunkMergeWorker((byte) (netWorkers + mergeWorkers + i), slotNumber,
+                    netWorkers, mergeWorkers, topMergeWorkers, this);
             this.topChunkMergeWorkers[i].initEventloop(true);
 
             this.topChunkMergeWorkers[i].compressLevel = compressLevel;
@@ -93,7 +93,7 @@ public class ChunkMerger {
 
         // begin with 0
         // merge worker handle request worker chunks
-        if (workerId < requestWorkers) {
+        if (workerId < netWorkers) {
             // by slot
             int chooseIndex = slot % chunkMergeWorkers.length;
             var mergeWorker = chunkMergeWorkers[chooseIndex];
@@ -101,7 +101,7 @@ public class ChunkMerger {
             return mergeWorker.submit(job);
         } else {
             // top merge worker handle self chunks
-            if (workerId >= requestWorkers + chunkMergeWorkers.length) {
+            if (workerId >= netWorkers + chunkMergeWorkers.length) {
                 for (var topMergeWorker : topChunkMergeWorkers) {
                     if (topMergeWorker.mergeWorkerId == workerId) {
                         job.mergeWorker = topMergeWorker;

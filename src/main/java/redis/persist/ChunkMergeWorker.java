@@ -25,7 +25,7 @@ public class ChunkMergeWorker {
     byte mergeWorkerId;
     private String mergeWorkerIdStr;
     private short slotNumber;
-    private byte requestWorkers;
+    private byte netWorkers;
     private byte mergeWorkers;
     private byte topMergeWorkers;
 
@@ -204,12 +204,12 @@ public class ChunkMergeWorker {
     }
 
     public ChunkMergeWorker(byte mergeWorkerId, short slotNumber,
-                            byte requestWorkers, byte mergeWorkers, byte topMergeWorkers,
+                            byte netWorkers, byte mergeWorkers, byte topMergeWorkers,
                             ChunkMerger chunkMerger) {
         this.mergeWorkerId = mergeWorkerId;
         this.mergeWorkerIdStr = String.valueOf(mergeWorkerId);
         this.slotNumber = slotNumber;
-        this.requestWorkers = requestWorkers;
+        this.netWorkers = netWorkers;
         this.mergeWorkers = mergeWorkers;
         this.topMergeWorkers = topMergeWorkers;
         this.chunkMerger = chunkMerger;

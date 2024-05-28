@@ -13,8 +13,7 @@ public class ThreadFactoryAssignSupport {
         return instance;
     }
 
-    public static final ThreadFactory requestWorkerThreadFactory = new AffinityThreadFactory("request-worker",
-            AffinityStrategies.DIFFERENT_CORE);
+    public Inner ForMultiSlotRequest = new Inner(2, 16, "multi-slot-request-", true);
 
     // one or two ssd volume, one cpu v-core is enough, suppose there are at most 8 ssd volumes
     public Inner ForFdReadWrite = new Inner(8, 16, "fd-read-write-group-", true);

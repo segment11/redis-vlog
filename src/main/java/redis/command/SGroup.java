@@ -1,7 +1,10 @@
 
 package redis.command;
 
+import io.activej.async.function.AsyncSupplier;
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.promise.Promise;
+import io.activej.promise.Promises;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.clients.jedis.Jedis;
@@ -11,7 +14,6 @@ import redis.type.RedisHashKeys;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Random;
-import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 
 import static redis.CompressedValue.NO_EXPIRE;
@@ -182,7 +184,8 @@ public class SGroup extends BaseCommand {
         }
 
         if ("slaveof".equals(cmd)) {
-            return slaveof();
+            // todo
+//            return slaveof();
         }
 
         return NilReply.INSTANCE;
@@ -197,9 +200,9 @@ public class SGroup extends BaseCommand {
     private static final Pattern IPv4_PATTERN = Pattern.compile(IPV4_REGEX);
 
     // execute in a net thread
-    private Reply slaveof() {
+    private Promise<Reply> slaveof() {
         if (data.length != 3) {
-            return ErrorReply.FORMAT;
+            return Promise.of(ErrorReply.FORMAT);
         }
 
         var hostBytes = data[1];
@@ -207,10 +210,10 @@ public class SGroup extends BaseCommand {
 
         var isNoOne = "no".equalsIgnoreCase(new String(hostBytes));
         if (isNoOne) {
-            CompletableFuture<Boolean>[] futures = new CompletableFuture[slotNumber];
+            Promise<Boolean>[] promises = new Promise[slotNumber];
             for (int i = 0; i < slotNumber; i++) {
                 var oneSlot = localPersist.oneSlot((byte) i);
-                futures[i] = oneSlot.threadSafeHandle(() -> {
+                promises[i] = oneSlot.asyncCall(AsyncSupplier.of(() -> {
                     try {
                         oneSlot.removeReplPairAsSlave();
                         return true;
@@ -218,29 +221,35 @@ public class SGroup extends BaseCommand {
                         log.error("Remove repl pair as slave failed, slot: " + oneSlot.slot(), e);
                         return false;
                     }
-                });
+                }));
             }
-            CompletableFuture.allOf(futures).join();
 
-            return OKReply.INSTANCE;
+            return Promises.toArray(Boolean.class, promises).map(results -> {
+                for (var result : results) {
+                    if (!result) {
+                        return new ErrorReply("remove repl pair as slave failed");
+                    }
+                }
+                return OKReply.INSTANCE;
+            });
         }
 
         var host = new String(hostBytes);
         // host valid check
         var matcher = IPv4_PATTERN.matcher(host);
         if (!matcher.matches()) {
-            return ErrorReply.SYNTAX;
+            return Promise.of(ErrorReply.SYNTAX);
         }
 
         int port;
         try {
             port = Integer.parseInt(new String(portBytes));
         } catch (NumberFormatException e) {
-            return ErrorReply.NOT_INTEGER;
+            return Promise.of(ErrorReply.NOT_INTEGER);
         }
         // port range check
         if (port < 0 || port > 65535) {
-            return new ErrorReply("invalid port");
+            return Promise.of(new ErrorReply("invalid port"));
         }
 
         // connect check
@@ -250,15 +259,15 @@ public class SGroup extends BaseCommand {
             var pong = jedis.ping();
             log.info("Slave of {}:{} pong: {}", host, port, pong);
         } catch (Exception e) {
-            return new ErrorReply("connect failed");
+            return Promise.of(new ErrorReply("connect failed"));
         } finally {
             jedis.close();
         }
 
-        CompletableFuture<Boolean>[] futures = new CompletableFuture[slotNumber];
+        Promise<Boolean>[] promises = new Promise[slotNumber];
         for (int i = 0; i < slotNumber; i++) {
             var oneSlot = localPersist.oneSlot((byte) i);
-            futures[i] = oneSlot.threadSafeHandle(() -> {
+            promises[i] = oneSlot.asyncCall(AsyncSupplier.of(() -> {
                 try {
                     oneSlot.createReplPairAsSlave(host, port);
                     return true;
@@ -266,11 +275,17 @@ public class SGroup extends BaseCommand {
                     log.error("Create repl pair as slave failed, slot: " + oneSlot.slot(), e);
                     return false;
                 }
-            });
+            }));
         }
-        CompletableFuture.allOf(futures).join();
 
-        return OKReply.INSTANCE;
+        return Promises.toArray(Boolean.class, promises).map(results -> {
+            for (var result : results) {
+                if (!result) {
+                    return new ErrorReply("remove repl pair as slave failed");
+                }
+            }
+            return OKReply.INSTANCE;
+        });
     }
 
     Reply set(byte[][] dd) {

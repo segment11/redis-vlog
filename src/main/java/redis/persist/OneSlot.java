@@ -2,10 +2,12 @@ package redis.persist;
 
 import com.github.luben.zstd.Zstd;
 import io.activej.async.callback.AsyncComputation;
+import io.activej.async.function.AsyncSupplier;
 import io.activej.common.function.RunnableEx;
-import io.activej.common.function.SupplierEx;
 import io.activej.config.Config;
 import io.activej.eventloop.Eventloop;
+import io.activej.promise.Promise;
+import io.activej.promise.Promises;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.prometheus.client.Summary;
@@ -198,7 +200,7 @@ public class OneSlot {
 
         var replPair = new ReplPair(slot, false, host, port);
         replPair.setSlaveUuid(masterUuid);
-        replPair.initAsSlave(requestHandleEventloop, requestHandler);
+        replPair.initAsSlave(netWorkerEventloop, requestHandler);
         log.warn("Create repl pair as slave, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
 
@@ -265,22 +267,22 @@ public class OneSlot {
         for (var replPair1 : replPairs) {
             if (replPair1.equals(replPair)) {
                 log.warn("Repl pair already exists, host: {}, port: {}, slot: {}", host, port, slot);
-                replPair1.initAsMaster(slaveUuid, requestHandleEventloop, requestHandler);
+                replPair1.initAsMaster(slaveUuid, netWorkerEventloop, requestHandler);
                 return replPair1;
             }
         }
 
-        replPair.initAsMaster(slaveUuid, requestHandleEventloop, requestHandler);
+        replPair.initAsMaster(slaveUuid, netWorkerEventloop, requestHandler);
         log.warn("Create repl pair as master, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
         return replPair;
     }
 
-    public void setRequestHandleEventloop(Eventloop requestHandleEventloop) {
-        this.requestHandleEventloop = requestHandleEventloop;
+    public void setNetWorkerEventloop(Eventloop netWorkerEventloop) {
+        this.netWorkerEventloop = netWorkerEventloop;
     }
 
-    private Eventloop requestHandleEventloop;
+    private Eventloop netWorkerEventloop;
 
     public void setRequestHandler(RequestHandler requestHandler) {
         this.requestHandler = requestHandler;
@@ -288,17 +290,8 @@ public class OneSlot {
 
     private RequestHandler requestHandler;
 
-    public <T> CompletableFuture<T> threadSafeHandle(SupplierEx<T> supplierEx) {
-        if (reuseNetWorkers) {
-            try {
-                var r = supplierEx.get();
-                return CompletableFuture.completedFuture(r);
-            } catch (Exception e) {
-                return CompletableFuture.failedFuture(e);
-            }
-        }
-
-        return requestHandleEventloop.submit(AsyncComputation.of(supplierEx));
+    public <T> Promise<T> asyncCall(AsyncSupplier<T> asyncSupplier) {
+        return Promises.first(asyncSupplier);
     }
 
     private final byte slot;
@@ -408,7 +401,7 @@ public class OneSlot {
     }
 
     private byte allWorkers;
-    private byte requestWorkers;
+    private byte netWorkers;
     private byte mergeWorkers;
     private byte topMergeWorkers;
 
@@ -421,7 +414,7 @@ public class OneSlot {
     public void setChunkMerger(ChunkMerger chunkMerger) {
         this.chunkMerger = chunkMerger;
 
-        for (int i = requestWorkers; i < allWorkers; i++) {
+        for (int i = netWorkers; i < allWorkers; i++) {
             for (var chunk : chunksArray[i]) {
                 chunkMerger.getChunkMergeWorker((byte) i).fixMergeHandleChunkThreadId(chunk);
             }
@@ -451,8 +444,6 @@ public class OneSlot {
     public void overwriteMetaChunkSegmentIndexBytesFromRepl(byte[] bytes) {
         metaChunkSegmentIndex.overwriteInMemoryCachedBytes(bytes);
     }
-
-    boolean reuseNetWorkers;
 
     private final TaskChain taskChain = new TaskChain();
 
@@ -879,9 +870,9 @@ public class OneSlot {
         this.metaChunkSegmentIndex.clear();
     }
 
-    public void initFds(LibC libC, byte allWorkers, byte requestWorkers, byte mergeWorkers, byte topMergeWorkers) throws IOException {
+    public void initFds(LibC libC, byte allWorkers, byte netWorkers, byte mergeWorkers, byte topMergeWorkers) throws IOException {
         this.allWorkers = allWorkers;
-        this.requestWorkers = requestWorkers;
+        this.netWorkers = netWorkers;
         this.mergeWorkers = mergeWorkers;
         this.topMergeWorkers = topMergeWorkers;
 
@@ -917,12 +908,12 @@ public class OneSlot {
 
             var workerId = (byte) i;
             for (int j = 0; j < batchNumber; j++) {
-                var chunk = new Chunk(workerId, slot, (byte) j, requestWorkers, snowFlake, slotDir, this, keyLoader, masterUpdateCallback);
+                var chunk = new Chunk(workerId, slot, (byte) j, netWorkers, snowFlake, slotDir, this, keyLoader, masterUpdateCallback);
                 chunks[j] = chunk;
 
                 initChunk(chunk);
 
-                if (i < requestWorkers) {
+                if (i < netWorkers) {
                     fixRequestHandleChunkThreadId(chunk);
                 }
             }
@@ -980,7 +971,7 @@ public class OneSlot {
                     ", segment length: " + chunk.segmentLength + ", segment count: " + segmentCount);
         }
 
-        if (workerId < requestWorkers) {
+        if (workerId < netWorkers) {
             var persistHandleEventloop = persistHandleEventloopArray[batchIndex];
             persistHandleEventloop.submit(() -> {
                 chunk.writeSegmentsFromMasterExists(bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);

@@ -110,15 +110,16 @@ public class MGroup extends BaseCommand {
             var subList = entry.getValue();
 
             var oneSlot = localPersist.oneSlot(slot);
-            var f = oneSlot.threadSafeHandle(() -> {
-                ArrayList<ValueBytesAndIndex> valueList = new ArrayList<>();
-                for (var one : subList) {
-                    var valueBytes = get(one.keyBytes, one.slotWithKeyHash);
-                    valueList.add(new ValueBytesAndIndex(valueBytes, one.index));
-                }
-                return valueList;
-            });
-            futureList.add(f);
+            // todo
+//            var f = oneSlot.threadSafeHandle(() -> {
+//                ArrayList<ValueBytesAndIndex> valueList = new ArrayList<>();
+//                for (var one : subList) {
+//                    var valueBytes = get(one.keyBytes, one.slotWithKeyHash);
+//                    valueList.add(new ValueBytesAndIndex(valueBytes, one.index));
+//                }
+//                return valueList;
+//            });
+//            futureList.add(f);
         }
 
         ArrayList<ValueBytesAndIndex> valueList = new ArrayList<>();
@@ -179,13 +180,14 @@ public class MGroup extends BaseCommand {
             var subList = entry.getValue();
 
             var oneSlot = localPersist.oneSlot(slot);
-            var f = oneSlot.threadSafeHandle(() -> {
-                for (var one : subList) {
-                    set(one.keyBytes, one.valueBytes, one.slotWithKeyHash);
-                }
-                return true;
-            });
-            futureList.add(f);
+            // todo
+//            var f = oneSlot.threadSafeHandle(() -> {
+//                for (var one : subList) {
+//                    set(one.keyBytes, one.valueBytes, one.slotWithKeyHash);
+//                }
+//                return true;
+//            });
+//            futureList.add(f);
         }
 
         var allFutures = CompletableFuture.allOf(futureList.toArray(new CompletableFuture[futureList.size()]));
@@ -454,15 +456,16 @@ public class MGroup extends BaseCommand {
 
             var oneSlots = localPersist.oneSlots();
             for (var oneSlot : oneSlots) {
-                var f = oneSlot.threadSafeHandle(() -> oneSlot.updateDynConfig(configKey, configValueBytes));
-                try {
-                    var r = f.get();
-                    if (!r) {
-                        return new ErrorReply("update dyn config failed, slot: " + oneSlot.slot());
-                    }
-                } catch (Exception e) {
-                    return new ErrorReply("update dyn config failed, slot: " + oneSlot.slot() + ", message: " + e.getMessage());
-                }
+                // todo
+//                var f = oneSlot.threadSafeHandle(() -> oneSlot.updateDynConfig(configKey, configValueBytes));
+//                try {
+//                    var r = f.get();
+//                    if (!r) {
+//                        return new ErrorReply("update dyn config failed, slot: " + oneSlot.slot());
+//                    }
+//                } catch (Exception e) {
+//                    return new ErrorReply("update dyn config failed, slot: " + oneSlot.slot() + ", message: " + e.getMessage());
+//                }
             }
             return OKReply.INSTANCE;
         }
