@@ -6,9 +6,9 @@ import java.util.HashMap;
 import java.util.List;
 
 public class CompressStats {
-    public long compressRawCount = 0;
+    public long rawCount = 0;
     public long compressedCount = 0;
-    public long compressRawTotalLength = 0;
+    public long rawTotalLength = 0;
     public long compressedTotalLength = 0;
     public long compressedCostTotalNanos = 0;
     public long decompressedCount = 0;
@@ -24,16 +24,16 @@ public class CompressStats {
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
             if (compressedCount > 0) {
-                map.put("compress_raw_count", new SimpleGauge.ValueWithLabelValues((double) compressRawCount, labelValues));
+                map.put("raw_count", new SimpleGauge.ValueWithLabelValues((double) rawCount, labelValues));
                 map.put("compressed_count", new SimpleGauge.ValueWithLabelValues((double) compressedCount, labelValues));
                 map.put("compressed_cost_total_millis", new SimpleGauge.ValueWithLabelValues((double) compressedCostTotalNanos / 1000 / 1000, labelValues));
                 double costTAvg = (double) compressedCostTotalNanos / compressedCount / 1000;
                 map.put("compressed_cost_avg_micros", new SimpleGauge.ValueWithLabelValues(costTAvg, labelValues));
 
-                map.put("compress_raw_total_length", new SimpleGauge.ValueWithLabelValues((double) compressRawTotalLength, labelValues));
+                map.put("raw_total_length", new SimpleGauge.ValueWithLabelValues((double) rawTotalLength, labelValues));
                 map.put("compressed_total_length", new SimpleGauge.ValueWithLabelValues((double) compressedTotalLength, labelValues));
                 if (compressedTotalLength > 0) {
-                    map.put("compression_ratio", new SimpleGauge.ValueWithLabelValues((double) compressedTotalLength / compressRawTotalLength, labelValues));
+                    map.put("compression_ratio", new SimpleGauge.ValueWithLabelValues((double) compressedTotalLength / rawTotalLength, labelValues));
                 }
             }
 

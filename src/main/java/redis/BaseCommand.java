@@ -415,7 +415,7 @@ public abstract class BaseCommand {
     }
 
     public void set(byte[] keyBytes, byte[] valueBytes, SlotWithKeyHash slotWithKeyHashReuse, int spType, long expireAt) {
-        compressStats.compressRawTotalLength += valueBytes.length;
+        compressStats.rawTotalLength += valueBytes.length;
 
         // prefer store as number type
         boolean isTypeNumber = CompressedValue.isTypeNumber(spType);
@@ -536,7 +536,7 @@ public abstract class BaseCommand {
             }
 
             // stats
-            compressStats.compressRawCount++;
+            compressStats.rawCount++;
             compressStats.compressedTotalLength += valueBytes.length;
         }
     }
