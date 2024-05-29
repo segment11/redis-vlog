@@ -63,7 +63,7 @@ public class OneSlot {
 
         this.bigStringFiles = new BigStringFiles(slot, slotDir);
 
-        this.chunkMergeWorker = new ChunkMergeWorker(slot, snowFlake);
+        this.chunkMergeWorker = new ChunkMergeWorker(slot, this);
 
         var dynConfigFile = new File(slotDir, DYN_CONFIG_FILE_NAME);
         this.dynConfig = new DynConfig(slot, dynConfigFile);

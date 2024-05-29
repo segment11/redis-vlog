@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.Debug;
-import redis.SnowFlake;
 import redis.metric.SimpleGauge;
 
 import java.util.ArrayList;
@@ -19,11 +18,11 @@ import static redis.persist.Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED;
 public class ChunkMergeWorker {
     private final byte slot;
     private final String slotStr;
-    private final SnowFlake snowFlake;
+    private final OneSlot oneSlot;
 
+    // metrics
     long mergedSegmentCount = 0;
     long mergedSegmentCostTimeTotalUs = 0;
-    byte lastMergedWorkerId = -1;
     byte lastMergedSlot = -1;
     int lastMergedSegmentIndex = -1;
 
@@ -31,8 +30,6 @@ public class ChunkMergeWorker {
     long invalidCvCountTotal = 0;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-
-    private final LocalPersist localPersist = LocalPersist.getInstance();
 
     // just for config parameter
     int compressLevel;
@@ -56,10 +53,6 @@ public class ChunkMergeWorker {
             }
         }
 
-        // persist to chunk
-        var oneSlot = localPersist.oneSlot(slot);
-        var chunk = oneSlot.chunk;
-
         ArrayList<Integer> needMergeSegmentIndexListAll = new ArrayList<>();
 
         var groupByWalGroupIndex = mergedCvList.stream().collect(Collectors.groupingBy(one -> Wal.calWalGroupIndex(one.bucketIndex)));
@@ -78,7 +71,7 @@ public class ChunkMergeWorker {
             }
 
             // if list size is too large, need multi batch persist, todo
-            var needMergeSegmentIndexList = chunk.persist(walGroupIndex, list, true);
+            var needMergeSegmentIndexList = oneSlot.chunk.persist(walGroupIndex, list, true);
             if (needMergeSegmentIndexList == null) {
                 log.error("Merge worker persist merged cv list error, w={}, s={}", slot);
                 throw new RuntimeException("Merge worker persist merged cv list error, s=" + slot);
@@ -112,13 +105,11 @@ public class ChunkMergeWorker {
             oneSlot.doMergeJob(needMergeSegmentIndexListAll);
         }
 
-        lastPersistAtMillis = System.currentTimeMillis();
         return true;
     }
 
-    long lastPersistAtMillis;
-
-    int lastPersistedSegmentIndex;
+    // for log
+    private int lastPersistedSegmentIndex;
 
     public record MergedSegment(int index, int validCvCount) implements Comparable<MergedSegment> {
         @Override
@@ -137,10 +128,10 @@ public class ChunkMergeWorker {
 
     final TreeSet<MergedSegment> mergedSegmentSet = new TreeSet<>();
 
-    public ChunkMergeWorker(byte slot, SnowFlake snowFlake) {
+    public ChunkMergeWorker(byte slot, OneSlot oneSlot) {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
-        this.snowFlake = snowFlake;
+        this.oneSlot = oneSlot;
 
         this.initMetricsCollect();
     }
@@ -173,7 +164,6 @@ public class ChunkMergeWorker {
                 map.put("valid_cv_rate", new SimpleGauge.ValueWithLabelValues(validCvRate, labelValues));
             }
 
-            map.put("last_merged_worker_id", new SimpleGauge.ValueWithLabelValues((double) lastMergedWorkerId, labelValues));
             map.put("last_merged_slot", new SimpleGauge.ValueWithLabelValues((double) lastMergedSlot, labelValues));
             map.put("last_merged_segment_index", new SimpleGauge.ValueWithLabelValues((double) lastMergedSegmentIndex, labelValues));
 

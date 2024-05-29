@@ -133,7 +133,6 @@ public class ChunkMergeJob {
             return;
         }
 
-        chunkMergeWorker.lastMergedSlot = slot;
         chunkMergeWorker.lastMergedSegmentIndex = lastSegmentIndex;
 
         chunkMergeWorker.mergedSegmentCount++;
@@ -347,8 +346,6 @@ public class ChunkMergeJob {
                         if (cv.isExpired()) {
                             validCvCountRecord.invalidCvCount++;
                             toRemoveCvList.add(one);
-                            // need not clear pvm, because key loader will clear
-//                                oneSlot.removeDelay(mergeWorker.mergeWorkerId, key, bucketIndex, cv.getKeyHash(), cv.getSeq());
 
                             if (cv.isBigString()) {
                                 // need remove file
