@@ -24,11 +24,9 @@ class FdReadWriteTest extends Specification {
         and:
         def fdReadWrite = new FdReadWrite('test', libC, oneFile)
         fdReadWrite.initByteBuffers(true)
-        fdReadWrite.initEventloop()
 
         def fdReadWrite2 = new FdReadWrite('test2', libC, oneFile2)
         fdReadWrite2.initByteBuffers(true)
-        fdReadWrite2.initEventloop()
 
         def segmentLength = ConfForSlot.global.confChunk.segmentLength
 
@@ -65,7 +63,6 @@ class FdReadWriteTest extends Specification {
         and:
         def fdReadWrite = new FdReadWrite('test', libC, oneFile)
         fdReadWrite.initByteBuffers(true)
-        fdReadWrite.initEventloop()
 
         def segmentLength = ConfForSlot.global.confChunk.segmentLength
 

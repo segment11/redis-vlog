@@ -68,7 +68,7 @@ public class Chunk {
     private final SegmentBatch segmentBatch;
 
     private int[] fdLengths;
-    private FdReadWrite[] fdReadWriteArray;
+    FdReadWrite[] fdReadWriteArray;
 
     public Chunk(byte slot, SnowFlake snowFlake, File slotDir,
                  OneSlot oneSlot, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {

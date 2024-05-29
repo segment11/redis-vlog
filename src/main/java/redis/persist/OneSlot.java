@@ -38,11 +38,36 @@ import static io.activej.config.converter.ConfigConverters.ofInteger;
 import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
 public class OneSlot {
+    // for unit test
+    public OneSlot(byte slot, File slotDir, KeyLoader keyLoader, Wal wal) throws IOException {
+        this.slot = slot;
+        this.slotStr = String.valueOf(slot);
+        this.slotDir = slotDir;
+        this.slotNumber = 1;
+
+        this.keyLoader = keyLoader;
+        this.snowFlake = new SnowFlake(1, 1);
+        this.persistConfig = Config.create();
+        this.segmentLength = 4096;
+
+        this.bigStringFiles = null;
+        this.chunkMergeWorker = null;
+        this.dynConfig = null;
+        this.walArray = new Wal[]{wal};
+        this.raf = null;
+        this.rafShortValue = null;
+        this.masterUpdateCallback = null;
+        this.masterUuid = 0L;
+
+        this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, slotDir);
+    }
+
     public OneSlot(byte slot, short slotNumber, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
         this.segmentLength = ConfForSlot.global.confChunk.segmentLength;
 
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
+        this.slotNumber = slotNumber;
         this.snowFlake = snowFlake;
         this.persistConfig = persistConfig;
 
@@ -258,6 +283,7 @@ public class OneSlot {
 
     private final byte slot;
     private final String slotStr;
+    private final short slotNumber;
 
     public byte slot() {
         return slot;
@@ -266,7 +292,7 @@ public class OneSlot {
     private final int segmentLength;
     private final SnowFlake snowFlake;
     private final Config persistConfig;
-    private final File slotDir;
+    final File slotDir;
 
     private final BigStringFiles bigStringFiles;
 
@@ -274,7 +300,7 @@ public class OneSlot {
         return bigStringFiles;
     }
 
-    private final ChunkMergeWorker chunkMergeWorker;
+    final ChunkMergeWorker chunkMergeWorker;
 
     private static final String DYN_CONFIG_FILE_NAME = "dyn-config.json";
     private final DynConfig dynConfig;
@@ -352,7 +378,7 @@ public class OneSlot {
 
     Chunk chunk;
 
-    private MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
+    MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
 
     public byte[] getMetaChunkSegmentFlagSeqBytesToSlaveExists() {
         return metaChunkSegmentFlagSeq.getInMemoryCachedBytes();
@@ -880,7 +906,7 @@ public class OneSlot {
         metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, flag, segmentSeq);
     }
 
-    public void setSegmentMergeFlagBatch(int segmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
+    void setSegmentMergeFlagBatch(int segmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
         metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(segmentIndex, segmentCount, flag, segmentSeqList);
     }
 

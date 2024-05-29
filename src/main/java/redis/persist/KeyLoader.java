@@ -37,11 +37,11 @@ public class KeyLoader {
 
     private final byte slot;
     private final String slotStr;
-    private final int bucketsPerSlot;
+    final int bucketsPerSlot;
     private final File slotDir;
     final SnowFlake snowFlake;
 
-    private MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
+    MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
 
     byte[] getMetaKeyBucketSplitNumberBatch(int beginBucketIndex, int bucketCount) {
         return metaKeyBucketSplitNumber.getBatch(beginBucketIndex, bucketCount);
@@ -78,13 +78,13 @@ public class KeyLoader {
 
     private LibC libC;
     // index is split index
-    private FdReadWrite[] fdReadWriteArray;
+    FdReadWrite[] fdReadWriteArray;
 
     private final Logger log = org.slf4j.LoggerFactory.getLogger(KeyLoader.class);
 
     public static final int BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL = ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
 
-    private StatKeyCountInBuckets statKeyCountInBuckets;
+    StatKeyCountInBuckets statKeyCountInBuckets;
 
     public short getKeyCountInBucketIndex(int bucketIndex) {
         return statKeyCountInBuckets.getKeyCountForBucketIndex(bucketIndex);

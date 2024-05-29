@@ -18,7 +18,7 @@ import static redis.persist.Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED;
 public class ChunkMergeWorker {
     private final byte slot;
     private final String slotStr;
-    private final OneSlot oneSlot;
+    final OneSlot oneSlot;
 
     // metrics
     long mergedSegmentCount = 0;

@@ -30,7 +30,7 @@ class WalTest extends Specification {
         def raf = new RandomAccessFile(file, 'rw')
         def rafShortValue = new RandomAccessFile(fileShortValue, 'rw')
         def snowFlake = new SnowFlake(1, 1)
-        def wal = new Wal((byte) 0, 0, (byte) 0, raf, rafShortValue, snowFlake)
+        def wal = new Wal((byte) 0, 0, raf, rafShortValue, snowFlake)
 
         when:
         10.times {
@@ -44,7 +44,7 @@ class WalTest extends Specification {
 
             def cvEncoded = cv.encode()
 
-            def v = new Wal.V((byte) 0, snowFlake.nextId(), 0, cv.keyHash, CompressedValue.NO_EXPIRE,
+            def v = new Wal.V(snowFlake.nextId(), 0, cv.keyHash, CompressedValue.NO_EXPIRE,
                     key, cvEncoded, cvEncoded.length)
 
             wal.put(true, key, v)

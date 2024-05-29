@@ -18,9 +18,13 @@ public class ChunkMergeJob {
     private final byte slot;
     private final ArrayList<Integer> needMergeSegmentIndexList;
     private final ChunkMergeWorker chunkMergeWorker;
+    private final OneSlot oneSlot;
     private final SnowFlake snowFlake;
     int validCvCountAfterRun = 0;
     int invalidCvCountAfterRun = 0;
+
+    // for unit test
+    int testTargetBucketIndex = -1;
 
     private final LocalPersist localPersist = LocalPersist.getInstance();
 
@@ -30,6 +34,7 @@ public class ChunkMergeJob {
         this.slot = slot;
         this.needMergeSegmentIndexList = needMergeSegmentIndexList;
         this.chunkMergeWorker = chunkMergeWorker;
+        this.oneSlot = chunkMergeWorker.oneSlot;
         this.snowFlake = snowFlake;
     }
 
@@ -82,7 +87,7 @@ public class ChunkMergeJob {
         final int segmentIndex;
     }
 
-    private void mergeSegments(List<Integer> needMergeSegmentIndexList) {
+    void mergeSegments(List<Integer> needMergeSegmentIndexList) {
         var firstSegmentIndex = needMergeSegmentIndexList.getFirst();
         var lastSegmentIndex = needMergeSegmentIndexList.getLast();
         assert needMergeSegmentIndexList.size() == lastSegmentIndex - firstSegmentIndex + 1;
@@ -90,8 +95,6 @@ public class ChunkMergeJob {
         int segmentLength = ConfForSlot.global.confChunk.segmentLength;
         var npages0 = segmentLength / PAGE_SIZE;
         int npagesMerge = npages0 * MERGE_READ_ONCE_SEGMENT_COUNT;
-
-        var oneSlot = localPersist.oneSlot(slot);
 
         HashSet<Integer> skipSegmentIndexSet = new HashSet<>();
         for (var segmentIndex : needMergeSegmentIndexList) {
@@ -196,7 +199,11 @@ public class ChunkMergeJob {
 
         // calc bucket index and wal group index
         for (var one : cvList) {
-            one.bucketIndex = localPersist.bucketIndex(one.cv.getKeyHash());
+            if (testTargetBucketIndex != -1) {
+                one.bucketIndex = testTargetBucketIndex;
+            } else {
+                one.bucketIndex = localPersist.bucketIndex(one.cv.getKeyHash());
+            }
             one.walGroupIndex = Wal.calWalGroupIndex(one.bucketIndex);
         }
         // compare to current wal or persist value meta in key buckets, remove those deleted or expired

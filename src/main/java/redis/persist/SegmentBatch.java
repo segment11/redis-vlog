@@ -333,9 +333,9 @@ public class SegmentBatch {
             int lenValue = VALUE_HEADER_LENGTH + cv.compressedLength();
             int length = lenKey + lenValue;
 
-            offsetInThisSegment += length;
-
             cvCallback.callback(key, cv, offsetInThisSegment);
+
+            offsetInThisSegment += length;
         }
     }
 }

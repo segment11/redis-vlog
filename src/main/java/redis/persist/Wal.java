@@ -167,6 +167,11 @@ public class Wal {
     long persistCostTimeMillis;
 
     int readWal(RandomAccessFile fromWalFile, HashMap<String, V> toMap, boolean isShortValue) throws IOException {
+        // for unit test
+        if (fromWalFile == null) {
+            return 0;
+        }
+
         var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
 
         var bufferBytes = new byte[ONE_GROUP_SIZE];
