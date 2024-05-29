@@ -259,6 +259,9 @@ public class RequestHandler {
                 return new ErrorReply(e.getMessage());
             } catch (DictMissingException e) {
                 return ErrorReply.DICT_MISSING;
+            } catch (Exception e) {
+                log.error("Get error, key: " + new String(keyBytes), e);
+                return new ErrorReply(e.getMessage());
             }
         }
 
