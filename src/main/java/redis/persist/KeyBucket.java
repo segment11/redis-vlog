@@ -40,7 +40,7 @@ public class KeyBucket {
 
     private final int capacity;
     short size;
-    private short cellCost;
+    short cellCost;
 
     public boolean isFull() {
         return cellCost >= capacity;

@@ -176,4 +176,28 @@ class KeyBucketTest extends Specification {
         k11.getValueByKey('a'.bytes, 97L).valueBytes == 'a'.bytes
         k22.getValueByKey('a'.bytes, 97L).valueBytes == 'a'.bytes
     }
+
+    def 'multi cell count'() {
+        given:
+        def snowFlake = new SnowFlake(1, 1)
+
+        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
+
+        when:
+        keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes, null)
+
+        then:
+        keyBucket.size == 1
+        keyBucket.cellCost == 1
+
+        when:
+        var longKeyBytes = 'a'.padRight(100, 'a').bytes
+        keyBucket.put(longKeyBytes, 9797L, 0L, 1L, 'long a'.bytes, null)
+
+        then:
+        keyBucket.size == 2
+        keyBucket.cellCost == 3
+
+        keyBucket.getValueByKey(longKeyBytes, 9797L).valueBytes == 'long a'.bytes
+    }
 }
