@@ -235,7 +235,7 @@ public class MultiWorkerServer extends Launcher {
         var targetHandler = requestHandlerArray[i];
 
         var currentThreadId = Thread.currentThread().threadId();
-        if (currentThreadId == threadIds[i]) {
+        if (currentThreadId == netWorkerThreadIds[i]) {
             return getByteBufPromiseByCurrentEventloop(request, socket, targetHandler);
         } else {
             var otherNetWorkerEventloop = netWorkerEventloopArray[i];
@@ -361,19 +361,21 @@ public class MultiWorkerServer extends Launcher {
         netWorkerEventloop.delay(1000L, taskRunnable);
     }
 
-    long[] threadIds;
+    private long[] netWorkerThreadIds;
 
     @Override
     protected void onStart() throws Exception {
         var localPersist = LocalPersist.getInstance();
         localPersist.persistMergeSegmentsUndone();
 
-        threadIds = new long[netWorkerEventloopArray.length];
+        netWorkerThreadIds = new long[netWorkerEventloopArray.length];
 
         for (int i = 0; i < netWorkerEventloopArray.length; i++) {
             var netWorkerEventloop = netWorkerEventloopArray[i];
+            netWorkerThreadIds[i] = netWorkerEventloop.getEventloopThread().threadId();
+
+            // start schedule
             eventloopAsScheduler(netWorkerEventloop, i);
-            threadIds[i] = netWorkerEventloop.getEventloopThread().threadId();
         }
         logger.info("Net worker eventloop scheduler started");
 
@@ -381,7 +383,7 @@ public class MultiWorkerServer extends Launcher {
         int slotNumber = configInject.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
         for (int slot = 0; slot < slotNumber; slot++) {
             int i = slot % requestHandlerArray.length;
-            localPersist.fixSlotThreadId((byte) slot, threadIds[i]);
+            localPersist.fixSlotThreadId((byte) slot, netWorkerThreadIds[i]);
         }
 
         // cross request worker threads, need use this eventloop

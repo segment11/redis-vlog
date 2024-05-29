@@ -164,28 +164,26 @@ public class ChunkMergeJob {
             var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength);
             // sub blocks
             // refer to SegmentBatch tight HEADER_LENGTH
-            for (int j = 0; j < SegmentBatch.MAX_BLOCK_NUMBER; j++) {
-                // seq long + total bytes length int + each sub block * (offset short + length short)
+            for (int subBlockIndex = 0; subBlockIndex < SegmentBatch.MAX_BLOCK_NUMBER; subBlockIndex++) {
                 // position to target sub block
-                buffer.position(8 + 4 + j * (2 + 2));
+                buffer.position(SegmentBatch.subBlockMetaPosition(subBlockIndex));
                 var subBlockOffset = buffer.getShort();
                 if (subBlockOffset == 0) {
                     break;
                 }
-
                 var subBlockLength = buffer.getShort();
 
-                var uncompressedBytes = new byte[segmentLength];
-                var d = Zstd.decompressByteArray(uncompressedBytes, 0, segmentLength,
+                var decompressedBytes = new byte[segmentLength];
+                var d = Zstd.decompressByteArray(decompressedBytes, 0, segmentLength,
                         segmentBytesBatchRead, relativeOffsetInBatchBytes + subBlockOffset, subBlockLength);
                 if (d != segmentLength) {
                     throw new IllegalStateException("Decompress error, s=" + slot
-                            + ", i=" + segmentIndex + ", sbi=" + j + ", d=" + d + ", segmentLength=" + segmentLength);
+                            + ", i=" + segmentIndex + ", sbi=" + subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
                 }
 
-                int finalJ = j;
-                SegmentBatch.iterateFromSegmentBytes(uncompressedBytes, (key, cv, offsetInThisSegment) -> {
-                    cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetInThisSegment, segmentIndex, (byte) finalJ));
+                int finalSubBlockIndex = subBlockIndex;
+                SegmentBatch.iterateFromSegmentBytes(decompressedBytes, (key, cv, offsetInThisSegment) -> {
+                    cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetInThisSegment, segmentIndex, (byte) finalSubBlockIndex));
                 });
             }
 

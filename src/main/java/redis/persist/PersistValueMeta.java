@@ -36,7 +36,7 @@ public class PersistValueMeta {
     @Override
     public String toString() {
         return "PersistValueMeta{" +
-                ", slot=" + slot +
+                "slot=" + slot +
                 ", length=" + length +
                 ", segmentIndex=" + segmentIndex +
                 ", subBlockIndex=" + subBlockIndex +

@@ -86,7 +86,7 @@ public class RGroup extends BaseCommand {
             return ErrorReply.NO_SUCH_KEY;
         }
 
-        // key mask value will be overwritten by setCv
+        // key hash will be overwritten by setCv
         var dstSlotWithKeyHash = slot(dstKeyBytes);
         var dstSlot = dstSlotWithKeyHash.slot();
 
