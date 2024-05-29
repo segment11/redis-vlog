@@ -285,6 +285,7 @@ public class RequestHandler {
             } catch (ReadonlyException e) {
                 return ErrorReply.READONLY;
             } catch (Exception e) {
+                log.error("Set error, key: " + new String(keyBytes), e);
                 return new ErrorReply(e.getMessage());
             }
 
