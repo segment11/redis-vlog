@@ -91,6 +91,26 @@ public class MetaKeyBucketSplitNumber {
         }
     }
 
+    void setBatch(int beginBucketIndex, byte[] splitNumberArray) {
+        if (ConfForSlot.global.pureMemory) {
+            System.arraycopy(splitNumberArray, 0, inMemoryCachedBytes, beginBucketIndex, splitNumberArray.length);
+            return;
+        }
+
+        var offset = beginBucketIndex;
+        try {
+            raf.seek(offset);
+            raf.write(splitNumberArray);
+            System.arraycopy(splitNumberArray, 0, inMemoryCachedBytes, beginBucketIndex, splitNumberArray.length);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    byte[] getBatch(int beginBucketIndex, int bucketCount) {
+        return Arrays.copyOfRange(inMemoryCachedBytes, beginBucketIndex, beginBucketIndex + bucketCount);
+    }
+
     byte get(int bucketIndex) {
         return inMemoryCachedBytes[bucketIndex];
     }

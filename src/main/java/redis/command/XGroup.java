@@ -378,7 +378,7 @@ public class XGroup extends BaseCommand {
         var beginBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
 
         var oneSlot = localPersist.oneSlot(slot);
-        byte splitNumber = oneSlot.getKeyLoader().maxSplitNumber();
+        byte splitNumber = oneSlot.getKeyLoader().maxSplitNumberForRepl();
         byte[] bytes = null;
         try {
             bytes = oneSlot.getKeyLoader().readKeyBucketBytesBatchToSlaveExists(splitIndex, beginBucketIndex);

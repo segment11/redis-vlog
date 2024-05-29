@@ -43,11 +43,16 @@ public class KeyLoader {
 
     private MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
 
-    byte getKeyBucketSplitNumber(int bucketIndex) {
-        return metaKeyBucketSplitNumber.get(bucketIndex);
+    byte[] getMetaKeyBucketSplitNumberBatch(int beginBucketIndex, int bucketCount) {
+        return metaKeyBucketSplitNumber.getBatch(beginBucketIndex, bucketCount);
     }
 
-    public byte maxSplitNumber() {
+    // need thread safe or just for test
+    void updateMetaKeyBucketSplitNumberBatch(int beginBucketIndex, byte[] splitNumberArray) {
+        metaKeyBucketSplitNumber.setBatch(beginBucketIndex, splitNumberArray);
+    }
+
+    public byte maxSplitNumberForRepl() {
         return metaKeyBucketSplitNumber.maxSplitNumber();
     }
 
@@ -313,7 +318,7 @@ public class KeyLoader {
 
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
-        updateBatchSplitNumber(inner.splitNumberTmp, inner.beginBucketIndex);
+        updateMetaKeyBucketSplitNumberBatch(inner.beginBucketIndex, inner.splitNumberTmp);
     }
 
     public void persistShortValueListBatchInOneWalGroup(int walGroupIndex, Collection<Wal.V> shortValueList) {
@@ -324,7 +329,7 @@ public class KeyLoader {
 
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
-        updateBatchSplitNumber(inner.splitNumberTmp, inner.beginBucketIndex);
+        updateMetaKeyBucketSplitNumberBatch(inner.beginBucketIndex, inner.splitNumberTmp);
     }
 
     // need thread safe or just for test
@@ -339,18 +344,6 @@ public class KeyLoader {
             }
 
             fdReadWrite.writeSegmentForKeyBucketsInOneWalGroup(beginBucketIndex, sharedBytes);
-        }
-    }
-
-    // need thread safe or just for test
-    void updateBatchSplitNumber(byte[] splitNumberTmp, int beginBucketIndex) {
-        for (int i = 0; i < splitNumberTmp.length; i++) {
-            var bucketIndex = beginBucketIndex + i;
-            var splitNumber = splitNumberTmp[i];
-
-            if (metaKeyBucketSplitNumber.get(bucketIndex) != splitNumber) {
-                metaKeyBucketSplitNumber.set(bucketIndex, splitNumber);
-            }
         }
     }
 

@@ -23,14 +23,14 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         shortValueList.every {
             def splitNumber = inner.splitNumberTmp[it.bucketIndex]
             def splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(it.keyHash % splitNumber)
-            inner.getKeyBucket(it.bucketIndex, (byte) splitIndex, splitNumber, it.keyHash).getValueByKey(it.key.bytes, it.keyHash).valueBytes() == it.cvEncoded()
+            inner.getKeyBucket(it.bucketIndex, (byte) splitIndex, splitNumber, it.keyHash).getValueByKey(it.key.bytes, it.keyHash).valueBytes() == it.cvEncoded
         }
         inner.isSplit == (n > KeyBucket.INIT_CAPACITY)
 
         when:
         def sharedBytesList = inner.writeAfterPutBatch()
         keyLoader.writeSharedBytesList(sharedBytesList, inner.beginBucketIndex)
-        keyLoader.updateBatchSplitNumber(inner.splitNumberTmp, inner.beginBucketIndex)
+        keyLoader.updateMetaKeyBucketSplitNumberBatch(inner.beginBucketIndex, inner.splitNumberTmp)
 
         then:
 
@@ -38,7 +38,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         def valueBytesWithExpireAt = keyLoader.getValueByKey(firstShortValue.bucketIndex, firstShortValue.key.bytes, firstShortValue.keyHash)
 
         then:
-        valueBytesWithExpireAt.valueBytes() == firstShortValue.cvEncoded()
+        valueBytesWithExpireAt.valueBytes == firstShortValue.cvEncoded
 
         cleanup:
         keyLoader.cleanUp()

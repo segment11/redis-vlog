@@ -84,7 +84,7 @@ public class KeyBucket {
 
     // compressed
     final byte[] bytes;
-    private final int position;
+    final int position;
 
     boolean isSharedBytes() {
         return bytes.length != KEY_BUCKET_ONE_COST_SIZE;

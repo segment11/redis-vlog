@@ -14,18 +14,15 @@ public class KeyBucketsInOneWalGroup {
 
         var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber;
         this.oneChargeBucketNumber = oneChargeBucketNumber;
-        this.splitNumberTmp = new byte[oneChargeBucketNumber];
         this.keyCountTmp = new int[oneChargeBucketNumber];
         this.beginBucketIndex = oneChargeBucketNumber * groupIndex;
-
-        this.emptyBytes = new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE];
     }
 
     private final byte slot;
     private final int groupIndex;
     private final int oneChargeBucketNumber;
     // index is bucket index - begin bucket index
-    final byte[] splitNumberTmp;
+    byte[] splitNumberTmp;
     final int[] keyCountTmp;
     final int beginBucketIndex;
 
@@ -39,7 +36,8 @@ public class KeyBucketsInOneWalGroup {
     }
 
     KeyBucket getKeyBucket(int bucketIndex, byte splitIndex, byte splitNumber, long keyHash) {
-        var currentSplitNumber = splitNumberTmp[bucketIndex - beginBucketIndex];
+        int relativeBucketIndex = bucketIndex - beginBucketIndex;
+        var currentSplitNumber = splitNumberTmp[relativeBucketIndex];
         if (currentSplitNumber == splitNumber) {
             var list = listList.get(splitIndex);
             if (list == null) {
@@ -58,17 +56,18 @@ public class KeyBucketsInOneWalGroup {
     }
 
     void readBeforePutBatch() {
-        var maxSplitNumber = keyLoader.maxSplitNumber();
+        this.splitNumberTmp = keyLoader.getMetaKeyBucketSplitNumberBatch(beginBucketIndex, oneChargeBucketNumber);
+        int maxSplitNumber = 0;
+        for (int i = 0; i < oneChargeBucketNumber; i++) {
+            if (splitNumberTmp[i] > maxSplitNumber) {
+                maxSplitNumber = splitNumberTmp[i];
+            }
+        }
+
         for (int splitIndex = 0; splitIndex < maxSplitNumber; splitIndex++) {
             if (listList.size() <= splitIndex) {
                 listList.add(null);
             }
-        }
-
-        for (int i = 0; i < oneChargeBucketNumber; i++) {
-            var bucketIndex = beginBucketIndex + i;
-            var splitNumber = keyLoader.getKeyBucketSplitNumber(bucketIndex);
-            splitNumberTmp[i] = splitNumber;
         }
 
         for (int splitIndex = 0; splitIndex < maxSplitNumber; splitIndex++) {
@@ -86,7 +85,8 @@ public class KeyBucketsInOneWalGroup {
             for (int i = 0; i < oneChargeBucketNumber; i++) {
                 var bucketIndex = beginBucketIndex + i;
                 var currentSplitNumber = splitNumberTmp[i];
-                var bucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, currentSplitNumber, sharedBytes, KeyLoader.KEY_BUCKET_ONE_COST_SIZE * i, keyLoader.snowFlake);
+                var bucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, currentSplitNumber, sharedBytes,
+                        KeyLoader.KEY_BUCKET_ONE_COST_SIZE * i, keyLoader.snowFlake);
                 keyCountTmp[i] += bucket.size;
                 list.set(i, bucket);
             }
@@ -104,7 +104,7 @@ public class KeyBucketsInOneWalGroup {
         return keyBucket.getValueByKey(keyBytes, keyHash);
     }
 
-    private final byte[] emptyBytes;
+    private final byte[] EMPTY_BYTES = new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE];
 
     byte[][] writeAfterPutBatch() {
         int maxSplitNumberTmp = 0;
@@ -137,20 +137,14 @@ public class KeyBucketsInOneWalGroup {
                 sharedBytes = list.get(0).bytes;
             } else {
                 sharedBytes = new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE * oneChargeBucketNumber];
-                var lastWriteOffset = 0;
                 for (int i = 0; i < oneChargeBucketNumber; i++) {
                     int destPos = KeyLoader.KEY_BUCKET_ONE_COST_SIZE * i;
-                    if (lastWriteOffset > destPos) {
-                        continue;
-                    }
 
                     var keyBucket = list.get(i);
                     if (keyBucket == null) {
-                        System.arraycopy(emptyBytes, 0, sharedBytes, destPos, KeyLoader.KEY_BUCKET_ONE_COST_SIZE);
-                        lastWriteOffset += KeyLoader.KEY_BUCKET_ONE_COST_SIZE;
+                        System.arraycopy(EMPTY_BYTES, 0, sharedBytes, destPos, KeyLoader.KEY_BUCKET_ONE_COST_SIZE);
                     } else {
-                        System.arraycopy(keyBucket.bytes, 0, sharedBytes, destPos, keyBucket.bytes.length);
-                        lastWriteOffset += keyBucket.bytes.length;
+                        System.arraycopy(keyBucket.bytes, keyBucket.position, sharedBytes, destPos, KeyLoader.KEY_BUCKET_ONE_COST_SIZE);
                     }
                 }
             }
