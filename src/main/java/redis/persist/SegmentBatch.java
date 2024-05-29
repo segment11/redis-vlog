@@ -91,6 +91,10 @@ public class SegmentBatch {
     // seq long + total bytes length int + each sub block * (offset short + length short)
     private static final int HEADER_LENGTH = 8 + 4 + MAX_BLOCK_NUMBER * (2 + 2);
 
+    static int subBlockMetaPosition(int subBlockIndex) {
+        return 8 + 4 + subBlockIndex * 4;
+    }
+
     private SegmentTightBytesWithLengthAndSegmentIndex tightSegments(int afterTightSegmentIndex, ArrayList<SegmentCompressedBytesWithIndex> onceList, ArrayList<PersistValueMeta> returnPvmList) {
         for (int j = 0; j < onceList.size(); j++) {
             var subBlockIndex = (byte) j;
@@ -210,7 +214,7 @@ public class SegmentBatch {
     private SegmentCompressedBytesWithIndex compressAsSegment(ArrayList<Wal.V> list, int segmentIndex, ArrayList<PersistValueMeta> returnPvmList) {
         long segmentSeq = snowFlake.nextId();
 
-        // only use key bytes mask value to calculate crc
+        // only use key bytes hash to calculate crc
         var crcCalBytes = new byte[8 * list.size()];
         var crcCalBuffer = ByteBuffer.wrap(crcCalBytes);
 
@@ -227,7 +231,7 @@ public class SegmentBatch {
             crcCalBuffer.putLong(v.keyHash());
 
             var keyBytes = v.key().getBytes();
-            buffer.put((byte) keyBytes.length);
+            buffer.putShort((short) keyBytes.length);
             buffer.put(keyBytes);
             buffer.put(v.cvEncoded());
 
@@ -254,16 +258,16 @@ public class SegmentBatch {
             offsetInThisSegment += length;
         }
 
-        if (buffer.remaining() >= 4) {
-            // write 0 int, so merge loop can break, because reuse old bytes
-            buffer.putInt(0);
+        if (buffer.remaining() >= 2) {
+            // write 0 short, so merge loop can break, because reuse old bytes
+            buffer.putShort((short) 0);
         }
 
         // update crc
-        int segmentMaskedValue = KeyHash.hash32(crcCalBytes);
+        int segmentCrc32 = KeyHash.hash32(crcCalBytes);
         // refer to SEGMENT_HEADER_LENGTH definition
         // seq long + cv number int + crc int
-        buffer.putInt(8 + 4, segmentMaskedValue);
+        buffer.putInt(8 + 4, segmentCrc32);
 
         // important: 4KB decompress cost ~200us, so use 4KB segment length for better read latency
         // double compress
@@ -289,22 +293,32 @@ public class SegmentBatch {
         void callback(String key, CompressedValue cv, int offsetInThisSegment);
     }
 
-    static void iterateFromSegmentBytes(byte[] uncompressedBytes, CvCallback cvCallback) {
-        var buf = Unpooled.wrappedBuffer(uncompressedBytes);
-        buf.skipBytes(SEGMENT_HEADER_LENGTH);
-        // check segment crc, todo
-//                long segmentSeq = buf.readLong();
-//                int cvCount = buf.readInt();
-//                int segmentMaskedValue = buf.readInt();
+    static class ForDebugCvCallback implements CvCallback {
+        @Override
+        public void callback(String key, CompressedValue cv, int offsetInThisSegment) {
+            System.out.println("key: " + key + ", cv: " + cv + ", offsetInThisSegment: " + offsetInThisSegment);
+        }
+    }
+
+    static void iterateFromSegmentBytesForDebug(byte[] decompressedBytes) {
+        iterateFromSegmentBytes(decompressedBytes, new ForDebugCvCallback());
+    }
+
+    static void iterateFromSegmentBytes(byte[] decompressedBytes, CvCallback cvCallback) {
+        var buf = Unpooled.wrappedBuffer(decompressedBytes);
+        // for crc check
+        var segmentSeq = buf.readLong();
+        var cvCount = buf.readInt();
+        var segmentCrc32 = buf.readInt();
 
         int offsetInThisSegment = Chunk.SEGMENT_HEADER_LENGTH;
         while (true) {
-            // refer to comment: write 0 int, so merge loop can break, because reuse old bytes
-            if (buf.readableBytes() < 4 || buf.getInt(buf.readerIndex()) == 0) {
+            // refer to comment: write 0 short, so merge loop can break, because reuse old bytes
+            if (buf.readableBytes() < 2 || buf.getShort(buf.readerIndex()) == 0) {
                 break;
             }
 
-            var keyLength = buf.readByte();
+            var keyLength = buf.readShort();
             if (keyLength == 0) {
                 break;
             }

@@ -45,8 +45,8 @@ public class CompressedValue {
 
     // seq long + expireAt long + dictSeq int + keyHash long + uncompressedLength int + cvEncodedLength int
     public static final int VALUE_HEADER_LENGTH = 8 + 8 + 4 + 8 + 4 + 4;
-    // key length byte, 128 is enough
-    public static final int KEY_HEADER_LENGTH = 1;
+    // key length use short
+    public static final int KEY_HEADER_LENGTH = 2;
 
     public long getSeq() {
         return seq;
@@ -380,9 +380,9 @@ public class CompressedValue {
             }
 
             // why ? todo: check
-            log.warn("Key masked value not match, key: {}, seq: {}, uncompressedLength: {}, cvEncodedLength: {}, keyHash: {}, persisted keyHash: {}",
+            log.warn("Key hash not match, key: {}, seq: {}, uncompressedLength: {}, cvEncodedLength: {}, keyHash: {}, persisted keyHash: {}",
                     new String(keyBytes), cv.seq, cv.uncompressedLength, cv.compressedLength, keyHash, cv.keyHash);
-            throw new IllegalStateException("Key masked value not match, key: " + new String(keyBytes) +
+            throw new IllegalStateException("Key hash not match, key: " + new String(keyBytes) +
                     ", seq: " + cv.seq +
                     ", uncompressedLength: " + cv.uncompressedLength +
                     ", cvEncodedLength: " + cv.compressedLength +

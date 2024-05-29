@@ -471,13 +471,13 @@ public class OneSlot {
 
     public ByteBuf get(byte[] keyBytes, int bucketIndex, long keyHash) {
         var key = new String(keyBytes);
-        var tmpValueBytes = getFromWal(key, bucketIndex);
-        if (tmpValueBytes != null) {
+        var cvEncodedFromWal = getFromWal(key, bucketIndex);
+        if (cvEncodedFromWal != null) {
             // write batch kv is the newest
-            if (CompressedValue.isDeleted(tmpValueBytes)) {
+            if (CompressedValue.isDeleted(cvEncodedFromWal)) {
                 return null;
             }
-            return Unpooled.wrappedBuffer(tmpValueBytes);
+            return Unpooled.wrappedBuffer(cvEncodedFromWal);
         }
 
         var valueBytesWithExpireAt = keyLoader.getValueByKey(bucketIndex, keyBytes, keyHash);
@@ -485,28 +485,35 @@ public class OneSlot {
             return null;
         }
 
-        // if value bytes is not meta, must be short value
         var valueBytes = valueBytesWithExpireAt.valueBytes();
         if (!PersistValueMeta.isPvm(valueBytes)) {
+            // short value, just return, CompressedValue can decode
             return Unpooled.wrappedBuffer(valueBytes);
         }
 
         var pvm = PersistValueMeta.decode(valueBytes);
+        var decompressedBytes = getSegmentSubBlockDecompressedBytesByPvm(pvm);
+//        SegmentBatch.iterateFromSegmentBytesForDebug(decompressedBytes);
 
-        // need not lock, write is always append only, old value will not be changed
-        var withKeyHeaderBuf = getKeyValueBufByPvm(pvm);
+        var buf = Unpooled.wrappedBuffer(decompressedBytes);
+        // crc check
+//        var segmentSeq = buf.readLong();
+//        var cvCount = buf.readInt();
+//        var segmentMaskedValue = buf.readInt();
+//        buf.skipBytes(SEGMENT_HEADER_LENGTH);
 
-        // skip key header
-        // no use, for check
-        byte keyLength = withKeyHeaderBuf.readByte();
+        buf.readerIndex(pvm.segmentOffset);
+
+        // skip key header or check key
+        var keyLength = buf.readShort();
         var keyBytesRead = new byte[keyLength];
-        withKeyHeaderBuf.readBytes(keyBytesRead);
+        buf.readBytes(keyBytesRead);
 
-//        if (!Arrays.equals(keyBytesRead, keyBytes)) {
-//            throw new IllegalStateException("Key not match, key: " + new String(keyBytes) + ", key persisted: " + new String(keyBytesRead));
-//        }
+        if (!Arrays.equals(keyBytesRead, keyBytes)) {
+            throw new IllegalStateException("Key not match, key: " + new String(keyBytes) + ", key persisted: " + new String(keyBytesRead));
+        }
 
-        return withKeyHeaderBuf;
+        return buf;
     }
 
     byte[] getFromWal(String key, int bucketIndex) {
@@ -515,22 +522,26 @@ public class OneSlot {
         return targetWal.get(key);
     }
 
-    public ByteBuf getKeyValueBufByPvm(PersistValueMeta pvm) {
+    private byte[] getSegmentSubBlockDecompressedBytesByPvm(PersistValueMeta pvm) {
         byte[] tightBytesWithLength = chunk.preadSegmentTightBytesWithLength(pvm.segmentIndex);
         if (tightBytesWithLength == null) {
             throw new IllegalStateException("Load persisted segment bytes error, pvm: " + pvm);
         }
 
         var buffer = ByteBuffer.wrap(tightBytesWithLength);
-        // refer to SegmentBatch tight HEADER_LENGTH
-        buffer.position(4 + pvm.subBlockIndex * 4);
+        buffer.position(SegmentBatch.subBlockMetaPosition(pvm.subBlockIndex));
         var subBlockOffset = buffer.getShort();
         var subBlockLength = buffer.getShort();
 
-        var uncompressedBytes = new byte[segmentLength];
+        // memory copy
+//        var compressedBytes = new byte[subBlockLength];
+//        buffer.position(subBlockOffset).get(compressedBytes);
+
+        var decompressedBytes = new byte[segmentLength];
 
         var beginT = System.nanoTime();
-        var d = Zstd.decompressByteArray(uncompressedBytes, 0, segmentLength,
+//        var decompressedBytes = Zstd.decompress(compressedBytes, segmentLength);
+        var d = Zstd.decompressByteArray(decompressedBytes, 0, segmentLength,
                 tightBytesWithLength, subBlockOffset, subBlockLength);
         var costT = (System.nanoTime() - beginT) / 1000;
         if (costT == 0) {
@@ -544,9 +555,7 @@ public class OneSlot {
                     ", i=" + pvm.segmentIndex + ", sbi=" + pvm.subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
         }
 
-        var buf = Unpooled.wrappedBuffer(uncompressedBytes);
-        buf.readerIndex(pvm.segmentOffset);
-        return buf;
+        return decompressedBytes;
     }
 
     public boolean remove(int bucketIndex, String key, long keyHash, boolean isDelayUpdateKeyBucket) {
