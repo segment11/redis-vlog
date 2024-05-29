@@ -13,11 +13,11 @@ public enum ConfForSlot {
     public final ConfBucket confBucket;
     public final ConfChunk confChunk;
     public final ConfWal confWal;
-    public final ConfLru lruBigString = new ConfLru(300, 300, 100_000_000L, 1000);
+    public final ConfLru lruBigString = new ConfLru(1000);
 
     public boolean pureMemory = false;
     public short slotNumber = 1;
-    public byte allWorkers = 1;
+    public byte netWorkers = 1;
     public int eventLoopIdleMillis = 10;
 
     public static ConfForSlot from(long estimateKeyNumber) {
@@ -61,16 +61,10 @@ public enum ConfForSlot {
     }
 
     public static class ConfLru {
-        public ConfLru(long expireAfterWrite, long expireAfterAccess, long maximumBytes, int maxSize) {
-            this.expireAfterWrite = expireAfterWrite;
-            this.expireAfterAccess = expireAfterAccess;
-            this.maximumBytes = maximumBytes;
+        public ConfLru(int maxSize) {
             this.maxSize = maxSize;
         }
 
-        public long expireAfterWrite;
-        public long expireAfterAccess;
-        public long maximumBytes;
         public int maxSize;
     }
 
@@ -83,9 +77,8 @@ public enum ConfForSlot {
 
         public int bucketsPerSlot;
 
-        public ConfLru lru = new ConfLru(300, 300, 100_000_000L, 1000 * 25);
-
-        public boolean isCompress = false;
+        // 4KB one segment, 25 * 1000 * 4KB = 100MB
+        public ConfLru lru = new ConfLru(1000 * 25);
 
         @Override
         public String toString() {
@@ -118,7 +111,8 @@ public enum ConfForSlot {
         // for better latency, PAGE_SIZE 4K is ok
         public int segmentLength;
 
-        public ConfLru lru = new ConfLru(300, 300, 100_000_000L, 1000 * 25);
+        // 4KB one segment, 25 * 1000 * 4KB = 100MB
+        public ConfLru lru = new ConfLru(1000 * 25);
 
         public int maxSegmentNumber() {
             return segmentNumberPerFd * fdPerChunk;
@@ -135,20 +129,18 @@ public enum ConfForSlot {
     }
 
     public enum ConfWal {
-        debugMode(16, 2, 1000, 1000),
-        c1m(16, 2, 1000, 1000),
-        c10m(32, 2, 1000, 1000),
-        c100m(32, 2, 1000, 1000);
+        debugMode(16, 1000, 1000),
+        c1m(16, 1000, 1000),
+        c10m(32, 1000, 1000),
+        c100m(32, 1000, 1000);
 
-        ConfWal(int oneChargeBucketNumber, int batchNumber, int valueSizeTrigger, int shortValueSizeTrigger) {
+        ConfWal(int oneChargeBucketNumber, int valueSizeTrigger, int shortValueSizeTrigger) {
             this.oneChargeBucketNumber = oneChargeBucketNumber;
-            this.batchNumber = batchNumber;
             this.valueSizeTrigger = valueSizeTrigger;
             this.shortValueSizeTrigger = shortValueSizeTrigger;
         }
 
         public int oneChargeBucketNumber;
-        public int batchNumber;
 
         // refer to Chunk BATCH_SEGMENT_COUNT_FOR_PWRITE
         // 4 pages ~= 16KB, one V persist length is about 100B, so 4 pages can store about 160 V
@@ -161,7 +153,6 @@ public enum ConfForSlot {
         public String toString() {
             return "ConfWal{" +
                     "oneChargeBucketNumber=" + oneChargeBucketNumber +
-                    ", batchNumber=" + batchNumber +
                     ", valueSizeTrigger=" + valueSizeTrigger +
                     ", shortValueSizeTrigger=" + shortValueSizeTrigger +
                     '}';

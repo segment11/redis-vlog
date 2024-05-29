@@ -1,5 +1,6 @@
 package redis.persist;
 
+import redis.CompressedValue;
 import redis.ConfForSlot;
 
 import java.util.ArrayList;
@@ -190,6 +191,15 @@ public class KeyBucketsInOneWalGroup {
                     // already updated
                     continue;
                 }
+            }
+
+            // wal remove delay use expire now
+            if (pvm.expireAt == CompressedValue.EXPIRE_NOW) {
+                var isDeleted = keyBucket.del(pvm.keyBytes, pvm.keyHash);
+                if (isDeleted) {
+                    keyCountTmp[relativeBucketIndex]--;
+                }
+                continue;
             }
 
             boolean isPut = keyBucket.put(pvm.keyBytes, pvm.keyHash, pvm.expireAt, pvm.seq,

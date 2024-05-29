@@ -728,7 +728,7 @@ public class SGroup extends BaseCommand {
         var oneSlot = localPersist.oneSlot(slot);
         if (set.isEmpty()) {
             // remove dst key
-            oneSlot.removeDelay(workerId, new String(dstKeyBytes), slotWithKeyHashForDst.bucketIndex(), slotWithKeyHashForDst.keyHash());
+            oneSlot.removeDelay(new String(dstKeyBytes), slotWithKeyHashForDst.bucketIndex(), slotWithKeyHashForDst.keyHash());
         } else {
             var encodedBytes = rhk.encode();
             var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
@@ -936,7 +936,7 @@ public class SGroup extends BaseCommand {
 
         if (srcRhk.size() == 0) {
             // remove key
-            oneSlotSrc.removeDelay(workerId, new String(srcKeyBytes), slotWithKeyHashForSrc.bucketIndex(), slotWithKeyHashForSrc.keyHash());
+            oneSlotSrc.removeDelay(new String(srcKeyBytes), slotWithKeyHashForSrc.bucketIndex(), slotWithKeyHashForSrc.keyHash());
         } else {
             var encodedBytes = srcRhk.encode();
             var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
@@ -1046,7 +1046,7 @@ public class SGroup extends BaseCommand {
             if (set.isEmpty()) {
                 // remove key
                 var oneSlot = localPersist.oneSlot(slot);
-                oneSlot.removeDelay(workerId, new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+                oneSlot.removeDelay(new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
             } else {
                 var encodedBytes = rhk.encode();
                 var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
@@ -1105,7 +1105,7 @@ public class SGroup extends BaseCommand {
         if (rhk.size() == 0) {
             // remove key
             var oneSlot = localPersist.oneSlot(slot);
-            oneSlot.removeDelay(workerId, new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+            oneSlot.removeDelay(new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
         } else {
             var encodedBytes = rhk.encode();
             var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;

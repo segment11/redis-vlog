@@ -1201,7 +1201,7 @@ public class ZGroup extends BaseCommand {
         if (rz.isEmpty()) {
             var oneSlot = localPersist.oneSlot(slot);
             // remove key
-            oneSlot.removeDelay(workerId, new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+            oneSlot.removeDelay(new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
         } else {
             var encodedBytes = rz.encode();
             var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
@@ -1315,7 +1315,7 @@ public class ZGroup extends BaseCommand {
         if (rz.isEmpty()) {
             var oneSlot = localPersist.oneSlot(slot);
             // remove dst key
-            oneSlot.removeDelay(workerId, new String(dstKeyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+            oneSlot.removeDelay(new String(dstKeyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
             return;
         }
 
@@ -1793,7 +1793,7 @@ public class ZGroup extends BaseCommand {
         if (rz.isEmpty()) {
             // remove key
             var oneSlot = localPersist.oneSlot(slot);
-            oneSlot.removeDelay(workerId, new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+            oneSlot.removeDelay(new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
         } else {
             var encodedBytes = rz.encode();
             var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
@@ -1979,7 +1979,7 @@ public class ZGroup extends BaseCommand {
             if (rz.isEmpty()) {
                 // remove key
                 var oneSlot = localPersist.oneSlot(slot);
-                oneSlot.removeDelay(workerId, new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+                oneSlot.removeDelay(new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
             } else {
                 var encodedBytes = rz.encode();
                 var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;

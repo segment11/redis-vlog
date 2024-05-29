@@ -25,7 +25,7 @@ class KeyLoaderTest extends Specification {
         def snowFlake = new SnowFlake(1, 1)
 
         byte slot = 0
-        def keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, null, null)
+        def keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake)
         keyLoader.initFds(libC)
         keyLoader
     }
@@ -61,7 +61,7 @@ class KeyLoaderTest extends Specification {
         keyBuckets[2].getValueByKey('b'.bytes, 2L).valueBytes() == 'b'.bytes
 
         when:
-        def isRemoved = keyLoader.remove(0, 'a'.getBytes(), 3L)
+        def isRemoved = keyLoader.removeSingleKeyForTest(0, 'a'.getBytes(), 3L)
 
         then:
         isRemoved

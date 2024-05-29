@@ -14,82 +14,54 @@ import java.util.List;
 
 public class MetaChunkSegmentFlagSeq {
     private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
-    // flag byte + merge worker byte + seq long
-    public static final int ONE_LENGTH = 1 + 1 + 8;
+    // flag byte + seq long
+    public static final int ONE_LENGTH = 1 + 8;
 
     private final byte slot;
-    private final byte allWorkers;
-    private final int oneBatchCapacity;
-    private final int oneWorkerCapacity;
     private final int allCapacity;
     private RandomAccessFile raf;
-
-    // 100KB
-    private static final int BATCH_SIZE = 1024 * 100;
-    private static final byte[] EMPTY_BYTES = new byte[BATCH_SIZE];
 
     private static void fillSegmentFlagInit(byte[] innerBytes) {
         var innerBuffer = ByteBuffer.wrap(innerBytes);
         var times = innerBytes.length / ONE_LENGTH;
         for (int i = 0; i < times; i++) {
             innerBuffer.put(Chunk.SEGMENT_FLAG_INIT);
-            innerBuffer.position(innerBuffer.position() + 9);
-        }
-    }
-
-    static {
-        var innerBytes = new byte[100];
-        fillSegmentFlagInit(innerBytes);
-
-        var buffer = ByteBuffer.wrap(EMPTY_BYTES);
-        for (int i = 0; i < 1024; i++) {
-            buffer.put(innerBytes);
+            innerBuffer.position(innerBuffer.position() + 8);
         }
     }
 
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
-    public synchronized byte[] getInMemoryCachedBytesOneWorkerOneBatch(byte workerId, byte batchIndex) {
-        var bytes = new byte[oneBatchCapacity];
-        var offset = workerId * oneWorkerCapacity + batchIndex * oneBatchCapacity;
-        System.arraycopy(inMemoryCachedBytes, offset, bytes, 0, oneBatchCapacity);
-        return bytes;
+    public byte[] getInMemoryCachedBytes() {
+        return inMemoryCachedBytes;
     }
 
-    public synchronized void overwriteInMemoryCachedBytesOneWorker(byte[] bytes) {
-        if (bytes.length != oneWorkerCapacity + 1) {
-            throw new IllegalArgumentException("Repl meta chunk segment flag seq, bytes length not match");
+    public void overwriteInMemoryCachedBytes(byte[] bytes) {
+        if (bytes.length != inMemoryCachedBytes.length) {
+            throw new IllegalArgumentException("Repl chunk segment flag seq, bytes length not match");
         }
-
-        var workerId = bytes[0];
-        var offset = workerId * oneWorkerCapacity;
+        System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
 
         if (ConfForSlot.global.pureMemory) {
-            System.arraycopy(bytes, 1, inMemoryCachedBytes, offset, oneWorkerCapacity);
             return;
         }
 
         try {
-            raf.seek(offset);
-            raf.write(bytes, 1, oneWorkerCapacity);
-            System.arraycopy(bytes, 1, inMemoryCachedBytes, offset, oneWorkerCapacity);
+            raf.seek(0);
+            raf.write(bytes);
         } catch (IOException e) {
-            throw new RuntimeException("Repl meta chunk segment flag seq, write file error", e);
+            throw new RuntimeException("Repl chunk segment flag seq, write file error", e);
         }
     }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public MetaChunkSegmentFlagSeq(byte slot, byte allWorkers, File slotDir) throws IOException {
+    public MetaChunkSegmentFlagSeq(byte slot, File slotDir) throws IOException {
         this.slot = slot;
-        this.allWorkers = allWorkers;
+        this.allCapacity = ConfForSlot.global.confChunk.maxSegmentNumber() * ONE_LENGTH;
 
-        this.oneBatchCapacity = ConfForSlot.global.confChunk.maxSegmentNumber() * ONE_LENGTH;
-        this.oneWorkerCapacity = ConfForSlot.global.confWal.batchNumber * oneBatchCapacity;
-        this.allCapacity = allWorkers * oneWorkerCapacity;
-
-        // max all workers <= 128, batch number <= 2, max segment number <= 512KB, 128 * 2 * 512KB * 10 = 1.28GB
+        // max max segment number <= 512KB * 8, 512KB * 8 * 9 = 36MB
         this.inMemoryCachedBytes = new byte[allCapacity];
         fillSegmentFlagInit(inMemoryCachedBytes);
 
@@ -102,14 +74,7 @@ public class MetaChunkSegmentFlagSeq {
         var file = new File(slotDir, META_CHUNK_SEGMENT_SEQ_FLAG_FILE);
         if (!file.exists()) {
             FileUtils.touch(file);
-
-            var initTimes = allCapacity / BATCH_SIZE;
-            if (allCapacity % BATCH_SIZE != 0) {
-                initTimes++;
-            }
-            for (int i = 0; i < initTimes; i++) {
-                FileUtils.writeByteArrayToFile(file, EMPTY_BYTES, true);
-            }
+            FileUtils.writeByteArrayToFile(file, this.inMemoryCachedBytes, true);
         } else {
             needRead = true;
         }
@@ -125,44 +90,36 @@ public class MetaChunkSegmentFlagSeq {
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
     }
 
-    public interface IterateCallBack {
-        void call(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte mergeWorkerId, long segmentSeq);
+    interface IterateCallBack {
+        void call(int segmentIndex, byte flag, long segmentSeq);
     }
 
-    public synchronized void iterate(IterateCallBack callBack) {
+    void iterate(IterateCallBack callBack) {
         for (int i = 0; i < allCapacity; i += ONE_LENGTH) {
-            var workerId = (byte) (i / oneWorkerCapacity);
-            var batchIndex = (i % oneWorkerCapacity) / oneBatchCapacity;
-            var segmentIndex = (i % oneBatchCapacity) / ONE_LENGTH;
+            var segmentIndex = i;
 
             var flag = inMemoryCachedByteBuffer.get(i);
-            var mergeWorkerId = inMemoryCachedByteBuffer.get(i + 1);
-            var segmentSeq = inMemoryCachedByteBuffer.getLong(i + 2);
+            var segmentSeq = inMemoryCachedByteBuffer.getLong(i + 1);
 
-            callBack.call(workerId, (byte) batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
+            callBack.call(segmentIndex, flag, segmentSeq);
         }
     }
 
-    public synchronized List<Long> getSomeSegmentsSeqList(byte workerId, byte batchIndex, int beginSegmentIndex, int segmentCount) {
-        var offset = workerId * oneWorkerCapacity +
-                batchIndex * oneBatchCapacity +
-                beginSegmentIndex * ONE_LENGTH;
+    List<Long> getSegmentSeqListBatchForRepl(int beginSegmentIndex, int segmentCount) {
+        var offset = beginSegmentIndex * ONE_LENGTH;
         var list = new ArrayList<Long>();
         for (int i = beginSegmentIndex; i < beginSegmentIndex + segmentCount; i++) {
-            list.add(inMemoryCachedByteBuffer.getLong(offset + 2));
+            list.add(inMemoryCachedByteBuffer.getLong(offset + 1));
             offset += ONE_LENGTH;
         }
         return list;
     }
 
-    public synchronized void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex, byte flag, byte mergeWorkerId, long segmentSeq) {
-        var offset = workerId * oneWorkerCapacity +
-                batchIndex * oneBatchCapacity +
-                segmentIndex * ONE_LENGTH;
+    void setSegmentMergeFlag(int segmentIndex, byte flag, long segmentSeq) {
+        var offset = segmentIndex * ONE_LENGTH;
         var bytes = new byte[ONE_LENGTH];
         bytes[0] = flag;
-        bytes[1] = mergeWorkerId;
-        ByteBuffer.wrap(bytes, 2, 8).putLong(segmentSeq);
+        ByteBuffer.wrap(bytes, 1, 8).putLong(segmentSeq);
 
         if (ConfForSlot.global.pureMemory) {
             inMemoryCachedByteBuffer.put(offset, bytes);
@@ -178,11 +135,15 @@ public class MetaChunkSegmentFlagSeq {
         }
     }
 
-    public synchronized void setSegmentMergeFlagBatch(byte workerId, byte batchIndex, int beginSegmentIndex, byte[] bytes) {
-        var offset = workerId * oneWorkerCapacity +
-                batchIndex * oneBatchCapacity +
-                beginSegmentIndex * ONE_LENGTH;
+    void setSegmentMergeFlagBatch(int segmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
+        var bytes = new byte[segmentCount * ONE_LENGTH];
+        var buffer = ByteBuffer.wrap(bytes);
+        for (int i = 0; i < segmentCount; i++) {
+            buffer.put(i * ONE_LENGTH, flag);
+            buffer.putLong(i * ONE_LENGTH + 1, segmentSeqList.get(i));
+        }
 
+        var offset = segmentIndex * ONE_LENGTH;
         if (ConfForSlot.global.pureMemory) {
             inMemoryCachedByteBuffer.put(offset, bytes);
             return;
@@ -197,41 +158,38 @@ public class MetaChunkSegmentFlagSeq {
         }
     }
 
-    public synchronized Chunk.SegmentFlag getSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex) {
-        var offset = workerId * oneWorkerCapacity +
-                batchIndex * oneBatchCapacity +
-                segmentIndex * ONE_LENGTH;
-        return new Chunk.SegmentFlag(inMemoryCachedByteBuffer.get(offset), inMemoryCachedByteBuffer.get(offset + 1),
-                inMemoryCachedByteBuffer.getLong(offset + 2));
+    Chunk.SegmentFlag getSegmentMergeFlag(int segmentIndex) {
+        var offset = segmentIndex * ONE_LENGTH;
+        return new Chunk.SegmentFlag(inMemoryCachedByteBuffer.get(offset), inMemoryCachedByteBuffer.getLong(offset + 1));
     }
 
-    public synchronized void clear() {
+    void clear() {
         if (ConfForSlot.global.pureMemory) {
             fillSegmentFlagInit(inMemoryCachedBytes);
             return;
         }
 
-        var initTimes = allCapacity / BATCH_SIZE;
-        if (allCapacity % BATCH_SIZE != 0) {
-            initTimes++;
-        }
         try {
-            for (int i = 0; i < initTimes; i++) {
-                raf.seek(i * BATCH_SIZE);
-                raf.write(EMPTY_BYTES);
-            }
+            var tmpBytes = new byte[allCapacity];
+            fillSegmentFlagInit(tmpBytes);
+            raf.seek(0);
+            raf.write(tmpBytes);
             fillSegmentFlagInit(inMemoryCachedBytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public synchronized void cleanUp() {
+    void cleanUp() {
         if (ConfForSlot.global.pureMemory) {
             return;
         }
 
+        // sync all
         try {
+            raf.seek(0);
+            raf.write(inMemoryCachedBytes);
+            System.out.println("Meta chunk segment flag seq sync all done");
             raf.close();
         } catch (IOException e) {
             throw new RuntimeException(e);

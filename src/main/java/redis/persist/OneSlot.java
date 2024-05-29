@@ -3,7 +3,6 @@ package redis.persist;
 import com.github.luben.zstd.Zstd;
 import io.activej.async.callback.AsyncComputation;
 import io.activej.async.function.AsyncSupplier;
-import io.activej.common.function.RunnableEx;
 import io.activej.config.Config;
 import io.activej.eventloop.Eventloop;
 import io.activej.promise.Promise;
@@ -30,11 +29,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 
 import static io.activej.config.converter.ConfigConverters.ofInteger;
@@ -43,7 +40,6 @@ import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 public class OneSlot {
     public OneSlot(byte slot, short slotNumber, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
         this.segmentLength = ConfForSlot.global.confChunk.segmentLength;
-        this.batchNumber = ConfForSlot.global.confWal.batchNumber;
 
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
@@ -67,6 +63,8 @@ public class OneSlot {
 
         this.bigStringFiles = new BigStringFiles(slot, slotDir);
 
+        this.chunkMergeWorker = new ChunkMergeWorker(slot, snowFlake);
+
         var dynConfigFile = new File(slotDir, DYN_CONFIG_FILE_NAME);
         this.dynConfig = new DynConfig(slot, dynConfigFile);
 
@@ -80,54 +78,33 @@ public class OneSlot {
 
         int bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
         var walGroupNumber = bucketsPerSlot / ConfForSlot.global.confWal.oneChargeBucketNumber;
-        this.walQueueArray = new LinkedBlockingQueue[walGroupNumber];
-        this.walsArray = new Wal[walGroupNumber][];
-        this.currentWalArray = new Wal[walGroupNumber];
+        this.walArray = new Wal[walGroupNumber];
 
-        this.rafArray = new RandomAccessFile[batchNumber];
-        this.rafShortValueArray = new RandomAccessFile[batchNumber];
+        var walSharedFile = new File(slotDir, "wal.dat");
+        if (!walSharedFile.exists()) {
+            FileUtils.touch(walSharedFile);
 
-        if (!ConfForSlot.global.pureMemory) {
-            for (int i = 0; i < batchNumber; i++) {
-                var walSharedFileBatch = new File(slotDir, "wal-" + i + ".dat");
-                if (!walSharedFileBatch.exists()) {
-                    FileUtils.touch(walSharedFileBatch);
-
-                    var initTimes = walGroupNumber / Wal.INIT_M4_TIMES;
-                    for (int j = 0; j < initTimes; j++) {
-                        FileUtils.writeByteArrayToFile(walSharedFileBatch, Wal.INIT_M4, true);
-                    }
-                }
-                rafArray[i] = new RandomAccessFile(walSharedFileBatch, "rw");
-
-                var walSharedFileShortValueBatch = new File(slotDir, "wal-short-value-" + i + ".dat");
-                if (!walSharedFileShortValueBatch.exists()) {
-                    FileUtils.touch(walSharedFileShortValueBatch);
-
-                    var initTimes = walGroupNumber / Wal.INIT_M4_TIMES;
-                    for (int j = 0; j < initTimes; j++) {
-                        FileUtils.writeByteArrayToFile(walSharedFileShortValueBatch, Wal.INIT_M4, true);
-                    }
-                }
-                rafShortValueArray[i] = new RandomAccessFile(walSharedFileShortValueBatch, "rw");
+            var initTimes = walGroupNumber / Wal.INIT_M4_TIMES;
+            for (int j = 0; j < initTimes; j++) {
+                FileUtils.writeByteArrayToFile(walSharedFile, Wal.INIT_M4, true);
             }
         }
+        this.raf = new RandomAccessFile(walSharedFile, "rw");
+
+        var walSharedFileShortValue = new File(slotDir, "wal-short-value.dat");
+        if (!walSharedFileShortValue.exists()) {
+            FileUtils.touch(walSharedFileShortValue);
+
+            var initTimes = walGroupNumber / Wal.INIT_M4_TIMES;
+            for (int j = 0; j < initTimes; j++) {
+                FileUtils.writeByteArrayToFile(walSharedFileShortValue, Wal.INIT_M4, true);
+            }
+        }
+        this.rafShortValue = new RandomAccessFile(walSharedFileShortValue, "rw");
 
         for (int i = 0; i < walGroupNumber; i++) {
-            walQueueArray[i] = new LinkedBlockingQueue<>(batchNumber);
-            walsArray[i] = new Wal[batchNumber];
-
-            for (int j = 0; j < batchNumber; j++) {
-                var wal = new Wal(slot, i, (byte) j, rafArray[j], rafShortValueArray[j], snowFlake);
-                walsArray[i][j] = wal;
-                if (j > 0) {
-                    walQueueArray[i].add(wal);
-                } else {
-                    // first wal as current
-                    currentWalArray[i] = wal;
-                    wal.lastUsedTimeMillis = System.currentTimeMillis();
-                }
-            }
+            var wal = new Wal(slot, i, raf, rafShortValue, snowFlake);
+            walArray[i] = wal;
         }
 
         // default 2000, I do not know if it is suitable
@@ -142,24 +119,9 @@ public class OneSlot {
             }
         }, toSlaveWalAppendBatch);
 
-        this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, masterUpdateCallback, dynConfig);
+        this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake);
 
         DictMap.getInstance().setMasterUpdateCallback(masterUpdateCallback);
-
-        this.persistHandleEventloopArray = new Eventloop[batchNumber];
-        for (int i = 0; i < batchNumber; i++) {
-            var persistHandleEventloop = Eventloop.builder()
-                    .withThreadName("persist-worker-slot-" + slot + "-batch-" + i)
-                    .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
-                    .build();
-            persistHandleEventloop.keepAlive(true);
-            this.persistHandleEventloopArray[i] = persistHandleEventloop;
-
-            var threadFactory = ThreadFactoryAssignSupport.getInstance().ForSlotWalBatchPersist.getNextThreadFactory();
-            var thread = threadFactory.newThread(persistHandleEventloop);
-            thread.start();
-            log.info("Slot persist handle eventloop thread started, s={}, b={}, thread name={}", slot, i, thread.getName());
-        }
 
         this.initTasks();
         this.initMetricsCollect();
@@ -282,7 +244,7 @@ public class OneSlot {
         this.netWorkerEventloop = netWorkerEventloop;
     }
 
-    private Eventloop netWorkerEventloop;
+    Eventloop netWorkerEventloop;
 
     public void setRequestHandler(RequestHandler requestHandler) {
         this.requestHandler = requestHandler;
@@ -302,7 +264,6 @@ public class OneSlot {
     }
 
     private final int segmentLength;
-    private final int batchNumber;
     private final SnowFlake snowFlake;
     private final Config persistConfig;
     private final File slotDir;
@@ -312,6 +273,8 @@ public class OneSlot {
     public BigStringFiles getBigStringFiles() {
         return bigStringFiles;
     }
+
+    private final ChunkMergeWorker chunkMergeWorker;
 
     private static final String DYN_CONFIG_FILE_NAME = "dyn-config.json";
     private final DynConfig dynConfig;
@@ -361,18 +324,10 @@ public class OneSlot {
     }
 
     // index is group index
-    private final LinkedBlockingQueue<Wal>[] walQueueArray;
-    private long takeWalCostNanos = 0;
-    private long takeWalCount = 0;
+    private final Wal[] walArray;
 
-    // first index is group index, second index is batch index
-    private final Wal[][] walsArray;
-    // index is group index
-    private final Wal[] currentWalArray;
-
-    // index is batch index
-    private final RandomAccessFile[] rafArray;
-    private final RandomAccessFile[] rafShortValueArray;
+    private final RandomAccessFile raf;
+    private final RandomAccessFile rafShortValue;
 
     final KeyLoader keyLoader;
 
@@ -384,54 +339,27 @@ public class OneSlot {
 
     public long getKeyCount() {
         var r = keyLoader.getKeyCount();
-        for (var wals : walsArray) {
-            for (var wal : wals) {
-                r += wal.getKeyCount();
-            }
+        for (var wal : walArray) {
+            r += wal.getKeyCount();
         }
         return r;
     }
 
-    private final Eventloop[] persistHandleEventloopArray;
-
     private LibC libC;
 
-    public byte getAllWorkers() {
-        return allWorkers;
-    }
 
-    private byte allWorkers;
     private byte netWorkers;
-    private byte mergeWorkers;
-    private byte topMergeWorkers;
 
-    private ChunkMerger chunkMerger;
-
-    public ChunkMerger getChunkMerger() {
-        return chunkMerger;
-    }
-
-    public void setChunkMerger(ChunkMerger chunkMerger) {
-        this.chunkMerger = chunkMerger;
-
-        for (int i = netWorkers; i < allWorkers; i++) {
-            for (var chunk : chunksArray[i]) {
-                chunkMerger.getChunkMergeWorker((byte) i).fixMergeHandleChunkThreadId(chunk);
-            }
-        }
-    }
-
-    // first index is worker id, second index is batch index
-    Chunk[][] chunksArray;
+    Chunk chunk;
 
     private MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
 
-    public byte[] getMetaChunkSegmentFlagSeqBytesOneWorkerOneBatchToSlaveExists(byte workerId, byte batchIndex) {
-        return metaChunkSegmentFlagSeq.getInMemoryCachedBytesOneWorkerOneBatch(workerId, batchIndex);
+    public byte[] getMetaChunkSegmentFlagSeqBytesToSlaveExists() {
+        return metaChunkSegmentFlagSeq.getInMemoryCachedBytes();
     }
 
-    public void overwriteMetaChunkSegmentFlagSeqBytesOneWorkerFromMasterExists(byte[] bytes) {
-        metaChunkSegmentFlagSeq.overwriteInMemoryCachedBytesOneWorker(bytes);
+    public void overwriteMetaChunkSegmentFlagSeqBytesFromMasterExists(byte[] bytes) {
+        metaChunkSegmentFlagSeq.overwriteInMemoryCachedBytes(bytes);
     }
 
     private MetaChunkSegmentIndex metaChunkSegmentIndex;
@@ -583,30 +511,12 @@ public class OneSlot {
 
     byte[] getFromWal(String key, int bucketIndex) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-        byte[] tmpValueBytes = currentWalArray[walGroupIndex].get(key);
-        long lastUsedTimeMillis = currentWalArray[walGroupIndex].lastUsedTimeMillis;
-        for (var wal : walsArray[walGroupIndex]) {
-            if (wal == currentWalArray[walGroupIndex]) {
-                continue;
-            }
-
-            // skip older
-            if (lastUsedTimeMillis > wal.lastUsedTimeMillis && tmpValueBytes != null) {
-                continue;
-            }
-
-            lastUsedTimeMillis = wal.lastUsedTimeMillis;
-
-            var tmpValueBytesThisWal = wal.get(key);
-            if (tmpValueBytesThisWal != null) {
-                tmpValueBytes = tmpValueBytesThisWal;
-            }
-        }
-        return tmpValueBytes;
+        var targetWal = walArray[walGroupIndex];
+        return targetWal.get(key);
     }
 
     public ByteBuf getKeyValueBufByPvm(PersistValueMeta pvm) {
-        byte[] tightBytesWithLength = preadSegmentTightBytesWithLength(pvm.workerId, pvm.batchIndex, pvm.segmentIndex);
+        byte[] tightBytesWithLength = chunk.preadSegmentTightBytesWithLength(pvm.segmentIndex);
         if (tightBytesWithLength == null) {
             throw new IllegalStateException("Load persisted segment bytes error, pvm: " + pvm);
         }
@@ -630,8 +540,8 @@ public class OneSlot {
         segmentDecompressCountTotal.labels(slotStr).inc();
 
         if (d != segmentLength) {
-            throw new IllegalStateException("Decompress error, w=" + pvm.workerId + ", s=" + pvm.slot +
-                    ", b=" + pvm.batchIndex + ", i=" + pvm.segmentIndex + ", sbi=" + pvm.subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
+            throw new IllegalStateException("Decompress error, s=" + pvm.slot +
+                    ", i=" + pvm.segmentIndex + ", sbi=" + pvm.subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
         }
 
         var buf = Unpooled.wrappedBuffer(uncompressedBytes);
@@ -639,52 +549,46 @@ public class OneSlot {
         return buf;
     }
 
-    public boolean remove(byte workerId, int bucketIndex, String key, long keyHash, boolean isDelayUpdateKeyBucket) {
+    public boolean remove(int bucketIndex, String key, long keyHash, boolean isDelayUpdateKeyBucket) {
         if (isDelayUpdateKeyBucket) {
-            removeDelay(workerId, key, bucketIndex, keyHash);
+            removeDelay(key, bucketIndex, keyHash);
             return true;
         }
 
-        boolean isDeleted = false;
-        try {
-            var isRemovedFromWal = removeFromWal(workerId, bucketIndex, key, keyHash);
-            // if is removed from wal, means, wal add a removed flag value, key loader need not immediately update target key bucket
-            // if remove too frequently, key loader will be blocked, performance will be bad, important!!!
-            isDeleted = isRemovedFromWal || keyLoader.remove(bucketIndex, key.getBytes(), keyHash);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        var isRemovedFromWal = removeFromWal(bucketIndex, key, keyHash);
+        if (isRemovedFromWal) {
+            return true;
         }
-        return isDeleted;
+
+        var valueBytesWithExpireAtAndSeq = keyLoader.getValueByKey(bucketIndex, key.getBytes(), keyHash);
+        if (valueBytesWithExpireAtAndSeq == null || valueBytesWithExpireAtAndSeq.isExpired()) {
+            return false;
+        }
+
+        removeDelay(key, bucketIndex, keyHash);
+        return true;
     }
 
-    public void removeDelay(byte workerId, String key, int bucketIndex, long keyHash) {
+    public void removeDelay(String key, int bucketIndex, long keyHash) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-        var currentWal = currentWalArray[walGroupIndex];
-        var putResult = currentWal.removeDelay(workerId, key, bucketIndex, keyHash);
+        var targetWal = walArray[walGroupIndex];
+        var putResult = targetWal.removeDelay(key, bucketIndex, keyHash);
 
         if (putResult.needPersist()) {
             doPersist(walGroupIndex, key, bucketIndex, putResult);
         } else {
             if (masterUpdateCallback != null) {
-                masterUpdateCallback.onWalAppend(slot, bucketIndex, currentWal.batchIndex,
-                        putResult.isValueShort(), putResult.needPutV(), putResult.offset());
+                masterUpdateCallback.onWalAppend(slot, bucketIndex, putResult.isValueShort(), putResult.needPutV(), putResult.offset());
             }
         }
     }
 
-    private boolean removeFromWal(byte workerId, int bucketIndex, String key, long keyHash) {
+    private boolean removeFromWal(int bucketIndex, String key, long keyHash) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-
-        boolean isRemoved = false;
-        for (var wal : walsArray[walGroupIndex]) {
-            var isRemovedThisWal = wal.remove(key);
-            if (isRemovedThisWal) {
-                isRemoved = true;
-            }
-        }
-
+        var targetWal = walArray[walGroupIndex];
+        boolean isRemoved = targetWal.remove(key);
         if (isRemoved) {
-            removeDelay(workerId, key, bucketIndex, keyHash);
+            removeDelay(key, bucketIndex, keyHash);
         }
         return isRemoved;
     }
@@ -692,14 +596,13 @@ public class OneSlot {
     long threadIdProtectedWhenPut = -1;
 
     // thread safe, same slot, same event loop
-    public void put(byte workerId, String key, int bucketIndex, CompressedValue cv) {
-        checkCurrentThread(workerId);
+    public void put(String key, int bucketIndex, CompressedValue cv) {
         if (isReadonly()) {
             throw new ReadonlyException();
         }
 
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-        var currentWal = currentWalArray[walGroupIndex];
+        var targetWal = walArray[walGroupIndex];
 
         byte[] cvEncoded;
         boolean isValueShort = cv.noExpire() && (cv.isTypeNumber() || cv.isShortString());
@@ -712,7 +615,7 @@ public class OneSlot {
         } else {
             cvEncoded = cv.encode();
         }
-        var v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+        var v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                 key, cvEncoded, cv.compressedLength());
 
         // for big string, use single file
@@ -728,17 +631,16 @@ public class OneSlot {
 
             // encode again
             cvEncoded = cv.encodeAsBigStringMeta(uuid);
-            v = new Wal.V(workerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+            v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                     key, cvEncoded, cv.compressedLength());
 
             isValueShort = true;
         }
 
-        var putResult = currentWal.put(isValueShort, key, v);
+        var putResult = targetWal.put(isValueShort, key, v);
         if (!putResult.needPersist()) {
             if (masterUpdateCallback != null) {
-                masterUpdateCallback.onWalAppend(slot, bucketIndex, currentWal.batchIndex,
-                        isValueShort, v, putResult.offset());
+                masterUpdateCallback.onWalAppend(slot, bucketIndex, isValueShort, v, putResult.offset());
             }
 
             return;
@@ -747,44 +649,22 @@ public class OneSlot {
         doPersist(walGroupIndex, key, bucketIndex, putResult);
     }
 
-    private void checkCurrentThread(byte workerId) {
-        var currentThreadId = Thread.currentThread().threadId();
-        if (threadIdProtectedWhenPut != -1 && threadIdProtectedWhenPut != currentThreadId) {
-            throw new IllegalStateException("Thread id not match, w=" + workerId + ", s=" + slot +
-                    ", t=" + currentThreadId + ", t2=" + threadIdProtectedWhenPut);
-        }
-    }
-
     private void doPersist(int walGroupIndex, String key, int bucketIndex, Wal.PutResult putResult) {
-        var beginT = System.nanoTime();
-        try {
-            var nextAvailableWal = walQueueArray[walGroupIndex].take();
-            var costT = System.nanoTime() - beginT;
-            takeWalCostNanos += costT;
-            takeWalCount++;
+        var targetWal = walArray[walGroupIndex];
+        persistWal(putResult.isValueShort(), targetWal);
 
-            // clear values in this thread, so RandomAccessFile seek/put is thread safe
-            if (putResult.isValueShort()) {
-                nextAvailableWal.clearShortValues();
-            } else {
-                nextAvailableWal.clearValues();
+        if (putResult.isValueShort()) {
+            targetWal.clearShortValues();
+        } else {
+            targetWal.clearValues();
+        }
+
+        var needPutV = putResult.needPutV();
+        if (needPutV != null) {
+            targetWal.put(putResult.isValueShort(), key, needPutV);
+            if (masterUpdateCallback != null) {
+                masterUpdateCallback.onWalAppend(slot, bucketIndex, putResult.isValueShort(), needPutV, putResult.offset());
             }
-
-            var needPutV = putResult.needPutV();
-            if (needPutV != null) {
-                nextAvailableWal.put(putResult.isValueShort(), key, needPutV);
-
-                if (masterUpdateCallback != null) {
-                    masterUpdateCallback.onWalAppend(slot, bucketIndex, nextAvailableWal.batchIndex,
-                            putResult.isValueShort(), needPutV, putResult.offset());
-                }
-            }
-
-            submitPersistTaskFromWal(putResult.isValueShort(), walGroupIndex, currentWalArray[walGroupIndex]);
-            currentWalArray[walGroupIndex] = nextAvailableWal;
-            nextAvailableWal.lastUsedTimeMillis = System.currentTimeMillis();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
     }
 
@@ -793,12 +673,9 @@ public class OneSlot {
             var walGroupIndex = entry.getKey();
             var extVs = entry.getValue();
 
-            // batch index is not single, can not write once
             for (var extV : extVs) {
-                var batchIndex = extV.batchIndex();
-                var wal = walsArray[walGroupIndex][batchIndex];
+                var wal = walArray[walGroupIndex];
 
-                var v = extV.v();
                 var offset = extV.offset();
                 if (offset == 0) {
                     // clear
@@ -809,6 +686,7 @@ public class OneSlot {
                     }
                 }
 
+                var v = extV.v();
                 wal.writeRafAndOffsetFromMasterNewly(extV.isValueShort(), v, offset);
 
                 var key = v.key();
@@ -823,16 +701,13 @@ public class OneSlot {
         }
     }
 
-    private HashMap<Short, LinkedList<ToMasterExistsSegmentMeta.OncePull>> oncePullsByWorkerAndBatchIndex = new HashMap<>();
+    private LinkedList<ToMasterExistsSegmentMeta.OncePull> oncePulls = new LinkedList<>();
 
-    public void resetOncePulls(byte workerId, byte batchIndex, LinkedList<ToMasterExistsSegmentMeta.OncePull> oncePulls) {
-        var key = (short) ((workerId << 8) | batchIndex);
-        this.oncePullsByWorkerAndBatchIndex.put(key, oncePulls);
+    public void resetOncePulls(LinkedList<ToMasterExistsSegmentMeta.OncePull> oncePulls) {
+        this.oncePulls = oncePulls;
     }
 
-    public ToMasterExistsSegmentMeta.OncePull removeOncePull(byte workerId, byte batchIndex, int beginSegmentIndex) {
-        var key = (short) ((workerId << 8) | batchIndex);
-        var oncePulls = oncePullsByWorkerAndBatchIndex.get(key);
+    public ToMasterExistsSegmentMeta.OncePull removeOncePull(int beginSegmentIndex) {
         if (oncePulls == null) {
             return null;
         }
@@ -858,13 +733,9 @@ public class OneSlot {
     }
 
     public void flush() {
-        checkCurrentThread((byte) -1);
-
         // can truncate all batch for better perf, todo
-        for (var wals : walsArray) {
-            for (var wal : wals) {
-                wal.clear();
-            }
+        for (var wal : walArray) {
+            wal.clear();
         }
 
         try {
@@ -876,60 +747,25 @@ public class OneSlot {
         this.metaChunkSegmentIndex.clear();
     }
 
-    public void initFds(LibC libC, byte allWorkers, byte netWorkers, byte mergeWorkers, byte topMergeWorkers) throws IOException {
-        this.allWorkers = allWorkers;
+    public void initFds(LibC libC, byte netWorkers) throws IOException {
         this.netWorkers = netWorkers;
-        this.mergeWorkers = mergeWorkers;
-        this.topMergeWorkers = topMergeWorkers;
 
         this.libC = libC;
         this.keyLoader.initFds(libC);
 
         // meta data
-        this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, allWorkers, slotDir);
+        this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, slotDir);
+        this.metaChunkSegmentIndex = new MetaChunkSegmentIndex(slot, slotDir);
 
-        // todo, check
-//        int[] countArr = new int[batchNumber];
-//        this.chunkSegmentFlagMmapBuffer.iterate((workerId, batchIndex, segmentIndex, flag, flagWorkerId) -> {
-//            if (flag == Chunk.SEGMENT_FLAG_REUSE) {
-//                log.warn("Segment is still reuse wait for merging, w={}, s={}, b={}, i={}, flag={}", workerId, slot, batchIndex, segmentIndex, flag);
-//                countArr[batchIndex]++;
-//            }
-//        });
-//
-//        for (int batchIndex = 0; batchIndex < batchNumber; batchIndex++) {
-//            if (countArr[batchIndex] > 1) {
-//                throw new IllegalStateException("More than one segment is still reuse wait for merging, count: " + countArr[batchIndex] +
-//                        ", slot: " + slot + ", batch index: " + batchIndex);
-//            }
-//        }
-
-        this.metaChunkSegmentIndex = new MetaChunkSegmentIndex(slot, allWorkers, slotDir);
-
-        // chunks
-        this.chunksArray = new Chunk[allWorkers][batchNumber];
-        for (int i = 0; i < allWorkers; i++) {
-            var chunks = new Chunk[batchNumber];
-            chunksArray[i] = chunks;
-
-            var workerId = (byte) i;
-            for (int j = 0; j < batchNumber; j++) {
-                var chunk = new Chunk(workerId, slot, (byte) j, netWorkers, snowFlake, slotDir, this, keyLoader, masterUpdateCallback);
-                chunks[j] = chunk;
-
-                initChunk(chunk);
-
-                if (i < netWorkers) {
-                    fixRequestHandleChunkThreadId(chunk);
-                }
-            }
-        }
+        // chunk
+        initChunk();
     }
 
-    private void initChunk(Chunk chunk) throws IOException {
+    private void initChunk() throws IOException {
+        this.chunk = new Chunk(slot, snowFlake, slotDir, this, keyLoader, masterUpdateCallback);
         chunk.initFds(libC);
 
-        var segmentIndex = getChunkWriteSegmentIndex(chunk.workerId, chunk.batchIndex);
+        var segmentIndex = metaChunkSegmentIndex.get();
 
         // write index mmap crash recovery
         boolean isBreak = false;
@@ -938,16 +774,16 @@ public class OneSlot {
             // when restart server, set persisted flag
             if (!canWrite) {
                 int currentSegmentIndex = chunk.currentSegmentIndex();
-                log.warn("Segment can not write, w={}, s={}, b={}, i={}", chunk.workerId, slot, chunk.batchIndex, currentSegmentIndex);
+                log.warn("Segment can not write, s={}, i={}", slot, currentSegmentIndex);
 
                 // set persisted flag, for next loop reuse
-                setSegmentMergeFlag(chunk.workerId, chunk.batchIndex, currentSegmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, Chunk.MAIN_WORKER_ID, snowFlake.nextId());
+                setSegmentMergeFlag(currentSegmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, snowFlake.nextId());
                 log.warn("Reset persisted when init");
 
                 chunk.moveIndexNext(1);
-                setChunkWriteSegmentIndex(chunk.workerId, chunk.batchIndex, currentSegmentIndex);
+                setChunkWriteSegmentIndex(currentSegmentIndex);
 
-                log.warn("Move to next segment, w={}, s={}, b={}, i={}", chunk.workerId, slot, chunk.batchIndex, currentSegmentIndex);
+                log.warn("Move to next segment, s={}, i={}", slot, currentSegmentIndex);
             } else {
                 isBreak = true;
                 break;
@@ -955,84 +791,37 @@ public class OneSlot {
         }
 
         if (!isBreak) {
-            throw new IllegalStateException("Segment can not write after reset flag, w=" + chunk.workerId +
-                    ", s=" + slot + ", b=" + chunk.batchIndex + ", i=" + chunk.currentSegmentIndex());
+            throw new IllegalStateException("Segment can not write after reset flag, s=" + slot + ", i=" + chunk.currentSegmentIndex());
         }
     }
 
-    private void fixRequestHandleChunkThreadId(Chunk chunk) {
-        var persistHandleEventloop = persistHandleEventloopArray[chunk.batchIndex];
-        persistHandleEventloop.submit(() -> {
-            chunk.threadIdProtectedWhenWrite = Thread.currentThread().threadId();
-            log.warn("Fix request worker chunk chunk thread id, w={}, rw={}, s={}, b={}, tid={}",
-                    chunk.workerId, chunk.workerId, slot, chunk.batchIndex, chunk.threadIdProtectedWhenWrite);
-        });
-    }
-
-    public void submitPersistTaskFromMasterExists(byte workerId, byte batchIndex, int segmentIndex, int segmentCount,
-                                                  List<Long> segmentSeqList, byte[] bytes) {
-        var chunk = chunksArray[workerId][batchIndex];
+    public void writeSegmentsFromMasterExists(int segmentIndex, int segmentCount, List<Long> segmentSeqList, byte[] bytes) {
         if (bytes.length != chunk.segmentLength * segmentCount) {
             throw new IllegalStateException("Bytes length not match, bytes length: " + bytes.length +
                     ", segment length: " + chunk.segmentLength + ", segment count: " + segmentCount);
         }
 
-        if (workerId < netWorkers) {
-            var persistHandleEventloop = persistHandleEventloopArray[batchIndex];
-            persistHandleEventloop.submit(() -> {
-                chunk.writeSegmentsFromMasterExists(bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);
-            });
-        } else {
-            // merge worker
-            chunkMerger.getChunkMergeWorker(workerId).submitWriteSegmentsFromMasterExists(chunk,
-                    bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);
-        }
+        chunk.writeSegmentsFromMasterExists(bytes, segmentIndex, segmentCount, segmentSeqList, bytes.length);
     }
 
-    public byte[] preadForMerge(byte workerId, byte batchIndex, int segmentIndex) {
-        var chunk = chunksArray[workerId][batchIndex];
+    byte[] preadForMerge(int segmentIndex) {
         return chunk.preadForMerge(segmentIndex);
     }
 
-    public byte[] preadSegmentTightBytesWithLength(byte workerId, byte batchIndex, int segmentIndex) {
-        var chunk = chunksArray[workerId][batchIndex];
-        return chunk.preadSegmentTightBytesWithLength(segmentIndex);
-    }
-
-    public byte[] preadForRepl(byte workerId, byte batchIndex, int segmentIndex) {
-        var chunk = chunksArray[workerId][batchIndex];
-
-        var persistHandleEventloop = persistHandleEventloopArray[batchIndex];
-        var f = persistHandleEventloop.submit(AsyncComputation.of(() -> chunk.preadForRepl(segmentIndex)));
-        try {
-            return f.get();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
-        }
+    public byte[] preadForRepl(int segmentIndex) {
+        return chunk.preadForRepl(segmentIndex);
     }
 
     public void cleanUp() {
-        // persist handle eventloop break before chunk clean up
-        for (var persistHandleEventloop : persistHandleEventloopArray) {
-            persistHandleEventloop.breakEventloop();
-        }
-        System.out.println("Slot persist handle eventloop threads stopped, slot: " + slot);
-
         // close wal raf
         try {
-            for (var raf : rafArray) {
-                raf.close();
-            }
+            raf.close();
             System.out.println("Close wal raf success, slot: " + slot);
 
-            for (var raf : rafShortValueArray) {
-                raf.close();
-            }
+            rafShortValue.close();
             System.out.println("Close wal short value raf success, slot: " + slot);
         } catch (IOException e) {
-            System.err.println("Close wal raf error, slot: " + slot);
+            System.err.println("Close wal raf / wal short raf error, slot: " + slot);
         }
 
         if (metaChunkSegmentFlagSeq != null) {
@@ -1043,15 +832,7 @@ public class OneSlot {
             metaChunkSegmentIndex.cleanUp();
         }
 
-        if (chunksArray != null) {
-            for (var chunks : chunksArray) {
-                for (var chunk : chunks) {
-                    if (chunk != null) {
-                        chunk.cleanUp();
-                    }
-                }
-            }
-        }
+        chunk.cleanUp();
 
         for (var replPair : replPairs) {
             replPair.bye();
@@ -1059,204 +840,120 @@ public class OneSlot {
         }
     }
 
-    private record PersistTaskParams(boolean isShortValue, int walGroupIndex, Wal targetWal, long submitTimeMillis) {
+    private void persistWal(boolean isShortValue, Wal targetWal) {
+        if (isShortValue) {
+            keyLoader.persistShortValueListBatchInOneWalGroup(targetWal.groupIndex, targetWal.delayToKeyBucketShortValues.values());
+        } else {
+            var list = new ArrayList<>(targetWal.delayToKeyBucketValues.values());
+            // sort by bucket index for future merge better
+            list.sort(Comparator.comparingInt(Wal.V::bucketIndex));
 
-    }
+            var needMergeSegmentIndexList = chunk.persist(targetWal.groupIndex, list, false);
+            if (needMergeSegmentIndexList == null) {
+                throw new IllegalStateException("Persist error, need merge segment index list is null, slot: " + slot);
+            }
 
-    private class PersistTask implements RunnableEx {
-        PersistTask(PersistTaskParams params, CompletableFuture<PersistTaskParams> cf) {
-            this.params = params;
-            this.cf = cf;
-        }
-
-        private final PersistTaskParams params;
-        private final CompletableFuture<PersistTaskParams> cf;
-
-        @Override
-        public void run() {
-            var targetWal = params.targetWal;
-
-            boolean isError = false;
-            try {
-                if (params.isShortValue) {
-                    keyLoader.persistShortValueListBatchInOneWalGroup(targetWal.groupIndex, targetWal.delayToKeyBucketShortValues.values());
-                } else {
-                    var list = new ArrayList<>(targetWal.delayToKeyBucketValues.values());
-                    // sort by bucket index for future merge better
-                    list.sort(Comparator.comparingInt(Wal.V::bucketIndex));
-
-                    var batchIndex = targetWal.batchIndex;
-                    var workerId = list.get(0).workerId();
-                    var chunk = chunksArray[workerId][batchIndex];
-
-                    var needMergeSegmentIndexList = chunk.persist(targetWal.groupIndex, list, false);
-                    if (needMergeSegmentIndexList == null) {
-                        isError = true;
-                        return;
-                    }
-
-                    if (!needMergeSegmentIndexList.isEmpty()) {
-                        chunkMerger.submit(workerId, slot, batchIndex, needMergeSegmentIndexList);
-                    }
-                }
-            } catch (Exception e) {
-                log.error("Persist Task error", e);
-            } finally {
-                if (!isError) {
-                    cf.complete(params);
-                }
+            if (!needMergeSegmentIndexList.isEmpty()) {
+                doMergeJob(needMergeSegmentIndexList);
             }
         }
     }
 
-    private void submitPersistTaskFromWal(boolean isShortValue, int walGroupIndex, Wal targetWal) {
-        var params = new PersistTaskParams(isShortValue, walGroupIndex, targetWal, System.currentTimeMillis());
-        CompletableFuture<PersistTaskParams> cf = new CompletableFuture<>();
-        var persistTask = new PersistTask(params, cf);
-
-        // async
-        cf.whenComplete((result, e) -> {
-            if (e != null) {
-                log.error("Persist Task error", e);
-                throw new RuntimeException(e);
-            } else {
-                var costTimeMillis = System.currentTimeMillis() - result.submitTimeMillis;
-                targetWal.persistCount++;
-                targetWal.persistCostTimeMillis += costTimeMillis;
-
-                if (targetWal.persistCount % 1000 == 0) {
-                    log.info("Persist success, slot: {}, batch index: {}, persist count: {}, this time cost time millis: {}, avg cost time millis: {}",
-                            slot, targetWal.batchIndex, targetWal.persistCount, costTimeMillis, targetWal.persistCostTimeMillis / targetWal.persistCount);
-                }
-
-                // add to queue for reuse
-                walQueueArray[result.walGroupIndex].add(result.targetWal);
-            }
-        });
-        var persistHandleEventloop = persistHandleEventloopArray[targetWal.batchIndex];
-        persistHandleEventloop.submit(persistTask);
+    Chunk.SegmentFlag getSegmentMergeFlag(int segmentIndex) {
+        return metaChunkSegmentFlagSeq.getSegmentMergeFlag(segmentIndex);
     }
 
-    public TreeSet<ChunkMergeWorker.MergedSegment> getMergedSegmentSet(byte mergeWorkerId, byte workerId) {
-        var chunkMergeWorker = chunkMerger.getChunkMergeWorker(mergeWorkerId);
-        var mergedSegmentSets = chunkMergeWorker.mergedSegmentSets;
-
-        var r = new TreeSet<ChunkMergeWorker.MergedSegment>();
-        for (var mergedSegmentSet : mergedSegmentSets) {
-            for (var one : mergedSegmentSet) {
-                if (one.workerId() == workerId) {
-                    r.add(one);
-                }
-            }
-        }
-        return r;
+    public List<Long> getSegmentMergeFlagListBatchForRepl(int segmentIndex, int segmentCount) {
+        return metaChunkSegmentFlagSeq.getSegmentSeqListBatchForRepl(segmentIndex, segmentCount);
     }
 
-    public long getMergeLastPersistAtMillis(byte mergeWorkerId) {
-        var chunkMergeWorker = chunkMerger.getChunkMergeWorker(mergeWorkerId);
-        return chunkMergeWorker.lastPersistAtMillis;
+    void setSegmentMergeFlag(int segmentIndex, byte flag, long segmentSeq) {
+        metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, flag, segmentSeq);
     }
 
-    public int getMergeLastPersistedSegmentIndex(byte mergeWorkerId) {
-        var chunkMergeWorker = chunkMerger.getChunkMergeWorker(mergeWorkerId);
-        return chunkMergeWorker.lastPersistedSegmentIndex;
+    public void setSegmentMergeFlagBatch(int segmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
+        metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(segmentIndex, segmentCount, flag, segmentSeqList);
     }
 
-    public Chunk.SegmentFlag getSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex) {
-        return metaChunkSegmentFlagSeq.getSegmentMergeFlag(workerId, batchIndex, segmentIndex);
-    }
-
-    public void setSegmentMergeFlag(byte workerId, byte batchIndex, int segmentIndex,
-                                    byte flag, byte mergeWorkerId, long segmentSeq) {
-        metaChunkSegmentFlagSeq.setSegmentMergeFlag(workerId, batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq);
-    }
-
-    public List<Long> getSomeSegmentsSeqList(byte workerId, byte batchIndex, int segmentIndex, int segmentCount) {
-        return metaChunkSegmentFlagSeq.getSomeSegmentsSeqList(workerId, batchIndex, segmentIndex, segmentCount);
-    }
-
-    public void setSegmentMergeFlagBatch(byte workerId, byte batchIndex, int segmentIndex, int segmentCount,
-                                         byte flag, byte mergeWorkerId, List<Long> segmentSeqList) {
-        var bytes = new byte[segmentCount * MetaChunkSegmentFlagSeq.ONE_LENGTH];
-        var buffer = ByteBuffer.wrap(bytes);
-        for (int i = 0; i < segmentCount; i++) {
-            buffer.put(i * 2, flag);
-            buffer.put(i * 2 + 1, mergeWorkerId);
-            buffer.putLong(i * 2 + 2, segmentSeqList.get(i));
-        }
-        metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(workerId, batchIndex, segmentIndex, bytes);
+    CompletableFuture<Integer> doMergeJob(ArrayList<Integer> needMergeSegmentIndexList) {
+        var job = new ChunkMergeJob(slot, needMergeSegmentIndexList, chunkMergeWorker, snowFlake);
+        return netWorkerEventloop.submit(AsyncComputation.of(job::run));
     }
 
     public void persistMergeSegmentsUndone() throws ExecutionException, InterruptedException {
-        ArrayList<Integer>[][] needMergeSegmentIndexListArray = new ArrayList[allWorkers][batchNumber];
-        for (int i = 0; i < allWorkers; i++) {
-            for (int j = 0; j < batchNumber; j++) {
-                needMergeSegmentIndexListArray[i][j] = new ArrayList<>();
-            }
-        }
+        ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
 
-        this.metaChunkSegmentFlagSeq.iterate((workerId, batchIndex, segmentIndex, flag, mergeWorkerId, segmentSeq) -> {
+        this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq) -> {
             if (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGING) {
-                log.warn("Segment not persisted after merging, w={}, s={}, b={}, i={}, flag={}", workerId, slot, batchIndex, segmentIndex, flag);
-                needMergeSegmentIndexListArray[workerId][batchIndex].add(segmentIndex);
+                log.warn("Segment not persisted after merging, s={}, i={}, flag={}", slot, segmentIndex, flag);
+                needMergeSegmentIndexList.add(segmentIndex);
             }
         });
 
-        for (int workerId = 0; workerId < allWorkers; workerId++) {
-            for (int batchIndex = 0; batchIndex < batchNumber; batchIndex++) {
-                var needMergeSegmentIndexList = needMergeSegmentIndexListArray[workerId][batchIndex];
-                if (!needMergeSegmentIndexList.isEmpty()) {
-                    var firstSegmentIndex = needMergeSegmentIndexList.getFirst();
-                    var lastSegmentIndex = needMergeSegmentIndexList.getLast();
+        if (needMergeSegmentIndexList.isEmpty()) {
+            return;
+        }
 
-                    if (lastSegmentIndex - firstSegmentIndex + 1 == needMergeSegmentIndexList.size()) {
-                        // wait until done
-                        // write batch list duplicated if restart server
-                        int validCvCountAfterRun = chunkMerger.submit((byte) workerId, slot, (byte) batchIndex, needMergeSegmentIndexList).get();
-                        log.warn("Merge segments undone, w={}, s={}, b={}, i={}, end i={}, valid cv count after run: {}", workerId, slot, batchIndex,
-                                firstSegmentIndex, lastSegmentIndex, validCvCountAfterRun);
-                    } else {
-                        // split
-                        ArrayList<Integer> onceList = new ArrayList<>();
-                        onceList.add(firstSegmentIndex);
+        var firstSegmentIndex = needMergeSegmentIndexList.getFirst();
+        var lastSegmentIndex = needMergeSegmentIndexList.getLast();
 
-                        int last = firstSegmentIndex;
-                        for (int i = 1; i < needMergeSegmentIndexList.size(); i++) {
-                            var segmentIndex = needMergeSegmentIndexList.get(i);
-                            if (segmentIndex - last != 1) {
-                                if (!onceList.isEmpty()) {
-                                    int validCvCountAfterRun = chunkMerger.submit((byte) workerId, slot, (byte) batchIndex, onceList).get();
-                                    log.warn("Merge segments undone, w={}, s={}, b={}, i={}, end i={} valid cv count after run: {}", workerId, slot, batchIndex,
-                                            onceList.getFirst(), onceList.getLast(), validCvCountAfterRun);
-                                    onceList.clear();
-                                }
-                            }
-                            onceList.add(segmentIndex);
-                            last = segmentIndex;
-                        }
+        if (lastSegmentIndex - firstSegmentIndex + 1 == needMergeSegmentIndexList.size()) {
+            var f = doMergeJob(needMergeSegmentIndexList);
+            f.whenComplete((validCvCount, e) -> {
+                if (e != null) {
+                    log.error("Merge segments error, s={}, i={}, end i={}, valid cv count after run: {}",
+                            slot, firstSegmentIndex, lastSegmentIndex, validCvCount, e);
+                } else {
+                    log.warn("Merge segments undone, s={}, i={}, end i={}, valid cv count after run: {}",
+                            slot, firstSegmentIndex, lastSegmentIndex, validCvCount);
+                }
+            });
+            f.get();
+        } else {
+            // split
+            ArrayList<Integer> onceList = new ArrayList<>();
+            onceList.add(firstSegmentIndex);
 
-                        if (!onceList.isEmpty()) {
-                            int validCvCountAfterRun = chunkMerger.submit((byte) workerId, slot, (byte) batchIndex, onceList).get();
-                            log.warn("Merge segments undone, w={}, s={}, b={}, i={}, end i={} valid cv count after run: {}", workerId, slot, batchIndex,
-                                    onceList.getFirst(), onceList.getLast(), validCvCountAfterRun);
-                        }
+            int last = firstSegmentIndex;
+            for (int i = 1; i < needMergeSegmentIndexList.size(); i++) {
+                var segmentIndex = needMergeSegmentIndexList.get(i);
+                if (segmentIndex - last != 1) {
+                    if (!onceList.isEmpty()) {
+                        doMergeJobOnceList(onceList);
+                        onceList.clear();
                     }
                 }
+                onceList.add(segmentIndex);
+                last = segmentIndex;
+            }
+
+            if (!onceList.isEmpty()) {
+                doMergeJobOnceList(onceList);
             }
         }
     }
 
-    public int getChunkWriteSegmentIndex(byte workerId, byte batchIndex) {
-        return metaChunkSegmentIndex.get(workerId, batchIndex);
+    private void doMergeJobOnceList(ArrayList<Integer> onceList) throws ExecutionException, InterruptedException {
+        var f = doMergeJob(onceList);
+        f.whenComplete((validCvCount, e) -> {
+            if (e != null) {
+                log.error("Merge segments error, s={}, i={}, end i={}, valid cv count after run: {}",
+                        slot, onceList.get(0), onceList.get(onceList.size() - 1), validCvCount, e);
+            } else {
+                log.warn("Merge segments undone, s={}, i={}, end i={} valid cv count after run: {}",
+                        slot, onceList.get(0), onceList.get(onceList.size() - 1), validCvCount);
+            }
+        });
+        f.get();
     }
 
-    public void setChunkWriteSegmentIndex(byte workerId, byte batchIndex, int segmentIndex) {
-        metaChunkSegmentIndex.put(workerId, batchIndex, segmentIndex);
+    public void setChunkWriteSegmentIndex(int segmentIndex) {
+        metaChunkSegmentIndex.set(segmentIndex);
     }
 
     // metrics
     private final static SimpleGauge walDelaySizeGauge = new SimpleGauge("wal_delay_size", "wal delay size",
-            "slot", "group_index", "batch_index");
+            "slot", "group_index");
 
     private final static SimpleGauge slotInnerGauge = new SimpleGauge("slot_inner", "slot inner",
             "slot");
@@ -1279,12 +976,10 @@ public class OneSlot {
     private void initMetricsCollect() {
         walDelaySizeGauge.addRawGetter(() -> {
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            for (var wals : walsArray) {
-                for (var wal : wals) {
-                    var labelValues = List.of(slotStr, String.valueOf(wal.groupIndex), String.valueOf(wal.batchIndex));
-                    map.put("delay_values_size", new SimpleGauge.ValueWithLabelValues((double) wal.delayToKeyBucketValues.size(), labelValues));
-                    map.put("delay_short_values_size", new SimpleGauge.ValueWithLabelValues((double) wal.delayToKeyBucketShortValues.size(), labelValues));
-                }
+            for (var wal : walArray) {
+                var labelValues = List.of(slotStr, String.valueOf(wal.groupIndex));
+                map.put("delay_values_size", new SimpleGauge.ValueWithLabelValues((double) wal.delayToKeyBucketValues.size(), labelValues));
+                map.put("delay_short_values_size", new SimpleGauge.ValueWithLabelValues((double) wal.delayToKeyBucketShortValues.size(), labelValues));
             }
             return map;
         });
@@ -1295,12 +990,6 @@ public class OneSlot {
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
             map.put("dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
             map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
-
-            map.put("take_wal_cost_nanos", new SimpleGauge.ValueWithLabelValues((double) takeWalCostNanos, labelValues));
-            map.put("take_wal_count", new SimpleGauge.ValueWithLabelValues((double) takeWalCount, labelValues));
-            if (takeWalCount > 0) {
-                map.put("take_wal_cost_avg_nanos", new SimpleGauge.ValueWithLabelValues(((double) takeWalCostNanos / takeWalCount), labelValues));
-            }
 
             var replPairSize = replPairs.stream().filter(one -> !one.isSendBye()).count();
             map.put("repl_pair_size", new SimpleGauge.ValueWithLabelValues((double) replPairSize, labelValues));

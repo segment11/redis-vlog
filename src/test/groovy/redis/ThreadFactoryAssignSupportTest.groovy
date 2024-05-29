@@ -7,7 +7,7 @@ import java.util.concurrent.ThreadFactory
 class ThreadFactoryAssignSupportTest extends Specification {
     def 'test share same core'() {
         given:
-        def inner = ThreadFactoryAssignSupport.instance.ForFdReadWrite
+        def inner = ThreadFactoryAssignSupport.instance.ForMultiSlotRequest
 
         when:
         def n = 256

@@ -17,12 +17,11 @@ import java.util.HashMap;
 import static redis.CompressedValue.EXPIRE_NOW;
 
 public class Wal {
-    public record V(byte workerId, long seq, int bucketIndex, long keyHash, long expireAt,
+    public record V(long seq, int bucketIndex, long keyHash, long expireAt,
                     String key, byte[] cvEncoded, int cvEncodedLength) {
         @Override
         public String toString() {
             return "V{" +
-                    "workerId=" + workerId +
                     ", seq=" + seq +
                     ", bucketIndex=" + bucketIndex +
                     ", key='" + key + '\'' +
@@ -31,19 +30,15 @@ public class Wal {
                     '}';
         }
 
-        public boolean isDeleteFlag() {
-            return cvEncoded.length == 1 && cvEncoded[0] == CompressedValue.SP_FLAG_DELETE_TMP;
-        }
-
         public int persistLength() {
             // include key
             // 2 -> key length short
             return 2 + key.length() + cvEncoded.length;
         }
 
-        // worker id byte + seq long + bucket index int + key hash long + expire at long +
+        // seq long + bucket index int + key hash long + expire at long +
         // key length short + cv encoded length int
-        private static final int ENCODED_HEADER_LENGTH = 1 + 8 + 4 + 8 + 8 + 2 + 4;
+        private static final int ENCODED_HEADER_LENGTH = 8 + 4 + 8 + 8 + 2 + 4;
 
         public int encodeLength() {
             int vLength = ENCODED_HEADER_LENGTH + key.length() + cvEncoded.length;
@@ -57,7 +52,6 @@ public class Wal {
             var buffer = ByteBuffer.wrap(bytes);
 
             buffer.putInt(vLength);
-            buffer.put(workerId);
             buffer.putLong(seq);
             buffer.putInt(bucketIndex);
             buffer.putLong(keyHash);
@@ -79,7 +73,6 @@ public class Wal {
                 return null;
             }
 
-            var workerId = is.readByte();
             var seq = is.readLong();
             var bucketIndex = is.readInt();
             var keyHash = is.readLong();
@@ -95,18 +88,17 @@ public class Wal {
                 throw new IllegalStateException("Invalid length: " + vLength);
             }
 
-            return new V(workerId, seq, bucketIndex, keyHash, expireAt, new String(keyBytes), cvEncoded, cvEncodedLength);
+            return new V(seq, bucketIndex, keyHash, expireAt, new String(keyBytes), cvEncoded, cvEncodedLength);
         }
     }
 
     record PutResult(boolean needPersist, boolean isValueShort, V needPutV, int offset) {
     }
 
-    public Wal(byte slot, int groupIndex, byte batchIndex, RandomAccessFile walSharedFile, RandomAccessFile walSharedFileShortValue,
+    public Wal(byte slot, int groupIndex, RandomAccessFile walSharedFile, RandomAccessFile walSharedFileShortValue,
                SnowFlake snowFlake) throws IOException {
         this.slot = slot;
         this.groupIndex = groupIndex;
-        this.batchIndex = batchIndex;
         this.walSharedFile = walSharedFile;
         this.walSharedFileShortValue = walSharedFileShortValue;
         this.snowFlake = snowFlake;
@@ -119,9 +111,9 @@ public class Wal {
             var n2 = readWal(walSharedFileShortValue, delayToKeyBucketShortValues, true);
 
             // reduce log
-            if (slot == 0 && groupIndex == 0 && batchIndex == 0) {
-                log.info("Read wal file success, slot: {}, group index: {}, batch index: {}, value size: {}, short value size: {}",
-                        slot, groupIndex, batchIndex, n1, n2);
+            if (slot == 0 && groupIndex == 0) {
+                log.info("Read wal file success, slot: {}, group index: {}, value size: {}, short value size: {}",
+                        slot, groupIndex, n1, n2);
             }
         }
     }
@@ -130,10 +122,8 @@ public class Wal {
     public String toString() {
         return "Wal{" +
                 "slot=" + slot +
-                ", batchIndex=" + batchIndex +
                 ", delayToKeyBucketValues=" + delayToKeyBucketValues.size() +
                 ", delayToKeyBucketShortValues=" + delayToKeyBucketShortValues.size() +
-                ", lastUsedTimeMillis=" + lastUsedTimeMillis +
                 ", persistCount=" + persistCount +
                 ", persistCostTimeMillis=" + persistCostTimeMillis +
                 '}';
@@ -162,7 +152,6 @@ public class Wal {
         return bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
     }
 
-    final byte batchIndex;
     private final RandomAccessFile walSharedFile;
     private final RandomAccessFile walSharedFileShortValue;
     private final SnowFlake snowFlake;
@@ -173,8 +162,6 @@ public class Wal {
     int getKeyCount() {
         return delayToKeyBucketValues.size() + delayToKeyBucketShortValues.size();
     }
-
-    long lastUsedTimeMillis;
 
     long persistCount;
     long persistCostTimeMillis;
@@ -236,7 +223,7 @@ public class Wal {
         truncateWal(false);
         truncateWal(true);
 
-        log.info("Clear wal, slot: {}, group index: {}, batch index: {}", slot, groupIndex, batchIndex);
+        log.info("Clear wal, slot: {}, group index: {}", slot, groupIndex);
     }
 
     long clearShortValuesCount = 0;
@@ -248,7 +235,7 @@ public class Wal {
 
         clearShortValuesCount++;
         if (clearShortValuesCount % 1000 == 0) {
-            log.info("Clear short values, slot: {}, group index: {}, batch index: {}, count: {}", slot, groupIndex, batchIndex, clearShortValuesCount);
+            log.info("Clear short values, slot: {}, group index: {}, count: {}", slot, groupIndex, clearShortValuesCount);
         }
     }
 
@@ -258,7 +245,7 @@ public class Wal {
 
         clearValuesCount++;
         if (clearValuesCount % 1000 == 0) {
-            log.info("Clear values, slot: {}, group index: {}, batch index: {}, count: {}", slot, groupIndex, batchIndex, clearValuesCount);
+            log.info("Clear values, slot: {}, group index: {}, count: {}", slot, groupIndex, clearValuesCount);
         }
     }
 
@@ -275,9 +262,9 @@ public class Wal {
         return null;
     }
 
-    PutResult removeDelay(byte workerId, String key, int bucketIndex, long keyHash) {
+    PutResult removeDelay(String key, int bucketIndex, long keyHash) {
         byte[] encoded = {CompressedValue.SP_FLAG_DELETE_TMP};
-        var v = new V(workerId, snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, key, encoded, 1);
+        var v = new V(snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, key, encoded, 1);
 
         return put(true, key, v);
     }

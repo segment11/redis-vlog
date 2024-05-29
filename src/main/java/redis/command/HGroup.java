@@ -153,7 +153,7 @@ public class HGroup extends BaseCommand {
 
                 var fieldKey = RedisHashKeys.fieldKey(key, field);
                 var slotWithKeyHashThisField = slot(fieldKey.getBytes());
-                oneSlot.removeDelay(workerId, fieldKey, slotWithKeyHashThisField.bucketIndex(), slotWithKeyHashThisField.keyHash());
+                oneSlot.removeDelay(fieldKey, slotWithKeyHashThisField.bucketIndex(), slotWithKeyHashThisField.keyHash());
             }
         }
 

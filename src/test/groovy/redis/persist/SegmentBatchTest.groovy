@@ -12,7 +12,7 @@ class SegmentBatchTest extends Specification {
     def "tight segments write and read"() {
         given:
         def snowFlake = new SnowFlake(1, 1)
-        def segmentBatch = new SegmentBatch((byte) 0, (byte) 0, (byte) 0, snowFlake)
+        def segmentBatch = new SegmentBatch((byte) 0, snowFlake)
 
         var list = Mock.prepareValueList(400)
 

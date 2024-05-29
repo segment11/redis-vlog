@@ -8,19 +8,22 @@ import jnr.posix.LibC;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
-import redis.ThreadFactoryAssignSupport;
 import redis.repl.content.ToMasterExistsSegmentMeta;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.ThreadFactory;
 
 import static redis.persist.LocalPersist.PAGE_SIZE;
 import static redis.persist.LocalPersist.PROTECTION;
 
-public class FdReadWrite extends ThreadSafeCaller {
+// thread safe
+public class FdReadWrite {
+
+    private Logger log = LoggerFactory.getLogger(FdReadWrite.class);
 
     public FdReadWrite(String name, LibC libC, File file) throws IOException {
         this.name = name;
@@ -83,15 +86,6 @@ public class FdReadWrite extends ThreadSafeCaller {
             labelNames("fd_name")
             .register();
 
-    @Override
-    String threadName() {
-        return "fd-read-write-" + name;
-    }
-
-    @Override
-    ThreadFactory getNextThreadFactory() {
-        return ThreadFactoryAssignSupport.getInstance().ForFdReadWrite.getNextThreadFactory();
-    }
 
     public static final int BATCH_ONCE_SEGMENT_COUNT_PWRITE = 4;
 
@@ -138,13 +132,10 @@ public class FdReadWrite extends ThreadSafeCaller {
         this.segmentLength = segmentLength;
 
         if (isChunkFd) {
-            var allWorkers = ConfForSlot.global.allWorkers;
-            var batchNumber = ConfForSlot.global.confWal.batchNumber;
             var maxSize = ConfForSlot.global.confChunk.lru.maxSize;
             var fdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;
 
-            // request worker's chunks lru size should be bigger than merge worker's chunks lru size, need dyn recreate lru map, todo
-            int maxSizeOneFd = maxSize / allWorkers / batchNumber / fdPerChunk;
+            int maxSizeOneFd = maxSize / fdPerChunk;
             log.info("Chunk lru max size for one worker/batch/fd: {}, segment length: {}, memory require: {}MB, total memory require: {}MB",
                     maxSizeOneFd, segmentLength, maxSizeOneFd * segmentLength / 1024 / 1024, maxSize * segmentLength / 1024 / 1024);
             this.segmentBytesByIndexLRU = new LRUMap<>(maxSizeOneFd);
@@ -201,8 +192,6 @@ public class FdReadWrite extends ThreadSafeCaller {
     }
 
     public void cleanUp() {
-        stopEventLoop();
-
         var oneSegmentPage = segmentLength / PAGE_SIZE;
 
         var pageManager = PageManager.getInstance();
@@ -407,25 +396,15 @@ public class FdReadWrite extends ThreadSafeCaller {
         return n;
     }
 
-    private byte[] readAsyncNotPureMemory(int segmentIndex, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
-        return callSync(() -> readInnerNotPureMemory(segmentIndex, buffer, callback, isRefreshLRUCache));
-    }
-
-    private int writeAsyncNotPureMemory(int segmentIndex, ByteBuffer buffer, WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
-        return callSync(() -> writeInnerNotPureMemory(segmentIndex, buffer, prepare, isRefreshLRUCache));
-    }
-
     private byte[] readSegmentBatchFromMemory(int segmentIndex, int segmentCount) {
-        return callSync(() -> {
-            var bytesRead = new byte[segmentLength * segmentCount];
-            for (int i = 0; i < segmentCount; i++) {
-                var oneSegmentBytes = allBytesBySegmentIndex[segmentIndex + i];
-                if (oneSegmentBytes != null) {
-                    System.arraycopy(oneSegmentBytes, 0, bytesRead, i * segmentLength, segmentLength);
-                }
+        var bytesRead = new byte[segmentLength * segmentCount];
+        for (int i = 0; i < segmentCount; i++) {
+            var oneSegmentBytes = allBytesBySegmentIndex[segmentIndex + i];
+            if (oneSegmentBytes != null) {
+                System.arraycopy(oneSegmentBytes, 0, bytesRead, i * segmentLength, oneSegmentBytes.length);
             }
-            return bytesRead;
-        });
+        }
+        return bytesRead;
     }
 
     public byte[] readSegment(int segmentIndex, boolean isRefreshLRUCache) {
@@ -433,7 +412,7 @@ public class FdReadWrite extends ThreadSafeCaller {
             return readSegmentBatchFromMemory(segmentIndex, 1);
         }
 
-        return readAsyncNotPureMemory(segmentIndex, readPageBuffer, null, isRefreshLRUCache);
+        return readInnerNotPureMemory(segmentIndex, readPageBuffer, null, isRefreshLRUCache);
     }
 
     public byte[] readSegmentForMerge(int segmentIndex) {
@@ -441,7 +420,7 @@ public class FdReadWrite extends ThreadSafeCaller {
             return readSegmentBatchFromMemory(segmentIndex, MERGE_READ_ONCE_SEGMENT_COUNT);
         }
 
-        return readAsyncNotPureMemory(segmentIndex, readForMergeBatchBuffer, null, false);
+        return readInnerNotPureMemory(segmentIndex, readForMergeBatchBuffer, null, false);
     }
 
     public byte[] readSegmentForRepl(int segmentIndex) {
@@ -449,7 +428,7 @@ public class FdReadWrite extends ThreadSafeCaller {
             return readSegmentBatchFromMemory(segmentIndex, ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT);
         }
 
-        return readAsyncNotPureMemory(segmentIndex, readForReplBuffer, null, false);
+        return readInnerNotPureMemory(segmentIndex, readForReplBuffer, null, false);
     }
 
     public byte[] readSegmentForKeyBucketsInOneWalGroup(int bucketIndex) {
@@ -458,14 +437,12 @@ public class FdReadWrite extends ThreadSafeCaller {
             return readSegmentBatchFromMemory(bucketIndex, ConfForSlot.global.confWal.oneChargeBucketNumber);
         }
 
-        return readAsyncNotPureMemory(bucketIndex, readForOneWalGroupBatchBuffer, null, false);
+        return readInnerNotPureMemory(bucketIndex, readForOneWalGroupBatchBuffer, null, false);
     }
 
     public int clearOneSegmentToMemory(int segmentIndex) {
-        return callSync(() -> {
-            allBytesBySegmentIndex[segmentIndex] = null;
-            return 0;
-        });
+        allBytesBySegmentIndex[segmentIndex] = null;
+        return 0;
     }
 
     public int writeSegmentBatchToMemory(int segmentIndex, byte[] bytes, int position) {
@@ -474,23 +451,21 @@ public class FdReadWrite extends ThreadSafeCaller {
             throw new IllegalArgumentException("Bytes length must be multiple of segment length");
         }
 
-        return callSync(() -> {
-            if (isSmallerThanOneSegment) {
-                allBytesBySegmentIndex[segmentIndex] = bytes;
-                return bytes.length;
-            }
-
-            var segmentCount = bytes.length / segmentLength;
-            var offset = position;
-            for (int i = 0; i < segmentCount; i++) {
-                var bytesOneSegment = new byte[segmentLength];
-                System.arraycopy(bytes, offset, bytesOneSegment, 0, segmentLength);
-                offset += segmentLength;
-
-                allBytesBySegmentIndex[segmentIndex + i] = bytesOneSegment;
-            }
+        if (isSmallerThanOneSegment) {
+            allBytesBySegmentIndex[segmentIndex] = bytes;
             return bytes.length;
-        });
+        }
+
+        var segmentCount = bytes.length / segmentLength;
+        var offset = position;
+        for (int i = 0; i < segmentCount; i++) {
+            var bytesOneSegment = new byte[segmentLength];
+            System.arraycopy(bytes, offset, bytesOneSegment, 0, segmentLength);
+            offset += segmentLength;
+
+            allBytesBySegmentIndex[segmentIndex + i] = bytesOneSegment;
+        }
+        return bytes.length;
     }
 
     public int writeSegment(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
@@ -502,7 +477,7 @@ public class FdReadWrite extends ThreadSafeCaller {
             return writeSegmentBatchToMemory(segmentIndex, bytes, 0);
         }
 
-        return writeAsyncNotPureMemory(segmentIndex, writePageBuffer, (buffer) -> {
+        return writeInnerNotPureMemory(segmentIndex, writePageBuffer, (buffer) -> {
             buffer.clear();
             buffer.put(bytes);
         }, isRefreshLRUCache);
@@ -522,7 +497,7 @@ public class FdReadWrite extends ThreadSafeCaller {
             return writeSegmentBatchToMemory(segmentIndex, bytes, position);
         }
 
-        return writeAsyncNotPureMemory(segmentIndex, writePageBufferB, (buffer) -> {
+        return writeInnerNotPureMemory(segmentIndex, writePageBufferB, (buffer) -> {
             buffer.clear();
             if (position == 0) {
                 buffer.put(bytes);
@@ -542,7 +517,7 @@ public class FdReadWrite extends ThreadSafeCaller {
             return writeSegmentBatchToMemory(segmentIndex, bytes, 0);
         }
 
-        return writeAsyncNotPureMemory(segmentIndex, writeForOneWalGroupBatchBuffer, (buffer) -> {
+        return writeInnerNotPureMemory(segmentIndex, writeForOneWalGroupBatchBuffer, (buffer) -> {
             buffer.clear();
             buffer.put(bytes);
         }, false);
@@ -558,7 +533,7 @@ public class FdReadWrite extends ThreadSafeCaller {
             return writeSegmentBatchToMemory(segmentIndex, bytes, position);
         }
 
-        return writeAsyncNotPureMemory(segmentIndex, writeForReplBuffer, (buffer) -> {
+        return writeInnerNotPureMemory(segmentIndex, writeForReplBuffer, (buffer) -> {
             buffer.clear();
             if (position == 0) {
                 buffer.put(bytes);
@@ -569,13 +544,11 @@ public class FdReadWrite extends ThreadSafeCaller {
     }
 
     public int truncate() {
-        return callSync(() -> {
-            var r = libC.ftruncate(fd, 0);
-            if (r < 0) {
-                throw new RuntimeException("Truncate error: " + libC.strerror(r));
-            }
-            log.info("Truncate fd: {}, name: {}", fd, name);
-            return r;
-        });
+        var r = libC.ftruncate(fd, 0);
+        if (r < 0) {
+            throw new RuntimeException("Truncate error: " + libC.strerror(r));
+        }
+        log.info("Truncate fd: {}, name: {}", fd, name);
+        return r;
     }
 }

@@ -32,7 +32,6 @@ import io.activej.worker.annotation.Worker;
 import io.activej.worker.annotation.WorkerId;
 import redis.decode.Request;
 import redis.decode.RequestDecoder;
-import redis.persist.ChunkMerger;
 import redis.persist.KeyBucket;
 import redis.persist.LocalPersist;
 import redis.persist.Wal;
@@ -72,9 +71,6 @@ public class MultiWorkerServer extends Launcher {
 
     @Inject
     PrimaryServer primaryServer;
-
-    @Inject
-    ChunkMerger chunkMerger;
 
     @Inject
     RequestHandler[] requestHandlerArray;
@@ -332,19 +328,6 @@ public class MultiWorkerServer extends Launcher {
         return new SnowFlake(datacenterId, machineId);
     }
 
-    @Provides
-    ChunkMerger chunkMerger(SnowFlake snowFlake, Config config) {
-        int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
-
-        int netWorkers = config.get(toInt, "netWorkers", 1);
-        int mergeWorkers = config.get(toInt, "mergeWorkers", slotNumber);
-        int topMergeWorkers = config.get(toInt, "topMergeWorkers", slotNumber);
-
-        var chunkMerger = new ChunkMerger((byte) netWorkers, (byte) mergeWorkers, (byte) topMergeWorkers,
-                (short) slotNumber, snowFlake);
-        return chunkMerger;
-    }
-
     @Override
     protected final Module getModule() {
         return combine(
@@ -383,11 +366,7 @@ public class MultiWorkerServer extends Launcher {
     @Override
     protected void onStart() throws Exception {
         var localPersist = LocalPersist.getInstance();
-        localPersist.initChunkMerger(chunkMerger);
         localPersist.persistMergeSegmentsUndone();
-
-        chunkMerger.setCompressLevel(requestHandlerArray[0].compressLevel);
-        chunkMerger.start();
 
         threadIds = new long[netWorkerEventloopArray.length];
 
@@ -441,9 +420,6 @@ public class MultiWorkerServer extends Launcher {
             for (var multiSlotEventloop : multiSlotMultiThreadRequestEventloopArray.multiSlotEventloopArray) {
                 multiSlotEventloop.breakEventloop();
             }
-
-            // need stop chunk merge threads first
-            chunkMerger.stop();
 
             // disconnect all clients
             socketInspector.closeAll();
@@ -501,14 +477,8 @@ public class MultiWorkerServer extends Launcher {
                             throw new IllegalStateException("Bucket count per slot should be multiple of 1024");
                         }
 
-                        if (config.getChild("bucket.lru.expireAfterWrite").hasValue()) {
-                            c.confBucket.lru.expireAfterWrite = config.get(ofLong(), "bucket.lru.expireAfterWrite");
-                        }
-                        if (config.getChild("bucket.lru.expireAfterAccess").hasValue()) {
-                            c.confBucket.lru.expireAfterAccess = config.get(ofLong(), "bucket.lru.expireAfterAccess");
-                        }
-                        if (config.getChild("bucket.lru.maximumBytes").hasValue()) {
-                            c.confBucket.lru.maximumBytes = config.get(ofLong(), "bucket.lru.maximumBytes");
+                        if (config.getChild("bucket.lru.maxSize").hasValue()) {
+                            c.confBucket.lru.maxSize = config.get(toInt, "bucket.lru.maxSize");
                         }
 
                         // override chunk conf
@@ -520,16 +490,6 @@ public class MultiWorkerServer extends Launcher {
                         }
                         if (config.getChild("chunk.segmentLength").hasValue()) {
                             c.confChunk.segmentLength = config.get(ofInteger(), "chunk.segmentLength");
-                        }
-
-                        if (config.getChild("chunk.lru.expireAfterWrite").hasValue()) {
-                            c.confChunk.lru.expireAfterWrite = config.get(ofLong(), "chunk.lru.expireAfterWrite");
-                        }
-                        if (config.getChild("chunk.lru.expireAfterAccess").hasValue()) {
-                            c.confChunk.lru.expireAfterAccess = config.get(ofLong(), "chunk.lru.expireAfterAccess");
-                        }
-                        if (config.getChild("chunk.lru.maximumBytes").hasValue()) {
-                            c.confChunk.lru.maximumBytes = config.get(ofLong(), "chunk.lru.maximumBytes");
                         }
                         if (config.getChild("chunk.lru.maxSize").hasValue()) {
                             c.confChunk.lru.maxSize = config.get(ofInteger(), "chunk.lru.maxSize");
@@ -545,9 +505,6 @@ public class MultiWorkerServer extends Launcher {
                             throw new IllegalStateException("Wal group number too large, wal group number should be less than " + Wal.MAX_WAL_GROUP_NUMBER);
                         }
 
-                        if (config.getChild("wal.batchNumber").hasValue()) {
-                            c.confWal.batchNumber = config.get(ofInteger(), "wal.batchNumber");
-                        }
                         if (config.getChild("wal.valueSizeTrigger").hasValue()) {
                             c.confWal.valueSizeTrigger = config.get(ofInteger(), "wal.valueSizeTrigger");
                         }
@@ -575,25 +532,10 @@ public class MultiWorkerServer extends Launcher {
                         confForSlot.slotNumber = (short) slotNumber;
 
                         int netWorkers = config.get(toInt, "netWorkers", 1);
-                        int mergeWorkers = config.get(toInt, "mergeWorkers", slotNumber);
-                        int topMergeWorkers = config.get(toInt, "topMergeWorkers", slotNumber);
-
                         if (netWorkers > MAX_NET_WORKERS) {
                             throw new IllegalStateException("Net workers too large, net workers should be less than " + MAX_NET_WORKERS);
                         }
-                        if (mergeWorkers > ChunkMerger.MAX_MERGE_WORKERS) {
-                            throw new IllegalStateException("Merge workers too large, merge workers should be less than " + ChunkMerger.MAX_MERGE_WORKERS);
-                        }
-                        if (topMergeWorkers > ChunkMerger.MAX_TOP_MERGE_WORKERS) {
-                            throw new IllegalStateException("Top merge workers too large, top merge workers should be less than " + ChunkMerger.MAX_TOP_MERGE_WORKERS);
-                        }
-
-                        // not include net workers
-                        byte allWorkers = (byte) (netWorkers + mergeWorkers + topMergeWorkers);
-                        confForSlot.allWorkers = allWorkers;
-
-                        logger.info("netWorkers: {}, mergeWorkers: {}, topMergeWorkers: {}, slotNumber: {}",
-                                netWorkers, mergeWorkers, topMergeWorkers, slotNumber);
+                        confForSlot.netWorkers = (byte) netWorkers;
 
                         var dirFile = dirFile(config);
 
@@ -603,8 +545,7 @@ public class MultiWorkerServer extends Launcher {
                         TrainSampleJob.setDictPrefixKeyMaxLen(configCompress.get(toInt, "dictPrefixKeyMaxLen", 5));
 
                         // init local persist
-                        LocalPersist.getInstance().init(allWorkers, (byte) netWorkers, (byte) mergeWorkers, (byte) topMergeWorkers, (short) slotNumber,
-                                snowFlake, dirFile, config.getChild("persist"));
+                        LocalPersist.getInstance().init((byte) netWorkers, (short) slotNumber, snowFlake, dirFile, config.getChild("persist"));
 
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
                         if (debugMode) {
@@ -615,18 +556,13 @@ public class MultiWorkerServer extends Launcher {
                     }
 
                     @Provides
-                    RequestHandler[] requestHandlerArray(SnowFlake snowFlake, ChunkMerger chunkMerger,
-                                                         Integer beforeCreateHandler, SocketInspector socketInspector, Config config) {
+                    RequestHandler[] requestHandlerArray(SnowFlake snowFlake, Integer beforeCreateHandler, SocketInspector socketInspector, Config config) {
                         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
-
                         int netWorkers = config.get(toInt, "netWorkers", 1);
-                        int mergeWorkers = config.get(toInt, "mergeWorkers", slotNumber);
-                        int topMergeWorkers = config.get(toInt, "topMergeWorkers", slotNumber);
 
                         var list = new RequestHandler[netWorkers];
                         for (int i = 0; i < netWorkers; i++) {
-                            list[i] = new RequestHandler((byte) i, (byte) netWorkers, (byte) mergeWorkers, (byte) topMergeWorkers,
-                                    (short) slotNumber, snowFlake, chunkMerger, config, socketInspector);
+                            list[i] = new RequestHandler((byte) i, (byte) netWorkers, (short) slotNumber, snowFlake, socketInspector, config);
                         }
                         return list;
                     }
@@ -649,8 +585,7 @@ public class MultiWorkerServer extends Launcher {
 
                         var list = new RequestHandler[multiSlotMultiThreadNumber];
                         for (int i = 0; i < multiSlotMultiThreadNumber; i++) {
-                            list[i] = new RequestHandler((byte) -i, (byte) multiSlotMultiThreadNumber, (byte) 1, (byte) 1,
-                                    (short) slotNumber, null, null, config, null);
+                            list[i] = new RequestHandler((byte) -i, (byte) multiSlotMultiThreadNumber, (short) slotNumber, null, null, config);
                         }
                         return new WrapRequestHandlerArray(list);
                     }

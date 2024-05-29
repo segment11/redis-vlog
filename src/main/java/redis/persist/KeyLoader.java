@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import redis.ConfForSlot;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
-import redis.repl.MasterUpdateCallback;
 import redis.repl.content.ToMasterExistsSegmentMeta;
 
 import java.io.File;
@@ -26,16 +25,12 @@ public class KeyLoader {
     // one split index one file
     static final int MAX_KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
-    public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake,
-                     MasterUpdateCallback masterUpdateCallback, DynConfig dynConfig) {
+    public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake) {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
         this.bucketsPerSlot = bucketsPerSlot;
         this.slotDir = slotDir;
         this.snowFlake = snowFlake;
-        this.masterUpdateCallback = masterUpdateCallback;
-
-        this.dynConfig = dynConfig;
 
         this.initMetricsCollect();
     }
@@ -45,11 +40,7 @@ public class KeyLoader {
     private final int bucketsPerSlot;
     private final File slotDir;
     final SnowFlake snowFlake;
-    private final MasterUpdateCallback masterUpdateCallback;
 
-    private final DynConfig dynConfig;
-
-    // use read write better than synchronized
     private MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
 
     byte getKeyBucketSplitNumber(int bucketIndex) {
@@ -88,27 +79,27 @@ public class KeyLoader {
 
     public static final int BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL = ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
 
-    private StatKeyBucketLastUpdateCount statKeyBucketLastUpdateCount;
+    private StatKeyCountInBuckets statKeyCountInBuckets;
 
     public short getKeyCountInBucketIndex(int bucketIndex) {
-        return statKeyBucketLastUpdateCount.getKeyCountInBucketIndex(bucketIndex);
+        return statKeyCountInBuckets.getKeyCountForBucketIndex(bucketIndex);
     }
 
     public long getKeyCount() {
-        return statKeyBucketLastUpdateCount.getKeyCount();
+        return statKeyCountInBuckets.getKeyCount();
     }
 
     private void updateKeyCountBatchCached(int[] keyCountTmp, int beginBucketIndex) {
         for (int i = 0; i < keyCountTmp.length; i++) {
             var bucketIndex = beginBucketIndex + i;
             var keyCount = keyCountTmp[i];
-            statKeyBucketLastUpdateCount.setKeyCountInBucketIndex(bucketIndex, (short) keyCount);
+            statKeyCountInBuckets.setKeyCountForBucketIndex(bucketIndex, (short) keyCount);
         }
     }
 
     public void initFds(LibC libC) throws IOException {
-        this.metaKeyBucketSplitNumber = new MetaKeyBucketSplitNumber(slot, bucketsPerSlot, slotDir);
-        this.statKeyBucketLastUpdateCount = new StatKeyBucketLastUpdateCount(slot, bucketsPerSlot, slotDir);
+        this.metaKeyBucketSplitNumber = new MetaKeyBucketSplitNumber(slot, slotDir);
+        this.statKeyCountInBuckets = new StatKeyCountInBuckets(slot, bucketsPerSlot, slotDir);
 
         this.libC = libC;
 
@@ -118,7 +109,7 @@ public class KeyLoader {
         this.initFds(maxSplitNumber);
     }
 
-    private synchronized void initFds(byte splitNumber) {
+    private void initFds(byte splitNumber) {
         for (int splitIndex = 0; splitIndex < splitNumber; splitIndex++) {
             if (fdReadWriteArray[splitIndex] != null) {
                 continue;
@@ -135,7 +126,6 @@ public class KeyLoader {
                 throw new RuntimeException(e);
             }
             fdReadWrite.initByteBuffers(false);
-            fdReadWrite.initEventloop();
 
             fdReadWriteArray[splitIndex] = fdReadWrite;
         }
@@ -156,13 +146,14 @@ public class KeyLoader {
             System.out.println("Cleaned up bucket split number");
         }
 
-        if (statKeyBucketLastUpdateCount != null) {
-            statKeyBucketLastUpdateCount.cleanUp();
+        if (statKeyCountInBuckets != null) {
+            statKeyCountInBuckets.cleanUp();
+            System.out.println("Cleaned up key count in buckets");
         }
     }
 
     // for repl
-    public synchronized byte[] readKeyBucketBytesBatchToSlaveExists(byte splitIndex, int beginBucketIndex) {
+    public byte[] readKeyBucketBytesBatchToSlaveExists(byte splitIndex, int beginBucketIndex) {
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
             return null;
@@ -170,7 +161,7 @@ public class KeyLoader {
         return fdReadWrite.readSegmentForRepl(beginBucketIndex);
     }
 
-    public synchronized void writeKeyBucketBytesBatchFromMasterExists(byte[] contentBytes) {
+    public void writeKeyBucketBytesBatchFromMasterExists(byte[] contentBytes) {
         var splitIndex = contentBytes[0];
 //            var splitNumber = contentBytes[1];
         var beginBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
@@ -216,13 +207,6 @@ public class KeyLoader {
     }
 
     private KeyBucket readKeyBucketForSingleKey(int bucketIndex, byte splitIndex, byte splitNumber, long keyHash, boolean isRefreshLRUCache) {
-        // if split happened after put batch, read from file is not correct
-        if (tmpViewAsSplitHappenedAfterPutBatch != null && tmpViewAsSplitHappenedAfterPutBatch.isBucketIndexInThisWalGroup(bucketIndex)) {
-            // already put all pvm list or short value list, may be not write to files yet, get one key bucket is newest, need not synchronized
-            var keyBucket = tmpViewAsSplitHappenedAfterPutBatch.getKeyBucket(bucketIndex, splitIndex, splitNumber, keyHash);
-            return keyBucket;
-        }
-
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
             return null;
@@ -296,7 +280,6 @@ public class KeyLoader {
         return sb.toString();
     }
 
-    // need call by method that has synchronized
     private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket, boolean isRefreshLRUCache) {
         var bytes = keyBucket.encode();
         var splitIndex = keyBucket.splitIndex;
@@ -314,26 +297,6 @@ public class KeyLoader {
         fdReadWrite.writeSegment(bucketIndex, bytes, isRefreshLRUCache);
     }
 
-    public synchronized boolean remove(int bucketIndex, byte[] keyBytes, long keyHash) {
-        var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
-        var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
-
-        var keyBucket = readKeyBucketForSingleKey(bucketIndex, (byte) splitIndex, splitNumber, keyHash, false);
-        if (keyBucket == null) {
-            return false;
-        }
-
-        var isDeleted = keyBucket.del(keyBytes, keyHash);
-        if (isDeleted) {
-            updateKeyBucketInner(bucketIndex, keyBucket, false);
-        }
-
-        return isDeleted;
-    }
-
-    // copy on write
-    private volatile KeyBucketsInOneWalGroup tmpViewAsSplitHappenedAfterPutBatch;
-
     byte[] readBatchInOneWalGroup(byte splitIndex, int beginBucketIndex) {
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
@@ -342,42 +305,26 @@ public class KeyLoader {
         return fdReadWrite.readSegmentForKeyBucketsInOneWalGroup(beginBucketIndex);
     }
 
-    public synchronized void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList, boolean isMerge) {
+    public void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList, boolean isMerge) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
         inner.readBeforePutBatch();
         inner.putAllPvmList(pvmList, isMerge);
         updateKeyCountBatchCached(inner.keyCountTmp, inner.beginBucketIndex);
 
-        if (inner.isSplit) {
-            tmpViewAsSplitHappenedAfterPutBatch = inner;
-        }
-
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
         updateBatchSplitNumber(inner.splitNumberTmp, inner.beginBucketIndex);
-
-        if (tmpViewAsSplitHappenedAfterPutBatch != null) {
-            tmpViewAsSplitHappenedAfterPutBatch = null;
-        }
     }
 
-    public synchronized void persistShortValueListBatchInOneWalGroup(int walGroupIndex, Collection<Wal.V> shortValueList) {
+    public void persistShortValueListBatchInOneWalGroup(int walGroupIndex, Collection<Wal.V> shortValueList) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
         inner.readBeforePutBatch();
         inner.putAll(shortValueList);
         updateKeyCountBatchCached(inner.keyCountTmp, inner.beginBucketIndex);
 
-        if (inner.isSplit) {
-            tmpViewAsSplitHappenedAfterPutBatch = inner;
-        }
-
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
         updateBatchSplitNumber(inner.splitNumberTmp, inner.beginBucketIndex);
-
-        if (tmpViewAsSplitHappenedAfterPutBatch != null) {
-            tmpViewAsSplitHappenedAfterPutBatch = null;
-        }
     }
 
     // need thread safe or just for test
@@ -407,9 +354,27 @@ public class KeyLoader {
         }
     }
 
-    public synchronized void flush() {
+    // use wal delay remove instead of remove immediately
+    boolean removeSingleKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash) {
+        var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
+        var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
+
+        var keyBucket = readKeyBucketForSingleKey(bucketIndex, (byte) splitIndex, splitNumber, keyHash, false);
+        if (keyBucket == null) {
+            return false;
+        }
+
+        var isDeleted = keyBucket.del(keyBytes, keyHash);
+        if (isDeleted) {
+            updateKeyBucketInner(bucketIndex, keyBucket, false);
+        }
+
+        return isDeleted;
+    }
+
+    public void flush() {
         metaKeyBucketSplitNumber.clear();
-        statKeyBucketLastUpdateCount.clear();
+        statKeyCountInBuckets.clear();
 
         boolean[] ftruncateFlags = new boolean[MAX_SPLIT_NUMBER];
 

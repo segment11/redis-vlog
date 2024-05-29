@@ -13,9 +13,7 @@ import org.slf4j.LoggerFactory;
 import redis.command.*;
 import redis.decode.Request;
 import redis.metric.SimpleGauge;
-import redis.persist.ChunkMerger;
 import redis.persist.ReadonlyException;
-import redis.persist.SegmentOverflowException;
 import redis.reply.*;
 
 import java.io.IOException;
@@ -40,11 +38,8 @@ public class RequestHandler {
     final byte workerId;
     final String workerIdStr;
     final byte netWorkers;
-    final byte mergeWorkers;
-    final byte topMergeWorkers;
     final short slotNumber;
     final SnowFlake snowFlake;
-    private final ChunkMerger chunkMerger;
     private final SocketInspector socketInspector;
     final boolean localTest;
     final int localTestRandomValueListSize;
@@ -65,18 +60,14 @@ public class RequestHandler {
         isStopped = true;
     }
 
-    public RequestHandler(byte workerId, byte netWorkers, byte mergeWorkers, byte topMergeWorkers,
-                          short slotNumber, SnowFlake snowFlake, ChunkMerger chunkMerger,
-                          Config config, SocketInspector socketInspector) {
+    public RequestHandler(byte workerId, byte netWorkers, short slotNumber,
+                          SnowFlake snowFlake, SocketInspector socketInspector, Config config) {
         this.workerId = workerId;
         this.workerIdStr = String.valueOf(workerId);
         this.netWorkers = netWorkers;
-        this.mergeWorkers = mergeWorkers;
-        this.topMergeWorkers = topMergeWorkers;
         this.slotNumber = slotNumber;
 
         this.snowFlake = snowFlake;
-        this.chunkMerger = chunkMerger;
         this.socketInspector = socketInspector;
 
         this.password = config.get(ofString(), "password", null);
@@ -100,7 +91,7 @@ public class RequestHandler {
 
         var requestConfig = config.getChild("request");
 
-        this.compressStats = new CompressStats("req_worker_" + workerId);
+        this.compressStats = new CompressStats("net_worker_" + workerId);
         // compress and train sample dict requestConfig
         this.compressLevel = requestConfig.get(toInt, "compressLevel", Zstd.defaultCompressionLevel());
         this.trainSampleListMaxSize = requestConfig.get(toInt, "trainSampleListMaxSize", 1000);
@@ -197,7 +188,12 @@ public class RequestHandler {
             var xGroup = new XGroup(null, data, socket);
             xGroup.init(this, request);
 
-            return xGroup.handleRepl();
+            try {
+                return xGroup.handleRepl();
+            } catch (Exception e) {
+                log.error("Repl handle error", e);
+                return new ErrorReply(e.getMessage());
+            }
         }
 
         // metrics, prometheus format
@@ -285,9 +281,7 @@ public class RequestHandler {
                 sGroup.set(keyBytes, valueBytes);
             } catch (ReadonlyException e) {
                 return ErrorReply.READONLY;
-            } catch (SegmentOverflowException e) {
-                return new ErrorReply(e.getMessage());
-            } catch (IllegalStateException e) {
+            } catch (Exception e) {
                 return new ErrorReply(e.getMessage());
             }
 
@@ -352,6 +346,9 @@ public class RequestHandler {
             }
         } catch (ReadonlyException e) {
             return ErrorReply.READONLY;
+        } catch (Exception e) {
+            log.error("Request handle error", e);
+            return new ErrorReply(e.getMessage());
         }
 
         return ErrorReply.FORMAT;

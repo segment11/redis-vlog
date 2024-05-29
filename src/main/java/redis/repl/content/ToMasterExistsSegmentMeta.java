@@ -12,28 +12,22 @@ import java.util.List;
 public class ToMasterExistsSegmentMeta implements ReplContent {
     public static final byte FLAG_IS_MY_CHARGE = 0;
 
-    private final byte workerId;
-    private final byte batchIndex;
     private final byte[] metaBytes;
 
-    public ToMasterExistsSegmentMeta(byte workerId, byte batchIndex, byte[] metaBytes) {
-        this.workerId = workerId;
-        this.batchIndex = batchIndex;
+    public ToMasterExistsSegmentMeta(byte[] metaBytes) {
         this.metaBytes = metaBytes;
     }
 
     @Override
     public void encodeTo(ByteBuf toBuf) {
         toBuf.writeByte(FLAG_IS_MY_CHARGE);
-        toBuf.writeByte(workerId);
-        toBuf.writeByte(batchIndex);
         toBuf.write(metaBytes);
     }
 
     @Override
     public int encodeLength() {
-        // flag byte, worker id byte, batch index byte, meta bytes length
-        return 1 + 1 + 1 + metaBytes.length;
+        // flag byte, meta bytes length
+        return 1 + metaBytes.length;
     }
 
     // 4K one segment, 1024 segments means read 4M data and send to slave
@@ -50,8 +44,8 @@ public class ToMasterExistsSegmentMeta implements ReplContent {
     }
 
     public static List<OncePull> diffMasterAndSlave(byte[] metaBytesMaster, byte[] contentBytesFromSlave) {
-        // content bytes include flag byte, worker id byte, batch index byte
-        if (contentBytesFromSlave.length != metaBytesMaster.length + 3) {
+        // content bytes include flag byte
+        if (contentBytesFromSlave.length != metaBytesMaster.length + 1) {
             throw new IllegalArgumentException("Repl exists segment meta from slave meta length is not equal to master meta length");
         }
 
@@ -64,7 +58,7 @@ public class ToMasterExistsSegmentMeta implements ReplContent {
             int offset = beginSegmentIndex * MetaChunkSegmentFlagSeq.ONE_LENGTH;
 
             var bufferMaster = ByteBuffer.wrap(metaBytesMaster, offset, length);
-            var bufferSlave = ByteBuffer.wrap(contentBytesFromSlave, 3 + offset, length);
+            var bufferSlave = ByteBuffer.wrap(contentBytesFromSlave, 1 + offset, length);
 
             if (bufferMaster.equals(bufferSlave)) {
                 continue;

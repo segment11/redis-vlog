@@ -12,11 +12,11 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
     private long walAppendCount = 0;
 
     @Override
-    public void onWalAppend(byte slot, int bucketIndex, byte batchIndex, boolean isValueShort, Wal.V v, int offset) {
+    public void onWalAppend(byte slot, int bucketIndex, boolean isValueShort, Wal.V v, int offset) {
         walAppendCount++;
         if (walAppendCount % 100000 == 0) {
-            log.warn("onWalAppend called with slot: {}, bucketIndex: {}, batchIndex: {}, isValueShort: {}, offset: {}, v: {}",
-                    slot, bucketIndex, batchIndex, isValueShort, offset, v);
+            log.warn("onWalAppend called with slot: {}, bucketIndex: {}, isValueShort: {}, offset: {}, v: {}",
+                    slot, bucketIndex, isValueShort, offset, v);
         }
     }
 

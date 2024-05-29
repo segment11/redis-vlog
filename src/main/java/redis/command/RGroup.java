@@ -99,9 +99,9 @@ public class RGroup extends BaseCommand {
         var srcSlot = slotWithKeyHash.slot();
 
         var oneSlotSrc = localPersist.oneSlot(srcSlot);
-        oneSlotSrc.removeDelay(workerId, srcKey, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+        oneSlotSrc.removeDelay(srcKey, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
 //        var srcBucketIndex = oneSlotSrc.bucketIndex(slotWithKeyHash.keyHash());
-//        keyLoader.bucketLock(srcSlot, srcBucketIndex, () -> oneSlotSrc.removeDelay(workerId, srcKey, slotWithKeyHash.keyHash()));
+//        keyLoader.bucketLock(srcSlot, srcBucketIndex, () -> oneSlotSrc.removeDelay(srcKey, slotWithKeyHash.keyHash()));
         return OKReply.INSTANCE;
     }
 

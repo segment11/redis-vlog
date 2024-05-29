@@ -22,12 +22,7 @@ import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 public class SegmentBatch {
     private final byte[] bytes;
     private final ByteBuffer buffer;
-
-    private final byte workerId;
     private final byte slot;
-    private final byte batchIndex;
-
-    private final String workerIdStr;
     private final String slotStr;
 
     private final int segmentLength;
@@ -35,35 +30,30 @@ public class SegmentBatch {
 
     private static final Counter segmentCompressTimeTotalUs = Counter.build().name("segment_compress_time_total_us").
             help("segment compress time total us").
-            labelNames("worker_id", "slot")
+            labelNames("slot")
             .register();
 
     private static final Counter segmentCompressCountTotal = Counter.build().name("segment_compress_count_total").
             help("segment compress count total").
-            labelNames("worker_id", "slot")
+            labelNames("slot")
             .register();
 
 
     private static final Counter compressBytesCounter = Counter.build().name("compress_bytes").
             help("segment batch compress bytes").
-            labelNames("worker_id", "slot")
+            labelNames("slot")
             .register();
 
     private static final Counter compressedBytesCounter = Counter.build().name("compressed_bytes").
             help("segment batch compressed bytes").
-            labelNames("worker_id", "slot")
+            labelNames("slot")
             .register();
 
     private final Logger log = LoggerFactory.getLogger(SegmentBatch.class);
 
-    public SegmentBatch(byte workerId, byte slot, byte batchIndex, SnowFlake snowFlake) {
+    public SegmentBatch(byte slot, SnowFlake snowFlake) {
         this.segmentLength = ConfForSlot.global.confChunk.segmentLength;
-
-        this.workerId = workerId;
         this.slot = slot;
-        this.batchIndex = batchIndex;
-
-        this.workerIdStr = String.valueOf(workerId);
         this.slotStr = String.valueOf(slot);
 
         this.bytes = new byte[segmentLength];
@@ -250,9 +240,7 @@ public class SegmentBatch {
             pvm.keyHash = v.keyHash();
             pvm.bucketIndex = v.bucketIndex();
 
-            pvm.workerId = workerId;
             pvm.slot = slot;
-            pvm.batchIndex = batchIndex;
             // tmp 0, then update
             pvm.subBlockIndex = 0;
             pvm.length = length;
@@ -280,16 +268,16 @@ public class SegmentBatch {
         // important: 4KB decompress cost ~200us, so use 4KB segment length for better read latency
         // double compress
 
-        segmentCompressCountTotal.labels(workerIdStr, slotStr).inc();
+        segmentCompressCountTotal.labels(slotStr).inc();
         var beginT = System.nanoTime();
         var compressedBytes = Zstd.compress(bytes);
         var costT = (System.nanoTime() - beginT) / 1000;
         if (costT == 0) {
             costT = 1;
         }
-        segmentCompressTimeTotalUs.labels(workerIdStr, slotStr).inc(costT);
-        compressBytesCounter.labels(workerIdStr, slotStr).inc(bytes.length);
-        compressedBytesCounter.labels(workerIdStr, slotStr).inc(compressedBytes.length);
+        segmentCompressTimeTotalUs.labels(slotStr).inc(costT);
+        compressBytesCounter.labels(slotStr).inc(bytes.length);
+        compressedBytesCounter.labels(slotStr).inc(compressedBytes.length);
 
         buffer.clear();
         Arrays.fill(bytes, (byte) 0);

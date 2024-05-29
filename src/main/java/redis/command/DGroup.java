@@ -86,7 +86,7 @@ public class DGroup extends BaseCommand {
             var oneSlot = localPersist.oneSlot(slot);
 
             // remove delay, perf better
-            var isRemoved = oneSlot.remove(workerId, bucketIndex, key, keyHash, true);
+            var isRemoved = oneSlot.remove(bucketIndex, key, keyHash, true);
             return isRemoved ? IntegerReply.REPLY_1 : IntegerReply.REPLY_0;
         }
 
@@ -106,7 +106,7 @@ public class DGroup extends BaseCommand {
             var oneSlot = localPersist.oneSlot(slot);
 
             // remove delay, perf better
-            var isRemoved = oneSlot.remove(workerId, bucketIndex, key, keyHash, true);
+            var isRemoved = oneSlot.remove(bucketIndex, key, keyHash, true);
             if (isRemoved) {
                 nArr[0]++;
             }

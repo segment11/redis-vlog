@@ -70,7 +70,7 @@ public class GGroup extends BaseCommand {
         var valueBytes = get(keyBytes, slotWithKeyHash);
         if (valueBytes != null) {
             var oneSlot = localPersist.oneSlot(slot);
-            oneSlot.removeDelay(workerId, key, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+            oneSlot.removeDelay(key, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
             return new BulkReply(valueBytes);
         } else {
             return NilReply.INSTANCE;

@@ -108,6 +108,7 @@ public class KeyBucket {
         if (sharedBytes == null) {
             this.bytes = new byte[KEY_BUCKET_ONE_COST_SIZE];
             this.position = 0;
+            this.buffer = ByteBuffer.wrap(this.bytes, this.position, KEY_BUCKET_ONE_COST_SIZE);
         } else {
             if (sharedBytes.length % KEY_BUCKET_ONE_COST_SIZE != 0) {
                 throw new IllegalStateException("Key bucket shared bytes length must be multiple of " + KEY_BUCKET_ONE_COST_SIZE);
@@ -116,12 +117,13 @@ public class KeyBucket {
             if (sharedBytes.length <= position) {
                 this.bytes = new byte[KEY_BUCKET_ONE_COST_SIZE];
                 this.position = 0;
+                this.buffer = ByteBuffer.wrap(this.bytes, this.position, KEY_BUCKET_ONE_COST_SIZE);
             } else {
                 this.bytes = sharedBytes;
                 this.position = position;
+                this.buffer = ByteBuffer.wrap(this.bytes, this.position, KEY_BUCKET_ONE_COST_SIZE).slice();
             }
         }
-        this.buffer = ByteBuffer.wrap(this.bytes, this.position, KEY_BUCKET_ONE_COST_SIZE);
 
         this.lastUpdateSeq = buffer.getLong();
         this.size = buffer.getShort();
@@ -132,7 +134,7 @@ public class KeyBucket {
         void call(long cellHashValue, long expireAt, byte[] keyBytes, byte[] valueBytes);
     }
 
-    synchronized void iterate(IterateCallBack callBack) {
+    void iterate(IterateCallBack callBack) {
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
             int metaIndex = metaIndex(cellIndex);
             var cellHashValue = buffer.getLong(metaIndex);
@@ -332,7 +334,7 @@ public class KeyBucket {
     private record CanPutResult(boolean flag, boolean isUpdate, int needRemoveSameKeyCellIndexAfterPut) {
     }
 
-    public synchronized boolean put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, KeyBucket[] afterPutKeyBuckets) {
+    public boolean put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, KeyBucket[] afterPutKeyBuckets) {
         if (cellCost == capacity) {
             if (afterPutKeyBuckets == null) {
                 throw new BucketFullException("Key bucket is full, " + this);
@@ -400,7 +402,7 @@ public class KeyBucket {
         }
 
         if (putToCellIndex == -1) {
-            throw new BucketFullException("Key bucket is full, slot=" + slot + ", bucket index=" + bucketIndex);
+            throw new BucketFullException("Key bucket is full, this: " + this);
         }
 
         putTo(putToCellIndex, cellCount, keyHash, expireAt, seq, keyBytes, valueBytes);
@@ -544,8 +546,7 @@ public class KeyBucket {
         }
     }
 
-    // add synchronized as when key loader batch update pvm list or short value list, can also be read in another thread
-    public synchronized ValueBytesWithExpireAtAndSeq getValueByKey(byte[] keyBytes, long keyHash) {
+    public ValueBytesWithExpireAtAndSeq getValueByKey(byte[] keyBytes, long keyHash) {
         if (size == 0) {
             return null;
         }
@@ -600,7 +601,7 @@ public class KeyBucket {
         buffer.put(beginCellOffset, bytes0);
     }
 
-    public synchronized boolean del(byte[] keyBytes, long keyHash) {
+    public boolean del(byte[] keyBytes, long keyHash) {
         boolean isDeleted = false;
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
             int metaIndex = metaIndex(cellIndex);

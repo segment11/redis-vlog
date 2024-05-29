@@ -791,7 +791,7 @@ public class LGroup extends BaseCommand {
 
         if (start > size || start > stop) {
             var oneSlot = localPersist.oneSlot(slot);
-            oneSlot.removeDelay(workerId, key, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+            oneSlot.removeDelay(key, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
             return OKReply.INSTANCE;
         }
 

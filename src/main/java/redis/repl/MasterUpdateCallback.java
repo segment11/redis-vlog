@@ -5,7 +5,7 @@ import redis.persist.Wal;
 
 public interface MasterUpdateCallback {
     // offset == 0, need clear values
-    void onWalAppend(byte slot, int bucketIndex, byte batchIndex, boolean isValueShort, Wal.V v, int offset);
+    void onWalAppend(byte slot, int bucketIndex, boolean isValueShort, Wal.V v, int offset);
 
     boolean isToSlaveWalAppendBatchEmpty();
 

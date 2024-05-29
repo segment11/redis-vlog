@@ -11,8 +11,8 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-public class StatKeyBucketLastUpdateCount {
-    private static final String STAT_KEY_BUCKET_LAST_UPDATE_COUNT_FILE = "stat_key_bucket_last_update_count.dat";
+public class StatKeyCountInBuckets {
+    private static final String STAT_KEY_BUCKET_LAST_UPDATE_COUNT_FILE = "stat_key_count_in_buckets.dat";
     // short is enough for one key bucket total value count
     public static final int ONE_LENGTH = 2;
 
@@ -21,16 +21,12 @@ public class StatKeyBucketLastUpdateCount {
     private final int allCapacity;
     private RandomAccessFile raf;
 
-    // 64KB
-    private static final int BATCH_SIZE = 1024 * 64;
-    private static final byte[] EMPTY_BYTES = new byte[BATCH_SIZE];
-
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public StatKeyBucketLastUpdateCount(byte slot, int bucketsPerSlot, File slotDir) throws IOException {
+    public StatKeyCountInBuckets(byte slot, int bucketsPerSlot, File slotDir) throws IOException {
         this.slot = slot;
         this.bucketsPerSlot = bucketsPerSlot;
         this.allCapacity = bucketsPerSlot * ONE_LENGTH;
@@ -47,14 +43,7 @@ public class StatKeyBucketLastUpdateCount {
         var file = new File(slotDir, STAT_KEY_BUCKET_LAST_UPDATE_COUNT_FILE);
         if (!file.exists()) {
             FileUtils.touch(file);
-
-            var initTimes = allCapacity / BATCH_SIZE;
-            if (allCapacity % BATCH_SIZE != 0) {
-                initTimes++;
-            }
-            for (int i = 0; i < initTimes; i++) {
-                FileUtils.writeByteArrayToFile(file, EMPTY_BYTES, true);
-            }
+            FileUtils.writeByteArrayToFile(file, this.inMemoryCachedBytes, true);
         } else {
             needRead = true;
         }
@@ -63,35 +52,35 @@ public class StatKeyBucketLastUpdateCount {
         if (needRead) {
             raf.seek(0);
             raf.read(inMemoryCachedBytes);
-            log.warn("Read stat key bucket last update count file success, file: {}, slot: {}, all capacity: {}KB",
+            log.warn("Read stat key count in buckets file success, file: {}, slot: {}, all capacity: {}KB",
                     file, slot, allCapacity / 1024);
         }
 
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
     }
 
-    public interface IterateCallBack {
+    interface IterateCallBack {
         void call(byte slot, int bucketIndex, short size);
     }
 
-    public synchronized void iterate(IterateCallBack callBack) {
+    void iterate(IterateCallBack callBack) {
         for (int bucketIndex = 0; bucketIndex < bucketsPerSlot; bucketIndex++) {
-            var size = inMemoryCachedByteBuffer.getShort(bucketIndex);
+            var size = inMemoryCachedByteBuffer.getShort(bucketIndex * ONE_LENGTH);
             callBack.call(slot, bucketIndex, size);
         }
     }
 
-    public synchronized void setKeyCountInBucketIndex(int bucketIndex, short keyCount) {
+    void setKeyCountForBucketIndex(int bucketIndex, short keyCount) {
         var offset = bucketIndex * ONE_LENGTH;
         inMemoryCachedByteBuffer.putShort(offset, keyCount);
     }
 
-    public synchronized short getKeyCountInBucketIndex(int bucketIndex) {
+    short getKeyCountForBucketIndex(int bucketIndex) {
         var offset = bucketIndex * ONE_LENGTH;
         return inMemoryCachedByteBuffer.getShort(offset);
     }
 
-    public synchronized long getKeyCount() {
+    long getKeyCount() {
         long keyCount = 0;
         for (int i = 0; i < bucketsPerSlot; i++) {
             var offset = i * ONE_LENGTH;
@@ -100,28 +89,23 @@ public class StatKeyBucketLastUpdateCount {
         return keyCount;
     }
 
-    public synchronized void clear() {
+    void clear() {
         if (ConfForSlot.global.pureMemory) {
             Arrays.fill(inMemoryCachedBytes, (byte) 0);
             return;
         }
 
-        var initTimes = allCapacity / BATCH_SIZE;
-        if (allCapacity % BATCH_SIZE != 0) {
-            initTimes++;
-        }
         try {
-            for (int i = 0; i < initTimes; i++) {
-                raf.seek(i * BATCH_SIZE);
-                raf.write(EMPTY_BYTES);
-            }
+            var tmpBytes = new byte[allCapacity];
+            raf.seek(0);
+            raf.write(tmpBytes);
             Arrays.fill(inMemoryCachedBytes, (byte) 0);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public synchronized void cleanUp() {
+    void cleanUp() {
         if (ConfForSlot.global.pureMemory) {
             return;
         }

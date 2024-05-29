@@ -10,7 +10,7 @@ public class InMemoryGetSet implements ByPassGetSet {
     private HashMap<String, CompressedValue> map = new HashMap<>();
 
     @Override
-    public void put(byte slot, byte workerId, String key, int bucketIndex, CompressedValue cv) {
+    public void put(byte slot, String key, int bucketIndex, CompressedValue cv) {
         map.put(key, cv);
     }
 

@@ -8,6 +8,7 @@ import redis.reply.OKReply;
 import redis.reply.Reply;
 
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 
 public class FGroup extends BaseCommand {
     public FGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -28,14 +29,15 @@ public class FGroup extends BaseCommand {
         if ("flushdb".equals(cmd) || "flushall".equals(cmd)) {
             boolean isAsync = data.length == 2 && "async".equalsIgnoreCase(new String(data[1]));
             if (isAsync) {
-                // todo
                 for (int i = 0; i < slotNumber; i++) {
                     localPersist.flush((byte) i);
                 }
             } else {
+                CompletableFuture<Void>[] futures = new CompletableFuture[slotNumber];
                 for (int i = 0; i < slotNumber; i++) {
-                    localPersist.flush((byte) i);
+                    futures[i] = localPersist.flush((byte) i);
                 }
+                CompletableFuture.allOf(futures).join();
             }
             return new OKReply();
         }

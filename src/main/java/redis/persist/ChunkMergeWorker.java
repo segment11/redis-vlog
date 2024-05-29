@@ -1,35 +1,25 @@
 package redis.persist;
 
-import io.activej.async.callback.AsyncComputation;
-import io.activej.eventloop.Eventloop;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
-import redis.ConfForSlot;
 import redis.Debug;
-import redis.ThreadFactoryAssignSupport;
+import redis.SnowFlake;
 import redis.metric.SimpleGauge;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.TreeSet;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static redis.persist.Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED;
 
 public class ChunkMergeWorker {
-    byte mergeWorkerId;
-    private String mergeWorkerIdStr;
-    private short slotNumber;
-    private byte netWorkers;
-    private byte mergeWorkers;
-    private byte topMergeWorkers;
-
-    private ChunkMerger chunkMerger;
+    private final byte slot;
+    private final String slotStr;
+    private final SnowFlake snowFlake;
 
     long mergedSegmentCount = 0;
     long mergedSegmentCostTimeTotalUs = 0;
@@ -40,14 +30,9 @@ public class ChunkMergeWorker {
     long validCvCountTotal = 0;
     long invalidCvCountTotal = 0;
 
-    final Logger log = LoggerFactory.getLogger(getClass());
+    private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final LocalPersist localPersist = LocalPersist.getInstance();
-
-    // index is batch index
-    private Eventloop[] mergeHandleEventloopArray;
-
-    boolean isTopMergeWorker;
 
     // just for config parameter
     int compressLevel;
@@ -58,26 +43,22 @@ public class ChunkMergeWorker {
     private static final int MERGING_CV_SIZE_THRESHOLD = 1000;
     private static final int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 100;
 
-    private final List<CvWithKeyAndBucketIndex>[][] mergedCvListBySlotAndBatchIndex;
+    private final List<CvWithKeyAndBucketIndex> mergedCvList = new ArrayList<>(MERGING_CV_SIZE_THRESHOLD);
 
-    void addMergedCv(byte slot, byte batchIndex, CvWithKeyAndBucketIndex cvWithKeyAndBucketIndex) {
-        mergedCvListBySlotAndBatchIndex[slot][batchIndex].add(cvWithKeyAndBucketIndex);
+    void addMergedCv(CvWithKeyAndBucketIndex cvWithKeyAndBucketIndex) {
+        mergedCvList.add(cvWithKeyAndBucketIndex);
     }
 
-    boolean persistMergedCvList(byte slot, byte batchIndex) {
-        var mergedCvList = mergedCvListBySlotAndBatchIndex[slot][batchIndex];
-        var mergedSegmentSet = mergedSegmentSets[batchIndex];
-
+    boolean persistMergedCvList() {
         if (mergedCvList.size() < MERGING_CV_SIZE_THRESHOLD) {
-            var mergedSegmentCount = mergedSegmentSet.stream().filter(one -> one.slot == slot).count();
-            if (mergedSegmentCount < MERGED_SEGMENT_SET_SIZE_THRESHOLD) {
+            if (mergedSegmentSet.size() < MERGED_SEGMENT_SET_SIZE_THRESHOLD) {
                 return false;
             }
         }
 
         // persist to chunk
         var oneSlot = localPersist.oneSlot(slot);
-        var targetChunk = oneSlot.chunksArray[mergeWorkerId][batchIndex];
+        var chunk = oneSlot.chunk;
 
         ArrayList<Integer> needMergeSegmentIndexListAll = new ArrayList<>();
 
@@ -92,15 +73,15 @@ public class ChunkMergeWorker {
                 var key = cvWithKeyAndBucketIndex.key;
                 var bucketIndex = cvWithKeyAndBucketIndex.bucketIndex;
 
-                list.add(new Wal.V(mergeWorkerId, cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+                list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                         key, cv.encode(), cv.compressedLength()));
             }
 
             // if list size is too large, need multi batch persist, todo
-            var needMergeSegmentIndexList = targetChunk.persist(walGroupIndex, list, true);
+            var needMergeSegmentIndexList = chunk.persist(walGroupIndex, list, true);
             if (needMergeSegmentIndexList == null) {
-                log.error("Merge worker persist merged cv list error, w={}, s={}", mergeWorkerId, slot);
-                throw new RuntimeException("Merge worker persist merged cv list error, w=" + mergeWorkerId + ", s=" + slot);
+                log.error("Merge worker persist merged cv list error, w={}, s={}", slot);
+                throw new RuntimeException("Merge worker persist merged cv list error, s=" + slot);
             }
 
             needMergeSegmentIndexListAll.addAll(needMergeSegmentIndexList);
@@ -112,19 +93,13 @@ public class ChunkMergeWorker {
 
             while (it.hasNext()) {
                 var one = it.next();
-                if (one.slot != slot) {
-                    continue;
-                }
-
                 // can reuse this chunk by segment index
-                oneSlot.setSegmentMergeFlag(one.workerId, one.batchIndex, one.index, SEGMENT_FLAG_MERGED_AND_PERSISTED, this.mergeWorkerId, 0L);
+                oneSlot.setSegmentMergeFlag(one.index, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
                 it.remove();
 
                 lastPersistedSegmentIndex = one.index;
 
-                sb.append(one.workerId).append(",")
-                        .append(one.batchIndex).append(",")
-                        .append(one.index).append(";");
+                sb.append(one.index).append(";");
             }
 
             var doLog = (lastPersistedSegmentIndex % 500 == 0 && slot == 0) || Debug.getInstance().logMerge;
@@ -134,7 +109,7 @@ public class ChunkMergeWorker {
         }
 
         if (!needMergeSegmentIndexListAll.isEmpty()) {
-            chunkMerger.submit(mergeWorkerId, slot, batchIndex, needMergeSegmentIndexListAll);
+            oneSlot.doMergeJob(needMergeSegmentIndexListAll);
         }
 
         lastPersistAtMillis = System.currentTimeMillis();
@@ -145,13 +120,10 @@ public class ChunkMergeWorker {
 
     int lastPersistedSegmentIndex;
 
-    public record MergedSegment(byte workerId, byte slot, byte batchIndex, int index,
-                                int validCvCount) implements Comparable<MergedSegment> {
+    public record MergedSegment(int index, int validCvCount) implements Comparable<MergedSegment> {
         @Override
         public String toString() {
             return "MergedSegment{" +
-                    ", slot=" + slot +
-                    ", batchIndex=" + batchIndex +
                     ", index=" + index +
                     ", validCvCount=" + validCvCount +
                     '}';
@@ -159,98 +131,22 @@ public class ChunkMergeWorker {
 
         @Override
         public int compareTo(@NotNull ChunkMergeWorker.MergedSegment o) {
-            if (this.slot != o.slot) {
-                return this.slot - o.slot;
-            }
-            if (this.batchIndex != o.batchIndex) {
-                return this.batchIndex - o.batchIndex;
-            }
             return this.index - o.index;
         }
     }
 
-    // index is batch index
-    final TreeSet<MergedSegment>[] mergedSegmentSets;
+    final TreeSet<MergedSegment> mergedSegmentSet = new TreeSet<>();
 
-    public void initEventloop(boolean isTopMergeWorker) {
-        this.isTopMergeWorker = isTopMergeWorker;
-
-        var batchNumber = ConfForSlot.global.confWal.batchNumber;
-
-        this.mergeHandleEventloopArray = new Eventloop[batchNumber];
-        for (int batchIndex = 0; batchIndex < batchNumber; batchIndex++) {
-            var mergeHandleEventloop = Eventloop.builder()
-                    .withThreadName("chunk-merge-worker-batch-" + batchIndex)
-                    .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
-                    .build();
-            mergeHandleEventloop.keepAlive(true);
-            this.mergeHandleEventloopArray[batchIndex] = mergeHandleEventloop;
-        }
-        log.info("Create chunk merge handle eventloop {}", mergeWorkerId);
-    }
-
-    public void fixMergeHandleChunkThreadId(Chunk chunk) {
-        this.mergeHandleEventloopArray[chunk.batchIndex].submit(() -> {
-            chunk.threadIdProtectedWhenWrite = Thread.currentThread().threadId();
-            log.warn("Fix merge worker chunk thread id, w={}, mw={}, s={}, b={}, tid={}",
-                    chunk.workerId, mergeWorkerId, chunk.slot, chunk.batchIndex, chunk.threadIdProtectedWhenWrite);
-        });
-    }
-
-    public void submitWriteSegmentsFromMasterExists(Chunk chunk, byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
-        this.mergeHandleEventloopArray[chunk.batchIndex].submit(() -> {
-            chunk.writeSegmentsFromMasterExists(bytes, segmentIndex, segmentCount, segmentSeqList, capacity);
-        });
-    }
-
-    public ChunkMergeWorker(byte mergeWorkerId, short slotNumber,
-                            byte netWorkers, byte mergeWorkers, byte topMergeWorkers,
-                            ChunkMerger chunkMerger) {
-        this.mergeWorkerId = mergeWorkerId;
-        this.mergeWorkerIdStr = String.valueOf(mergeWorkerId);
-        this.slotNumber = slotNumber;
-        this.netWorkers = netWorkers;
-        this.mergeWorkers = mergeWorkers;
-        this.topMergeWorkers = topMergeWorkers;
-        this.chunkMerger = chunkMerger;
-
-        var batchNumber = ConfForSlot.global.confWal.batchNumber;
-
-        this.mergedCvListBySlotAndBatchIndex = new ArrayList[slotNumber][batchNumber];
-        for (int i = 0; i < slotNumber; i++) {
-            mergedCvListBySlotAndBatchIndex[i] = new ArrayList[batchNumber];
-            for (int j = 0; j < batchNumber; j++) {
-                mergedCvListBySlotAndBatchIndex[i][j] = new ArrayList<>(MERGING_CV_SIZE_THRESHOLD);
-            }
-        }
-
-        this.mergedSegmentSets = new TreeSet[batchNumber];
-        for (int i = 0; i < batchNumber; i++) {
-            mergedSegmentSets[i] = new TreeSet<>();
-        }
+    public ChunkMergeWorker(byte slot, SnowFlake snowFlake) {
+        this.slot = slot;
+        this.slotStr = String.valueOf(slot);
+        this.snowFlake = snowFlake;
 
         this.initMetricsCollect();
     }
 
-    void start() {
-        for (int i = 0; i < mergeHandleEventloopArray.length; i++) {
-            var mergeHandleEventloop = mergeHandleEventloopArray[i];
-            var threadFactory = ThreadFactoryAssignSupport.getInstance().ForChunkMerge.getNextThreadFactory();
-            var thread = threadFactory.newThread(mergeHandleEventloop);
-            thread.start();
-            log.info("Chunk merge handle eventloop thread started, w={}, b={}, thread name={}", mergeWorkerId, i, thread.getName());
-        }
-    }
-
-    void stop() {
-        for (var mergeHandleEventloop : mergeHandleEventloopArray) {
-            mergeHandleEventloop.breakEventloop();
-        }
-        System.out.println("Stop chunk merge worker " + mergeWorkerId + " eventloop");
-    }
-
     private static final SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
-            "merge_worker_id");
+            "slot");
 
     static {
         innerGauge.register();
@@ -258,7 +154,7 @@ public class ChunkMergeWorker {
 
     private void initMetricsCollect() {
         innerGauge.addRawGetter(() -> {
-            var labelValues = List.of(mergeWorkerIdStr);
+            var labelValues = List.of(slotStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
 
@@ -283,9 +179,5 @@ public class ChunkMergeWorker {
 
             return map;
         });
-    }
-
-    CompletableFuture<Integer> submit(ChunkMergeJob job) {
-        return mergeHandleEventloopArray[job.batchIndex].submit(AsyncComputation.of(job));
     }
 }

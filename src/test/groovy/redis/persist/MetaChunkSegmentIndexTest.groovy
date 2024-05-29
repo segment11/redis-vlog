@@ -1,24 +1,29 @@
 package redis.persist
 
 import spock.lang.Specification
-import static Consts.*
+
+import static redis.persist.Consts.getSlotDir
 
 class MetaChunkSegmentIndexTest extends Specification {
     def "set and get"() {
         given:
-        def one = new MetaChunkSegmentIndex((byte) 0, (byte) 2, slotDir)
+        def one = new MetaChunkSegmentIndex((byte) 0, slotDir)
         when:
-        one.put((byte) 0, (byte) 0, 10)
-        one.put((byte) 0, (byte) 1, 20)
-        one.put((byte) 1, (byte) 0, 100)
-        one.put((byte) 1, (byte) 1, 200)
+        one.set(10)
         then:
-        one.get((byte) 0, (byte) 0) == 10
-        one.get((byte) 0, (byte) 1) == 20
-        one.get((byte) 1, (byte) 0) == 100
-        one.get((byte) 1, (byte) 1) == 200
-        cleanup:
+        one.get() == 10
+
+        when:
+        one.set(20)
+        then:
+        one.get() == 20
+
+        when:
         one.clear()
+        then:
+        one.get() == 0
+
+        cleanup:
         one.cleanUp()
     }
 }

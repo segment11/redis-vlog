@@ -12,7 +12,7 @@ import redis.SnowFlake;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 public class LocalPersist {
@@ -39,16 +39,7 @@ public class LocalPersist {
 
     public static final int O_DIRECT = 040000;
 
-    private ChunkMerger chunkMerger;
-
-    public void initChunkMerger(ChunkMerger chunkMerger) throws IOException {
-        this.chunkMerger = chunkMerger;
-        for (var oneSlot : oneSlots) {
-            oneSlot.setChunkMerger(chunkMerger);
-        }
-    }
-
-    public void persistMergeSegmentsUndone() throws Exception {
+    public void persistMergeSegmentsUndone() throws ExecutionException, InterruptedException {
         for (var oneSlot : oneSlots) {
             oneSlot.persistMergeSegmentsUndone();
         }
@@ -78,8 +69,7 @@ public class LocalPersist {
         return (int) Math.abs(keyHash % ConfForSlot.global.confBucket.bucketsPerSlot);
     }
 
-    public void init(byte allWorkers, byte netWorkers, byte mergeWorkers, byte topMergeWorkers, short slotNumber,
-                     SnowFlake snowFlake, File dirFile, Config persistConfig) throws IOException {
+    public void init(byte netWorkers, short slotNumber, SnowFlake snowFlake, File dirFile, Config persistConfig) throws IOException {
         this.slotNumber = slotNumber;
 
         // already created
@@ -89,7 +79,7 @@ public class LocalPersist {
         this.oneSlots = new OneSlot[slotNumber];
         for (short i = 0; i < slotNumber; i++) {
             var oneSlot = new OneSlot((byte) i, slotNumber, snowFlake, persistDir, persistConfig);
-            oneSlot.initFds(libC, allWorkers, netWorkers, mergeWorkers, topMergeWorkers);
+            oneSlot.initFds(libC, netWorkers);
 
             oneSlots[i] = oneSlot;
         }
@@ -112,18 +102,10 @@ public class LocalPersist {
         }
     }
 
-    public int startChunkMergerJob(byte workerId, byte slot, byte batchIndex, int segmentIndex) throws ExecutionException, InterruptedException {
-        ArrayList<Integer> segmentIndexList = new ArrayList<>();
-        segmentIndexList.add(segmentIndex);
-        var i = chunkMerger.submit(workerId, slot, batchIndex, segmentIndexList).get();
-        if (i == -1) {
-            throw new IllegalStateException("Merge segment error, w=" + workerId + ", s=" + slot + ", b=" + batchIndex + ", i=" + segmentIndex);
-        }
-        return i;
-    }
-
-    public void flush(byte slot) {
-        // should use persist eventloop submit to make sure thread safe, todo
-        oneSlots[slot].flush();
+    public CompletableFuture<Void> flush(byte slot) {
+        var oneSlot = oneSlots[slot];
+        return oneSlot.netWorkerEventloop.submit(() -> {
+            oneSlot.flush();
+        });
     }
 }

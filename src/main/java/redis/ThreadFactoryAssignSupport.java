@@ -16,11 +16,9 @@ public class ThreadFactoryAssignSupport {
     public Inner ForMultiSlotRequest = new Inner(2, 16, "multi-slot-request-", true);
 
     // one or two ssd volume, one cpu v-core is enough, suppose there are at most 8 ssd volumes
+    // use net-worker threads instread
+    @Deprecated
     public Inner ForFdReadWrite = new Inner(8, 16, "fd-read-write-group-", true);
-
-    public Inner ForSlotWalBatchPersist = new Inner(4, 8, "slot-wal-persist-", true);
-
-    public Inner ForChunkMerge = new Inner(4, 8, "chunk-merge-", true);
 
     public class Inner {
         final int number;

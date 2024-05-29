@@ -16,8 +16,8 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
     }
 
     @Override
-    public void onWalAppend(byte slot, int bucketIndex, byte batchIndex, boolean isValueShort, Wal.V v, int offset) {
-        var addBatchResult = toSlaveWalAppendBatch.addBatch(batchIndex, isValueShort, v, offset);
+    public void onWalAppend(byte slot, int bucketIndex, boolean isValueShort, Wal.V v, int offset) {
+        var addBatchResult = toSlaveWalAppendBatch.addBatch(isValueShort, v, offset);
         if (addBatchResult.needSent()) {
             var replPairList = getCurrentSlaveReplPairList.get();
             for (var replPair : replPairList) {
@@ -28,7 +28,7 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
             // wait slave reconnect and sync from the beginning if send fail
             toSlaveWalAppendBatch.reset();
             if (!addBatchResult.isLastIncluded()) {
-                toSlaveWalAppendBatch.addBatch(batchIndex, isValueShort, v, offset);
+                toSlaveWalAppendBatch.addBatch(isValueShort, v, offset);
             }
         }
     }

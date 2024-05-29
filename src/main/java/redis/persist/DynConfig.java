@@ -76,7 +76,7 @@ public class DynConfig {
         }
     }
 
-    private synchronized void update(String key, Object value) throws IOException {
+    private void update(String key, Object value) throws IOException {
         data.put(key, value);
         // write json
         var objectMapper = new ObjectMapper();

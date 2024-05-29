@@ -17,21 +17,13 @@ public class MetaKeyBucketSplitNumber {
     private final int allCapacity;
     private RandomAccessFile raf;
 
-    // 64KB
-    private static final int BATCH_SIZE = 1024 * 64;
-    private static final byte[] EMPTY_BYTES = new byte[BATCH_SIZE];
-
-    static {
-        Arrays.fill(EMPTY_BYTES, (byte) 1);
-    }
-
     private final byte[] inMemoryCachedBytes;
 
-    public synchronized byte[] getInMemoryCachedBytes() {
+    byte[] getInMemoryCachedBytes() {
         return inMemoryCachedBytes;
     }
 
-    public synchronized void overwriteInMemoryCachedBytes(byte[] bytes) {
+    void overwriteInMemoryCachedBytes(byte[] bytes) {
         if (bytes.length != inMemoryCachedBytes.length) {
             throw new IllegalArgumentException("Repl meta key bucket split number, bytes length not match");
         }
@@ -51,9 +43,10 @@ public class MetaKeyBucketSplitNumber {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public MetaKeyBucketSplitNumber(byte slot, int bucketsPerSlot, File slotDir) throws IOException {
+    public MetaKeyBucketSplitNumber(byte slot, File slotDir) throws IOException {
         this.slot = slot;
-        this.allCapacity = bucketsPerSlot;
+
+        this.allCapacity = ConfForSlot.global.confBucket.bucketsPerSlot;
 
         // max 512KB
         this.inMemoryCachedBytes = new byte[allCapacity];
@@ -67,14 +60,7 @@ public class MetaKeyBucketSplitNumber {
         var file = new File(slotDir, META_KEY_BUCKET_SPLIT_NUMBER_FILE);
         if (!file.exists()) {
             FileUtils.touch(file);
-
-            var initTimes = allCapacity / BATCH_SIZE;
-            if (allCapacity % BATCH_SIZE != 0) {
-                initTimes++;
-            }
-            for (int i = 0; i < initTimes; i++) {
-                FileUtils.writeByteArrayToFile(file, EMPTY_BYTES, true);
-            }
+            FileUtils.writeByteArrayToFile(file, this.inMemoryCachedBytes, true);
         } else {
             needRead = true;
         }
@@ -89,7 +75,7 @@ public class MetaKeyBucketSplitNumber {
     }
 
     // read write lock better
-    public synchronized void set(int bucketIndex, byte splitNumber) {
+    void set(int bucketIndex, byte splitNumber) {
         if (ConfForSlot.global.pureMemory) {
             inMemoryCachedBytes[bucketIndex] = splitNumber;
             return;
@@ -105,11 +91,11 @@ public class MetaKeyBucketSplitNumber {
         }
     }
 
-    public synchronized byte get(int bucketIndex) {
+    byte get(int bucketIndex) {
         return inMemoryCachedBytes[bucketIndex];
     }
 
-    public synchronized byte maxSplitNumber() {
+    byte maxSplitNumber() {
         byte max = 1;
         for (int j = 0; j < allCapacity; j++) {
             var splitNumber = inMemoryCachedBytes[j];
@@ -120,28 +106,22 @@ public class MetaKeyBucketSplitNumber {
         return max;
     }
 
-    public synchronized void clear() {
+    void clear() {
         if (ConfForSlot.global.pureMemory) {
             Arrays.fill(inMemoryCachedBytes, (byte) 0);
             return;
         }
 
-        var initTimes = allCapacity / BATCH_SIZE;
-        if (allCapacity % BATCH_SIZE != 0) {
-            initTimes++;
-        }
         try {
-            for (int i = 0; i < initTimes; i++) {
-                raf.seek(i * BATCH_SIZE);
-                raf.write(EMPTY_BYTES);
-            }
+            raf.seek(0);
+            raf.write(inMemoryCachedBytes);
             Arrays.fill(inMemoryCachedBytes, (byte) 0);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public synchronized void cleanUp() {
+    public void cleanUp() {
         if (ConfForSlot.global.pureMemory) {
             return;
         }

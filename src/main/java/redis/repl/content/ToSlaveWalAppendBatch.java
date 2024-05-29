@@ -13,8 +13,8 @@ public class ToSlaveWalAppendBatch implements ReplContent {
     private final byte[] bytes;
     private final ByteBuffer buffer;
 
-    // 2 bytes as short for batch count, 4 bytes as int for data length
-    private static final int HEADER_LENGTH = 2 + 4;
+    // flag byte, offset int, data length int
+    private static final int HEADER_LENGTH = 1 + 4 + 4;
 
     private short batchCount = 0;
     private int dataLength = 0;
@@ -43,19 +43,18 @@ public class ToSlaveWalAppendBatch implements ReplContent {
 
     }
 
-    public AddBatchResult addBatch(byte batchIndex, boolean isValueShort, Wal.V v, int offset) {
+    public AddBatchResult addBatch(boolean isValueShort, Wal.V v, int offset) {
         if (batchCount >= sendOnceMaxCount) {
             return new AddBatchResult(true, false);
         }
 
         int vEncodeLength = v.encodeLength();
-        // 1 byte for batch index, 1 byte for is value short, 4 bytes as int for offset, 4 bytes as int for v encode length
-        int itemLength = 1 + 1 + 4 + 4 + vEncodeLength;
+        // 1 byte for is value short, 4 bytes as int for offset, 4 bytes as int for v encode length
+        int itemLength = 1 + 4 + 4 + vEncodeLength;
         if (dataLength + itemLength > sendOnceMaxLength) {
             return new AddBatchResult(true, false);
         }
 
-        buffer.put(batchIndex);
         buffer.put(isValueShort ? (byte) 1 : (byte) 0);
         buffer.putInt(offset);
         buffer.putInt(vEncodeLength);

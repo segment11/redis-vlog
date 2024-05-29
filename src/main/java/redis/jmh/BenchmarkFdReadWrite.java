@@ -66,7 +66,6 @@ public class BenchmarkFdReadWrite {
 
             var fdReadWrite = new FdReadWrite("test" + i, libC, file);
             fdReadWrite.initByteBuffers(false);
-            fdReadWrite.initEventloop(threadFactory);
             fdReadWriteList.add(fdReadWrite);
         }
     }

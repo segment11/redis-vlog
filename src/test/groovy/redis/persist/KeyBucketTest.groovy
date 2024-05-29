@@ -31,11 +31,11 @@ class KeyBucketTest extends Specification {
                 def pvm = new PersistValueMeta()
                 pvm.segmentOffset = it
                 def encode = pvm.encode()
-                def v = new Wal.V((byte) 0, it, 0, keyHash, CompressedValue.EXPIRE_NOW,
+                def v = new Wal.V(it, 0, keyHash, CompressedValue.EXPIRE_NOW,
                         key, pvm.encode(), encode.length)
                 list << v
             } else {
-                def v = new Wal.V((byte) 0, 0L, 0, keyHash, 0L,
+                def v = new Wal.V(0L, 0, keyHash, 0L,
                         key, putValueBytes, putValueBytes.length)
                 list << v
             }

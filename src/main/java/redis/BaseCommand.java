@@ -91,7 +91,6 @@ public abstract class BaseCommand {
     }
 
     public void from(BaseCommand other) {
-        this.workerId = other.workerId;
         this.netWorkers = other.netWorkers;
         this.slotNumber = other.slotNumber;
 
@@ -114,7 +113,6 @@ public abstract class BaseCommand {
     }
 
     public BaseCommand init(RequestHandler requestHandler, Request request) {
-        this.workerId = requestHandler.workerId;
         this.netWorkers = requestHandler.netWorkers;
         this.slotNumber = requestHandler.slotNumber;
 
@@ -390,7 +388,7 @@ public abstract class BaseCommand {
 
                 var oneSlot = localPersist.oneSlot(slot);
                 try {
-                    oneSlot.put(workerId, dstKey, slotWithKeyHash.bucketIndex, cv);
+                    oneSlot.put(dstKey, slotWithKeyHash.bucketIndex, cv);
                 } catch (SegmentOverflowException e) {
                     log.error("Set error, key: {}, message: {}", dstKey, e.getMessage());
                     throw e;
@@ -473,11 +471,11 @@ public abstract class BaseCommand {
             cv.expireAt = expireAt;
 
             if (byPassGetSet != null) {
-                byPassGetSet.put(slot, workerId, key, slotWithKeyHash.bucketIndex, cv);
+                byPassGetSet.put(slot, key, slotWithKeyHash.bucketIndex, cv);
             } else {
                 var oneSlot = localPersist.oneSlot(slot);
                 try {
-                    oneSlot.put(workerId, key, slotWithKeyHash.bucketIndex, cv);
+                    oneSlot.put(key, slotWithKeyHash.bucketIndex, cv);
                 } catch (SegmentOverflowException e) {
                     log.error("Set error, key: {}, message: {}", key, e.getMessage());
                     throw e;
@@ -515,12 +513,12 @@ public abstract class BaseCommand {
             cvRaw.compressedData = valueBytes;
 
             if (byPassGetSet != null) {
-                byPassGetSet.put(slot, workerId, key, slotWithKeyHash.bucketIndex, cvRaw);
+                byPassGetSet.put(slot, key, slotWithKeyHash.bucketIndex, cvRaw);
             } else {
                 var oneSlot = localPersist.oneSlot(slot);
                 try {
                     // uncompressed
-                    oneSlot.put(workerId, key, slotWithKeyHash.bucketIndex, cvRaw);
+                    oneSlot.put(key, slotWithKeyHash.bucketIndex, cvRaw);
                 } catch (SegmentOverflowException e) {
                     log.error("Set error, key: {}, message: {}", key, e.getMessage());
                     throw e;
