@@ -38,7 +38,7 @@ public class SnowFlake {
         return lastNextId;
     }
 
-    public synchronized long nextId() {
+    public long nextId() {
         long currentStamp = getNewStamp();
         if (currentStamp < lastStamp) {
             throw new RuntimeException("Clock moved backwards. refusing to generate id");

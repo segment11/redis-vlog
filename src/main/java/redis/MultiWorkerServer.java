@@ -321,11 +321,19 @@ public class MultiWorkerServer extends Launcher {
                 .overrideWith(ofSystemProperties("redis-vlog-config"));
     }
 
+    // no share
+    // if support transaction, need share to generate lsn for all slots
     @Provides
-    SnowFlake snowFlake(Config config) {
+    SnowFlake[] snowFlakes(Config config) {
+        int netWorkers = config.get(toInt, "netWorkers", 1);
+        var snowFlakes = new SnowFlake[netWorkers];
+
         long datacenterId = config.get(ofLong(), "datacenterId", 0L);
         long machineId = config.get(ofLong(), "machineId", 0L);
-        return new SnowFlake(datacenterId, machineId);
+        for (int i = 0; i < netWorkers; i++) {
+            snowFlakes[i] = new SnowFlake(datacenterId, (machineId << 8) | i);
+        }
+        return snowFlakes;
     }
 
     @Override
@@ -523,7 +531,7 @@ public class MultiWorkerServer extends Launcher {
                     }
 
                     @Provides
-                    Integer beforeCreateHandler(ConfForSlot confForSlot, SnowFlake snowFlake, Config config) throws IOException {
+                    Integer beforeCreateHandler(ConfForSlot confForSlot, SnowFlake[] snowFlakes, Config config) throws IOException {
                         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
                         if (slotNumber > LocalPersist.MAX_SLOT_NUMBER) {
                             throw new IllegalStateException("Slot number too large, slot number should be less than " + LocalPersist.MAX_SLOT_NUMBER);
@@ -547,7 +555,7 @@ public class MultiWorkerServer extends Launcher {
                         TrainSampleJob.setDictPrefixKeyMaxLen(configCompress.get(toInt, "dictPrefixKeyMaxLen", 5));
 
                         // init local persist
-                        LocalPersist.getInstance().init((byte) netWorkers, (short) slotNumber, snowFlake, dirFile, config.getChild("persist"));
+                        LocalPersist.getInstance().init((byte) netWorkers, (short) slotNumber, snowFlakes, dirFile, config.getChild("persist"));
 
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
                         if (debugMode) {
@@ -558,13 +566,13 @@ public class MultiWorkerServer extends Launcher {
                     }
 
                     @Provides
-                    RequestHandler[] requestHandlerArray(SnowFlake snowFlake, Integer beforeCreateHandler, SocketInspector socketInspector, Config config) {
+                    RequestHandler[] requestHandlerArray(SnowFlake[] snowFlakes, Integer beforeCreateHandler, SocketInspector socketInspector, Config config) {
                         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
                         int netWorkers = config.get(toInt, "netWorkers", 1);
 
                         var list = new RequestHandler[netWorkers];
                         for (int i = 0; i < netWorkers; i++) {
-                            list[i] = new RequestHandler((byte) i, (byte) netWorkers, (short) slotNumber, snowFlake, socketInspector, config);
+                            list[i] = new RequestHandler((byte) i, (byte) netWorkers, (short) slotNumber, snowFlakes[i], socketInspector, config);
                         }
                         return list;
                     }
