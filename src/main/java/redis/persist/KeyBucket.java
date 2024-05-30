@@ -296,7 +296,7 @@ public class KeyBucket {
 
             var kvMeta = new KVMeta(cellOffset, keyLength, valueLength);
 
-            boolean isPut = targetKeyBucket.put(keyBytes, cellHashValue, expireAt, seq, valueBytes, null);
+            boolean isPut = targetKeyBucket.put(keyBytes, cellHashValue, expireAt, seq, valueBytes, null).isPut;
             if (!isPut) {
                 throw new BucketFullException("Split put fail, key=" + new String(keyBytes));
             }
@@ -331,10 +331,14 @@ public class KeyBucket {
         lastUpdateSeq = snowFlake.nextId();
     }
 
-    private record CanPutResult(boolean flag, boolean isUpdate, int needRemoveSameKeyCellIndexAfterPut) {
+    private record CanPutResult(boolean flag, boolean isUpdate) {
     }
 
-    public boolean put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, KeyBucket[] afterPutKeyBuckets) {
+    // is put is always true
+    record DoPutResult(boolean isPut, boolean isUpdate) {
+    }
+
+    public DoPutResult put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, KeyBucket[] afterPutKeyBuckets) {
         if (cellCost == capacity) {
             if (afterPutKeyBuckets == null) {
                 throw new BucketFullException("Key bucket is full, " + this);
@@ -359,23 +363,18 @@ public class KeyBucket {
 
             // split number already changed
             int newSplitIndex = (int) Math.abs(keyHash % splitNumber);
-            boolean isPut = false;
-            boolean putResult = false;
-            for (var keyBucket : kbArray) {
-                if (newSplitIndex == keyBucket.splitIndex) {
-                    isPut = true;
-                    putResult = keyBucket.put(keyBytes, keyHash, expireAt, seq, valueBytes, null);
-                    if (putResult) {
-                        keyBucket.updateSeq();
-                    }
-
+            DoPutResult doPutResult = null;
+            for (var keyBucketAfterSplit : kbArray) {
+                if (newSplitIndex == keyBucketAfterSplit.splitIndex) {
+                    doPutResult = keyBucketAfterSplit.put(keyBytes, keyHash, expireAt, seq, valueBytes, null);
+                    keyBucketAfterSplit.updateSeq();
                     break;
                 }
             }
-            if (!isPut) {
+            if (doPutResult == null) {
                 throw new IllegalStateException("New split index not match, new split index=" + newSplitIndex);
             }
-            return putResult;
+            return doPutResult;
         }
 
         int cellCount = KVMeta.calcCellCount((short) keyBytes.length, (byte) valueBytes.length);
@@ -384,7 +383,8 @@ public class KeyBucket {
                     + ", value length=" + valueBytes.length);
         }
 
-        int needRemoveSameKeyCellIndexAfterPut = -1;
+        // all in memory, performance is not a problem
+        var isExists = del(keyBytes, keyHash, false);
 
         boolean isUpdate = false;
         int putToCellIndex = -1;
@@ -392,49 +392,28 @@ public class KeyBucket {
             var canPutResult = canPut(keyBytes, keyHash, i, cellCount);
             if (canPutResult.flag) {
                 putToCellIndex = i;
-                isUpdate = canPutResult.isUpdate;
+                isUpdate = isExists;
                 break;
-            }
-
-            if (canPutResult.needRemoveSameKeyCellIndexAfterPut != -1) {
-                needRemoveSameKeyCellIndexAfterPut = canPutResult.needRemoveSameKeyCellIndexAfterPut;
             }
         }
 
         if (putToCellIndex == -1) {
+            if (isExists) {
+                // cell count is not enough ? key is not change, will not happen
+                // already deleted, data missing, SHIT
+                log.error("!!!Key bucket put fail but already delete old one already saved, need put manually, key: {}", new String(keyBytes));
+                log.error("!!!Key bucket put fail but already delete old one already saved, need put manually, key: {}", new String(keyBytes));
+                log.error("!!!Key bucket put fail but already delete old one already saved, need put manually, key: {}", new String(keyBytes));
+            }
             throw new BucketFullException("Key bucket is full, this: " + this);
         }
 
         putTo(putToCellIndex, cellCount, keyHash, expireAt, seq, keyBytes, valueBytes);
-        if (!isUpdate) {
-            size++;
-            cellCost += cellCount;
-        }
-
-        if (needRemoveSameKeyCellIndexAfterPut != -1) {
-            buffer.position(oneCellOffset(needRemoveSameKeyCellIndexAfterPut));
-
-            var keyLength = buffer.getShort();
-            buffer.position(buffer.position() + keyLength);
-            var valueLength = buffer.get();
-
-            int cellCountSameKey = KVMeta.calcCellCount(keyLength, valueLength);
-            clearCell(needRemoveSameKeyCellIndexAfterPut, cellCountSameKey);
-        }
-
-        // clear same key cell after put
-        int nextCellIndex = putToCellIndex + cellCount;
-        for (int i = nextCellIndex; i < capacity; i++) {
-            var kvMetaSameKey = isCellUseTargetKey(keyBytes, keyHash, i);
-            if (kvMetaSameKey != null) {
-                clearCell(i, kvMetaSameKey.cellCount());
-                size--;
-                cellCost -= kvMetaSameKey.cellCount();
-            }
-        }
+        size++;
+        cellCost += cellCount;
 
         updateSeq();
-        return true;
+        return new DoPutResult(true, isUpdate);
     }
 
     private void putTo(int putToCellIndex, int cellCount, long keyHash, long expireAt, long seq, byte[] keyBytes, byte[] valueBytes) {
@@ -493,9 +472,9 @@ public class KeyBucket {
 
         if (cellHashValue == NO_KEY) {
             var flag = isCellAvailableN(cellIndex, cellCount, false);
-            return new CanPutResult(flag, false, -1);
+            return new CanPutResult(flag, false);
         } else if (cellHashValue == PRE_KEY) {
-            return new CanPutResult(false, false, -1);
+            return new CanPutResult(false, false);
         } else {
             if (expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis()) {
                 clearOneExpired(cellIndex);
@@ -504,18 +483,17 @@ public class KeyBucket {
             }
 
             if (cellHashValue != keyHash) {
-                return new CanPutResult(false, false, -1);
+                return new CanPutResult(false, false);
             }
 
             var matchMeta = keyMatch(keyBytes, oneCellOffset(cellIndex));
             if (matchMeta != null) {
                 // update
                 var flag = isCellAvailableN(cellIndex + 1, cellCount - 1, true);
-                // need clear old cell after put if key match but can not put this time
-                return new CanPutResult(flag, true, flag ? -1 : cellIndex);
+                return new CanPutResult(flag, true);
             } else {
                 // hash conflict
-                return new CanPutResult(false, false, -1);
+                return new CanPutResult(false, false);
             }
         }
     }
@@ -601,7 +579,7 @@ public class KeyBucket {
         buffer.put(beginCellOffset, bytes0);
     }
 
-    public boolean del(byte[] keyBytes, long keyHash) {
+    public boolean del(byte[] keyBytes, long keyHash, boolean doUpdateSeq) {
         boolean isDeleted = false;
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
             int metaIndex = metaIndex(cellIndex);
@@ -620,7 +598,9 @@ public class KeyBucket {
                 clearCell(cellIndex, cellCount);
                 size--;
                 cellCost -= cellCount;
-                updateSeq();
+                if (doUpdateSeq) {
+                    updateSeq();
+                }
 
                 isDeleted = true;
             } else {

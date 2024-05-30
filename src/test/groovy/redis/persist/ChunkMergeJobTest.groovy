@@ -70,6 +70,7 @@ class ChunkMergeJobTest extends Specification {
         var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader, null)
         chunk.fdReadWriteArray = [fdReadWriteForChunkSegments]
         oneSlot.chunk = chunk
+        chunk.initSegmentIndexWhenFirstStart(segmentIndex)
 
         var chunkMergeWorker = new ChunkMergeWorker(slot, oneSlot)
 
@@ -90,6 +91,6 @@ class ChunkMergeJobTest extends Specification {
         fdReadWriteForChunkSegments.cleanUp()
         fdReadWriteForKeyLoader.cleanUp()
 
-        Consts.slotDir.delete()
+        Consts.slotDir.deleteDir()
     }
 }

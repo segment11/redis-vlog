@@ -361,7 +361,7 @@ public class KeyLoader {
             return false;
         }
 
-        var isDeleted = keyBucket.del(keyBytes, keyHash);
+        var isDeleted = keyBucket.del(keyBytes, keyHash, true);
         if (isDeleted) {
             updateKeyBucketInner(bucketIndex, keyBucket, false);
         }

@@ -70,11 +70,12 @@ public class ChunkMergeWorker {
                         key, cv.encode(), cv.compressedLength()));
             }
 
+            // refer Chunk.ONCE_PREPARE_SEGMENT_COUNT
             // if list size is too large, need multi batch persist, todo
             var needMergeSegmentIndexList = oneSlot.chunk.persist(walGroupIndex, list, true);
             if (needMergeSegmentIndexList == null) {
-                log.error("Merge worker persist merged cv list error, w={}, s={}", slot);
-                throw new RuntimeException("Merge worker persist merged cv list error, s=" + slot);
+                log.error("Merge worker persist merged cv list error, s={}, v list size={}", slot, list.size());
+                throw new IllegalStateException("Merge worker persist merged cv list error, s=" + slot + ", v list size=" + list.size());
             }
 
             needMergeSegmentIndexListAll.addAll(needMergeSegmentIndexList);
@@ -102,7 +103,12 @@ public class ChunkMergeWorker {
         }
 
         if (!needMergeSegmentIndexListAll.isEmpty()) {
-            oneSlot.doMergeJob(needMergeSegmentIndexListAll);
+            if (oneSlot.chunkMergeWorker == null) {
+                // for unit test
+                log.info("Merge worker is null, skip do merge job, s={}, i={}", slot, needMergeSegmentIndexListAll);
+            } else {
+                oneSlot.doMergeJob(needMergeSegmentIndexListAll);
+            }
         }
 
         return true;

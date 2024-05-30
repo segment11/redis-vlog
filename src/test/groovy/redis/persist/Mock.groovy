@@ -22,7 +22,7 @@ class Mock {
     }
 
     static List<Wal.V> prepareValueList(int n, int bucketIndex = 0) {
-        List<Wal.V> valuList = []
+        List<Wal.V> valueList = []
         n.times {
             def key = "key:" + it.toString().padLeft(12, '0')
             def keyBytes = key.bytes
@@ -40,8 +40,38 @@ class Mock {
             def v = new Wal.V(it, bucketIndex, keyHash, redis.CompressedValue.NO_EXPIRE,
                     key, cv.encode(), cv.compressedLength())
 
-            valuList << v
+            valueList << v
         }
-        valuList
+        valueList
+    }
+
+    static List<CompressedValue> prepareCompressedValueList(int n) {
+        List<CompressedValue> compressedValueList = []
+        n.times {
+            def cv = new CompressedValue()
+            cv.seq = it
+            cv.keyHash = it
+            cv.compressedData = new byte[10]
+            cv.compressedLength = 10
+            cv.uncompressedLength = 10
+            compressedValueList << cv
+        }
+        compressedValueList
+    }
+
+    static Map<Integer, List<Tuple2<String, Long>>> prepareKeyHashIndexByKeyBucketList(int n, int bucketsPerSlot) {
+        Map<Integer, List<Tuple2<String, Long>>> keyHashByBucketIndex = [:]
+        n.times {
+            def key = 'key:' + it.toString().padLeft(12, '0')
+            def keyHash = KeyHash.hash(key.bytes)
+            def bucketIndex = (int) Math.abs((keyHash % bucketsPerSlot).intValue())
+            def subList = keyHashByBucketIndex[bucketIndex]
+            if (subList == null) {
+                subList = []
+                keyHashByBucketIndex[bucketIndex] = subList
+            }
+            subList << new Tuple2(key, keyHash)
+        }
+        keyHashByBucketIndex
     }
 }

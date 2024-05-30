@@ -60,6 +60,7 @@ public class OneSlot {
         this.masterUuid = 0L;
 
         this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, slotDir);
+        this.metaChunkSegmentIndex = new MetaChunkSegmentIndex(slot, slotDir);
     }
 
     public OneSlot(byte slot, short slotNumber, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
@@ -388,7 +389,7 @@ public class OneSlot {
         metaChunkSegmentFlagSeq.overwriteInMemoryCachedBytes(bytes);
     }
 
-    private MetaChunkSegmentIndex metaChunkSegmentIndex;
+    MetaChunkSegmentIndex metaChunkSegmentIndex;
 
     // read only, important
     public byte[] getMetaChunkSegmentIndexBytesToSlaveExists() {

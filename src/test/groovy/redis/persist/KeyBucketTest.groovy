@@ -55,7 +55,7 @@ class KeyBucketTest extends Specification {
             }
 
             var kbArr = afterSplitKeyBucketList ? null : new KeyBucket[3]
-            boolean isPutDone = targetKeyBucket.put(keyBytes, v.keyHash, v.expireAt, v.seq, v.cvEncoded, kbArr)
+            boolean isPut = targetKeyBucket.put(keyBytes, v.keyHash, v.expireAt, v.seq, v.cvEncoded, kbArr).isPut
 
             if (kbArr && kbArr[0] != null) {
                 println 'after split key buckets: '
@@ -67,7 +67,7 @@ class KeyBucketTest extends Specification {
                 afterSplitKeyBucketList << kbArr[1]
                 afterSplitKeyBucketList << kbArr[2]
             }
-            if (isPutDone) {
+            if (isPut) {
                 if (afterSplitKeyBucketList) {
                     // already split
                     var targetSplitIndex = (int) Math.abs(v.keyHash % 3)

@@ -189,19 +189,18 @@ public class KeyBucketsInOneWalGroup {
 
             // wal remove delay use expire now
             if (pvm.expireAt == CompressedValue.EXPIRE_NOW) {
-                var isDeleted = keyBucket.del(pvm.keyBytes, pvm.keyHash);
+                var isDeleted = keyBucket.del(pvm.keyBytes, pvm.keyHash, true);
                 if (isDeleted) {
                     keyCountTmp[relativeBucketIndex]--;
                 }
                 continue;
             }
 
-            boolean isPut = keyBucket.put(pvm.keyBytes, pvm.keyHash, pvm.expireAt, pvm.seq,
+            var doPutResult = keyBucket.put(pvm.keyBytes, pvm.keyHash, pvm.expireAt, pvm.seq,
                     pvm.extendBytes != null ? pvm.extendBytes : pvm.encode(), afterPutKeyBuckets);
-            if (!isPut) {
-                throw new RuntimeException("Key buckets put batch short value list failed");
+            if (!doPutResult.isUpdate()) {
+                keyCountTmp[relativeBucketIndex]++;
             }
-            keyCountTmp[relativeBucketIndex]++;
             if (afterPutKeyBuckets[0] != null) {
                 isSplit = true;
                 splitNumberTmp[relativeBucketIndex] = (byte) afterPutKeyBuckets.length;
