@@ -146,7 +146,10 @@ public class MetaKeyBucketSplitNumber {
             return;
         }
 
+        // sync all
         try {
+            raf.getFD().sync();
+            System.out.println("Meta key bucket split number sync all done");
             raf.close();
         } catch (IOException e) {
             throw new RuntimeException(e);

@@ -99,7 +99,10 @@ public class MetaChunkSegmentIndex {
             return;
         }
 
+        // sync all
         try {
+            raf.getFD().sync();
+            System.out.println("Meta chunk segment index sync all done");
             raf.close();
         } catch (IOException e) {
             throw new RuntimeException(e);

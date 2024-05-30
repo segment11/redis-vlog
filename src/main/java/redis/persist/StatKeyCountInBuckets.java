@@ -112,8 +112,7 @@ public class StatKeyCountInBuckets {
 
         // sync all
         try {
-            raf.seek(0);
-            raf.write(inMemoryCachedBytes);
+            raf.getFD().sync();
             System.out.println("Stat key count in buckets sync all done");
             raf.close();
         } catch (IOException e) {

@@ -187,8 +187,7 @@ public class MetaChunkSegmentFlagSeq {
 
         // sync all
         try {
-            raf.seek(0);
-            raf.write(inMemoryCachedBytes);
+            raf.getFD().sync();
             System.out.println("Meta chunk segment flag seq sync all done");
             raf.close();
         } catch (IOException e) {
