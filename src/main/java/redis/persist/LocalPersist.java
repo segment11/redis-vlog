@@ -90,8 +90,7 @@ public class LocalPersist {
 
     public void cleanUp() {
         for (var oneSlot : oneSlots) {
-            // sync
-            oneSlot.asyncRun(oneSlot::cleanUp).getResult();
+            oneSlot.cleanUp();
         }
     }
 }

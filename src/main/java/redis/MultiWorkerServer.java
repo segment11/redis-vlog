@@ -436,6 +436,12 @@ public class MultiWorkerServer extends Launcher {
             for (var multiSlotEventloop : multiSlotMultiThreadRequestEventloopArray.multiSlotEventloopArray) {
                 multiSlotEventloop.breakEventloop();
             }
+            System.out.println("Multi slot request eventloop threads stopped");
+
+//            for (var netWorkerEventloop : netWorkerEventloopArray) {
+//                netWorkerEventloop.breakEventloop();
+//            }
+//            System.out.println("Net worker eventloop threads stopped");
 
             // disconnect all clients
             socketInspector.closeAll();

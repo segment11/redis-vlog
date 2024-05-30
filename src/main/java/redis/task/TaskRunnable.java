@@ -56,7 +56,7 @@ public class TaskRunnable implements Runnable {
         netWorkerEventloop.delay(1000L, this);
     }
 
-    private boolean isStopped = false;
+    private volatile boolean isStopped = false;
 
     public void stop() {
         isStopped = true;
