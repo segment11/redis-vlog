@@ -148,4 +148,33 @@ class FdReadWriteTest extends Specification {
         cleanup:
         fdReadWrite.cleanUp()
     }
+
+    def 'test segment index overflow'() {
+        given:
+        def fdReadWrite = new FdReadWrite('test')
+
+        when:
+        def isOverflow = false
+        fdReadWrite.isChunkFd = true
+        try {
+            fdReadWrite.writeSegment(ConfForSlot.global.confChunk.segmentNumberPerFd, new byte[0], false)
+        } catch (AssertionError e) {
+            isOverflow = true
+        }
+
+        then:
+        isOverflow
+
+        when:
+        isOverflow = false
+        fdReadWrite.isChunkFd = false
+        try {
+            fdReadWrite.writeSegment(ConfForSlot.global.confBucket.bucketsPerSlot, new byte[0], false)
+        } catch (AssertionError e) {
+            isOverflow = true
+        }
+
+        then:
+        isOverflow
+    }
 }

@@ -25,6 +25,13 @@ public class FdReadWrite {
 
     private Logger log = LoggerFactory.getLogger(FdReadWrite.class);
 
+    // for unit test
+    public FdReadWrite(String name) {
+        this.name = name;
+        this.libC = null;
+        this.fd = 0;
+    }
+
     public FdReadWrite(String name, LibC libC, File file) throws IOException {
         this.name = name;
         this.libC = libC;
@@ -116,6 +123,7 @@ public class FdReadWrite {
     private long writeForOneWalGroupBatchAddress;
 
     private int segmentLength;
+    boolean isChunkFd;
 
     static final int MERGE_READ_ONCE_SEGMENT_COUNT = 10;
 
@@ -130,6 +138,7 @@ public class FdReadWrite {
     public void initByteBuffers(boolean isChunkFd) {
         var segmentLength = isChunkFd ? ConfForSlot.global.confChunk.segmentLength : KeyLoader.KEY_BUCKET_ONE_COST_SIZE;
         this.segmentLength = segmentLength;
+        this.isChunkFd = isChunkFd;
 
         if (isChunkFd) {
             var maxSize = ConfForSlot.global.confChunk.lru.maxSize;
@@ -280,7 +289,18 @@ public class FdReadWrite {
         void prepare(ByteBuffer buffer);
     }
 
+    private void checkSegmentIndex(int segmentIndex) {
+        if (isChunkFd) {
+            assert segmentIndex >= 0 && segmentIndex < ConfForSlot.global.confChunk.segmentNumberPerFd;
+        } else {
+            // segment index -> bucket index
+            assert segmentIndex >= 0 && segmentIndex < ConfForSlot.global.confBucket.bucketsPerSlot;
+        }
+    }
+
     private byte[] readInnerNotPureMemory(int segmentIndex, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
+        checkSegmentIndex(segmentIndex);
+
         // for from lru cache if only read one segment
         int capacity = buffer.capacity();
         var isOnlyOneSegment = capacity == segmentLength;
@@ -343,6 +363,8 @@ public class FdReadWrite {
     }
 
     private int writeInnerNotPureMemory(int segmentIndex, ByteBuffer buffer, @NotNull WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
+        checkSegmentIndex(segmentIndex);
+
         int capacity = buffer.capacity();
         var segmentCount = capacity / segmentLength;
         var isOnlyOneSegment = segmentCount == 1;
