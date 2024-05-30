@@ -12,7 +12,6 @@ import redis.SnowFlake;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 public class LocalPersist {
@@ -57,14 +56,6 @@ public class LocalPersist {
         return oneSlots[slot];
     }
 
-    public long getKeyCount() {
-        long count = 0;
-        for (var oneSlot : oneSlots) {
-            count += oneSlot.getKeyCount();
-        }
-        return count;
-    }
-
     public int bucketIndex(long keyHash) {
         return (int) Math.abs(keyHash % ConfForSlot.global.confBucket.bucketsPerSlot);
     }
@@ -99,14 +90,8 @@ public class LocalPersist {
 
     public void cleanUp() {
         for (var oneSlot : oneSlots) {
-            oneSlot.netWorkerEventloop.submit(oneSlot::cleanUp);
+            // sync
+            oneSlot.asyncRun(oneSlot::cleanUp).getResult();
         }
-    }
-
-    public CompletableFuture<Void> flush(byte slot) {
-        var oneSlot = oneSlots[slot];
-        return oneSlot.netWorkerEventloop.submit(() -> {
-            oneSlot.flush();
-        });
     }
 }

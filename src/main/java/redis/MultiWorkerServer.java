@@ -176,24 +176,28 @@ public class MultiWorkerServer extends Launcher {
 
     private Promise<ByteBuf> handleRequest(Request request, ITcpSocket socket) {
         boolean isCrossRequestWorker = false;
-        var slotWithKeyHashList = request.getSlotWithKeyHashList();
-        // cross slots
-        if (slotWithKeyHashList != null && slotWithKeyHashList.size() > 1 && !request.isRepl()) {
-            // check if cross threads
-            int expectRequestWorkerId = -1;
-            for (var slotWithKeyHash : slotWithKeyHashList) {
-                int slot = slotWithKeyHash.slot();
-                var expectRequestWorkerIdInner = slot % requestHandlerArray.length;
-                if (expectRequestWorkerId == -1) {
-                    expectRequestWorkerId = expectRequestWorkerIdInner;
-                }
-                if (expectRequestWorkerId != expectRequestWorkerIdInner) {
-                    isCrossRequestWorker = true;
-                    break;
+        // some cmd already set cross slot flag
+        if (!request.isCrossRequestWorker()) {
+            var slotWithKeyHashList = request.getSlotWithKeyHashList();
+            if (slotWithKeyHashList != null && slotWithKeyHashList.size() > 1 && !request.isRepl()) {
+                // check if cross threads
+                int expectRequestWorkerId = -1;
+                for (var slotWithKeyHash : slotWithKeyHashList) {
+                    int slot = slotWithKeyHash.slot();
+                    var expectRequestWorkerIdInner = slot % requestHandlerArray.length;
+                    if (expectRequestWorkerId == -1) {
+                        expectRequestWorkerId = expectRequestWorkerIdInner;
+                    }
+                    if (expectRequestWorkerId != expectRequestWorkerIdInner) {
+                        isCrossRequestWorker = true;
+                        break;
+                    }
                 }
             }
+            request.setCrossRequestWorker(isCrossRequestWorker);
+        } else {
+            isCrossRequestWorker = true;
         }
-        request.setCrossRequestWorker(isCrossRequestWorker);
 
         if (isCrossRequestWorker) {
             RequestHandler targetHandler;
@@ -274,6 +278,8 @@ public class MultiWorkerServer extends Launcher {
         for (var request : pipeline) {
             request.setSlotNumber(slotNumber);
             RequestHandler.parseSlots(request);
+
+            request.checkCmdIfCrossRequestWorker();
         }
 
         if (pipeline.size() == 1) {

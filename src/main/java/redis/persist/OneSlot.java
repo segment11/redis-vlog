@@ -2,11 +2,11 @@ package redis.persist;
 
 import com.github.luben.zstd.Zstd;
 import io.activej.async.callback.AsyncComputation;
-import io.activej.async.function.AsyncSupplier;
+import io.activej.common.function.RunnableEx;
+import io.activej.common.function.SupplierEx;
 import io.activej.config.Config;
 import io.activej.eventloop.Eventloop;
 import io.activej.promise.Promise;
-import io.activej.promise.Promises;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.prometheus.client.Counter;
@@ -265,7 +265,7 @@ public class OneSlot {
         this.netWorkerEventloop = netWorkerEventloop;
     }
 
-    Eventloop netWorkerEventloop;
+    private Eventloop netWorkerEventloop;
 
     public void setRequestHandler(RequestHandler requestHandler) {
         this.requestHandler = requestHandler;
@@ -273,8 +273,12 @@ public class OneSlot {
 
     private RequestHandler requestHandler;
 
-    public <T> Promise<T> asyncCall(AsyncSupplier<T> asyncSupplier) {
-        return Promises.first(asyncSupplier);
+    public Promise<Void> asyncRun(RunnableEx runnableEx) {
+        return Promise.ofFuture(netWorkerEventloop.submit(runnableEx));
+    }
+
+    public <T> Promise<T> asyncCall(SupplierEx<T> supplierEx) {
+        return Promise.ofFuture(netWorkerEventloop.submit(AsyncComputation.of(supplierEx)));
     }
 
     private final byte slot;

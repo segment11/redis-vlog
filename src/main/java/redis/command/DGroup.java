@@ -2,6 +2,8 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.promise.Promise;
+import io.activej.promise.Promises;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
@@ -45,7 +47,21 @@ public class DGroup extends BaseCommand {
         }
 
         if ("dbsize".equals(cmd)) {
-            return new IntegerReply(localPersist.getKeyCount());
+            Promise<Long>[] promises = new Promise[slotNumber];
+            for (int i = 0; i < slotNumber; i++) {
+                var oneSlot = localPersist.oneSlot((byte) i);
+                promises[i] = oneSlot.asyncCall(oneSlot::getKeyCount);
+            }
+
+            var r = Promises.toArray(Long.class, promises).map(values -> {
+                long sum = 0;
+                for (long value : values) {
+                    sum += value;
+                }
+                return sum;
+            }).getResult();
+
+            return new IntegerReply(r);
         }
 
         if ("decr".equals(cmd)) {

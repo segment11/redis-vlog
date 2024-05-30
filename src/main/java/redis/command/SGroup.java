@@ -1,7 +1,7 @@
 
 package redis.command;
 
-import io.activej.async.function.AsyncSupplier;
+import io.activej.common.function.SupplierEx;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
@@ -213,7 +213,7 @@ public class SGroup extends BaseCommand {
             Promise<Boolean>[] promises = new Promise[slotNumber];
             for (int i = 0; i < slotNumber; i++) {
                 var oneSlot = localPersist.oneSlot((byte) i);
-                promises[i] = oneSlot.asyncCall(AsyncSupplier.of(() -> {
+                promises[i] = oneSlot.asyncCall(SupplierEx.of(() -> {
                     try {
                         oneSlot.removeReplPairAsSlave();
                         return true;
@@ -267,7 +267,7 @@ public class SGroup extends BaseCommand {
         Promise<Boolean>[] promises = new Promise[slotNumber];
         for (int i = 0; i < slotNumber; i++) {
             var oneSlot = localPersist.oneSlot((byte) i);
-            promises[i] = oneSlot.asyncCall(AsyncSupplier.of(() -> {
+            promises[i] = oneSlot.asyncCall(SupplierEx.of(() -> {
                 try {
                     oneSlot.createReplPairAsSlave(host, port);
                     return true;
