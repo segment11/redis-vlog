@@ -415,12 +415,14 @@ public abstract class BaseCommand {
         set(keyBytes, valueBytes, slotWithKeyHashReuse, spType, NO_EXPIRE);
     }
 
+    private static final int MAX_LONG_VALUE_IN_BYTES_LENGTH = String.valueOf(Long.MAX_VALUE).length();
+
     public void set(byte[] keyBytes, byte[] valueBytes, SlotWithKeyHash slotWithKeyHashReuse, int spType, long expireAt) {
         compressStats.rawTotalLength += valueBytes.length;
 
         // prefer store as number type
         boolean isTypeNumber = CompressedValue.isTypeNumber(spType);
-        if (valueBytes.length <= Long.SIZE && !isTypeNumber) {
+        if (valueBytes.length <= MAX_LONG_VALUE_IN_BYTES_LENGTH && !isTypeNumber) {
             var value = new String(valueBytes);
 
             // check if value is a number
