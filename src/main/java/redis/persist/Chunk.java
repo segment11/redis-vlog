@@ -63,7 +63,7 @@ public class Chunk {
     private final MasterUpdateCallback masterUpdateCallback;
     private final SegmentBatch segmentBatch;
 
-    private int[] fdLengths;
+    int[] fdLengths;
     FdReadWrite[] fdReadWriteArray;
 
     public Chunk(byte slot, File slotDir, OneSlot oneSlot,
@@ -347,8 +347,8 @@ public class Chunk {
 
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
         for (var segment : segments) {
-            int toMergeSegmentIndex = needMergeSegmentIndex(isNewAppendAfterBatch, segment.segmentIndex());
-            if (toMergeSegmentIndex != -1) {
+            var toMergeSegmentIndex = needMergeSegmentIndex(isNewAppendAfterBatch, segment.segmentIndex());
+            if (toMergeSegmentIndex != NO_NEED_MERGE_SEGMENT_INDEX) {
                 needMergeSegmentIndexList.add(toMergeSegmentIndex);
             }
         }
@@ -394,8 +394,10 @@ public class Chunk {
         }
     }
 
+    private static final int NO_NEED_MERGE_SEGMENT_INDEX = -1;
+
     int needMergeSegmentIndex(boolean isNewAppend, int targetIndex) {
-        int segmentIndexToMerge = -1;
+        int segmentIndexToMerge = NO_NEED_MERGE_SEGMENT_INDEX;
         if (targetIndex >= halfSegmentNumber) {
             // begins with 0
             // ends with 2^18 - 1
@@ -427,7 +429,6 @@ public class Chunk {
                         isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList.getFirst());
             } else {
                 for (int i = 0; i < segmentCount; i++) {
-                    // trim 0, todo
                     var oneSegmentBytes = new byte[segmentLength];
                     System.arraycopy(bytes, i * segmentLength, oneSegmentBytes, 0, segmentLength);
 
