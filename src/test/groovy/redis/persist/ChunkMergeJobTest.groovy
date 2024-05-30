@@ -64,7 +64,7 @@ class ChunkMergeJobTest extends Specification {
         def oneSlot = new OneSlot(slot, Consts.slotDir, keyLoader, wal)
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L)
 
-        var chunk = new Chunk(slot, snowFlake, Consts.slotDir, oneSlot, keyLoader, null)
+        var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader, null)
         chunk.fdReadWriteArray = [fdReadWriteForChunkSegments]
         oneSlot.chunk = chunk
 

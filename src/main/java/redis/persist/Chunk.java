@@ -22,7 +22,7 @@ public class Chunk {
     private final int maxSegmentNumberPerFd;
     private final byte maxFdPerChunk;
     private final int maxSegmentIndex;
-    private final int halfSegmentIndex;
+    private final int halfSegmentNumber;
 
     // seq long + cv number int + crc int
     public static final int SEGMENT_HEADER_LENGTH = 8 + 4 + 4;
@@ -33,19 +33,15 @@ public class Chunk {
     public static final byte SEGMENT_FLAG_MERGED = -1;
     public static final byte SEGMENT_FLAG_MERGED_AND_PERSISTED = -10;
     public static final byte SEGMENT_FLAG_REUSE = -100;
-    public static final byte MAIN_WORKER_ID = -1;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    final byte slot;
-
+    private final byte slot;
     private final String slotStr;
+    private final File slotDir;
 
     // for better latency, segment length = 4096 decompress performance is better
     final int segmentLength;
-    // for seq generation
-    final SnowFlake snowFlake;
-    private final File slotDir;
 
     private static final Counter persistCounter = Counter.build().name("chunk_persist_count").
             help("chunk persist count").
@@ -70,21 +66,20 @@ public class Chunk {
     private int[] fdLengths;
     FdReadWrite[] fdReadWriteArray;
 
-    public Chunk(byte slot, SnowFlake snowFlake, File slotDir,
-                 OneSlot oneSlot, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {
+    public Chunk(byte slot, File slotDir, OneSlot oneSlot,
+                 SnowFlake snowFlake, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {
         this.maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
         this.maxFdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;
 
         int maxSegmentNumber = maxSegmentNumberPerFd * maxFdPerChunk;
         this.maxSegmentIndex = maxSegmentNumber - 1;
-        this.halfSegmentIndex = maxSegmentNumber / 2;
+        this.halfSegmentNumber = maxSegmentNumber / 2;
 
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
+        this.slotDir = slotDir;
 
         this.segmentLength = ConfForSlot.global.confChunk.segmentLength;
-        this.snowFlake = snowFlake;
-        this.slotDir = slotDir;
 
         this.oneSlot = oneSlot;
         this.keyLoader = keyLoader;
@@ -92,7 +87,7 @@ public class Chunk {
         this.segmentBatch = new SegmentBatch(slot, snowFlake);
     }
 
-    public void initFds(LibC libC) throws IOException {
+    void initFds(LibC libC) throws IOException {
         this.fdLengths = new int[maxFdPerChunk];
         this.fdReadWriteArray = new FdReadWrite[maxFdPerChunk];
         for (int i = 0; i < maxFdPerChunk; i++) {
@@ -108,7 +103,7 @@ public class Chunk {
         }
     }
 
-    public void cleanUp() {
+    void cleanUp() {
         if (fdReadWriteArray != null) {
             for (var fdReadWrite : fdReadWriteArray) {
                 fdReadWrite.cleanUp();
@@ -137,21 +132,12 @@ public class Chunk {
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
-
-        var segmentBytes = fdReadWrite.readSegment(segmentIndexTargetFd, true);
-        return segmentBytes;
-
-//        var buffer = ByteBuffer.wrap(segmentBytes);
-//
-//        int tightBytesLength = buffer.getInt();
-//        var tightBytesWithLength = new byte[4 + tightBytesLength];
-//        buffer.position(0).get(tightBytesWithLength);
-//        return tightBytesWithLength;
+        return fdReadWrite.readSegment(segmentIndexTargetFd, true);
     }
 
     // begin with 0
     // -1 means not init
-    private int segmentIndex = -1;
+    int segmentIndex = -1;
 
     int currentSegmentIndex() {
         return segmentIndex;
@@ -179,7 +165,7 @@ public class Chunk {
         return reuseSegments(true, 1, true);
     }
 
-    private boolean reuseSegments(boolean isFirstStart, int segmentCount, boolean updateFlag) {
+    private boolean reuseSegments(boolean isFirstStart, int segmentCount, boolean updateAsReuseFlag) {
         for (int i = 0; i < segmentCount; i++) {
             var targetIndex = segmentIndex + i;
 
@@ -199,12 +185,13 @@ public class Chunk {
             }
 
             if (flag == SEGMENT_FLAG_MERGED_AND_PERSISTED || flag == SEGMENT_FLAG_REUSE_AND_PERSISTED) {
-                if (updateFlag) {
+                if (updateAsReuseFlag) {
                     oneSlot.setSegmentMergeFlag(targetIndex, SEGMENT_FLAG_REUSE, 0L);
                 }
                 continue;
             }
 
+            // only left SEGMENT_FLAG_NEW, SEGMENT_FLAG_MERGING, SEGMENT_FLAG_MERGED, can not reuse
             log.warn("Chunk segment index is not merged and persisted or reuse and persisted, can not write, s={}, i={}, flag={}",
                     slot, targetIndex, flag);
             return false;
@@ -225,8 +212,6 @@ public class Chunk {
     // need refer Wal valueSizeTrigger
     // 32 segments is enough for 1000 Wal.V persist
     static final int ONCE_PREPARE_SEGMENT_COUNT = 32;
-
-    long threadIdProtectedWhenWrite = -1;
 
     // return need merge segment index array
     public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge) {
@@ -283,14 +268,14 @@ public class Chunk {
                     List<Long> segmentSeqListSubBatch = new ArrayList<>();
                     segmentSeqListSubBatch.add(segment.segmentSeq());
 
-                    boolean isNewAppend = writeSegments(segment.tightBytesWithLength(), 1, segmentSeqListSubBatch);
+                    boolean isNewAppend = writeSegments(segment.tightBytesWithLength(), 1);
                     isNewAppendAfterBatch = isNewAppend;
 
                     // need set segment flag so that merge worker can merge
                     oneSlot.setSegmentMergeFlag(segment.segmentIndex(),
                             isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segment.segmentSeq());
 
-                    moveIndexNext(1);
+                    moveSegmentIndexNext(1);
                 }
             } else {
                 // batch write
@@ -320,14 +305,14 @@ public class Chunk {
                         segmentSeqListSubBatch.add(segment.segmentSeq());
                     }
 
-                    boolean isNewAppend = writeSegments(tmpBatchBytes, BATCH_ONCE_SEGMENT_COUNT_PWRITE, segmentSeqListSubBatch);
+                    boolean isNewAppend = writeSegments(tmpBatchBytes, BATCH_ONCE_SEGMENT_COUNT_PWRITE);
                     isNewAppendAfterBatch = isNewAppend;
 
                     // need set segment flag so that merge worker can merge
                     oneSlot.setSegmentMergeFlagBatch(segmentIndex, BATCH_ONCE_SEGMENT_COUNT_PWRITE,
                             isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqListSubBatch);
 
-                    moveIndexNext(BATCH_ONCE_SEGMENT_COUNT_PWRITE);
+                    moveSegmentIndexNext(BATCH_ONCE_SEGMENT_COUNT_PWRITE);
                 }
 
                 for (int i = 0; i < remainCount; i++) {
@@ -336,14 +321,14 @@ public class Chunk {
                     List<Long> segmentSeqListSubBatch = new ArrayList<>();
                     segmentSeqListSubBatch.add(segment.segmentSeq());
 
-                    boolean isNewAppend = writeSegments(segment.tightBytesWithLength(), 1, segmentSeqListSubBatch);
+                    boolean isNewAppend = writeSegments(segment.tightBytesWithLength(), 1);
                     isNewAppendAfterBatch = isNewAppend;
 
                     // need set segment flag so that merge worker can merge
                     oneSlot.setSegmentMergeFlag(segment.segmentIndex(),
                             isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segment.segmentSeq());
 
-                    moveIndexNext(1);
+                    moveSegmentIndexNext(1);
                 }
             }
         }
@@ -383,13 +368,17 @@ public class Chunk {
         }
     }
 
-    void moveIndexNext(int segmentCount) {
+    void moveSegmentIndexNext(int segmentCount) {
         if (segmentCount > 1) {
-            // already skip fd last 100 segments
-            segmentIndex += segmentCount;
-            if (segmentIndex == maxSegmentIndex) {
-                segmentIndex = 0;
+            var newSegmentIndex = segmentIndex + segmentCount;
+            if (newSegmentIndex == maxSegmentIndex) {
+                newSegmentIndex = 0;
+            } else if (newSegmentIndex > maxSegmentIndex) {
+                // already skip fd last 32 segments for prepare pwrite batch, never reach here
+                throw new SegmentOverflowException("Segment index overflow, s=" + slot + ", i=" + segmentIndex +
+                        ", c=" + segmentCount + ", max=" + maxSegmentIndex);
             }
+            segmentIndex = newSegmentIndex;
             return;
         }
 
@@ -399,23 +388,21 @@ public class Chunk {
         } else {
             segmentIndex++;
 
-            if (segmentIndex == halfSegmentIndex) {
-                log.warn("Chunk segment index reach half max reuse, s={}, i={}", slot, segmentIndex);
+            if (segmentIndex == halfSegmentNumber) {
+                log.warn("Chunk segment index reach half of max, start reuse from beginning, s={}, i={}", slot, segmentIndex);
             }
         }
     }
 
-    private int needMergeSegmentIndex(boolean isNewAppend, int targetIndex) {
+    int needMergeSegmentIndex(boolean isNewAppend, int targetIndex) {
         int segmentIndexToMerge = -1;
-        if (targetIndex >= halfSegmentIndex) {
+        if (targetIndex >= halfSegmentNumber) {
             // begins with 0
             // ends with 2^18 - 1
-            segmentIndexToMerge = targetIndex - halfSegmentIndex;
+            segmentIndexToMerge = targetIndex - halfSegmentNumber;
         } else {
             if (!isNewAppend) {
-                // begins with 2^18
-                // ends with 2^19 - 1
-                segmentIndexToMerge = targetIndex + halfSegmentIndex + 1 + 1;
+                segmentIndexToMerge = targetIndex + halfSegmentNumber;
             }
         }
         return segmentIndexToMerge;
@@ -424,7 +411,7 @@ public class Chunk {
     public boolean writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
         if (ConfForSlot.global.pureMemory) {
             if (capacity != bytes.length) {
-                throw new RuntimeException("Write buffer capacity not match, expect: " + capacity + ", actual: " + bytes.length);
+                throw new IllegalArgumentException("Write buffer capacity not match, expect: " + capacity + ", actual: " + bytes.length);
             }
 
             var fdIndex = targetFdIndex(segmentIndex);
@@ -454,7 +441,7 @@ public class Chunk {
             return isNewAppend;
         } else {
             this.segmentIndex = segmentIndex;
-            boolean isNewAppend = writeSegments(bytes, segmentCount, segmentSeqList);
+            boolean isNewAppend = writeSegments(bytes, segmentCount);
 
             if (segmentCount == 1) {
                 oneSlot.setSegmentMergeFlag(segmentIndex,
@@ -468,7 +455,7 @@ public class Chunk {
         }
     }
 
-    private boolean writeSegments(byte[] bytes, int segmentCount, List<Long> segmentSeqList) {
+    private boolean writeSegments(byte[] bytes, int segmentCount) {
         var fdIndex = targetFdIndex();
         var segmentIndexTargetFd = targetSegmentIndexTargetFd();
 
@@ -480,7 +467,7 @@ public class Chunk {
         } else if (segmentCount == ONCE_SEGMENT_COUNT) {
             fdReadWrite.writeSegmentForRepl(segmentIndex, bytes, 0);
         } else {
-            throw new RuntimeException("Write segment count not support: " + segmentCount);
+            throw new IllegalArgumentException("Write segment count not support: " + segmentCount);
         }
 
         boolean isNewAppend = false;

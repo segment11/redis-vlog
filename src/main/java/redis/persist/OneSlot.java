@@ -793,7 +793,7 @@ public class OneSlot {
     }
 
     private void initChunk() throws IOException {
-        this.chunk = new Chunk(slot, snowFlake, slotDir, this, keyLoader, masterUpdateCallback);
+        this.chunk = new Chunk(slot, slotDir, this, snowFlake, keyLoader, masterUpdateCallback);
         chunk.initFds(libC);
 
         var segmentIndex = metaChunkSegmentIndex.get();
@@ -811,7 +811,7 @@ public class OneSlot {
                 setSegmentMergeFlag(currentSegmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, snowFlake.nextId());
                 log.warn("Reset persisted when init");
 
-                chunk.moveIndexNext(1);
+                chunk.moveSegmentIndexNext(1);
                 setChunkWriteSegmentIndex(currentSegmentIndex);
 
                 log.warn("Move to next segment, s={}, i={}", slot, currentSegmentIndex);
