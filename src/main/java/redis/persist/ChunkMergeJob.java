@@ -163,7 +163,7 @@ public class ChunkMergeJob {
             }
 
             int relativeOffsetInBatchBytes = i * segmentLength;
-            var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength);
+            var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength).slice();
             // sub blocks
             // refer to SegmentBatch tight HEADER_LENGTH
             for (int subBlockIndex = 0; subBlockIndex < SegmentBatch.MAX_BLOCK_NUMBER; subBlockIndex++) {

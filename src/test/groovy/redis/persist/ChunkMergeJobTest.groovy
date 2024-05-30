@@ -16,13 +16,14 @@ class ChunkMergeJobTest extends Specification {
         def snowFlake = new SnowFlake(1, 1)
 
         and:
-        var list = Mock.prepareValueList(100)
+        var valueList = Mock.prepareValueList(400)
 
         int[] nextNSegmentIndex = [0, 1, 2, 3, 4, 5, 6]
         ArrayList<PersistValueMeta> returnPvmList = []
 
         def segmentBatch = new SegmentBatch(slot, snowFlake)
-        def r = segmentBatch.splitAndTight(list, nextNSegmentIndex, returnPvmList)
+        def r = segmentBatch.splitAndTight(valueList, nextNSegmentIndex, returnPvmList)
+        println 'split and tight: ' + r.size() + ' segments, ' + returnPvmList.size() + ' pvm list'
         ArrayList<PersistValueMeta> somePvmList = returnPvmList[0..<10]
 
         and:
@@ -38,7 +39,8 @@ class ChunkMergeJobTest extends Specification {
         fdReadWriteForChunkSegments.initByteBuffers(true)
 
         fdReadWriteForChunkSegments.writeSegment(segmentIndex, r[0].tightBytesWithLength, false)
-        println 'write segment ' + segmentIndex
+        fdReadWriteForChunkSegments.writeSegment(segmentIndex + 1, r[1].tightBytesWithLength, false)
+        println 'write segment ' + segmentIndex + ', ' + (segmentIndex + 1)
 
         def keyBucketsDataFile = new File(Consts.slotDir, 'key-bucket-split-0.dat')
         def fdReadWriteForKeyLoader = new FdReadWrite('key_loader_data', libC, keyBucketsDataFile)
@@ -63,6 +65,7 @@ class ChunkMergeJobTest extends Specification {
         def wal = new Wal(slot, walGroupIndex, null, null, snowFlake)
         def oneSlot = new OneSlot(slot, Consts.slotDir, keyLoader, wal)
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex + 1, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L)
 
         var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader, null)
         chunk.fdReadWriteArray = [fdReadWriteForChunkSegments]
@@ -70,14 +73,14 @@ class ChunkMergeJobTest extends Specification {
 
         var chunkMergeWorker = new ChunkMergeWorker(slot, oneSlot)
 
-        ArrayList<Integer> needMergeSegmentIndexList = [segmentIndex]
+        ArrayList<Integer> needMergeSegmentIndexList = [segmentIndex, segmentIndex + 1]
         def job = new ChunkMergeJob(slot, needMergeSegmentIndexList, chunkMergeWorker, snowFlake)
         job.testTargetBucketIndex = bucketIndex
         job.mergeSegments(needMergeSegmentIndexList)
 
         then:
         job.validCvCountAfterRun == somePvmList.size()
-        job.invalidCvCountAfterRun == list.size() - job.validCvCountAfterRun
+        job.invalidCvCountAfterRun == valueList.size() - job.validCvCountAfterRun
 
         cleanup:
         oneSlot.metaChunkSegmentFlagSeq.cleanUp()
