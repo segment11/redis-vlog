@@ -11,11 +11,14 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.metric.SimpleGauge;
 import redis.repl.content.ToMasterExistsSegmentMeta;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.List;
 
 import static redis.persist.LocalPersist.PAGE_SIZE;
 import static redis.persist.LocalPersist.PROTECTION;
@@ -43,6 +46,14 @@ public class FdReadWrite {
         log.info("Opened fd: {}, name: {}", fd, name);
 
         this.writeIndex = (int) file.length();
+
+        fdLengthGauge.addRawGetter(() -> {
+            var labelValues = List.of(name);
+
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            map.put("fd_length", new SimpleGauge.ValueWithLabelValues((double) writeIndex, labelValues));
+            return map;
+        });
     }
 
     private final String name;
@@ -52,6 +63,13 @@ public class FdReadWrite {
     private final int fd;
 
     int writeIndex;
+
+    private final static SimpleGauge fdLengthGauge = new SimpleGauge("fd_length", "chunk or key buckets files length",
+            "name");
+
+    static {
+        fdLengthGauge.register();
+    }
 
     private static final Counter readTimeTotalUs = Counter.build().name("pread_time_total_us").
             help("fd read time total us").
