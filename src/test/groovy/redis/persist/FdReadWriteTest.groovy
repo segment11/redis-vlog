@@ -12,7 +12,7 @@ class FdReadWriteTest extends Specification {
         given:
         System.setProperty('jnr.ffi.asm.enabled', 'false')
         def libC = LibraryLoader.create(LibC.class).load('c')
-        def oneFile = new File('/tmp/test-fd-read-write')
+        def oneFile = new File('/tmp/test-fd-read-write-multi')
         if (oneFile.exists()) {
             oneFile.delete()
         }
@@ -84,6 +84,66 @@ class FdReadWriteTest extends Specification {
         index100SegmentBytesForMerge.length == segmentLength * FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT
         ByteBuffer.wrap(firstSegmentBytes).getInt() == 100
         ByteBuffer.wrap(index100SegmentBytes).getInt() == 100
+
+        cleanup:
+        fdReadWrite.cleanUp()
+    }
+
+    def 'test skip segment write'() {
+        given:
+        System.setProperty('jnr.ffi.asm.enabled', 'false')
+        def libC = LibraryLoader.create(LibC.class).load('c')
+        def oneFile = new File('/tmp/test-fd-read-write-skip-segment-write')
+        if (oneFile.exists()) {
+            oneFile.delete()
+        }
+
+        and:
+        def fdReadWrite = new FdReadWrite('test', libC, oneFile)
+        fdReadWrite.initByteBuffers(true)
+
+        def segmentLength = ConfForSlot.global.confChunk.segmentLength
+
+        and:
+        def bytes0 = new byte[segmentLength]
+
+        def segmentIndex20Bytes = new byte[segmentLength]
+        Arrays.fill(segmentIndex20Bytes, (byte) 20)
+        def segmentIndex30Bytes = new byte[segmentLength]
+        Arrays.fill(segmentIndex30Bytes, (byte) 30)
+        def segmentIndex100Bytes = new byte[segmentLength]
+        Arrays.fill(segmentIndex100Bytes, (byte) 100)
+
+        when:
+        fdReadWrite.writeSegment(20, segmentIndex20Bytes, false)
+        fdReadWrite.writeSegment(30, segmentIndex30Bytes, false)
+        fdReadWrite.writeSegment(100, segmentIndex100Bytes, false)
+
+        def writeIndex = fdReadWrite.writeIndex
+
+        def readSegment20Bytes = fdReadWrite.readSegment(20, false)
+        def readSegment30Bytes = fdReadWrite.readSegment(30, false)
+        def readSegment100Bytes = fdReadWrite.readSegment(100, false)
+
+        List<byte[]> readFirst10SegmentBytesList = []
+        (0..<10).each {
+            readFirst10SegmentBytesList << fdReadWrite.readSegment(it, false)
+        }
+        [11, 31, 99].each {
+            readFirst10SegmentBytesList << fdReadWrite.readSegment(it, false)
+        }
+        def readSegment101Bytes = fdReadWrite.readSegment(101, false)
+
+        then:
+        writeIndex == (100 + 1) * segmentLength
+
+        readSegment20Bytes == segmentIndex20Bytes
+        readSegment30Bytes == segmentIndex30Bytes
+        readSegment100Bytes == segmentIndex100Bytes
+        readFirst10SegmentBytesList.every {
+            it == bytes0
+        }
+        readSegment101Bytes == null
 
         cleanup:
         fdReadWrite.cleanUp()

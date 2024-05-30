@@ -35,7 +35,7 @@ public class FdReadWrite {
         this.fd = libC.open(file.getAbsolutePath(), LocalPersist.O_DIRECT | OpenFlags.O_RDWR.value(), 00644);
         log.info("Opened fd: {}, name: {}", fd, name);
 
-        this.fdLength = (int) file.length();
+        this.writeIndex = (int) file.length();
     }
 
     private final String name;
@@ -44,7 +44,7 @@ public class FdReadWrite {
 
     private final int fd;
 
-    private int fdLength;
+    int writeIndex;
 
     private static final Counter readTimeTotalUs = Counter.build().name("pread_time_total_us").
             help("fd read time total us").
@@ -299,14 +299,14 @@ public class FdReadWrite {
         }
 
         var offset = segmentIndex * segmentLength;
-        if (offset >= fdLength) {
+        if (offset >= writeIndex) {
             return null;
         }
 
         var readLength = capacity;
         var lastSegmentOffset = offset + (segmentCount * segmentLength);
-        if (fdLength <= lastSegmentOffset) {
-            readLength = fdLength - offset;
+        if (writeIndex <= lastSegmentOffset) {
+            readLength = writeIndex - offset;
         }
 
         buffer.clear();
@@ -374,8 +374,8 @@ public class FdReadWrite {
             throw new RuntimeException("Write error, n: " + n + ", buffer capacity: " + capacity + ", name: " + name);
         }
 
-        if (offset + capacity > fdLength) {
-            fdLength = offset + capacity;
+        if (offset + capacity > writeIndex) {
+            writeIndex = offset + capacity;
         }
 
         // set to lru cache
