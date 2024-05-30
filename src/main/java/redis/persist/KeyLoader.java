@@ -10,10 +10,7 @@ import redis.repl.content.ToMasterExistsSegmentMeta;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
@@ -47,9 +44,16 @@ public class KeyLoader {
         return metaKeyBucketSplitNumber.getBatch(beginBucketIndex, bucketCount);
     }
 
-    // need thread safe or just for test
-    void updateMetaKeyBucketSplitNumberBatch(int beginBucketIndex, byte[] splitNumberArray) {
+    boolean updateMetaKeyBucketSplitNumberBatchIfChanged(int beginBucketIndex, byte[] splitNumberArray) {
+        // if not change, need not an extra ssd io
+        // even though random access file use os page cache
+        var currentBytes = metaKeyBucketSplitNumber.getBatch(beginBucketIndex, splitNumberArray.length);
+        if (Arrays.equals(currentBytes, splitNumberArray)) {
+            return false;
+        }
+
         metaKeyBucketSplitNumber.setBatch(beginBucketIndex, splitNumberArray);
+        return true;
     }
 
     public byte maxSplitNumberForRepl() {
@@ -318,7 +322,7 @@ public class KeyLoader {
 
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
-        updateMetaKeyBucketSplitNumberBatch(inner.beginBucketIndex, inner.splitNumberTmp);
+        updateMetaKeyBucketSplitNumberBatchIfChanged(inner.beginBucketIndex, inner.splitNumberTmp);
     }
 
     public void persistShortValueListBatchInOneWalGroup(int walGroupIndex, Collection<Wal.V> shortValueList) {
@@ -329,7 +333,7 @@ public class KeyLoader {
 
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
-        updateMetaKeyBucketSplitNumberBatch(inner.beginBucketIndex, inner.splitNumberTmp);
+        updateMetaKeyBucketSplitNumberBatchIfChanged(inner.beginBucketIndex, inner.splitNumberTmp);
     }
 
     // need thread safe or just for test
