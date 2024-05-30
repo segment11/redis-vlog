@@ -545,7 +545,7 @@ public abstract class BaseCommand {
         }
     }
 
-    private synchronized void handleTrainSampleResult(TrainSampleJob.TrainSampleResult trainSampleResult) {
+    private void handleTrainSampleResult(TrainSampleJob.TrainSampleResult trainSampleResult) {
         if (trainSampleResult == null) {
             return;
         }

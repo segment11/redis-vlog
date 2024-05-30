@@ -136,13 +136,9 @@ public class OneSlot {
         var sendOnceMaxCount = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxCount", 2000);
         var sendOnceMaxSize = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxSize", 1024 * 1024);
         var toSlaveWalAppendBatch = new ToSlaveWalAppendBatch(sendOnceMaxCount, sendOnceMaxSize);
-        // sync to slave callback
-        this.masterUpdateCallback = new SendToSlaveMasterUpdateCallback(() -> {
-            // merge worker thread also call this, so need thread safe
-            synchronized (replPairs) {
-                return replPairs.stream().filter(ReplPair::isAsMaster).collect(Collectors.toList());
-            }
-        }, toSlaveWalAppendBatch);
+        // sync / async to slave callback
+        this.masterUpdateCallback = new SendToSlaveMasterUpdateCallback(() -> replPairs.stream().
+                filter(ReplPair::isAsMaster).collect(Collectors.toList()), toSlaveWalAppendBatch);
 
         this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake);
 

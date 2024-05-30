@@ -41,7 +41,7 @@ public class TcpClient {
     private long writeErrorCount = 0;
     private long notConnectedErrorCount = 0;
 
-    synchronized boolean write(ReplType type, ReplContent content) {
+    boolean write(ReplType type, ReplContent content) {
         if (isSocketConnected()) {
             try {
                 sock.write(Repl.buffer(replPair.getSlaveUuid(), slot, type, content));
@@ -108,7 +108,7 @@ public class TcpClient {
                 .whenException(e -> log.error("Could not connect to server", e));
     }
 
-    public synchronized void close() {
+    public void close() {
         if (sock != null && !sock.isClosed()) {
             sock.close();
             System.out.println("Closed socket, slot: " + slot + ", host: " + replPair.getHost() + ", port: " + replPair.getPort());

@@ -17,6 +17,7 @@ public class SendToSlaveMasterUpdateCallback implements MasterUpdateCallback {
 
     @Override
     public void onWalAppend(byte slot, int bucketIndex, boolean isValueShort, Wal.V v, int offset) {
+        // todo, support async use eventloop
         var addBatchResult = toSlaveWalAppendBatch.addBatch(isValueShort, v, offset);
         if (addBatchResult.needSent()) {
             var replPairList = getCurrentSlaveReplPairList.get();

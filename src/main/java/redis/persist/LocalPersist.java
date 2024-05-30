@@ -99,7 +99,7 @@ public class LocalPersist {
 
     public void cleanUp() {
         for (var oneSlot : oneSlots) {
-            oneSlot.cleanUp();
+            oneSlot.netWorkerEventloop.submit(oneSlot::cleanUp);
         }
     }
 

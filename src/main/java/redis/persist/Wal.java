@@ -206,13 +206,11 @@ public class Wal {
 
         if (!ConfForSlot.global.pureMemory) {
             var raf = isShortValue ? walSharedFileShortValue : walSharedFile;
-            synchronized (raf) {
-                try {
-                    raf.seek(targetGroupBeginOffset);
-                    raf.write(K128);
-                } catch (IOException e) {
-                    log.error("Truncate wal group error", e);
-                }
+            try {
+                raf.seek(targetGroupBeginOffset);
+                raf.write(K128);
+            } catch (IOException e) {
+                log.error("Truncate wal group error", e);
             }
         }
 
@@ -288,14 +286,12 @@ public class Wal {
 
         if (!ConfForSlot.global.pureMemory) {
             var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
-            synchronized (raf) {
-                try {
-                    raf.seek(targetGroupBeginOffset + offset);
-                    raf.write(v.encode());
-                } catch (IOException e) {
-                    log.error("Write to file error", e);
-                    throw new RuntimeException("Write to file error: " + e.getMessage());
-                }
+            try {
+                raf.seek(targetGroupBeginOffset + offset);
+                raf.write(v.encode());
+            } catch (IOException e) {
+                log.error("Write to file error", e);
+                throw new RuntimeException("Write to file error: " + e.getMessage());
             }
         }
 
@@ -317,14 +313,12 @@ public class Wal {
         // bulk load need not wal write
         if (!ConfForSlot.global.pureMemory && !bulkLoad) {
             var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
-            synchronized (raf) {
-                try {
-                    raf.seek(targetGroupBeginOffset + offset);
-                    raf.write(v.encode());
-                } catch (IOException e) {
-                    log.error("Write to file error", e);
-                    throw new RuntimeException("Write to file error: " + e.getMessage());
-                }
+            try {
+                raf.seek(targetGroupBeginOffset + offset);
+                raf.write(v.encode());
+            } catch (IOException e) {
+                log.error("Write to file error", e);
+                throw new RuntimeException("Write to file error: " + e.getMessage());
             }
         }
         positionArray[groupIndex] += encodeLength;
