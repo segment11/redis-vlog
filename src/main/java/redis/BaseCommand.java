@@ -533,8 +533,10 @@ public abstract class BaseCommand {
 
             // add train sample list
             if (sampleToTrainList.size() < trainSampleListMaxSize) {
-                var kv = new TrainSampleJob.TrainSampleKV(key, null, cvRaw.seq, valueBytes);
-                sampleToTrainList.add(kv);
+                if (valueBytes.length >= DictMap.TO_COMPRESS_MIN_DATA_LENGTH) {
+                    var kv = new TrainSampleJob.TrainSampleKV(key, null, cvRaw.seq, valueBytes);
+                    sampleToTrainList.add(kv);
+                }
             } else {
                 // no async train, latency sensitive
                 trainSampleJob.resetSampleToTrainList(sampleToTrainList);
