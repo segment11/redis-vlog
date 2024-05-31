@@ -14,6 +14,7 @@ public enum ConfForSlot {
     public final ConfChunk confChunk;
     public final ConfWal confWal;
     public final ConfLru lruBigString = new ConfLru(1000);
+    public final ConfLru lruKeyAndCompressedValueEncoded = new ConfLru(1_000_000);
 
     public boolean pureMemory = false;
     public short slotNumber = 1;
@@ -78,7 +79,7 @@ public enum ConfForSlot {
         public int bucketsPerSlot;
 
         // 4KB one segment, 25 * 1000 * 4KB = 100MB
-        public ConfLru lru = new ConfLru(1000 * 25);
+        public ConfLru lruPerFd = new ConfLru(1000 * 25);
 
         @Override
         public String toString() {
@@ -92,7 +93,7 @@ public enum ConfForSlot {
         debugMode(4 * 1024, (byte) 1, PAGE_SIZE),
         c1m(64 * 1024, (byte) 2, PAGE_SIZE),
         c10m(256 * 1024, (byte) 4, PAGE_SIZE),
-        c100m(512 * 1024, (byte) 8, PAGE_SIZE);
+        c100m(512 * 1024, (byte) 4, PAGE_SIZE);
 
         ConfChunk(int segmentNumberPerFd, byte fdPerChunk, int segmentLength) {
             this.segmentNumberPerFd = segmentNumberPerFd;
@@ -112,7 +113,7 @@ public enum ConfForSlot {
         public int segmentLength;
 
         // 4KB one segment, 25 * 1000 * 4KB = 100MB
-        public ConfLru lru = new ConfLru(1000 * 25);
+        public ConfLru lruPerFd = new ConfLru(1000 * 25);
 
         public int maxSegmentNumber() {
             return segmentNumberPerFd * fdPerChunk;

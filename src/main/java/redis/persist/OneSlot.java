@@ -11,6 +11,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.prometheus.client.Counter;
 import jnr.posix.LibC;
+import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -133,6 +134,20 @@ public class OneSlot {
             walArray[i] = wal;
         }
 
+        // cache lru
+        int maxSizeForAllWalGroups = ConfForSlot.global.lruKeyAndCompressedValueEncoded.maxSize;
+        var maxSizeForEachWalGroup = maxSizeForAllWalGroups / walGroupNumber;
+        final var maybeOneCompressedValueEncodedLength = 200;
+        log.info("LRU max size for each wal group: {}, all wal group number: {}, maybe one compressed value encoded length is {}B, memory require: {}MB",
+                maxSizeForEachWalGroup,
+                walGroupNumber,
+                maybeOneCompressedValueEncodedLength,
+                maxSizeForAllWalGroups * maybeOneCompressedValueEncodedLength / 1024 / 1024);
+        for (int walGroupIndex = 0; walGroupIndex < walGroupNumber; walGroupIndex++) {
+            LRUMap<String, byte[]> lru = new LRUMap<>(maxSizeForEachWalGroup);
+            kvByWalGroupIndexLRU.put(walGroupIndex, lru);
+        }
+
         // default 2000, I do not know if it is suitable
         var sendOnceMaxCount = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxCount", 2000);
         var sendOnceMaxSize = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxSize", 1024 * 1024);
@@ -141,7 +156,7 @@ public class OneSlot {
         this.masterUpdateCallback = new SendToSlaveMasterUpdateCallback(() -> replPairs.stream().
                 filter(ReplPair::isAsMaster).collect(Collectors.toList()), toSlaveWalAppendBatch);
 
-        this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake);
+        this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, this);
 
         DictMap.getInstance().setMasterUpdateCallback(masterUpdateCallback);
 
@@ -299,6 +314,18 @@ public class OneSlot {
 
     public BigStringFiles getBigStringFiles() {
         return bigStringFiles;
+    }
+
+    private final Map<Integer, LRUMap<String, byte[]>> kvByWalGroupIndexLRU = new HashMap<>();
+
+    void clearKvLRUByWalGroupIndex(int walGroupIndex) {
+        var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
+        if (lru != null) {
+            lru.clear();
+            if (walGroupIndex == 0) {
+                log.info("KV LRU cleared for wal group index: {}, I am alive, act normal", walGroupIndex);
+            }
+        }
     }
 
     final ChunkMergeWorker chunkMergeWorker;
@@ -496,7 +523,10 @@ public class OneSlot {
         });
     }
 
-    public ByteBuf get(byte[] keyBytes, int bucketIndex, long keyHash) {
+    public record BufOrCompressedValue(ByteBuf buf, CompressedValue cv) {
+    }
+
+    public BufOrCompressedValue get(byte[] keyBytes, int bucketIndex, long keyHash) {
         var key = new String(keyBytes);
         var cvEncodedFromWal = getFromWal(key, bucketIndex);
         if (cvEncodedFromWal != null) {
@@ -504,7 +534,15 @@ public class OneSlot {
             if (CompressedValue.isDeleted(cvEncodedFromWal)) {
                 return null;
             }
-            return Unpooled.wrappedBuffer(cvEncodedFromWal);
+            return new BufOrCompressedValue(Unpooled.wrappedBuffer(cvEncodedFromWal), null);
+        }
+
+        // from lru cache
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
+        var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
+        var cvEncodedBytesFromLRU = lru.get(key);
+        if (cvEncodedBytesFromLRU != null) {
+            return new BufOrCompressedValue(Unpooled.wrappedBuffer(cvEncodedBytesFromLRU), null);
         }
 
         var valueBytesWithExpireAt = keyLoader.getValueByKey(bucketIndex, keyBytes, keyHash);
@@ -515,7 +553,8 @@ public class OneSlot {
         var valueBytes = valueBytesWithExpireAt.valueBytes();
         if (!PersistValueMeta.isPvm(valueBytes)) {
             // short value, just return, CompressedValue can decode
-            return Unpooled.wrappedBuffer(valueBytes);
+            lru.put(key, valueBytes);
+            return new BufOrCompressedValue(Unpooled.wrappedBuffer(valueBytes), null);
         }
 
         var pvm = PersistValueMeta.decode(valueBytes);
@@ -540,7 +579,11 @@ public class OneSlot {
             throw new IllegalStateException("Key not match, key: " + new String(keyBytes) + ", key persisted: " + new String(keyBytesRead));
         }
 
-        return buf;
+        // set to lru cache, just target bytes
+        var cv = CompressedValue.decode(buf, keyBytes, keyHash, false);
+        lru.put(key, cv.encode());
+
+        return new BufOrCompressedValue(null, cv);
     }
 
     byte[] getFromWal(String key, int bucketIndex) {

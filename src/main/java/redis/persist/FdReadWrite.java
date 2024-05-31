@@ -1,5 +1,6 @@
 package redis.persist;
 
+import com.github.luben.zstd.Zstd;
 import com.kenai.jffi.MemoryIO;
 import com.kenai.jffi.PageManager;
 import io.prometheus.client.Counter;
@@ -70,6 +71,23 @@ public class FdReadWrite {
     static {
         fdLengthGauge.register();
     }
+
+    // avg = this time / cache hit count
+    private static final Counter afterLRUReadDecompressTimeTotalUs = Counter.build().name("after_lru_read_decompress_time_total_us").
+            help("after lru read decompress time total us").
+            labelNames("fd_name")
+            .register();
+
+    // avg = this time / after fd pread compress count total
+    private static final Counter afterFdPreadCompressTimeTotalUs = Counter.build().name("after_fd_pread_compress_time_total_us").
+            help("after fd pread compress time total us").
+            labelNames("fd_name")
+            .register();
+
+    private static final Counter afterFdPreadCompressCountTotal = Counter.build().name("after_fd_pread_compress_count_total").
+            help("after fd pread compress count total").
+            labelNames("fd_name")
+            .register();
 
     private static final Counter readTimeTotalUs = Counter.build().name("pread_time_total_us").
             help("fd read time total us").
@@ -159,22 +177,18 @@ public class FdReadWrite {
         this.isChunkFd = isChunkFd;
 
         if (isChunkFd) {
-            var maxSize = ConfForSlot.global.confChunk.lru.maxSize;
-            var fdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;
-
-            int maxSizeOneFd = maxSize / fdPerChunk;
-            log.info("Chunk lru max size for one worker/batch/fd: {}, segment length: {}, memory require: {}MB, total memory require: {}MB",
-                    maxSizeOneFd, segmentLength, maxSizeOneFd * segmentLength / 1024 / 1024, maxSize * segmentLength / 1024 / 1024);
-            this.segmentBytesByIndexLRU = new LRUMap<>(maxSizeOneFd);
+            var maxSize = ConfForSlot.global.confChunk.lruPerFd.maxSize;
+            log.info("Chunk lru max size for one chunk fd: {}, segment length: {}, memory require: {}MB",
+                    maxSize, segmentLength, maxSize * segmentLength / 1024 / 1024);
+            this.segmentBytesByIndexLRU = new LRUMap<>(maxSize);
         } else {
             // key bucket
-            var slotNumber = ConfForSlot.global.slotNumber;
-            var maxSize = ConfForSlot.global.confBucket.lru.maxSize;
-
-            int maxSizeOneFd = maxSize / slotNumber;
-            log.info("Bucket lru max size for one slot: {}, segment length: {}， memory require: {}MB, total memory require: {}MB",
-                    maxSizeOneFd, segmentLength, maxSizeOneFd * segmentLength / 1024 / 1024, maxSize * segmentLength / 1024 / 1024);
-            this.segmentBytesByIndexLRU = new LRUMap<>(maxSizeOneFd);
+            var maxSize = ConfForSlot.global.confBucket.lruPerFd.maxSize;
+            // need to compare with metrics
+            var compressRatio = 0.25;
+            log.info("Key bucket lru max size for one key bucket fd: {}, segment length: {}， compress ratio maybe: {}, memory require: {}MB",
+                    maxSize, segmentLength, compressRatio, maxSize * segmentLength / 1024 / 1024 * compressRatio);
+            this.segmentBytesByIndexLRU = new LRUMap<>(maxSize);
         }
 
         if (ConfForSlot.global.pureMemory) {
@@ -328,7 +342,20 @@ public class FdReadWrite {
             var bytesCached = segmentBytesByIndexLRU.get(segmentIndex);
             if (bytesCached != null) {
                 lruHitCounter.labels(name).inc();
-                return bytesCached;
+
+                if (isChunkFd) {
+                    return bytesCached;
+                } else {
+                    // only key bucket data need decompress
+                    var beginT = System.nanoTime();
+                    var bytesDecompressedCached = Zstd.decompress(bytesCached, segmentLength);
+                    var costT = (System.nanoTime() - beginT) / 1000;
+                    if (costT == 0) {
+                        costT = 1;
+                    }
+                    afterLRUReadDecompressTimeTotalUs.labels(name).inc(costT);
+                    return bytesDecompressedCached;
+                }
             } else {
                 lruMissCounter.labels(name).inc();
             }
@@ -375,7 +402,20 @@ public class FdReadWrite {
         }
 
         if (isOnlyOneSegment && isRefreshLRUCache) {
-            segmentBytesByIndexLRU.put(segmentIndex, bytesRead);
+            if (isChunkFd) {
+                segmentBytesByIndexLRU.put(segmentIndex, bytesRead);
+            } else {
+                // only key bucket data need compress
+                var beginT2 = System.nanoTime();
+                var bytesCompressed = Zstd.compress(bytesRead);
+                var costT2 = (System.nanoTime() - beginT2) / 1000;
+                if (costT2 == 0) {
+                    costT2 = 1;
+                }
+                afterFdPreadCompressTimeTotalUs.labels(name).inc(costT2);
+                afterFdPreadCompressCountTotal.labels(name).inc();
+                segmentBytesByIndexLRU.put(segmentIndex, bytesCompressed);
+            }
         }
         return bytesRead;
     }
@@ -419,13 +459,17 @@ public class FdReadWrite {
         }
 
         // set to lru cache
-        // lru bytes may be not full segment length when compress, todo
         if (isRefreshLRUCache && (isOnlyOneSegment || isPwriteBatch)) {
             for (int i = 0; i < segmentCount; i++) {
                 var bytes = new byte[segmentLength];
                 buffer.position(i * segmentLength);
                 buffer.get(bytes);
-                segmentBytesByIndexLRU.put(segmentIndex + i, bytes);
+
+                // chunk data is already compressed
+                // key bucket data need not compress here, compress when after read
+                if (isChunkFd) {
+                    segmentBytesByIndexLRU.put(segmentIndex + i, bytes);
+                }
             }
         } else {
             for (int i = 0; i < segmentCount; i++) {

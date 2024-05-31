@@ -499,8 +499,11 @@ public class MultiWorkerServer extends Launcher {
                             throw new IllegalStateException("Bucket count per slot should be multiple of 1024");
                         }
 
-                        if (config.getChild("bucket.lru.maxSize").hasValue()) {
-                            c.confBucket.lru.maxSize = config.get(toInt, "bucket.lru.maxSize");
+                        if (config.getChild("bucket.lruPerFd.maxSize").hasValue()) {
+                            c.confBucket.lruPerFd.maxSize = config.get(toInt, "bucket.lruPerFd.maxSize");
+                        } else {
+                            // default all buckets in cache
+                            c.confBucket.lruPerFd.maxSize = c.confBucket.bucketsPerSlot;
                         }
 
                         // override chunk conf
@@ -513,8 +516,8 @@ public class MultiWorkerServer extends Launcher {
                         if (config.getChild("chunk.segmentLength").hasValue()) {
                             c.confChunk.segmentLength = config.get(ofInteger(), "chunk.segmentLength");
                         }
-                        if (config.getChild("chunk.lru.maxSize").hasValue()) {
-                            c.confChunk.lru.maxSize = config.get(ofInteger(), "chunk.lru.maxSize");
+                        if (config.getChild("chunk.lruPerFd.maxSize").hasValue()) {
+                            c.confChunk.lruPerFd.maxSize = config.get(ofInteger(), "chunk.lruPerFd.maxSize");
                         }
 
                         // override wal conf
@@ -536,6 +539,9 @@ public class MultiWorkerServer extends Launcher {
 
                         if (config.getChild("big.string.lru.maxSize").hasValue()) {
                             c.lruBigString.maxSize = config.get(ofInteger(), "big.string.lru.maxSize");
+                        }
+                        if (config.getChild("kv.lru.maxSize").hasValue()) {
+                            c.lruKeyAndCompressedValueEncoded.maxSize = config.get(ofInteger(), "kv.lru.maxSize");
                         }
 
                         logger.info("ConfForSlot: {}", c);

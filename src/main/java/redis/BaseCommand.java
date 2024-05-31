@@ -2,13 +2,13 @@ package redis;
 
 import com.github.luben.zstd.Zstd;
 import io.activej.net.socket.tcp.ITcpSocket;
-import io.netty.buffer.ByteBuf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.command.AGroup;
 import redis.decode.Request;
 import redis.mock.ByPassGetSet;
 import redis.persist.LocalPersist;
+import redis.persist.OneSlot;
 import redis.persist.SegmentOverflowException;
 import redis.reply.Reply;
 
@@ -216,24 +216,25 @@ public abstract class BaseCommand {
         var slotWithKeyHash = slotWithKeyHashReuse != null ? slotWithKeyHashReuse : slot(keyBytes);
         var slot = slotWithKeyHash.slot();
 
-        ByteBuf buf;
+        OneSlot.BufOrCompressedValue bufOrCompressedValue;
         if (byPassGetSet != null) {
-            buf = byPassGetSet.getBuf(slot, keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
+            bufOrCompressedValue = byPassGetSet.getBuf(slot, keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
         } else {
             var oneSlot = localPersist.oneSlot(slot);
             try {
-                buf = oneSlot.get(keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
+                bufOrCompressedValue = oneSlot.get(keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
             } catch (Exception e) {
                 log.error("Get error, key: {}, message: {}", new String(keyBytes), e.getMessage());
                 return null;
             }
         }
 
-        if (buf == null) {
+        if (bufOrCompressedValue == null) {
             return null;
         }
 
-        var cv = CompressedValue.decode(buf, keyBytes, slotWithKeyHash.keyHash(), false);
+        var cv = bufOrCompressedValue.cv() != null ? bufOrCompressedValue.cv() :
+                CompressedValue.decode(bufOrCompressedValue.buf(), keyBytes, slotWithKeyHash.keyHash(), false);
         if (cv.isExpired()) {
             return null;
         }

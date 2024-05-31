@@ -349,6 +349,7 @@ public class CompressedValue {
 
     private static final Logger log = LoggerFactory.getLogger(CompressedValue.class);
 
+    // no memory copy when iterate decode many compressed values
     public static CompressedValue decode(io.netty.buffer.ByteBuf buf, byte[] keyBytes, long keyHash, boolean isJustForCheck) {
         var cv = new CompressedValue();
         var firstByte = buf.getByte(0);

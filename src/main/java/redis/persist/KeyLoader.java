@@ -22,12 +22,18 @@ public class KeyLoader {
     // one split index one file
     static final int MAX_KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
+    // for unit test
     public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake) {
+        this(slot, bucketsPerSlot, slotDir, snowFlake, null);
+    }
+
+    public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake, OneSlot oneSlot) {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
         this.bucketsPerSlot = bucketsPerSlot;
         this.slotDir = slotDir;
         this.snowFlake = snowFlake;
+        this.oneSlot = oneSlot;
 
         this.initMetricsCollect();
     }
@@ -37,6 +43,8 @@ public class KeyLoader {
     final int bucketsPerSlot;
     private final File slotDir;
     final SnowFlake snowFlake;
+
+    private final OneSlot oneSlot;
 
     MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
 
@@ -323,6 +331,10 @@ public class KeyLoader {
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
         updateMetaKeyBucketSplitNumberBatchIfChanged(inner.beginBucketIndex, inner.splitNumberTmp);
+
+        if (oneSlot != null) {
+            oneSlot.clearKvLRUByWalGroupIndex(walGroupIndex);
+        }
     }
 
     public void persistShortValueListBatchInOneWalGroup(int walGroupIndex, Collection<Wal.V> shortValueList) {
@@ -334,6 +346,10 @@ public class KeyLoader {
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
         updateMetaKeyBucketSplitNumberBatchIfChanged(inner.beginBucketIndex, inner.splitNumberTmp);
+
+        if (oneSlot != null) {
+            oneSlot.clearKvLRUByWalGroupIndex(walGroupIndex);
+        }
     }
 
     // need thread safe or just for test
