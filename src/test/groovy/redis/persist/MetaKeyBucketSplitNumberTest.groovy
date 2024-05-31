@@ -8,11 +8,12 @@ class MetaKeyBucketSplitNumberTest extends Specification {
     def "set and get"() {
         given:
         def one = new MetaKeyBucketSplitNumber((byte) 0, slotDir)
+        println one.inMemoryCachedBytes
 
         when:
-        one.set(10, (byte) 3)
-        one.set(20, (byte) 9)
-        one.set(30, (byte) 27)
+        one.setForTest(10, (byte) 3)
+        one.setForTest(20, (byte) 9)
+        one.setForTest(30, (byte) 27)
         then:
         one.get((byte) 10) == 3
         one.get((byte) 20) == 9

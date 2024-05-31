@@ -90,6 +90,13 @@ public class KeyBucket {
         return bytes.length != KEY_BUCKET_ONE_COST_SIZE;
     }
 
+    // for put all exists and new added after rehash
+    void clearAll() {
+        this.buffer.position(0).put(new byte[KEY_BUCKET_ONE_COST_SIZE]);
+        this.size = 0;
+        this.cellCost = 0;
+    }
+
     public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] bytes, SnowFlake snowFlake) {
         this(slot, bucketIndex, splitIndex, splitNumber, bytes, 0, snowFlake);
     }
@@ -131,7 +138,7 @@ public class KeyBucket {
     }
 
     interface IterateCallBack {
-        void call(long cellHashValue, long expireAt, byte[] keyBytes, byte[] valueBytes);
+        void call(long keyHash, long expireAt, long seq, byte[] keyBytes, byte[] valueBytes);
     }
 
     void iterate(IterateCallBack callBack) {
@@ -143,6 +150,8 @@ public class KeyBucket {
             }
 
             var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
+            var seq = buffer.getLong(metaIndex + HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
+
             buffer.position(oneCellOffset(cellIndex));
 
             var keyLength = buffer.getShort();
@@ -152,11 +161,11 @@ public class KeyBucket {
             var valueBytes = new byte[valueLength];
             buffer.get(valueBytes);
 
-            callBack.call(cellHashValue, expireAt, keyBytes, valueBytes);
+            callBack.call(cellHashValue, expireAt, seq, keyBytes, valueBytes);
         }
     }
 
-    private record KVMeta(int offset, short keyLength, byte valueLength) {
+    record KVMeta(int offset, short keyLength, byte valueLength) {
         int valueOffset() {
             return offset + Short.BYTES + keyLength + Byte.BYTES;
         }
@@ -193,8 +202,7 @@ public class KeyBucket {
 
     public byte[] encode() {
         buffer.position(0).putLong(lastUpdateSeq).putShort(size).putShort(cellCost);
-        // shared bytes
-        if (bytes.length != KEY_BUCKET_ONE_COST_SIZE) {
+        if (isSharedBytes()) {
             var dst = new byte[KEY_BUCKET_ONE_COST_SIZE];
             System.arraycopy(bytes, position, dst, 0, KEY_BUCKET_ONE_COST_SIZE);
             return dst;
@@ -219,15 +227,33 @@ public class KeyBucket {
         cellCost -= cellCount;
     }
 
+    void clearAllExpired() {
+        for (int i = 0; i < capacity; i++) {
+            int metaIndex = metaIndex(i);
+            var cellHashValue = buffer.getLong(metaIndex);
+            if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
+                continue;
+            }
+
+            var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
+            if (expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis()) {
+                clearOneExpired(i);
+            }
+        }
+    }
+
     String allPrint() {
         var sb = new StringBuilder();
-        iterate((keyHash, expireAt, keyBytes, valueBytes) -> sb.append("key=").append(new String(keyBytes))
+        iterate((keyHash, expireAt, seq, keyBytes, valueBytes) -> sb.append("key=").append(new String(keyBytes))
                 .append(", value=").append(PersistValueMeta.isPvm(valueBytes) ? PersistValueMeta.decode(valueBytes) : new String(valueBytes))
-                .append(", expireAt=").append(expireAt).append("\n"));
+                .append(", expireAt=").append(expireAt)
+                .append(", seq=").append(seq)
+                .append("\n"));
         return sb.toString();
     }
 
     // because * 2 may be data skew
+    @Deprecated
     KeyBucket[] split() {
         // bucket per slot usually % 8 == 0, % 3 is better for data skew
         var newSplitNumber = (byte) (splitNumber * SPLIT_MULTI_STEP);
@@ -580,6 +606,10 @@ public class KeyBucket {
     }
 
     public boolean del(byte[] keyBytes, long keyHash, boolean doUpdateSeq) {
+        if (size == 0) {
+            return false;
+        }
+
         boolean isDeleted = false;
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
             int metaIndex = metaIndex(cellIndex);

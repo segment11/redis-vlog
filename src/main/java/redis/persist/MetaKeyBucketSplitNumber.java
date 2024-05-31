@@ -74,8 +74,8 @@ public class MetaKeyBucketSplitNumber {
         }
     }
 
-    // read write lock better
-    void set(int bucketIndex, byte splitNumber) {
+    // for unit test
+    void setForTest(int bucketIndex, byte splitNumber) {
         if (ConfForSlot.global.pureMemory) {
             inMemoryCachedBytes[bucketIndex] = splitNumber;
             return;
@@ -128,14 +128,14 @@ public class MetaKeyBucketSplitNumber {
 
     void clear() {
         if (ConfForSlot.global.pureMemory) {
-            Arrays.fill(inMemoryCachedBytes, (byte) 0);
+            Arrays.fill(inMemoryCachedBytes, (byte) 1);
             return;
         }
 
         try {
             raf.seek(0);
             raf.write(inMemoryCachedBytes);
-            Arrays.fill(inMemoryCachedBytes, (byte) 0);
+            Arrays.fill(inMemoryCachedBytes, (byte) 1);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

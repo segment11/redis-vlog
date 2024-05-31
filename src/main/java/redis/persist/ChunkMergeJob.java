@@ -275,7 +275,6 @@ public class ChunkMergeJob {
         for (var entry : groupByWalGroupIndex.entrySet()) {
             var walGroupIndex = entry.getKey();
             var keyBucketsInOneWalGroup = new KeyBucketsInOneWalGroup(slot, walGroupIndex, oneSlot.keyLoader);
-            keyBucketsInOneWalGroup.readBeforePutBatch();
 
             var cvListInOneWalGroup = entry.getValue();
             for (var one : cvListInOneWalGroup) {

@@ -54,7 +54,7 @@ class ChunkMergeJobTest extends Specification {
         keyLoader.fdReadWriteArray = [fdReadWriteForKeyLoader]
 
         keyLoader.metaKeyBucketSplitNumber = new MetaKeyBucketSplitNumber(slot, Consts.slotDir)
-        keyLoader.metaKeyBucketSplitNumber.set(bucketIndex, (byte) 1)
+        keyLoader.metaKeyBucketSplitNumber.setForTest(bucketIndex, (byte) 1)
         keyLoader.statKeyCountInBuckets = new StatKeyCountInBuckets(slot, keyLoader.bucketsPerSlot, Consts.slotDir)
 
         keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, somePvmList, false)

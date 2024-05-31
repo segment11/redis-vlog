@@ -78,7 +78,7 @@ public class KeyLoader {
     }
 
     void setMetaKeyBucketSplitNumberForTest(int bucketIndex, byte splitNumber) {
-        metaKeyBucketSplitNumber.set(bucketIndex, splitNumber);
+        metaKeyBucketSplitNumber.setForTest(bucketIndex, splitNumber);
     }
 
     // split 3 times, 3 * 3 * 3 = 27
@@ -324,7 +324,6 @@ public class KeyLoader {
 
     public void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList, boolean isMerge) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
-        inner.readBeforePutBatch();
         inner.putAllPvmList(pvmList, isMerge);
         updateKeyCountBatchCached(inner.keyCountTmp, inner.beginBucketIndex);
 
@@ -339,7 +338,6 @@ public class KeyLoader {
 
     public void persistShortValueListBatchInOneWalGroup(int walGroupIndex, Collection<Wal.V> shortValueList) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
-        inner.readBeforePutBatch();
         inner.putAll(shortValueList);
         updateKeyCountBatchCached(inner.keyCountTmp, inner.beginBucketIndex);
 
