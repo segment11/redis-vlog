@@ -57,22 +57,24 @@ public class StatKeyCountInBuckets {
         }
 
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
-    }
-
-    interface IterateCallBack {
-        void call(byte slot, int bucketIndex, short size);
-    }
-
-    void iterate(IterateCallBack callBack) {
-        for (int bucketIndex = 0; bucketIndex < bucketsPerSlot; bucketIndex++) {
-            var size = inMemoryCachedByteBuffer.getShort(bucketIndex * ONE_LENGTH);
-            callBack.call(slot, bucketIndex, size);
-        }
+        log.info("Key count in buckets: {}, slot: {}", getKeyCount(), slot);
     }
 
     void setKeyCountForBucketIndex(int bucketIndex, short keyCount) {
         var offset = bucketIndex * ONE_LENGTH;
-        inMemoryCachedByteBuffer.putShort(offset, keyCount);
+
+        if (ConfForSlot.global.pureMemory) {
+            inMemoryCachedByteBuffer.putShort(offset, keyCount);
+            return;
+        }
+
+        try {
+            raf.seek(offset);
+            raf.writeShort(keyCount);
+            inMemoryCachedByteBuffer.putShort(offset, keyCount);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     short getKeyCountForBucketIndex(int bucketIndex) {
