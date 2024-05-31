@@ -39,7 +39,16 @@ public class BigStringFiles {
             }
         }
 
-        this.bigStringBytesByUuidLRU = new LRUMap<>(ConfForSlot.global.lruBigString.maxSize);
+        var maxSize = ConfForSlot.global.lruBigString.maxSize;
+        final var maybeOneBigStringBytesLength = 4096;
+        var lruMemoryRequireMB = maxSize * maybeOneBigStringBytesLength / 1024 / 1024;
+        log.info("LRU max size for big string: {}, maybe one big string bytes length is {}B, memory require: {}MB",
+                maxSize,
+                maybeOneBigStringBytesLength,
+                lruMemoryRequireMB);
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.big_string, lruMemoryRequireMB, false);
+
+        this.bigStringBytesByUuidLRU = new LRUMap<>(maxSize);
         bigStringFilesCountGauge.labels(slotStr).set(0);
     }
 

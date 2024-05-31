@@ -9,7 +9,6 @@ import io.activej.eventloop.Eventloop;
 import io.activej.promise.Promise;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.prometheus.client.Counter;
 import jnr.posix.LibC;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
@@ -138,11 +137,14 @@ public class OneSlot {
         int maxSizeForAllWalGroups = ConfForSlot.global.lruKeyAndCompressedValueEncoded.maxSize;
         var maxSizeForEachWalGroup = maxSizeForAllWalGroups / walGroupNumber;
         final var maybeOneCompressedValueEncodedLength = 200;
+        var lruMemoryRequireMB = maxSizeForAllWalGroups * maybeOneCompressedValueEncodedLength / 1024 / 1024;
         log.info("LRU max size for each wal group: {}, all wal group number: {}, maybe one compressed value encoded length is {}B, memory require: {}MB",
                 maxSizeForEachWalGroup,
                 walGroupNumber,
                 maybeOneCompressedValueEncodedLength,
-                maxSizeForAllWalGroups * maybeOneCompressedValueEncodedLength / 1024 / 1024);
+                lruMemoryRequireMB);
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_by_wal_group, lruMemoryRequireMB, false);
+
         for (int walGroupIndex = 0; walGroupIndex < walGroupNumber; walGroupIndex++) {
             LRUMap<String, byte[]> lru = new LRUMap<>(maxSizeForEachWalGroup);
             kvByWalGroupIndexLRU.put(walGroupIndex, lru);
@@ -327,6 +329,9 @@ public class OneSlot {
             }
         }
     }
+
+    private long kvLRUHitTotal = 0;
+    private long kvLRUMissTotal = 0;
 
     final ChunkMergeWorker chunkMergeWorker;
 
@@ -546,8 +551,10 @@ public class OneSlot {
         var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
         var cvEncodedBytesFromLRU = lru.get(key);
         if (cvEncodedBytesFromLRU != null) {
+            kvLRUHitTotal++;
             return new BufOrCompressedValue(Unpooled.wrappedBuffer(cvEncodedBytesFromLRU), null);
         }
+        kvLRUMissTotal++;
 
         var valueBytesWithExpireAt = keyLoader.getValueByKey(bucketIndex, keyBytes, keyHash);
         if (valueBytesWithExpireAt == null) {
@@ -621,8 +628,8 @@ public class OneSlot {
         if (costT == 0) {
             costT = 1;
         }
-        segmentDecompressTimeTotalUs.labels(slotStr).inc(costT);
-        segmentDecompressCountTotal.labels(slotStr).inc();
+        segmentDecompressTimeTotalUs += costT;
+        segmentDecompressCountTotal++;
 
         if (d != segmentLength) {
             throw new IllegalStateException("Decompress error, s=" + pvm.slot +
@@ -1046,15 +1053,8 @@ public class OneSlot {
         slotInnerGauge.register();
     }
 
-    private static final Counter segmentDecompressTimeTotalUs = Counter.build().name("segment_decompress_time_total_us").
-            help("segment decompress time total us").
-            labelNames("slot")
-            .register();
-
-    private static final Counter segmentDecompressCountTotal = Counter.build().name("segment_decompress_count_total_us").
-            help("segment decompress count total").
-            labelNames("slot")
-            .register();
+    private long segmentDecompressTimeTotalUs = 0;
+    private long segmentDecompressCountTotal = 0;
 
     private void initMetricsCollect() {
         walDelaySizeGauge.addRawGetter(() -> {
@@ -1074,6 +1074,25 @@ public class OneSlot {
             map.put("dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
             map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
             map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
+
+            map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
+                    (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket), labelValues));
+            map.put("lru_prepare_mb_fd_chunk_data_all_slots", new SimpleGauge.ValueWithLabelValues(
+                    (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_chunk_data), labelValues));
+            map.put("lru_prepare_mb_kv_by_wal_group_all_slots", new SimpleGauge.ValueWithLabelValues(
+                    (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_by_wal_group), labelValues));
+            map.put("lru_prepare_mb_kv_big_string_all_slots", new SimpleGauge.ValueWithLabelValues(
+                    (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.big_string), labelValues));
+
+            map.put("kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
+            map.put("kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
+
+            map.put("segment_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressTimeTotalUs, labelValues));
+            map.put("segment_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressCountTotal, labelValues));
+            if (segmentDecompressCountTotal > 0) {
+                double segmentDecompressedCostTAvg = (double) segmentDecompressTimeTotalUs / segmentDecompressCountTotal;
+                map.put("segment_decompress_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(segmentDecompressedCostTAvg, labelValues));
+            }
 
             var replPairSize = replPairs.stream().filter(one -> !one.isSendBye()).count();
             map.put("repl_pair_size", new SimpleGauge.ValueWithLabelValues((double) replPairSize, labelValues));
