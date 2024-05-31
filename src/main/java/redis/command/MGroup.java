@@ -251,7 +251,7 @@ public class MGroup extends BaseCommand {
             return OKReply.INSTANCE;
         }
 
-        if (subCmd.equals("view-bucket-key-count")) {
+        if (subCmd.equals("view-persist-key-count")) {
             if (data.length != 4) {
                 return ErrorReply.FORMAT;
             }
@@ -271,7 +271,7 @@ public class MGroup extends BaseCommand {
 
             var oneSlot = localPersist.oneSlot(slot);
 
-            var keyCount = bucketIndex == -1 ? oneSlot.getKeyCount() : oneSlot.getKeyLoader().getKeyCountInBucketIndex(bucketIndex);
+            var keyCount = bucketIndex == -1 ? oneSlot.getAllKeyCount() : oneSlot.getKeyLoader().getKeyCountInBucketIndex(bucketIndex);
             return new IntegerReply(keyCount);
         }
 

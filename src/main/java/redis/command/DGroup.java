@@ -50,7 +50,7 @@ public class DGroup extends BaseCommand {
             Promise<Long>[] promises = new Promise[slotNumber];
             for (int i = 0; i < slotNumber; i++) {
                 var oneSlot = localPersist.oneSlot((byte) i);
-                promises[i] = oneSlot.asyncCall(oneSlot::getKeyCount);
+                promises[i] = oneSlot.asyncCall(oneSlot::getAllKeyCount);
             }
 
             var r = Promises.toArray(Long.class, promises).map(values -> {

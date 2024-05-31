@@ -391,12 +391,16 @@ public class OneSlot {
 
     private final MasterUpdateCallback masterUpdateCallback;
 
-    public long getKeyCount() {
-        var r = keyLoader.getKeyCount();
+    public long getWalKeyCount() {
+        long r = 0;
         for (var wal : walArray) {
             r += wal.getKeyCount();
         }
         return r;
+    }
+
+    public long getAllKeyCount() {
+        return keyLoader.getKeyCount() + getWalKeyCount();
     }
 
     private LibC libC;
@@ -1069,6 +1073,7 @@ public class OneSlot {
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
             map.put("dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
             map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
+            map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
 
             var replPairSize = replPairs.stream().filter(one -> !one.isSendBye()).count();
             map.put("repl_pair_size", new SimpleGauge.ValueWithLabelValues((double) replPairSize, labelValues));
