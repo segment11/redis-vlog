@@ -1075,14 +1075,16 @@ public class OneSlot {
             map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
             map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
 
-            map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
-                    (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket), labelValues));
-            map.put("lru_prepare_mb_fd_chunk_data_all_slots", new SimpleGauge.ValueWithLabelValues(
-                    (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_chunk_data), labelValues));
-            map.put("lru_prepare_mb_kv_by_wal_group_all_slots", new SimpleGauge.ValueWithLabelValues(
-                    (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_by_wal_group), labelValues));
-            map.put("lru_prepare_mb_kv_big_string_all_slots", new SimpleGauge.ValueWithLabelValues(
-                    (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.big_string), labelValues));
+            if (slot == 0) {
+                map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket), labelValues));
+                map.put("lru_prepare_mb_fd_chunk_data_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_chunk_data), labelValues));
+                map.put("lru_prepare_mb_kv_by_wal_group_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_by_wal_group), labelValues));
+                map.put("lru_prepare_mb_kv_big_string_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.big_string), labelValues));
+            }
 
             map.put("kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
             map.put("kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
