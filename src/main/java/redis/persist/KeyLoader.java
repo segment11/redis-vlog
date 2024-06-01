@@ -82,13 +82,13 @@ public class KeyLoader {
         metaKeyBucketSplitNumber.setForTest(bucketIndex, splitNumber);
     }
 
-    // split 3 times, 1 * 2 * 2 * 2 = 8
-    // when 8, batch persist pvm, will slot stall and read all 8 files, read and write perf will be bad
+    // split 2 times, 1 * 3 * 3 = 9
+    // when get bigger, batch persist pvm, will slot stall and read all 8 files, read and write perf will be bad
     // end to end read perf ok, because only read one key bucket and lru cache
     // increase buckets per slot value, then will split fewer times, but will cost more wal memory
     // or decrease wal delay persist value size, then will once put less key values, may be better for latency
-    public static final byte MAX_SPLIT_NUMBER = 8;
-    static final int SPLIT_MULTI_STEP = 2;
+    public static final byte MAX_SPLIT_NUMBER = 9;
+    static final int SPLIT_MULTI_STEP = 3;
     // you can change here, the bigger, key buckets will split more times, like load factor
     // compare to KeyBucket.INIT_CAPACITY = 46
     static final int KEY_OR_CELL_COST_TOLERANCE_COUNT_WHEN_CHECK_SPLIT = 0;

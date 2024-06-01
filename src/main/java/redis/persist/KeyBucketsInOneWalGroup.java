@@ -302,11 +302,20 @@ public class KeyBucketsInOneWalGroup {
 
         final int tolerance = KeyLoader.KEY_OR_CELL_COST_TOLERANCE_COUNT_WHEN_CHECK_SPLIT;
 
+        int splitMultiStep = KeyLoader.SPLIT_MULTI_STEP;
         var needSplit = false;
         if (newKeyCountNeedThisBucket > canPutKeyCountThisBucket - tolerance) {
             needSplit = true;
+            if (newKeyCountNeedThisBucket > canPutKeyCountThisBucket * KeyLoader.SPLIT_MULTI_STEP) {
+                splitMultiStep *= KeyLoader.SPLIT_MULTI_STEP;
+                log.warn("Bucket split once 4 times for slot: {}, bucket index: {}, once add key count: {}", slot, bucketIndex, newKeyCountNeedThisBucket);
+            }
         } else if (newCellCostNeedThisBucket > canPutKeyCountThisBucket - tolerance) {
             needSplit = true;
+            if (newCellCostNeedThisBucket > canPutKeyCountThisBucket * KeyLoader.SPLIT_MULTI_STEP) {
+                splitMultiStep *= KeyLoader.SPLIT_MULTI_STEP;
+                log.warn("Bucket split once 4 times for slot: {}, bucket index: {}, once add cell cost: {}", slot, bucketIndex, newCellCostNeedThisBucket);
+            }
         }
 
         if (!needSplit) {
@@ -317,6 +326,7 @@ public class KeyBucketsInOneWalGroup {
                 var needDeleteKeyCount = needDeleteKeyCountBySplitIndex[splitIndex];
                 if (existsKeyCount + needAddKeyCount - needDeleteKeyCount > KeyBucket.INIT_CAPACITY - tolerance) {
                     needSplit = true;
+                    // split number * 3 can cover ? need not check, because wal group once number is not too large
                     break;
                 }
 
@@ -327,13 +337,14 @@ public class KeyBucketsInOneWalGroup {
                 // fix this, todo
                 if (existsCellCost + needAddCellCost - needDeleteCellCost > KeyBucket.INIT_CAPACITY - tolerance) {
                     needSplit = true;
+                    // split number * 3 can cover ? need not check, because wal group once number is not too large
                     break;
                 }
             }
         }
 
         if (needSplit) {
-            var newMaxSplitNumber = currentSplitNumber * KeyLoader.SPLIT_MULTI_STEP;
+            var newMaxSplitNumber = currentSplitNumber * splitMultiStep;
             if (newMaxSplitNumber > KeyLoader.MAX_SPLIT_NUMBER) {
                 log.warn("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER +
                         ", slot: " + slot + ", bucket index: " + bucketIndex);
