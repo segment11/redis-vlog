@@ -687,6 +687,11 @@ public class OneSlot {
 
     // thread safe, same slot, same event loop
     public void put(String key, int bucketIndex, CompressedValue cv) {
+        var threadId = Thread.currentThread().getId();
+        if (threadId != threadIdProtectedWhenPut) {
+            throw new IllegalStateException("Thread id not match, thread id: " + threadId + ", thread id protected: " + threadIdProtectedWhenPut);
+        }
+
         if (isReadonly()) {
             throw new ReadonlyException();
         }
