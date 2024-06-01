@@ -27,7 +27,7 @@ import static redis.persist.LocalPersist.PROTECTION;
 // thread safe
 public class FdReadWrite {
 
-    private Logger log = LoggerFactory.getLogger(FdReadWrite.class);
+    private final Logger log = LoggerFactory.getLogger(FdReadWrite.class);
 
     // for unit test
     public FdReadWrite(String name) {
