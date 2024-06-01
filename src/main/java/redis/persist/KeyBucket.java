@@ -14,6 +14,8 @@ public class KeyBucket {
     public static final short INIT_CAPACITY = 46;
     // if big, wal will cost too much memory
     public static final int MAX_BUCKETS_PER_SLOT = KeyLoader.MAX_KEY_BUCKET_COUNT_PER_FD;
+    // readonly
+    static final byte[] EMPTY_BYTES = new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE];
     public static final int DEFAULT_BUCKETS_PER_SLOT = 16384;
 
     // key length short 2 + key length <= 32 + value length byte 1 + (pvm length 24 or short value case number 17 / string 19 ) < 64
@@ -41,10 +43,6 @@ public class KeyBucket {
     private final int capacity;
     short size;
     short cellCost;
-
-    public boolean isFull() {
-        return cellCost >= capacity;
-    }
 
     long lastUpdateSeq;
 
@@ -91,10 +89,11 @@ public class KeyBucket {
     }
 
     // for put all exists and new added after rehash
-    void clearAll() {
-        this.buffer.position(0).put(new byte[KEY_BUCKET_ONE_COST_SIZE]);
+    public void clearAll() {
+        this.buffer.position(0).put(EMPTY_BYTES);
         this.size = 0;
         this.cellCost = 0;
+        this.lastUpdateSeq = 0L;
     }
 
     public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] bytes, SnowFlake snowFlake) {

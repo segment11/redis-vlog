@@ -199,5 +199,28 @@ class KeyBucketTest extends Specification {
         keyBucket.cellCost == 3
 
         keyBucket.getValueByKey(longKeyBytes, 9797L).valueBytes == 'long a'.bytes
+
+        when:
+        keyBucket.put('b'.bytes, 98L, System.currentTimeMillis() - 1, 2L, 'b'.bytes, null)
+
+        then:
+        keyBucket.size == 3
+        keyBucket.getValueByKey('b'.bytes, 98L) != null
+
+        when:
+        keyBucket.clearAllExpired()
+
+        then:
+        keyBucket.size == 2
+        keyBucket.getValueByKey('b'.bytes, 98L) == null
+
+        when:
+        keyBucket.clearAll()
+
+        then:
+        keyBucket.size == 0
+        keyBucket.cellCost == 0
+        keyBucket.getValueByKey('a'.bytes, 97L) == null
+        keyBucket.getValueByKey(longKeyBytes, 9797L) == null
     }
 }

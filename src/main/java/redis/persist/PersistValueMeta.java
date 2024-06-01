@@ -8,13 +8,13 @@ public class PersistValueMeta {
     // slot byte + segment sub block index byte
     // + length int + segment index int + segment offset int
     // may add type or other metadata in the future
-    static final int ENCODED_LEN = 1 + 1 + 4 + 4 + 4;
+    static final int ENCODED_LENGTH = 1 + 1 + 4 + 4 + 4;
 
     // CompressedValue encoded length is much more than PersistValueMeta encoded length
     public static boolean isPvm(byte[] bytes) {
         // short string encoded
         // first byte is type, < 0 means special type
-        return bytes[0] >= 0 && (bytes.length == ENCODED_LEN);
+        return bytes[0] >= 0 && (bytes.length == ENCODED_LENGTH);
     }
 
     byte slot;
@@ -33,6 +33,14 @@ public class PersistValueMeta {
 
     byte[] extendBytes;
 
+    int cellCostInKeyBucket() {
+        var valueLength = extendBytes != null ? extendBytes.length : ENCODED_LENGTH;
+        if (valueLength > Byte.MAX_VALUE) {
+            throw new IllegalArgumentException("Persist value meta extend bytes too long: " + valueLength);
+        }
+        return KeyBucket.KVMeta.calcCellCount((short) keyBytes.length, (byte) valueLength);
+    }
+
     @Override
     public String toString() {
         return "PersistValueMeta{" +
@@ -46,7 +54,7 @@ public class PersistValueMeta {
     }
 
     public byte[] encode() {
-        var bytes = new byte[ENCODED_LEN];
+        var bytes = new byte[ENCODED_LENGTH];
         var buf = ByteBuf.wrapForWriting(bytes);
         buf.writeByte(slot);
         buf.writeByte(subBlockIndex);

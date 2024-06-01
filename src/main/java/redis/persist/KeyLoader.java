@@ -3,6 +3,7 @@ package redis.persist;
 import jnr.posix.LibC;
 import org.slf4j.Logger;
 import redis.ConfForSlot;
+import redis.KeyHash;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
 import redis.repl.content.ToMasterExistsSegmentMeta;
@@ -240,7 +241,7 @@ public class KeyLoader {
 
     KeyBucket.ValueBytesWithExpireAtAndSeq getValueByKey(int bucketIndex, byte[] keyBytes, long keyHash) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
-        var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
+        var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
 
         var keyBucket = readKeyBucketForSingleKey(bucketIndex, (byte) splitIndex, splitNumber, keyHash, true);
         if (keyBucket == null) {
@@ -253,7 +254,7 @@ public class KeyLoader {
     // not exact correct when split, just for test or debug, not public
     void putValueByKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
-        var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
+        var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
 
         var keyBucket = readKeyBucketForSingleKey(bucketIndex, (byte) splitIndex, splitNumber, keyHash, false);
         if (keyBucket == null) {
@@ -325,7 +326,7 @@ public class KeyLoader {
     public void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList, boolean isMerge) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
         inner.putAllPvmList(pvmList, isMerge);
-        updateKeyCountBatchCached(inner.keyCountTmp, inner.beginBucketIndex);
+        updateKeyCountBatchCached(inner.keyCountForStatsTmp, inner.beginBucketIndex);
 
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
@@ -339,7 +340,7 @@ public class KeyLoader {
     public void persistShortValueListBatchInOneWalGroup(int walGroupIndex, Collection<Wal.V> shortValueList) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
         inner.putAll(shortValueList);
-        updateKeyCountBatchCached(inner.keyCountTmp, inner.beginBucketIndex);
+        updateKeyCountBatchCached(inner.keyCountForStatsTmp, inner.beginBucketIndex);
 
         var sharedBytesList = inner.writeAfterPutBatch();
         writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
@@ -368,7 +369,7 @@ public class KeyLoader {
     // use wal delay remove instead of remove immediately
     boolean removeSingleKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
-        var splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(keyHash % splitNumber);
+        var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
 
         var keyBucket = readKeyBucketForSingleKey(bucketIndex, (byte) splitIndex, splitNumber, keyHash, false);
         if (keyBucket == null) {

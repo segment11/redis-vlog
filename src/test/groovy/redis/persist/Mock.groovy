@@ -59,6 +59,7 @@ class Mock {
         compressedValueList
     }
 
+    // tuple2: key, keyHash
     static Map<Integer, List<Tuple2<String, Long>>> prepareKeyHashIndexByKeyBucketList(int n, int bucketsPerSlot) {
         Map<Integer, List<Tuple2<String, Long>>> keyHashByBucketIndex = [:]
         n.times {

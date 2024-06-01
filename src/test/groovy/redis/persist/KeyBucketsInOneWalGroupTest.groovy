@@ -21,9 +21,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
         then:
         shortValueList.every {
-            def splitNumber = inner.splitNumberTmp[it.bucketIndex]
-            def splitIndex = splitNumber == 1 ? 0 : (int) Math.abs(it.keyHash % splitNumber)
-            inner.getKeyBucket(it.bucketIndex, (byte) splitIndex, splitNumber, it.keyHash).getValueByKey(it.key.bytes, it.keyHash).valueBytes() == it.cvEncoded
+            inner.getValue(it.bucketIndex, it.key.bytes, it.keyHash).valueBytes() == it.cvEncoded
         }
         inner.isSplit == (n > KeyBucket.INIT_CAPACITY)
 

@@ -26,4 +26,12 @@ public class KeyHash {
     public static int hash32Offset(byte[] keyBytes, int offset, int length) {
         return xxHash32Java.hash(keyBytes, offset, length, seed32);
     }
+
+    // for split index re-calculating, avoid data skew
+    public static byte splitIndex(long keyHash, byte splitNumber, int bucketIndex) {
+        if (splitNumber == 1) {
+            return 0;
+        }
+        return (byte) Math.abs(((keyHash >> 32) % splitNumber));
+    }
 }
