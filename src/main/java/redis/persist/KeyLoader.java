@@ -91,7 +91,7 @@ public class KeyLoader {
     static final int SPLIT_MULTI_STEP = 2;
     // you can change here, the bigger, key buckets will split more times, like load factor
     // compare to KeyBucket.INIT_CAPACITY = 46
-    static final int KEY_OR_CELL_COST_TOLERANCE_COUNT_WHEN_CHECK_SPLIT = 2;
+    static final int KEY_OR_CELL_COST_TOLERANCE_COUNT_WHEN_CHECK_SPLIT = 0;
 
     private LibC libC;
     // index is split index
@@ -266,7 +266,7 @@ public class KeyLoader {
         }
 
         keyBucket.put(keyBytes, keyHash, expireAt, seq, valueBytes);
-        updateKeyBucketInner(bucketIndex, keyBucket, false);
+        updateKeyBucketInnerForTest(bucketIndex, keyBucket, false);
     }
 
     // not exact correct when split, just for test or debug, not public
@@ -302,8 +302,8 @@ public class KeyLoader {
         return sb.toString();
     }
 
-    private void updateKeyBucketInner(int bucketIndex, KeyBucket keyBucket, boolean isRefreshLRUCache) {
-        var bytes = keyBucket.encode();
+    private void updateKeyBucketInnerForTest(int bucketIndex, KeyBucket keyBucket, boolean isRefreshLRUCache) {
+        var bytes = keyBucket.encode(true);
         var splitIndex = keyBucket.splitIndex;
         if (bytes.length > KEY_BUCKET_ONE_COST_SIZE) {
             throw new IllegalStateException("Key bucket bytes size too large, slot: " + slot +
@@ -382,7 +382,7 @@ public class KeyLoader {
 
         var isDeleted = keyBucket.del(keyBytes, keyHash, true);
         if (isDeleted) {
-            updateKeyBucketInner(bucketIndex, keyBucket, false);
+            updateKeyBucketInnerForTest(bucketIndex, keyBucket, false);
         }
 
         return isDeleted;

@@ -43,10 +43,10 @@ class KeyBucketTest extends Specification {
 
         and:
         k1.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
-        def k1Bytes = k1.encode()
+        def k1Bytes = k1.encode(false)
 
         k2.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
-        def k2Bytes = k2.encode()
+        def k2Bytes = k2.encode(false)
 
         def sharedBytes = new byte[4096 * 2]
         System.arraycopy(k1Bytes, 0, sharedBytes, 0, k1Bytes.length)

@@ -37,7 +37,7 @@ public class KeyBucketsInOneWalGroup {
     private final Logger log = LoggerFactory.getLogger(KeyBucketsInOneWalGroup.class);
 
     // outer index is split index, inner index is relative (bucket index - begin bucket index)
-    private ArrayList<ArrayList<KeyBucket>> listList = new ArrayList<>();
+    ArrayList<ArrayList<KeyBucket>> listList = new ArrayList<>();
 
     private ArrayList<KeyBucket> prepareListInitWithNull() {
         var listInitWithNull = new ArrayList<KeyBucket>();
@@ -49,6 +49,11 @@ public class KeyBucketsInOneWalGroup {
     }
 
     private void readBeforePutBatch() {
+        // for unit test
+        if (keyLoader == null) {
+            return;
+        }
+
         this.splitNumberTmp = keyLoader.getMetaKeyBucketSplitNumberBatch(beginBucketIndex, oneChargeBucketNumber);
         byte maxSplitNumber = 1;
         for (int i = 0; i < oneChargeBucketNumber; i++) {
@@ -116,7 +121,7 @@ public class KeyBucketsInOneWalGroup {
             var list = listList.get(splitIndex);
             for (var keyBucket : list) {
                 if (keyBucket != null) {
-                    keyBucket.encode();
+                    keyBucket.encode(true);
                 }
             }
 
@@ -152,10 +157,14 @@ public class KeyBucketsInOneWalGroup {
 
     boolean isSplit = false;
 
-    private void putPvmListToTargetBucketAfterClearAllIfSplit(List<PersistValueMeta> needAddNewList, List<PersistValueMeta> needDeleteList, Integer bucketIndex) {
+    private void putPvmListToTargetBucketAfterClearAllIfSplit(List<PersistValueMeta> needAddNewList,
+                                                              List<PersistValueMeta> needUpdateList,
+                                                              List<PersistValueMeta> needDeleteList, Integer bucketIndex) {
         int relativeBucketIndex = bucketIndex - beginBucketIndex;
         // if split, current split number is new split number
         var currentSplitNumber = splitNumberTmp[relativeBucketIndex];
+
+        needAddNewList.addAll(needUpdateList);
 
         for (var pvm : needAddNewList) {
             var splitIndex = KeyHash.splitIndex(pvm.keyHash, currentSplitNumber, bucketIndex);
@@ -163,12 +172,19 @@ public class KeyBucketsInOneWalGroup {
             var list = listList.get(splitIndex);
             var keyBucket = list.get(relativeBucketIndex);
             if (keyBucket == null) {
-                keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, currentSplitNumber, null, 0, keyLoader.snowFlake);
+                keyBucket = new KeyBucket(slot, bucketIndex, splitIndex, currentSplitNumber, null, 0, keyLoader.snowFlake);
                 list.set(relativeBucketIndex, keyBucket);
             }
 
             var doPutResult = keyBucket.put(pvm.keyBytes, pvm.keyHash, pvm.expireAt, pvm.seq,
-                    pvm.extendBytes != null ? pvm.extendBytes : pvm.encode());
+                    pvm.extendBytes != null ? pvm.extendBytes : pvm.encode(), false);
+            if (!doPutResult.isPut()) {
+                // log all keys
+                log.warn("Failed keys to put: {}", needAddNewList.stream().map(pvmInner -> new String(pvmInner.keyBytes)).collect(Collectors.toList()));
+                throw new BucketFullException("Bucket full, slot: " + slot + ", bucket index: " + bucketIndex +
+                        ", split index: " + splitIndex + ", key: " + new String(pvm.keyBytes) + "");
+            }
+
             if (!doPutResult.isUpdate()) {
                 keyCountForStatsTmp[relativeBucketIndex]++;
             }
@@ -190,7 +206,7 @@ public class KeyBucketsInOneWalGroup {
         }
     }
 
-    private void putPvmListToTargetBucket(List<PersistValueMeta> pvmListThisBucket, Integer bucketIndex, boolean isMerge) {
+    void putPvmListToTargetBucket(List<PersistValueMeta> pvmListThisBucket, Integer bucketIndex, boolean isMerge) {
         int relativeBucketIndex = bucketIndex - beginBucketIndex;
         var currentSplitNumber = splitNumberTmp[relativeBucketIndex];
 
@@ -273,8 +289,7 @@ public class KeyBucketsInOneWalGroup {
             }
         }
 
-        var currentMaxSplitNumber = listList.size();
-        var canPutKeyCountThisBucket = KeyBucket.INIT_CAPACITY * currentMaxSplitNumber;
+        var canPutKeyCountThisBucket = KeyBucket.INIT_CAPACITY * currentSplitNumber;
 
         var newKeyCountNeedThisBucket = currentTotalKeyCountThisBucket + needAddNewList.size() - needDeleteList.size();
         int newCellCostNeedThisBucket = currentTotalCellCostThisBucket;
@@ -318,7 +333,7 @@ public class KeyBucketsInOneWalGroup {
         }
 
         if (needSplit) {
-            var newMaxSplitNumber = currentMaxSplitNumber * KeyLoader.SPLIT_MULTI_STEP;
+            var newMaxSplitNumber = currentSplitNumber * KeyLoader.SPLIT_MULTI_STEP;
             if (newMaxSplitNumber > KeyLoader.MAX_SPLIT_NUMBER) {
                 log.warn("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER +
                         ", slot: " + slot + ", bucket index: " + bucketIndex);
@@ -328,9 +343,11 @@ public class KeyBucketsInOneWalGroup {
                         ", slot: " + slot + ", bucket index: " + bucketIndex);
             }
 
-            for (int i = currentMaxSplitNumber; i < newMaxSplitNumber; i++) {
-                listList.add(prepareListInitWithNull());
-                assert listList.size() == i + 1;
+            if (listList.size() < newMaxSplitNumber) {
+                for (int i = listList.size(); i < newMaxSplitNumber; i++) {
+                    listList.add(prepareListInitWithNull());
+                    assert listList.size() == i + 1;
+                }
             }
             splitNumberTmp[relativeBucketIndex] = (byte) newMaxSplitNumber;
 
@@ -361,8 +378,6 @@ public class KeyBucketsInOneWalGroup {
                     existsWithoutNeedUpdatePvmList.add(pvm);
                 });
             }
-
-            needAddNewList.addAll(needUpdateList);
             needAddNewList.addAll(existsWithoutNeedUpdatePvmList);
 
             // clear all and then re-put
@@ -375,11 +390,9 @@ public class KeyBucketsInOneWalGroup {
             keyCountForStatsTmp[relativeBucketIndex] = 0;
 
             isSplit = true;
-        } else {
-            needAddNewList.addAll(needUpdateList);
         }
 
-        putPvmListToTargetBucketAfterClearAllIfSplit(needAddNewList, needDeleteList, bucketIndex);
+        putPvmListToTargetBucketAfterClearAllIfSplit(needAddNewList, needUpdateList, needDeleteList, bucketIndex);
     }
 
     void putAllPvmList(ArrayList<PersistValueMeta> pvmList, boolean isMerge) {

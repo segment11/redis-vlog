@@ -15,6 +15,8 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         and:
         def n = KeyBucket.INIT_CAPACITY + 1
         def shortValueList = Mock.prepareShortValueList(n)
+        def shortValueList2 = Mock.prepareShortValueList(n, (byte) 1)
+        shortValueList.addAll(shortValueList2)
 
         when:
         inner.putAll(shortValueList)
@@ -39,5 +41,6 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
         cleanup:
         keyLoader.cleanUp()
+        Consts.slotDir.deleteDir()
     }
 }

@@ -197,7 +197,11 @@ public class KeyBucket {
 
     private ByteBuffer buffer;
 
-    public byte[] encode() {
+    public byte[] encode(boolean doUpdateSeq) {
+        if (doUpdateSeq) {
+            updateSeq();
+        }
+
         buffer.position(0).putLong(lastUpdateSeq).putShort(size).putShort(cellCost);
         if (isSharedBytes()) {
             var dst = new byte[KEY_BUCKET_ONE_COST_SIZE];
@@ -256,15 +260,14 @@ public class KeyBucket {
     private record CanPutResult(boolean flag, boolean isUpdate) {
     }
 
-    // is put is always true
     record DoPutResult(boolean isPut, boolean isUpdate) {
     }
 
     public DoPutResult put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes) {
-        if (cellCost == capacity) {
-            throw new BucketFullException("Key bucket is full, " + this);
-        }
+        return put(keyBytes, keyHash, expireAt, seq, valueBytes, true);
+    }
 
+    public DoPutResult put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, boolean doUpdateSeq) {
         int cellCount = KVMeta.calcCellCount((short) keyBytes.length, (byte) valueBytes.length);
         if (cellCount >= INIT_CAPACITY) {
             throw new BucketFullException("Key with value bytes too large, key length=" + keyBytes.length
@@ -293,14 +296,16 @@ public class KeyBucket {
                 log.error("!!!Key bucket put fail but already delete old one already saved, need put manually, key: {}", new String(keyBytes));
                 log.error("!!!Key bucket put fail but already delete old one already saved, need put manually, key: {}", new String(keyBytes));
             }
-            throw new BucketFullException("Key bucket is full, this: " + this);
+            return new DoPutResult(false, false);
         }
 
         putTo(putToCellIndex, cellCount, keyHash, expireAt, seq, keyBytes, valueBytes);
         size++;
         cellCost += cellCount;
 
-        updateSeq();
+        if (doUpdateSeq) {
+            updateSeq();
+        }
         return new DoPutResult(true, isUpdate);
     }
 
