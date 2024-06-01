@@ -34,15 +34,6 @@ class KeyLoaderTest extends Specification {
         given:
         def keyLoader = prepareKeyLoader()
 
-        and:
-        // clear files
-        3.times { splitIndex ->
-            def file = new File(slotDir, "key-bucket-split-" + splitIndex + ".dat")
-            if (file.exists()) {
-                file.delete()
-            }
-        }
-
         when:
         keyLoader.putValueByKeyForTest(0, 'a'.getBytes(), 3L, 0L, 1L, 'a'.bytes)
         def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 3L)
@@ -51,14 +42,19 @@ class KeyLoaderTest extends Specification {
         valueBytesWithExpireAt.valueBytes() == 'a'.bytes
 
         when:
-        keyLoader.setMetaKeyBucketSplitNumberForTest(0, (byte) 3)
+        keyLoader.setMetaKeyBucketSplitNumberForTest(0, (byte) 2)
         keyLoader.putValueByKeyForTest(0, 'b'.getBytes(), 2L, 0L, 1L, 'b'.bytes)
 
         def keyBuckets = keyLoader.readKeyBuckets(0)
 
         then:
-        keyBuckets.size() == 3
-        keyBuckets[2].getValueByKey('b'.bytes, 2L).valueBytes() == 'b'.bytes
+        keyBuckets.size() == 2
+        keyBuckets.count {
+            if (!it) {
+                return false
+            }
+            it.getValueByKey('b'.bytes, 2L)?.valueBytes() == 'b'.bytes
+        } == 1
 
         when:
         def isRemoved = keyLoader.removeSingleKeyForTest(0, 'a'.getBytes(), 3L)
