@@ -50,7 +50,7 @@ public class KeyBucketsInOneWalGroup {
 
     private void readBeforePutBatch() {
         this.splitNumberTmp = keyLoader.getMetaKeyBucketSplitNumberBatch(beginBucketIndex, oneChargeBucketNumber);
-        int maxSplitNumber = 0;
+        byte maxSplitNumber = 1;
         for (int i = 0; i < oneChargeBucketNumber; i++) {
             if (splitNumberTmp[i] > maxSplitNumber) {
                 maxSplitNumber = splitNumberTmp[i];
@@ -103,7 +103,7 @@ public class KeyBucketsInOneWalGroup {
     }
 
     byte[][] writeAfterPutBatch() {
-        int maxSplitNumberTmp = 0;
+        byte maxSplitNumberTmp = 1;
         for (int i = 0; i < oneChargeBucketNumber; i++) {
             if (splitNumberTmp[i] > maxSplitNumberTmp) {
                 maxSplitNumberTmp = splitNumberTmp[i];
@@ -320,10 +320,12 @@ public class KeyBucketsInOneWalGroup {
         if (needSplit) {
             var newMaxSplitNumber = currentMaxSplitNumber * KeyLoader.SPLIT_MULTI_STEP;
             if (newMaxSplitNumber > KeyLoader.MAX_SPLIT_NUMBER) {
-                log.warn("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER + ", slot: " + slot + ", bucketIndex: " + bucketIndex);
+                log.warn("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER +
+                        ", slot: " + slot + ", bucket index: " + bucketIndex);
                 // log all keys
                 log.warn("Failed keys to put: {}", pvmListThisBucket.stream().map(pvm -> new String(pvm.keyBytes)).collect(Collectors.toList()));
-                throw new BucketFullException("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER);
+                throw new BucketFullException("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER +
+                        ", slot: " + slot + ", bucket index: " + bucketIndex);
             }
 
             for (int i = currentMaxSplitNumber; i < newMaxSplitNumber; i++) {
