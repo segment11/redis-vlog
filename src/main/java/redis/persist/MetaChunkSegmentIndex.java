@@ -83,6 +83,7 @@ public class MetaChunkSegmentIndex {
         try {
             raf.seek(0);
             raf.writeInt(segmentIndex);
+            inMemoryCachedByteBuffer.putInt(0, segmentIndex);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

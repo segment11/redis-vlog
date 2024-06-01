@@ -169,15 +169,15 @@ public class MetaChunkSegmentFlagSeq {
     void clear() {
         if (ConfForSlot.global.pureMemory) {
             fillSegmentFlagInit(inMemoryCachedBytes);
-            inMemoryCachedByteBuffer.position(0).put(inMemoryCachedBytes);
             return;
         }
 
         try {
-            fillSegmentFlagInit(inMemoryCachedBytes);
+            var tmpBytes = new byte[allCapacity];
+            fillSegmentFlagInit(tmpBytes);
             raf.seek(0);
-            raf.write(inMemoryCachedBytes);
-            inMemoryCachedByteBuffer.position(0).put(inMemoryCachedBytes);
+            raf.write(tmpBytes);
+            inMemoryCachedByteBuffer.position(0).put(tmpBytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

@@ -99,9 +99,10 @@ public class StatKeyCountInBuckets {
 
         try {
             var tmpBytes = new byte[allCapacity];
+            Arrays.fill(tmpBytes, (byte) 0);
             raf.seek(0);
             raf.write(tmpBytes);
-            Arrays.fill(inMemoryCachedBytes, (byte) 0);
+            inMemoryCachedByteBuffer.position(0).put(tmpBytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -114,8 +115,8 @@ public class StatKeyCountInBuckets {
 
         // sync all
         try {
-            raf.getFD().sync();
-            System.out.println("Stat key count in buckets sync all done");
+//            raf.getFD().sync();
+//            System.out.println("Stat key count in buckets sync all done");
             raf.close();
         } catch (IOException e) {
             throw new RuntimeException(e);

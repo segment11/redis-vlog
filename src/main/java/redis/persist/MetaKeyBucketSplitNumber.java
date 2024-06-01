@@ -146,15 +146,15 @@ public class MetaKeyBucketSplitNumber {
     void clear() {
         if (ConfForSlot.global.pureMemory) {
             Arrays.fill(inMemoryCachedBytes, (byte) 1);
-            inMemoryCachedByteBuffer.position(0).put(inMemoryCachedBytes);
             return;
         }
 
         try {
-            Arrays.fill(inMemoryCachedBytes, (byte) 1);
+            var tmpBytes = new byte[allCapacity];
+            Arrays.fill(tmpBytes, (byte) 1);
             raf.seek(0);
-            raf.write(inMemoryCachedBytes);
-            inMemoryCachedByteBuffer.position(0).put(inMemoryCachedBytes);
+            raf.write(tmpBytes);
+            inMemoryCachedByteBuffer.position(0).put(tmpBytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
