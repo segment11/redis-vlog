@@ -134,11 +134,11 @@ public class KeyBucket {
         this.cellCost = buffer.getShort();
     }
 
-    interface IterateCallBack {
+    public interface IterateCallBack {
         void call(long keyHash, long expireAt, long seq, byte[] keyBytes, byte[] valueBytes);
     }
 
-    void iterate(IterateCallBack callBack) {
+    public void iterate(IterateCallBack callBack) {
         for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
             int metaIndex = metaIndex(cellIndex);
             var cellHashValue = buffer.getLong(metaIndex);
