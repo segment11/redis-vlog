@@ -8,7 +8,7 @@ import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
 
 import static redis.CompressedValue.NO_EXPIRE;
-import static redis.persist.KeyLoader.*;
+import static redis.persist.KeyLoader.KEY_BUCKET_ONE_COST_SIZE;
 
 public class KeyBucket {
     public static final short INIT_CAPACITY = 46;
@@ -47,8 +47,6 @@ public class KeyBucket {
     long lastUpdateSeq;
 
     private final SnowFlake snowFlake;
-
-    long lastSplitCostNanos;
 
     private int oneCellOffset(int cellIndex) {
         return HEADER_LENGTH + capacity * ONE_CELL_META_LENGTH + cellIndex * ONE_CELL_LENGTH;
@@ -251,107 +249,6 @@ public class KeyBucket {
         return sb.toString();
     }
 
-    // because * 2 may be data skew
-    @Deprecated
-    KeyBucket[] split() {
-        // bucket per slot usually % 8 == 0, % 3 is better for data skew
-        var newSplitNumber = (byte) (splitNumber * SPLIT_MULTI_STEP);
-        if (newSplitNumber > MAX_SPLIT_NUMBER) {
-            throw new BucketFullException("Split number too large, new split number=" + newSplitNumber);
-        }
-
-        // calc meta and move cell
-        long begin = System.nanoTime();
-
-        var oldSplitNumber = splitNumber;
-        this.splitNumber = newSplitNumber;
-
-        var keyBuckets = new KeyBucket[SPLIT_MULTI_STEP];
-        // self split index not change
-        keyBuckets[0] = this;
-
-        for (int i = 1; i < SPLIT_MULTI_STEP; i++) {
-            // split others
-            // split index change
-            var splitKeyBucket = new KeyBucket(slot, bucketIndex, (byte) (splitIndex + i * oldSplitNumber),
-                    newSplitNumber, null, 0, this.snowFlake);
-            keyBuckets[i] = splitKeyBucket;
-        }
-
-        for (int cellIndex = 0; cellIndex < capacity; cellIndex++) {
-            int metaIndex = metaIndex(cellIndex);
-            var cellHashValue = buffer.getLong(metaIndex);
-            if (cellHashValue == NO_KEY || cellHashValue == PRE_KEY) {
-                continue;
-            }
-
-            var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
-            if (expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis()) {
-                clearOneExpired(cellIndex);
-                continue;
-            }
-
-            var seq = buffer.getLong(metaIndex + HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
-
-            int newSplitIndex = (int) Math.abs(cellHashValue % newSplitNumber);
-            boolean isStillInCurrentSplit = newSplitIndex == splitIndex;
-            if (isStillInCurrentSplit) {
-                continue;
-            }
-
-            KeyBucket targetKeyBucket = null;
-            for (var splitKeyBucket : keyBuckets) {
-                if (newSplitIndex == splitKeyBucket.splitIndex) {
-                    targetKeyBucket = splitKeyBucket;
-                    break;
-                }
-            }
-            if (targetKeyBucket == null) {
-                throw new IllegalStateException("New split index not match, new split index=" + newSplitIndex);
-            }
-
-            var cellOffset = oneCellOffset(cellIndex);
-            buffer.position(cellOffset);
-            var keyLength = buffer.getShort();
-            var keyBytes = new byte[keyLength];
-            buffer.get(keyBytes);
-            var valueLength = buffer.get();
-            var valueBytes = new byte[valueLength];
-            buffer.get(valueBytes);
-
-            var kvMeta = new KVMeta(cellOffset, keyLength, valueLength);
-
-            boolean isPut = targetKeyBucket.put(keyBytes, cellHashValue, expireAt, seq, valueBytes, null).isPut;
-            if (!isPut) {
-                throw new BucketFullException("Split put fail, key=" + new String(keyBytes));
-            }
-
-            // clear old cell
-            var cellCount = kvMeta.cellCount();
-            clearCell(cellIndex, cellCount);
-            size--;
-            cellCost -= cellCount;
-        }
-
-        for (var splitKeyBucket : keyBuckets) {
-            splitKeyBucket.updateSeq();
-        }
-
-        long costT = System.nanoTime() - begin;
-        // reduce log
-        if (slot == 0 && bucketIndex % 1024 == 0) {
-            log.info("Split cost time={}us, capacity={}, size={}, cell cost={}, slot={}, bucket index={}, new split number={}",
-                    costT / 1000, capacity, size, cellCost, slot, bucketIndex, newSplitNumber);
-        }
-        lastSplitCostNanos = costT;
-
-        // for debug, need delete
-//        for (int i = 0; i < keyBuckets.length; i++) {
-//            System.out.println(keyBuckets[i]);
-//        }
-        return keyBuckets;
-    }
-
     private void updateSeq() {
         lastUpdateSeq = snowFlake.nextId();
     }
@@ -363,43 +260,9 @@ public class KeyBucket {
     record DoPutResult(boolean isPut, boolean isUpdate) {
     }
 
-    public DoPutResult put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, KeyBucket[] afterPutKeyBuckets) {
+    public DoPutResult put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes) {
         if (cellCost == capacity) {
-            if (afterPutKeyBuckets == null) {
-                throw new BucketFullException("Key bucket is full, " + this);
-            }
-
-            var kbArray = split();
-            boolean isSplitFail = false;
-            for (int i = 0; i < kbArray.length; i++) {
-                var x = kbArray[i];
-                afterPutKeyBuckets[i] = x;
-
-                if (!isSplitFail) {
-                    isSplitFail = x.cellCost >= x.capacity;
-                }
-            }
-            if (isSplitFail) {
-                for (var x : kbArray) {
-                    log.warn("After split, key bucket is still full, one key bucket={}", x);
-                }
-                throw new BucketFullException("After split, key bucket is full, slot=" + slot + ", bucket index=" + bucketIndex);
-            }
-
-            // split number already changed
-            int newSplitIndex = (int) Math.abs(keyHash % splitNumber);
-            DoPutResult doPutResult = null;
-            for (var keyBucketAfterSplit : kbArray) {
-                if (newSplitIndex == keyBucketAfterSplit.splitIndex) {
-                    doPutResult = keyBucketAfterSplit.put(keyBytes, keyHash, expireAt, seq, valueBytes, null);
-                    keyBucketAfterSplit.updateSeq();
-                    break;
-                }
-            }
-            if (doPutResult == null) {
-                throw new IllegalStateException("New split index not match, new split index=" + newSplitIndex);
-            }
-            return doPutResult;
+            throw new BucketFullException("Key bucket is full, " + this);
         }
 
         int cellCount = KVMeta.calcCellCount((short) keyBytes.length, (byte) valueBytes.length);

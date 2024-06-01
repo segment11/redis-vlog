@@ -168,7 +168,7 @@ public class KeyBucketsInOneWalGroup {
             }
 
             var doPutResult = keyBucket.put(pvm.keyBytes, pvm.keyHash, pvm.expireAt, pvm.seq,
-                    pvm.extendBytes != null ? pvm.extendBytes : pvm.encode(), null);
+                    pvm.extendBytes != null ? pvm.extendBytes : pvm.encode());
             if (!doPutResult.isUpdate()) {
                 keyCountForStatsTmp[relativeBucketIndex]++;
             }
@@ -285,8 +285,7 @@ public class KeyBucketsInOneWalGroup {
             newCellCostNeedThisBucket -= pvm.cellCostInKeyBucket();
         }
 
-        // todo, change here
-        final int tolerance = 2;
+        final int tolerance = KeyLoader.KEY_OR_CELL_COST_TOLERANCE_COUNT_WHEN_CHECK_SPLIT;
 
         var needSplit = false;
         if (newKeyCountNeedThisBucket > canPutKeyCountThisBucket - tolerance) {
@@ -318,16 +317,13 @@ public class KeyBucketsInOneWalGroup {
             }
         }
 
-        // you can change here to split more
-        final int multiStep = 2;
-        final byte maxSplitNumber = 8;
         if (needSplit) {
-            var newMaxSplitNumber = currentMaxSplitNumber * multiStep;
-            if (newMaxSplitNumber > maxSplitNumber) {
-                log.warn("Bucket full, split number exceed max split number: " + maxSplitNumber + ", slot: " + slot + ", bucketIndex: " + bucketIndex);
+            var newMaxSplitNumber = currentMaxSplitNumber * KeyLoader.SPLIT_MULTI_STEP;
+            if (newMaxSplitNumber > KeyLoader.MAX_SPLIT_NUMBER) {
+                log.warn("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER + ", slot: " + slot + ", bucketIndex: " + bucketIndex);
                 // log all keys
                 log.warn("Failed keys to put: {}", pvmListThisBucket.stream().map(pvm -> new String(pvm.keyBytes)).collect(Collectors.toList()));
-                throw new BucketFullException("Bucket full, split number exceed max split number: " + maxSplitNumber);
+                throw new BucketFullException("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER);
             }
 
             for (int i = currentMaxSplitNumber; i < newMaxSplitNumber; i++) {
