@@ -19,7 +19,9 @@ public class MetaChunkSegmentIndex {
     private final ByteBuffer inMemoryCachedByteBuffer;
 
     byte[] getInMemoryCachedBytes() {
-        return inMemoryCachedBytes;
+        var dst = new byte[inMemoryCachedBytes.length];
+        inMemoryCachedByteBuffer.position(0).get(dst);
+        return dst;
     }
 
     void overwriteInMemoryCachedBytes(byte[] bytes) {
@@ -28,14 +30,14 @@ public class MetaChunkSegmentIndex {
         }
 
         if (ConfForSlot.global.pureMemory) {
-            System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
+            inMemoryCachedByteBuffer.position(0).put(bytes);
             return;
         }
 
         try {
             raf.seek(0);
             raf.write(bytes);
-            System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
+            inMemoryCachedByteBuffer.position(0).put(bytes);
         } catch (IOException e) {
             throw new RuntimeException("Repl meta key bucket split number, write file error", e);
         }
@@ -73,8 +75,8 @@ public class MetaChunkSegmentIndex {
     }
 
     void set(int segmentIndex) {
-        this.inMemoryCachedByteBuffer.putInt(0, segmentIndex);
         if (ConfForSlot.global.pureMemory) {
+            this.inMemoryCachedByteBuffer.putInt(0, segmentIndex);
             return;
         }
 
@@ -101,8 +103,8 @@ public class MetaChunkSegmentIndex {
 
         // sync all
         try {
-            raf.getFD().sync();
-            System.out.println("Meta chunk segment index sync all done");
+//            raf.getFD().sync();
+//            System.out.println("Meta chunk segment index sync all done");
             raf.close();
         } catch (IOException e) {
             throw new RuntimeException(e);

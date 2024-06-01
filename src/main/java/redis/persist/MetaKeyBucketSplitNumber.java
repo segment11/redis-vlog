@@ -8,6 +8,7 @@ import redis.ConfForSlot;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class MetaKeyBucketSplitNumber {
@@ -19,23 +20,28 @@ public class MetaKeyBucketSplitNumber {
 
     private final byte[] inMemoryCachedBytes;
 
+    private final ByteBuffer inMemoryCachedByteBuffer;
+
     byte[] getInMemoryCachedBytes() {
-        return inMemoryCachedBytes;
+        var dst = new byte[inMemoryCachedBytes.length];
+        inMemoryCachedByteBuffer.position(0).get(dst);
+        return dst;
     }
 
     void overwriteInMemoryCachedBytes(byte[] bytes) {
         if (bytes.length != inMemoryCachedBytes.length) {
             throw new IllegalArgumentException("Repl meta key bucket split number, bytes length not match");
         }
-        System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
 
         if (ConfForSlot.global.pureMemory) {
+            inMemoryCachedByteBuffer.position(0).put(bytes);
             return;
         }
 
         try {
             raf.seek(0);
             raf.write(bytes);
+            inMemoryCachedByteBuffer.position(0).put(bytes);
         } catch (IOException e) {
             throw new RuntimeException("Repl meta key bucket split number, write file error", e);
         }
@@ -53,6 +59,7 @@ public class MetaKeyBucketSplitNumber {
         Arrays.fill(inMemoryCachedBytes, (byte) 1);
 
         if (ConfForSlot.global.pureMemory) {
+            this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
             return;
         }
 
@@ -71,13 +78,21 @@ public class MetaKeyBucketSplitNumber {
             raf.read(inMemoryCachedBytes);
             log.warn("Read meta key bucket split number file success, file: {}, slot: {}, all capacity: {}KB",
                     file, slot, allCapacity / 1024);
+
+            var sb = new StringBuilder();
+            for (int i = 0; i < 10; i++) {
+                sb.append(inMemoryCachedBytes[i]).append(", ");
+            }
+            log.info("For debug: first 10 key bucket split number: [{}]", sb);
         }
+
+        this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
     }
 
     // for unit test
     void setForTest(int bucketIndex, byte splitNumber) {
         if (ConfForSlot.global.pureMemory) {
-            inMemoryCachedBytes[bucketIndex] = splitNumber;
+            inMemoryCachedByteBuffer.put(bucketIndex, splitNumber);
             return;
         }
 
@@ -85,7 +100,7 @@ public class MetaKeyBucketSplitNumber {
         try {
             raf.seek(offset);
             raf.writeByte(splitNumber);
-            inMemoryCachedBytes[bucketIndex] = splitNumber;
+            inMemoryCachedByteBuffer.put(bucketIndex, splitNumber);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -93,7 +108,7 @@ public class MetaKeyBucketSplitNumber {
 
     void setBatch(int beginBucketIndex, byte[] splitNumberArray) {
         if (ConfForSlot.global.pureMemory) {
-            System.arraycopy(splitNumberArray, 0, inMemoryCachedBytes, beginBucketIndex, splitNumberArray.length);
+            inMemoryCachedByteBuffer.position(beginBucketIndex).put(splitNumberArray);
             return;
         }
 
@@ -101,24 +116,26 @@ public class MetaKeyBucketSplitNumber {
         try {
             raf.seek(offset);
             raf.write(splitNumberArray);
-            System.arraycopy(splitNumberArray, 0, inMemoryCachedBytes, beginBucketIndex, splitNumberArray.length);
+            inMemoryCachedByteBuffer.position(beginBucketIndex).put(splitNumberArray);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
     byte[] getBatch(int beginBucketIndex, int bucketCount) {
-        return Arrays.copyOfRange(inMemoryCachedBytes, beginBucketIndex, beginBucketIndex + bucketCount);
+        var dst = new byte[bucketCount];
+        inMemoryCachedByteBuffer.position(beginBucketIndex).get(dst);
+        return dst;
     }
 
     byte get(int bucketIndex) {
-        return inMemoryCachedBytes[bucketIndex];
+        return inMemoryCachedByteBuffer.get(bucketIndex);
     }
 
     byte maxSplitNumber() {
         byte max = 1;
         for (int j = 0; j < allCapacity; j++) {
-            var splitNumber = inMemoryCachedBytes[j];
+            var splitNumber = inMemoryCachedByteBuffer.get(j);
             if (splitNumber > max) {
                 max = splitNumber;
             }
@@ -129,13 +146,15 @@ public class MetaKeyBucketSplitNumber {
     void clear() {
         if (ConfForSlot.global.pureMemory) {
             Arrays.fill(inMemoryCachedBytes, (byte) 1);
+            inMemoryCachedByteBuffer.position(0).put(inMemoryCachedBytes);
             return;
         }
 
         try {
+            Arrays.fill(inMemoryCachedBytes, (byte) 1);
             raf.seek(0);
             raf.write(inMemoryCachedBytes);
-            Arrays.fill(inMemoryCachedBytes, (byte) 1);
+            inMemoryCachedByteBuffer.position(0).put(inMemoryCachedBytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -148,8 +167,8 @@ public class MetaKeyBucketSplitNumber {
 
         // sync all
         try {
-            raf.getFD().sync();
-            System.out.println("Meta key bucket split number sync all done");
+//            raf.getFD().sync();
+//            System.out.println("Meta key bucket split number sync all done");
             raf.close();
         } catch (IOException e) {
             throw new RuntimeException(e);

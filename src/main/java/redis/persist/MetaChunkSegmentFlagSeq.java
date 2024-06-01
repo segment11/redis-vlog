@@ -33,23 +33,26 @@ public class MetaChunkSegmentFlagSeq {
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
-    public byte[] getInMemoryCachedBytes() {
-        return inMemoryCachedBytes;
+    byte[] getInMemoryCachedBytes() {
+        var dst = new byte[inMemoryCachedBytes.length];
+        inMemoryCachedByteBuffer.position(0).get(dst);
+        return dst;
     }
 
-    public void overwriteInMemoryCachedBytes(byte[] bytes) {
+    void overwriteInMemoryCachedBytes(byte[] bytes) {
         if (bytes.length != inMemoryCachedBytes.length) {
             throw new IllegalArgumentException("Repl chunk segment flag seq, bytes length not match");
         }
-        System.arraycopy(bytes, 0, inMemoryCachedBytes, 0, bytes.length);
 
         if (ConfForSlot.global.pureMemory) {
+            inMemoryCachedByteBuffer.position(0).put(bytes);
             return;
         }
 
         try {
             raf.seek(0);
             raf.write(bytes);
+            inMemoryCachedByteBuffer.position(0).put(bytes);
         } catch (IOException e) {
             throw new RuntimeException("Repl chunk segment flag seq, write file error", e);
         }
@@ -166,15 +169,15 @@ public class MetaChunkSegmentFlagSeq {
     void clear() {
         if (ConfForSlot.global.pureMemory) {
             fillSegmentFlagInit(inMemoryCachedBytes);
+            inMemoryCachedByteBuffer.position(0).put(inMemoryCachedBytes);
             return;
         }
 
         try {
-            var tmpBytes = new byte[allCapacity];
-            fillSegmentFlagInit(tmpBytes);
-            raf.seek(0);
-            raf.write(tmpBytes);
             fillSegmentFlagInit(inMemoryCachedBytes);
+            raf.seek(0);
+            raf.write(inMemoryCachedBytes);
+            inMemoryCachedByteBuffer.position(0).put(inMemoryCachedBytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -187,8 +190,8 @@ public class MetaChunkSegmentFlagSeq {
 
         // sync all
         try {
-            raf.getFD().sync();
-            System.out.println("Meta chunk segment flag seq sync all done");
+//            raf.getFD().sync();
+//            System.out.println("Meta chunk segment flag seq sync all done");
             raf.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
