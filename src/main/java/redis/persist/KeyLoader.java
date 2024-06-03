@@ -90,7 +90,7 @@ public class KeyLoader {
     public static final byte MAX_SPLIT_NUMBER = 9;
     static final int SPLIT_MULTI_STEP = 3;
     // you can change here, the bigger, key buckets will split more times, like load factor
-    // compare to KeyBucket.INIT_CAPACITY = 46
+    // compare to KeyBucket.INIT_CAPACITY
     static final int KEY_OR_CELL_COST_TOLERANCE_COUNT_WHEN_CHECK_SPLIT = 0;
 
     private LibC libC;

@@ -438,10 +438,10 @@ public class MultiWorkerServer extends Launcher {
             }
             System.out.println("Multi slot request eventloop threads stopped");
 
-//            for (var netWorkerEventloop : netWorkerEventloopArray) {
-//                netWorkerEventloop.breakEventloop();
-//            }
-//            System.out.println("Net worker eventloop threads stopped");
+            for (var netWorkerEventloop : netWorkerEventloopArray) {
+                netWorkerEventloop.breakEventloop();
+            }
+            System.out.println("Net worker eventloop threads stopped");
 
             // disconnect all clients
             socketInspector.closeAll();
@@ -505,8 +505,8 @@ public class MultiWorkerServer extends Launcher {
                         if (config.getChild("bucket.lruPerFd.maxSize").hasValue()) {
                             c.confBucket.lruPerFd.maxSize = config.get(toInt, "bucket.lruPerFd.maxSize");
                         } else {
-                            // default all buckets in cache
-                            c.confBucket.lruPerFd.maxSize = c.confBucket.bucketsPerSlot;
+                            // default 50% compressed buckets in cache
+                            c.confBucket.lruPerFd.maxSize = c.confBucket.bucketsPerSlot / 2;
                         }
 
                         // override chunk conf
