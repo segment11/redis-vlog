@@ -498,6 +498,9 @@ public class MultiWorkerServer extends Launcher {
                         if (c.confBucket.bucketsPerSlot % 1024 != 0) {
                             throw new IllegalStateException("Bucket count per slot should be multiple of 1024");
                         }
+                        if (config.getChild("bucket.initialSplitNumber").hasValue()) {
+                            c.confBucket.initialSplitNumber = config.get(ofInteger(), "bucket.initialSplitNumber").byteValue();
+                        }
 
                         if (config.getChild("bucket.lruPerFd.maxSize").hasValue()) {
                             c.confBucket.lruPerFd.maxSize = config.get(toInt, "bucket.lruPerFd.maxSize");

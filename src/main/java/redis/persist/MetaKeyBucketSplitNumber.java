@@ -16,6 +16,7 @@ public class MetaKeyBucketSplitNumber {
 
     private final byte slot;
     private final int allCapacity;
+    private final byte initialSplitNumber;
     private RandomAccessFile raf;
 
     private final byte[] inMemoryCachedBytes;
@@ -53,10 +54,12 @@ public class MetaKeyBucketSplitNumber {
         this.slot = slot;
 
         this.allCapacity = ConfForSlot.global.confBucket.bucketsPerSlot;
+        this.initialSplitNumber = ConfForSlot.global.confBucket.initialSplitNumber;
+        log.info("Meta key bucket initial split number: {}", initialSplitNumber);
 
         // max 512KB
         this.inMemoryCachedBytes = new byte[allCapacity];
-        Arrays.fill(inMemoryCachedBytes, (byte) 1);
+        Arrays.fill(inMemoryCachedBytes, initialSplitNumber);
 
         if (ConfForSlot.global.pureMemory) {
             this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
@@ -145,13 +148,13 @@ public class MetaKeyBucketSplitNumber {
 
     void clear() {
         if (ConfForSlot.global.pureMemory) {
-            Arrays.fill(inMemoryCachedBytes, (byte) 1);
+            Arrays.fill(inMemoryCachedBytes, initialSplitNumber);
             return;
         }
 
         try {
             var tmpBytes = new byte[allCapacity];
-            Arrays.fill(tmpBytes, (byte) 1);
+            Arrays.fill(tmpBytes, initialSplitNumber);
             raf.seek(0);
             raf.write(tmpBytes);
             inMemoryCachedByteBuffer.position(0).put(tmpBytes);

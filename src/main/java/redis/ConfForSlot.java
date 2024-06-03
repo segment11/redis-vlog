@@ -70,13 +70,18 @@ public enum ConfForSlot {
     }
 
     public enum ConfBucket {
-        debugMode(KeyBucket.DEFAULT_BUCKETS_PER_SLOT), c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT), c10m(65536), c100m(KeyBucket.MAX_BUCKETS_PER_SLOT);
+        debugMode(KeyBucket.DEFAULT_BUCKETS_PER_SLOT, (byte) 1),
+        c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT, (byte) 1),
+        c10m(KeyBucket.MAX_BUCKETS_PER_SLOT / 2, (byte) 1),
+        c100m(KeyBucket.MAX_BUCKETS_PER_SLOT, (byte) 3);
 
-        ConfBucket(int bucketsPerSlot) {
+        ConfBucket(int bucketsPerSlot, byte initialSplitNumber) {
             this.bucketsPerSlot = bucketsPerSlot;
+            this.initialSplitNumber = initialSplitNumber;
         }
 
         public int bucketsPerSlot;
+        public byte initialSplitNumber;
 
         // 4KB one segment, 25 * 1000 * 4KB = 100MB
         public ConfLru lruPerFd = new ConfLru(1000 * 25);
@@ -133,7 +138,7 @@ public enum ConfForSlot {
         debugMode(16, 1000, 1000),
         c1m(16, 1000, 1000),
         c10m(64, 1000, 1000),
-        c100m(128, 1000, 1000);
+        c100m(64, 1000, 1000);
 
         ConfWal(int oneChargeBucketNumber, int valueSizeTrigger, int shortValueSizeTrigger) {
             this.oneChargeBucketNumber = oneChargeBucketNumber;

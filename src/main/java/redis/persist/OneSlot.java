@@ -102,8 +102,7 @@ public class OneSlot {
             dynConfig.setMasterUuid(masterUuid);
         }
 
-        int bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
-        var walGroupNumber = bucketsPerSlot / ConfForSlot.global.confWal.oneChargeBucketNumber;
+        var walGroupNumber = Wal.calcWalGroupNumber();
         this.walArray = new Wal[walGroupNumber];
 
         var walSharedFile = new File(slotDir, "wal.dat");

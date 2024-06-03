@@ -130,14 +130,15 @@ public class Wal {
     }
 
     // each bucket group use 128K in shared file
-    // chunk batch write 4 segments, each segment has 3 or 4 sub blocks, each blocks may contain 10-40 keys, 128K is enough for 1 batch
-    private static final int ONE_GROUP_SIZE = 1024 * 128;
+    // chunk batch write 4 segments, each segment has 3 or 4 sub blocks, each blocks may contain 10-40 keys, 64K is enough for 1 batch
+    // the smaller, latency will be better, MAX_WAL_GROUP_NUMBER will be larger, wal memory will be larger
+    private static final int ONE_GROUP_SIZE = 1024 * 64;
     // for prepend
-    public static final byte[] K128 = new byte[ONE_GROUP_SIZE];
+    public static final byte[] K64 = new byte[ONE_GROUP_SIZE];
     public static final byte[] INIT_M4 = new byte[1024 * 1024 * 4];
     public static final int INIT_M4_TIMES = 1024 * 4 / 128;
-    // 1 file max 2GB, 2GB / 128K = 16384
-    public static final int MAX_WAL_GROUP_NUMBER = 16384;
+    // 1 file max 2GB, 2GB / 64K = 32K groups
+    public static final int MAX_WAL_GROUP_NUMBER = 32 * 1024;
 
     // current wal group write position in target group of wal file
     private final int[] writePositionArray = new int[MAX_WAL_GROUP_NUMBER];
@@ -150,6 +151,10 @@ public class Wal {
 
     static int calWalGroupIndex(int bucketIndex) {
         return bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
+    }
+
+    static int calcWalGroupNumber() {
+        return ConfForSlot.global.confBucket.bucketsPerSlot / ConfForSlot.global.confWal.oneChargeBucketNumber;
     }
 
     private final RandomAccessFile walSharedFile;
@@ -208,7 +213,7 @@ public class Wal {
             var raf = isShortValue ? walSharedFileShortValue : walSharedFile;
             try {
                 raf.seek(targetGroupBeginOffset);
-                raf.write(K128);
+                raf.write(K64);
             } catch (IOException e) {
                 log.error("Truncate wal group error", e);
             }
