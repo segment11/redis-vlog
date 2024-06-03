@@ -80,7 +80,9 @@ class KeyBucketTest extends Specification {
         keyBucket.cellCost == 1
 
         when:
-        var longKeyBytes = 'a'.padRight(100, 'a').bytes
+        // 2 + 90 + 1 + 6 = 99
+        // 99 / 54 = 1, cell count = 3
+        var longKeyBytes = 'a'.padRight(90, 'a').bytes
         keyBucket.put(longKeyBytes, 9797L, 0L, 1L, 'long a'.bytes)
 
         then:

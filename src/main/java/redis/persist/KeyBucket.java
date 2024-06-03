@@ -11,17 +11,16 @@ import static redis.CompressedValue.NO_EXPIRE;
 import static redis.persist.KeyLoader.KEY_BUCKET_ONE_COST_SIZE;
 
 public class KeyBucket {
-    public static final short INIT_CAPACITY = 46;
+    public static final short INIT_CAPACITY = 52;
     // if big, wal will cost too much memory
     public static final int MAX_BUCKETS_PER_SLOT = KeyLoader.MAX_KEY_BUCKET_COUNT_PER_FD;
     // readonly
     static final byte[] EMPTY_BYTES = new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE];
     public static final int DEFAULT_BUCKETS_PER_SLOT = 16384;
 
-    // key length short 2 + key length <= 32 + value length byte 1 + (pvm length 24 or short value case number 17 / string 19 ) < 64
+    // key length short 2 + key length <= 32 + value length byte 1 + (pvm length 14 or short value case number 17 / string 19 ) <= 54
     // if key length > 32, refer CompressedValue.KEY_MAX_LENGTH, one key may cost 2 cells
-    // (8 + 8) * 50 + 64 * 50 = 4000, in one 4KB page
-    private static final int ONE_CELL_LENGTH = 64;
+    private static final int ONE_CELL_LENGTH = 54;
     private static final int HASH_VALUE_LENGTH = 8;
     private static final int EXPIRE_AT_VALUE_LENGTH = 8;
     private static final int SEQ_VALUE_LENGTH = 8;
@@ -45,6 +44,7 @@ public class KeyBucket {
     short cellCost;
 
     long lastUpdateSeq;
+    byte lastUpdateSplitNumber;
 
     private final SnowFlake snowFlake;
 
@@ -92,6 +92,7 @@ public class KeyBucket {
         this.size = 0;
         this.cellCost = 0;
         this.lastUpdateSeq = 0L;
+        this.lastUpdateSplitNumber = 0;
     }
 
     public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] bytes, SnowFlake snowFlake) {
@@ -130,8 +131,14 @@ public class KeyBucket {
         }
 
         this.lastUpdateSeq = buffer.getLong();
+        this.lastUpdateSplitNumber = (byte) (lastUpdateSeq & 0b1111);
         this.size = buffer.getShort();
         this.cellCost = buffer.getShort();
+
+        if (this.lastUpdateSeq != 0 && lastUpdateSplitNumber != splitNumber) {
+            throw new IllegalStateException("Key bucket last update split number not match, last=" + lastUpdateSplitNumber + ", current=" + splitNumber
+                    + ", slot=" + slot + ", bucket index=" + bucketIndex + ", split index=" + splitIndex);
+        }
     }
 
     public interface IterateCallBack {
@@ -254,7 +261,10 @@ public class KeyBucket {
     }
 
     private void updateSeq() {
-        lastUpdateSeq = snowFlake.nextId();
+        long seq = snowFlake.nextId();
+        // last 4 bits for split number for data check, max split number is 8
+        // can not compare bigger or smaller, just compare equal or not, !important
+        lastUpdateSeq = seq << 4 | splitNumber;
     }
 
     private record CanPutResult(boolean flag, boolean isUpdate) {

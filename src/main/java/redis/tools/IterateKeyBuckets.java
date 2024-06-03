@@ -15,7 +15,7 @@ public class IterateKeyBuckets {
     public static void main(String[] args) throws IOException {
         byte slot = 0;
         byte splitIndex = 0;
-        byte splitNumber = 8;
+        byte splitNumber = 1;
 
         for (int i = 0; i < splitNumber; i++) {
             iterateOneSplitIndex(slot, (byte) i, splitNumber);
@@ -25,7 +25,7 @@ public class IterateKeyBuckets {
         for (var entry : keysByBucketIndex.entrySet()) {
             var bucketIndex = entry.getKey();
             Set<String> keys = entry.getValue();
-            if (keys.size() > 46) {
+            if (keys.size() > KeyBucket.INIT_CAPACITY) {
                 System.out.println("bucket index: " + bucketIndex + ", size: " + keys.size() + ", keys: " + keys);
             }
 
