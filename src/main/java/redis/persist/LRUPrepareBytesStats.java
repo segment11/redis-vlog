@@ -4,7 +4,7 @@ import java.util.ArrayList;
 
 public class LRUPrepareBytesStats {
     enum Type {
-        fd_key_bucket, fd_chunk_data, big_string, kv_by_wal_group
+        fd_key_bucket, fd_chunk_data, big_string, kv_read_group_by_wal_group, kv_write_in_wal
     }
 
     record One(Type type, int lruMemoryRequireMB, boolean isExact) {
@@ -14,6 +14,10 @@ public class LRUPrepareBytesStats {
 
     static void add(Type type, int lruMemoryRequireMB, boolean isExact) {
         list.add(new One(type, lruMemoryRequireMB, isExact));
+    }
+
+    static int sum() {
+        return list.stream().mapToInt(one -> one.lruMemoryRequireMB).sum();
     }
 
     static int sum(Type type) {

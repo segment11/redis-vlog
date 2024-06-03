@@ -115,6 +115,8 @@ public class OneSlot {
             }
         }
         this.raf = new RandomAccessFile(walSharedFile, "rw");
+        var lruMemoryRequireMBWriteInWal = walSharedFile.length() / 1024 / 1024;
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_write_in_wal, (int) lruMemoryRequireMBWriteInWal, false);
 
         var walSharedFileShortValue = new File(slotDir, "wal-short-value.dat");
         if (!walSharedFileShortValue.exists()) {
@@ -126,6 +128,8 @@ public class OneSlot {
             }
         }
         this.rafShortValue = new RandomAccessFile(walSharedFileShortValue, "rw");
+        var lruMemoryRequireMBWriteInWal2 = walSharedFileShortValue.length() / 1024 / 1024;
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_write_in_wal, (int) lruMemoryRequireMBWriteInWal2, false);
 
         for (int i = 0; i < walGroupNumber; i++) {
             var wal = new Wal(slot, i, raf, rafShortValue, snowFlake);
@@ -136,13 +140,13 @@ public class OneSlot {
         int maxSizeForAllWalGroups = ConfForSlot.global.lruKeyAndCompressedValueEncoded.maxSize;
         var maxSizeForEachWalGroup = maxSizeForAllWalGroups / walGroupNumber;
         final var maybeOneCompressedValueEncodedLength = 200;
-        var lruMemoryRequireMB = maxSizeForAllWalGroups * maybeOneCompressedValueEncodedLength / 1024 / 1024;
+        var lruMemoryRequireMBReadGroupByWalGroup = maxSizeForAllWalGroups * maybeOneCompressedValueEncodedLength / 1024 / 1024;
         log.info("LRU max size for each wal group: {}, all wal group number: {}, maybe one compressed value encoded length is {}B, memory require: {}MB",
                 maxSizeForEachWalGroup,
                 walGroupNumber,
                 maybeOneCompressedValueEncodedLength,
-                lruMemoryRequireMB);
-        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_by_wal_group, lruMemoryRequireMB, false);
+                lruMemoryRequireMBReadGroupByWalGroup);
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_read_group_by_wal_group, lruMemoryRequireMBReadGroupByWalGroup, false);
 
         for (int walGroupIndex = 0; walGroupIndex < walGroupNumber; walGroupIndex++) {
             LRUMap<String, byte[]> lru = new LRUMap<>(maxSizeForEachWalGroup);
@@ -1084,10 +1088,15 @@ public class OneSlot {
                         (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket), labelValues));
                 map.put("lru_prepare_mb_fd_chunk_data_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_chunk_data), labelValues));
-                map.put("lru_prepare_mb_kv_by_wal_group_all_slots", new SimpleGauge.ValueWithLabelValues(
-                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_by_wal_group), labelValues));
+                map.put("lru_prepare_mb_kv_read_group_by_wal_group_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_read_group_by_wal_group), labelValues));
+                map.put("lru_prepare_mb_kv_write_in_wal_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_write_in_wal), labelValues));
                 map.put("lru_prepare_mb_kv_big_string_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.big_string), labelValues));
+
+                map.put("lru_prepare_mb_all", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(), labelValues));
             }
 
             map.put("kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
