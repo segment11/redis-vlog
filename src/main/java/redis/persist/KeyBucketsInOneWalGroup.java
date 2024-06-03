@@ -165,7 +165,6 @@ public class KeyBucketsInOneWalGroup {
         var currentSplitNumber = splitNumberTmp[relativeBucketIndex];
 
         needAddNewList.addAll(needUpdateList);
-
         for (var pvm : needAddNewList) {
             var splitIndex = KeyHash.splitIndex(pvm.keyHash, currentSplitNumber, bucketIndex);
 
@@ -213,6 +212,75 @@ public class KeyBucketsInOneWalGroup {
         List<PersistValueMeta> needAddNewList = new ArrayList<>();
         List<PersistValueMeta> needDeleteList = new ArrayList<>();
         List<PersistValueMeta> needUpdateList = new ArrayList<>();
+
+        var splitMultiStep = checkIfNeedSplit(pvmListThisBucket, needAddNewList, needUpdateList, needDeleteList,
+                bucketIndex, currentSplitNumber, isMerge);
+        if (splitMultiStep > 1) {
+            var newMaxSplitNumber = currentSplitNumber * splitMultiStep;
+            if (newMaxSplitNumber > KeyLoader.MAX_SPLIT_NUMBER) {
+                log.warn("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER +
+                        ", slot: " + slot + ", bucket index: " + bucketIndex);
+                // log all keys
+                log.warn("Failed keys to put: {}", pvmListThisBucket.stream().map(pvm -> new String(pvm.keyBytes)).collect(Collectors.toList()));
+                throw new BucketFullException("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER +
+                        ", slot: " + slot + ", bucket index: " + bucketIndex);
+            }
+
+            if (listList.size() < newMaxSplitNumber) {
+                for (int i = listList.size(); i < newMaxSplitNumber; i++) {
+                    listList.add(prepareListInitWithNull());
+                    assert listList.size() == i + 1;
+                }
+            }
+            splitNumberTmp[relativeBucketIndex] = (byte) newMaxSplitNumber;
+
+            // rehash
+            List<PersistValueMeta> existsWithoutNeedUpdatePvmList = new ArrayList<>();
+            for (var list : listList) {
+                var keyBucket = list.get(relativeBucketIndex);
+                if (keyBucket == null) {
+                    continue;
+                }
+
+                keyBucket.iterate((keyHash, expireAt, seq, keyBytes, valueBytes) -> {
+                    if (!needUpdateList.isEmpty()) {
+                        for (var needUpdatePvm : needUpdateList) {
+                            if (needUpdatePvm.keyHash == keyHash && Arrays.equals(needUpdatePvm.keyBytes, keyBytes)) {
+                                return;
+                            }
+                        }
+                    }
+
+                    var pvm = new PersistValueMeta();
+                    pvm.expireAt = expireAt;
+                    pvm.seq = seq;
+                    pvm.keyBytes = keyBytes;
+                    pvm.keyHash = keyHash;
+                    pvm.bucketIndex = bucketIndex;
+                    pvm.extendBytes = valueBytes;
+                    existsWithoutNeedUpdatePvmList.add(pvm);
+                });
+            }
+            needAddNewList.addAll(existsWithoutNeedUpdatePvmList);
+
+            // clear all and then re-put
+            for (var list : listList) {
+                var keyBucket = list.get(relativeBucketIndex);
+                if (keyBucket != null) {
+                    keyBucket.clearAll();
+                }
+            }
+            keyCountForStatsTmp[relativeBucketIndex] = 0;
+
+            isSplit = true;
+        }
+
+        putPvmListToTargetBucketAfterClearAllIfSplit(needAddNewList, needUpdateList, needDeleteList, bucketIndex);
+    }
+
+    int checkIfNeedSplit(List<PersistValueMeta> pvmListThisBucket, List<PersistValueMeta> needAddNewList, List<PersistValueMeta> needUpdateList,
+                         List<PersistValueMeta> needDeleteList, int bucketIndex, byte currentSplitNumber, boolean isMerge) {
+        var relativeBucketIndex = bucketIndex - beginBucketIndex;
 
         int currentTotalKeyCountThisBucket = 0;
         int currentTotalCellCostThisBucket = 0;
@@ -344,66 +412,10 @@ public class KeyBucketsInOneWalGroup {
         }
 
         if (needSplit) {
-            var newMaxSplitNumber = currentSplitNumber * splitMultiStep;
-            if (newMaxSplitNumber > KeyLoader.MAX_SPLIT_NUMBER) {
-                log.warn("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER +
-                        ", slot: " + slot + ", bucket index: " + bucketIndex);
-                // log all keys
-                log.warn("Failed keys to put: {}", pvmListThisBucket.stream().map(pvm -> new String(pvm.keyBytes)).collect(Collectors.toList()));
-                throw new BucketFullException("Bucket full, split number exceed max split number: " + KeyLoader.MAX_SPLIT_NUMBER +
-                        ", slot: " + slot + ", bucket index: " + bucketIndex);
-            }
-
-            if (listList.size() < newMaxSplitNumber) {
-                for (int i = listList.size(); i < newMaxSplitNumber; i++) {
-                    listList.add(prepareListInitWithNull());
-                    assert listList.size() == i + 1;
-                }
-            }
-            splitNumberTmp[relativeBucketIndex] = (byte) newMaxSplitNumber;
-
-            // rehash
-            List<PersistValueMeta> existsWithoutNeedUpdatePvmList = new ArrayList<>();
-            for (var list : listList) {
-                var keyBucket = list.get(relativeBucketIndex);
-                if (keyBucket == null) {
-                    continue;
-                }
-
-                keyBucket.iterate((keyHash, expireAt, seq, keyBytes, valueBytes) -> {
-                    if (!needUpdateList.isEmpty()) {
-                        for (var needUpdatePvm : needUpdateList) {
-                            if (needUpdatePvm.keyHash == keyHash && Arrays.equals(needUpdatePvm.keyBytes, keyBytes)) {
-                                return;
-                            }
-                        }
-                    }
-
-                    var pvm = new PersistValueMeta();
-                    pvm.expireAt = expireAt;
-                    pvm.seq = seq;
-                    pvm.keyBytes = keyBytes;
-                    pvm.keyHash = keyHash;
-                    pvm.bucketIndex = bucketIndex;
-                    pvm.extendBytes = valueBytes;
-                    existsWithoutNeedUpdatePvmList.add(pvm);
-                });
-            }
-            needAddNewList.addAll(existsWithoutNeedUpdatePvmList);
-
-            // clear all and then re-put
-            for (var list : listList) {
-                var keyBucket = list.get(relativeBucketIndex);
-                if (keyBucket != null) {
-                    keyBucket.clearAll();
-                }
-            }
-            keyCountForStatsTmp[relativeBucketIndex] = 0;
-
-            isSplit = true;
+            return splitMultiStep;
+        } else {
+            return 1;
         }
-
-        putPvmListToTargetBucketAfterClearAllIfSplit(needAddNewList, needUpdateList, needDeleteList, bucketIndex);
     }
 
     void putAllPvmList(ArrayList<PersistValueMeta> pvmList, boolean isMerge) {
@@ -420,15 +432,19 @@ public class KeyBucketsInOneWalGroup {
     void putAll(Collection<Wal.V> shortValueList) {
         var pvmList = new ArrayList<PersistValueMeta>();
         for (var v : shortValueList) {
-            var pvm = new PersistValueMeta();
-            pvm.expireAt = v.expireAt();
-            pvm.seq = v.seq();
-            pvm.keyBytes = v.key().getBytes();
-            pvm.keyHash = v.keyHash();
-            pvm.bucketIndex = v.bucketIndex();
-            pvm.extendBytes = v.cvEncoded();
-            pvmList.add(pvm);
+            pvmList.add(transferWalV(v));
         }
         putAllPvmList(pvmList, false);
+    }
+
+    static PersistValueMeta transferWalV(Wal.V v) {
+        var pvm = new PersistValueMeta();
+        pvm.expireAt = v.expireAt();
+        pvm.seq = v.seq();
+        pvm.keyBytes = v.key().getBytes();
+        pvm.keyHash = v.keyHash();
+        pvm.bucketIndex = v.bucketIndex();
+        pvm.extendBytes = v.cvEncoded();
+        return pvm;
     }
 }

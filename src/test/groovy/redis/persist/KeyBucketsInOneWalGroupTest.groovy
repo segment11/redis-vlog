@@ -1,6 +1,7 @@
 package redis.persist
 
-
+import redis.CompressedValue
+import redis.SnowFlake
 import spock.lang.Specification
 
 class KeyBucketsInOneWalGroupTest extends Specification {
@@ -10,7 +11,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
         and:
         def inner = new KeyBucketsInOneWalGroup((byte) 0, 0, keyLoader)
-        inner.readBeforePutBatch();
+        inner.readBeforePutBatch()
 
         and:
         def n = KeyBucket.INIT_CAPACITY + 1
@@ -42,5 +43,66 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         cleanup:
         keyLoader.cleanUp()
         Consts.slotDir.deleteDir()
+    }
+
+    def 'test check if need split'() {
+        given:
+        def inner = new KeyBucketsInOneWalGroup((byte) 0, 0, null)
+        def snowFlake = new SnowFlake(1, 1)
+
+        and:
+        def n = 10
+        def shortValueList10 = Mock.prepareShortValueList(n)
+
+        List<PersistValueMeta> needAddNewList = []
+        List<PersistValueMeta> needUpdateList = []
+        List<PersistValueMeta> needDeleteList = []
+
+        def pvmList10ThisBucket = shortValueList10.collect { v ->
+            KeyBucketsInOneWalGroup.transferWalV(v)
+        }
+
+        when:
+        def isMerge = false
+        int bucketIndex = 0
+        byte currentSplitNumber = 1
+
+        inner.listList = [[null]]
+        var splitMultiStep = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
+                bucketIndex, currentSplitNumber, isMerge)
+
+        then:
+        splitMultiStep == 1
+        needAddNewList.size() == 10
+
+        when:
+        var keyBucket = new KeyBucket((byte) 0, bucketIndex, (byte) 0, (byte) 1, null, snowFlake)
+        pvmList10ThisBucket[0..<5].each {
+            keyBucket.put(it.keyBytes, it.keyHash, 0L, 0L, it.extendBytes)
+        }
+        inner.listList = [[keyBucket]]
+
+        needAddNewList.clear()
+        var splitMultiStep2 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
+                bucketIndex, currentSplitNumber, isMerge)
+
+        then:
+        splitMultiStep2 == 1
+        needAddNewList.size() == 5
+        needUpdateList.size() == 5
+
+        when:
+        pvmList10ThisBucket[-1].expireAt = CompressedValue.EXPIRE_NOW
+        pvmList10ThisBucket[4].expireAt = CompressedValue.EXPIRE_NOW
+        needAddNewList.clear()
+        needUpdateList.clear()
+        var splitMultiStep3 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
+                bucketIndex, currentSplitNumber, isMerge)
+
+        then:
+        splitMultiStep3 == 1
+        needAddNewList.size() == 4
+        needUpdateList.size() == 4
+        needDeleteList.size() == 1
     }
 }
