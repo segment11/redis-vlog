@@ -46,7 +46,7 @@ public class FdReadWrite {
         this.fd = libC.open(file.getAbsolutePath(), LocalPersist.O_DIRECT | OpenFlags.O_RDWR.value(), 00644);
         log.info("Opened fd: {}, name: {}", fd, name);
 
-        this.writeIndex = (int) file.length();
+        this.writeIndex = file.length();
 
         fdLengthGauge.addRawGetter(() -> {
             var labelValues = List.of(name);
@@ -63,7 +63,7 @@ public class FdReadWrite {
 
     private final int fd;
 
-    int writeIndex;
+    long writeIndex;
 
     private final static SimpleGauge fdLengthGauge = new SimpleGauge("fd_length", "chunk or key buckets files length",
             "name");
@@ -374,10 +374,13 @@ public class FdReadWrite {
             return null;
         }
 
-        var readLength = capacity;
+        int readLength = capacity;
         var lastSegmentOffset = offset + (segmentCount * segmentLength);
         if (writeIndex <= lastSegmentOffset) {
-            readLength = writeIndex - offset;
+            readLength = (int) (writeIndex - offset);
+        }
+        if (readLength < 0 || readLength > segmentLength) {
+            throw new IllegalArgumentException("Read length must be less than segment length, read length: " + readLength);
         }
 
         buffer.clear();
