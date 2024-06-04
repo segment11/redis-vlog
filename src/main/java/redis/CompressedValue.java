@@ -17,8 +17,9 @@ public class CompressedValue {
     public static final int SP_TYPE_NUM_LONG = -8;
     public static final int SP_TYPE_NUM_DOUBLE = -16;
     public static final int SP_TYPE_SHORT_STRING = -32;
-    // if string length <= 10, need not write to chunk, just use key bucket
-    public static final int SP_TYPE_SHORT_STRING_MIN_LEN = 10;
+    // if string length <= max long value as string length, usually key bucket one cell can store a short value
+    // need not write to chunk, less ssd write
+    public static final int SP_TYPE_SHORT_STRING_MIN_LEN = String.valueOf(Long.MAX_VALUE).length();
 
     // need save as a singe file
     public static final int SP_TYPE_BIG_STRING = -64;

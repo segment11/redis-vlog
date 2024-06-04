@@ -33,6 +33,18 @@ class CompressedValueTest extends Specification {
         cv.isTypeNumber()
         cv.isTypeString()
         cv.isShortString()
+
+        when:
+        cv.compressedData= new byte[19]
+
+        then:
+        cv.isShortString()
+
+        when:
+        cv.compressedData= new byte[20]
+
+        then:
+        !cv.isShortString()
     }
 
     def 'test expire'() {
