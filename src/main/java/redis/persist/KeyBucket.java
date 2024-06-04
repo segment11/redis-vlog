@@ -11,16 +11,16 @@ import static redis.CompressedValue.NO_EXPIRE;
 import static redis.persist.KeyLoader.KEY_BUCKET_ONE_COST_SIZE;
 
 public class KeyBucket {
-    public static final short INIT_CAPACITY = 52;
+    public static final short INIT_CAPACITY = 48;
     // if big, wal will cost too much memory
     public static final int MAX_BUCKETS_PER_SLOT = KeyLoader.MAX_KEY_BUCKET_COUNT_PER_FD;
     // readonly
     static final byte[] EMPTY_BYTES = new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE];
     public static final int DEFAULT_BUCKETS_PER_SLOT = 16384;
 
-    // key length short 2 + key length <= 32 + value length byte 1 + (pvm length 14 or short value case number 17 / string 19 ) <= 54
+    // key length short 2 + key length <= 32 + value length byte 1 + (pvm length 14 or short value case encoded number 17 / string 25 ) <= 60
     // if key length > 32, refer CompressedValue.KEY_MAX_LENGTH, one key may cost 2 cells
-    private static final int ONE_CELL_LENGTH = 54;
+    private static final int ONE_CELL_LENGTH = 60;
     private static final int HASH_VALUE_LENGTH = 8;
     private static final int EXPIRE_AT_VALUE_LENGTH = 8;
     private static final int SEQ_VALUE_LENGTH = 8;

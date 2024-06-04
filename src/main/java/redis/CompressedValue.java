@@ -17,9 +17,11 @@ public class CompressedValue {
     public static final int SP_TYPE_NUM_LONG = -8;
     public static final int SP_TYPE_NUM_DOUBLE = -16;
     public static final int SP_TYPE_SHORT_STRING = -32;
-    // if string length <= max long value as string length, usually key bucket one cell can store a short value
+
+    // for redis-benchmark or other benchmarks, -d 16 is common
+    // if string length <= 16, usually key bucket one cell can store a short value, refer to key bucket ONE_CELL_LENGTH
     // need not write to chunk, less ssd write
-    public static final int SP_TYPE_SHORT_STRING_MIN_LEN = String.valueOf(Long.MAX_VALUE).length();
+    public static final int SP_TYPE_SHORT_STRING_MIN_LEN = 16;
 
     // need save as a singe file
     public static final int SP_TYPE_BIG_STRING = -64;
