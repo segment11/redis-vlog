@@ -64,6 +64,14 @@ public class KeyBucket {
     final byte splitIndex;
     byte splitNumber;
 
+    public byte getSplitNumber() {
+        return splitNumber;
+    }
+
+    public byte getSplitIndex() {
+        return splitIndex;
+    }
+
     @Override
     public String toString() {
         return "KeyBucket{" +
@@ -136,8 +144,13 @@ public class KeyBucket {
         this.cellCost = buffer.getShort();
 
         if (this.lastUpdateSeq != 0 && lastUpdateSplitNumber != splitNumber) {
-            throw new IllegalStateException("Key bucket last update split number not match, last=" + lastUpdateSplitNumber + ", current=" + splitNumber
-                    + ", slot=" + slot + ", bucket index=" + bucketIndex + ", split index=" + splitIndex);
+            if (splitNumber == -1) {
+                // use seq split number
+                this.splitNumber = lastUpdateSplitNumber;
+            } else {
+                throw new IllegalStateException("Key bucket last update split number not match, last=" + lastUpdateSplitNumber + ", current=" + splitNumber
+                        + ", slot=" + slot + ", bucket index=" + bucketIndex + ", split index=" + splitIndex);
+            }
         }
     }
 

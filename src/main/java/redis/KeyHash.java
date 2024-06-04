@@ -34,4 +34,8 @@ public class KeyHash {
         }
         return (byte) Math.abs(((keyHash >> 32) % splitNumber));
     }
+
+    public static int bucketIndex(long keyHash, int bucketsPerSlot) {
+        return Math.abs((int) (keyHash % bucketsPerSlot));
+    }
 }

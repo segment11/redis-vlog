@@ -1,6 +1,7 @@
 package redis.tools;
 
 import redis.ConfForSlot;
+import redis.KeyHash;
 import redis.persist.KeyBucket;
 
 import java.io.File;
@@ -15,21 +16,32 @@ public class IterateKeyBuckets {
     public static void main(String[] args) throws IOException {
         byte slot = 0;
         byte splitIndex = 0;
-        byte splitNumber = 1;
+        byte splitNumber = 3;
+        var bucketsPerSlot = ConfForSlot.ConfBucket.c1m.bucketsPerSlot;
+        int[] sumArray = new int[bucketsPerSlot];
+
+        // change here
+        final int toCheckBucketIndex = 15602;
 
         for (int i = 0; i < splitNumber; i++) {
-            iterateOneSplitIndex(slot, (byte) i, splitNumber);
+            iterateOneSplitIndex(slot, (byte) i, splitNumber, sumArray);
         }
+
+        int sumTotal = 0;
+        for (int i = 0; i < sumArray.length; i++) {
+            sumTotal += sumArray[i];
+        }
+        System.out.println("sum total: " + sumTotal);
 
         // get size > 100
         for (var entry : keysByBucketIndex.entrySet()) {
             var bucketIndex = entry.getKey();
             Set<String> keys = entry.getValue();
-            if (keys.size() > KeyBucket.INIT_CAPACITY) {
+            if (keys.size() > KeyBucket.INIT_CAPACITY * 2) {
                 System.out.println("bucket index: " + bucketIndex + ", size: " + keys.size() + ", keys: " + keys);
             }
 
-            if (bucketIndex == 7315) {
+            if (bucketIndex == toCheckBucketIndex) {
                 System.out.println("bucket index: " + bucketIndex + ", size: " + keys.size() + ", keys: " + keys);
             }
         }
@@ -37,9 +49,8 @@ public class IterateKeyBuckets {
 
     private static Map<Integer, Set<String>> keysByBucketIndex = new HashMap<>();
 
-    public static void iterateOneSplitIndex(byte slot, byte splitIndex, byte splitNumber) throws IOException {
-        var bucketsPerSlot = ConfForSlot.ConfBucket.c10m.bucketsPerSlot;
-        int[] sumArray = new int[bucketsPerSlot];
+    public static void iterateOneSplitIndex(byte slot, byte splitIndex, byte splitNumber, int[] sumArray) throws IOException {
+        var bucketsPerSlot = sumArray.length;
 
         var slotDir = new File("/tmp/redis-vlog/persist/slot-" + slot);
         var splitKeyBucketsFile = new File(slotDir, "key-bucket-split-" + splitIndex + ".dat");
@@ -61,16 +72,24 @@ public class IterateKeyBuckets {
                 }
 
 //                System.out.println("size: " + size + ", bucket index: " + i);
-                var keyBucket = new KeyBucket((byte) 0, i, splitIndex, splitNumber, bytes, null);
-//                int finalI = i;
+                var keyBucket = new KeyBucket((byte) 0, i, splitIndex, (byte) -1, bytes, null);
+                var splitNumberThisKeyBucket = keyBucket.getSplitNumber();
+                var splitIndexThisKeyBucket = keyBucket.getSplitIndex();
+                int finalI = i;
                 Set<String> finalSet = set;
                 keyBucket.iterate((keyHash, expireAt, seq, keyBytes, valueBytes) -> {
 //                    System.out.println("key: " + new String(keyBytes) + ", key hash: " + keyHash);
+                    var bucketIndexExpect = KeyHash.bucketIndex(keyHash, bucketsPerSlot);
+                    if (bucketIndexExpect != finalI) {
+                        System.out.println("bucket index expect: " + bucketIndexExpect + ", bucket index: " + finalI);
+                        throw new IllegalStateException("bucket index expect: " + bucketIndexExpect + ", bucket index: " + finalI);
+                    }
 
-//                    var bucketIndexExpect = Math.abs(keyHash % bucketsPerSlot);
-//                    if (bucketIndexExpect != finalI) {
-//                        System.out.println("bucket index expect: " + bucketIndexExpect + ", bucket index: " + finalI);
-//                    }
+                    var splitIndexExpect = KeyHash.splitIndex(keyHash, splitNumberThisKeyBucket, bucketIndexExpect);
+                    if (splitIndexExpect != splitIndexThisKeyBucket) {
+                        System.out.println("split index expect: " + splitIndexExpect + ", split index: " + splitIndexThisKeyBucket);
+                        throw new IllegalStateException("split index expect: " + splitIndexExpect + ", split index: " + splitIndexThisKeyBucket);
+                    }
                     finalSet.add(new String(keyBytes));
                 });
             }
