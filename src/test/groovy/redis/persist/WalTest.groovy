@@ -66,4 +66,47 @@ class WalTest extends Specification {
         raf.close()
         rafShortValue.close()
     }
+
+    def 'test value change to short value'() {
+        given:
+        def wal = new Wal((byte) 0, 0, null, null, null)
+        def key = 'test-key'
+        def shortV = new Wal.V(1, 0, 0, 0, key, 'short-value'.bytes, 10)
+        def v = new Wal.V(2, 0, 0, 0, key, 'value'.bytes, 30)
+        def shortV2 = new Wal.V(3, 0, 0, 0, key, 'short-value-x'.bytes, 10)
+
+        expect:
+        wal.get(key) == null
+
+        when:
+        wal.delayToKeyBucketShortValues.put(key, shortV)
+
+        then:
+        wal.get(key) == 'short-value'.bytes
+
+        when:
+        wal.delayToKeyBucketValues.put(key, v)
+
+        then:
+        wal.get(key) == 'value'.bytes
+
+        when:
+        wal.delayToKeyBucketShortValues.put(key, shortV2)
+
+        then:
+        wal.get(key) == 'short-value-x'.bytes
+
+        when:
+        wal.delayToKeyBucketShortValues.remove(key)
+
+        then:
+        wal.get(key) == 'value'.bytes
+
+        when:
+        wal.delayToKeyBucketValues.remove(key)
+        wal.delayToKeyBucketShortValues.remove(key)
+
+        then:
+        wal.get(key) == null
+    }
 }

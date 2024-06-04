@@ -259,14 +259,27 @@ public class Wal {
 
     byte[] get(String key) {
         var v = delayToKeyBucketShortValues.get(key);
-        if (v != null) {
-            return v.cvEncoded;
+        var v2 = delayToKeyBucketValues.get(key);
+        if (v == null && v2 == null) {
+            return null;
         }
 
-        v = delayToKeyBucketValues.get(key);
         if (v != null) {
-            return v.cvEncoded;
+            if (v2 == null) {
+                return v.cvEncoded;
+            } else {
+                if (v.seq > v2.seq) {
+                    return v.cvEncoded;
+                } else {
+                    return v2.cvEncoded;
+                }
+            }
         }
+
+        if (v2 != null) {
+            return v2.cvEncoded;
+        }
+
         return null;
     }
 
