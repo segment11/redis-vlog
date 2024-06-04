@@ -114,4 +114,25 @@ class KeyBucketTest extends Specification {
         keyBucket.getValueByKey('a'.bytes, 97L) == null
         keyBucket.getValueByKey(longKeyBytes, 9797L) == null
     }
+
+    def 'test last update seq'() {
+        given:
+        def snowFlake = new SnowFlake(1, 1)
+        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
+
+        when:
+        keyBucket.updateSeq()
+        def lastUpdateSplitNumber = (byte) (keyBucket.lastUpdateSeq & 0b1111);
+
+        then:
+        lastUpdateSplitNumber == 1
+
+        when:
+        keyBucket.splitNumber = 3
+        keyBucket.updateSeq()
+        lastUpdateSplitNumber = (byte) (keyBucket.lastUpdateSeq & 0b1111);
+
+        then:
+        lastUpdateSplitNumber == 3
+    }
 }

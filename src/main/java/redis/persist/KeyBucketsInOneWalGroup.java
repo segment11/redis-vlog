@@ -119,8 +119,11 @@ public class KeyBucketsInOneWalGroup {
 
         for (int splitIndex = 0; splitIndex < listList.size(); splitIndex++) {
             var list = listList.get(splitIndex);
-            for (var keyBucket : list) {
+            for (int i = 0; i < list.size(); i++) {
+                var keyBucket = list.get(i);
                 if (keyBucket != null) {
+                    var currentSplitNumber = splitNumberTmp[i];
+                    keyBucket.splitNumber = currentSplitNumber;
                     keyBucket.encode(true);
                 }
             }

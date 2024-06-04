@@ -260,7 +260,7 @@ public class KeyBucket {
         return sb.toString();
     }
 
-    private void updateSeq() {
+    void updateSeq() {
         long seq = snowFlake.nextId();
         // last 4 bits for split number for data check, max split number is 8
         // can not compare bigger or smaller, just compare equal or not, !important
