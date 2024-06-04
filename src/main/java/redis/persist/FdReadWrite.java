@@ -44,9 +44,8 @@ public class FdReadWrite {
             FileUtils.touch(file);
         }
         this.fd = libC.open(file.getAbsolutePath(), LocalPersist.O_DIRECT | OpenFlags.O_RDWR.value(), 00644);
-        log.info("Opened fd: {}, name: {}", fd, name);
-
         this.writeIndex = file.length();
+        log.info("Opened fd: {}, name: {}, file length: {}MB", fd, name, this.writeIndex / 1024 / 1024);
 
         fdLengthGauge.addRawGetter(() -> {
             var labelValues = List.of(name);
@@ -64,6 +63,8 @@ public class FdReadWrite {
     private final int fd;
 
     long writeIndex;
+
+    private boolean isLRUOn = false;
 
     private final static SimpleGauge fdLengthGauge = new SimpleGauge("fd_length", "chunk or key buckets files length",
             "name");
@@ -183,7 +184,10 @@ public class FdReadWrite {
                     maxSize, lruMemoryRequireMB);
             LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, (int) lruMemoryRequireMB, true);
 
-            this.segmentBytesByIndexLRU = new LRUMap<>(maxSize);
+            if (maxSize > 0) {
+                this.segmentBytesByIndexLRU = new LRUMap<>(maxSize);
+                this.isLRUOn = true;
+            }
         } else {
             // key bucket
             var maxSize = ConfForSlot.global.confBucket.lruPerFd.maxSize;
@@ -194,7 +198,10 @@ public class FdReadWrite {
                     maxSize, segmentLength, compressRatio, lruMemoryRequireMB);
             LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, (int) lruMemoryRequireMB, false);
 
-            this.segmentBytesByIndexLRU = new LRUMap<>(maxSize);
+            if (maxSize > 0) {
+                this.segmentBytesByIndexLRU = new LRUMap<>(maxSize);
+                this.isLRUOn = true;
+            }
         }
 
         if (ConfForSlot.global.pureMemory) {
@@ -345,25 +352,28 @@ public class FdReadWrite {
         int segmentCount;
         if (isOnlyOneSegment) {
             segmentCount = 1;
-            var bytesCached = segmentBytesByIndexLRU.get(segmentIndex);
-            if (bytesCached != null) {
-                lruHitCounter.labels(name).inc();
 
-                if (isChunkFd) {
-                    return bytesCached;
-                } else {
-                    // only key bucket data need decompress
-                    var beginT = System.nanoTime();
-                    var bytesDecompressedCached = Zstd.decompress(bytesCached, segmentLength);
-                    var costT = (System.nanoTime() - beginT) / 1000;
-                    if (costT == 0) {
-                        costT = 1;
+            if (isLRUOn) {
+                var bytesCached = segmentBytesByIndexLRU.get(segmentIndex);
+                if (bytesCached != null) {
+                    lruHitCounter.labels(name).inc();
+
+                    if (isChunkFd) {
+                        return bytesCached;
+                    } else {
+                        // only key bucket data need decompress
+                        var beginT = System.nanoTime();
+                        var bytesDecompressedCached = Zstd.decompress(bytesCached, segmentLength);
+                        var costT = (System.nanoTime() - beginT) / 1000;
+                        if (costT == 0) {
+                            costT = 1;
+                        }
+                        afterLRUReadDecompressTimeTotalUs.labels(name).inc(costT);
+                        return bytesDecompressedCached;
                     }
-                    afterLRUReadDecompressTimeTotalUs.labels(name).inc(costT);
-                    return bytesDecompressedCached;
+                } else {
+                    lruMissCounter.labels(name).inc();
                 }
-            } else {
-                lruMissCounter.labels(name).inc();
             }
         } else {
             segmentCount = capacity / segmentLength;
@@ -379,8 +389,8 @@ public class FdReadWrite {
         if (writeIndex <= lastSegmentOffset) {
             readLength = (int) (writeIndex - offset);
         }
-        if (readLength < 0 || readLength > segmentLength) {
-            throw new IllegalArgumentException("Read length must be less than segment length, read length: " + readLength);
+        if (readLength < 0 || readLength > capacity) {
+            throw new IllegalArgumentException("Read length must be less than capacity: " + capacity + ", read length: " + readLength);
         }
 
         buffer.clear();
@@ -411,19 +421,21 @@ public class FdReadWrite {
         }
 
         if (isOnlyOneSegment && isRefreshLRUCache) {
-            if (isChunkFd) {
-                segmentBytesByIndexLRU.put(segmentIndex, bytesRead);
-            } else {
-                // only key bucket data need compress
-                var beginT2 = System.nanoTime();
-                var bytesCompressed = Zstd.compress(bytesRead);
-                var costT2 = (System.nanoTime() - beginT2) / 1000;
-                if (costT2 == 0) {
-                    costT2 = 1;
+            if (isLRUOn) {
+                if (isChunkFd) {
+                    segmentBytesByIndexLRU.put(segmentIndex, bytesRead);
+                } else {
+                    // only key bucket data need compress
+                    var beginT2 = System.nanoTime();
+                    var bytesCompressed = Zstd.compress(bytesRead);
+                    var costT2 = (System.nanoTime() - beginT2) / 1000;
+                    if (costT2 == 0) {
+                        costT2 = 1;
+                    }
+                    afterFdPreadCompressTimeTotalUs.labels(name).inc(costT2);
+                    afterFdPreadCompressCountTotal.labels(name).inc();
+                    segmentBytesByIndexLRU.put(segmentIndex, bytesCompressed);
                 }
-                afterFdPreadCompressTimeTotalUs.labels(name).inc(costT2);
-                afterFdPreadCompressCountTotal.labels(name).inc();
-                segmentBytesByIndexLRU.put(segmentIndex, bytesCompressed);
             }
         }
         return bytesRead;
@@ -468,21 +480,23 @@ public class FdReadWrite {
         }
 
         // set to lru cache
-        if (isRefreshLRUCache && (isOnlyOneSegment || isPwriteBatch)) {
-            for (int i = 0; i < segmentCount; i++) {
-                var bytes = new byte[segmentLength];
-                buffer.position(i * segmentLength);
-                buffer.get(bytes);
+        if (isLRUOn) {
+            if (isRefreshLRUCache && (isOnlyOneSegment || isPwriteBatch)) {
+                for (int i = 0; i < segmentCount; i++) {
+                    var bytes = new byte[segmentLength];
+                    buffer.position(i * segmentLength);
+                    buffer.get(bytes);
 
-                // chunk data is already compressed
-                // key bucket data need not compress here, compress when after read
-                if (isChunkFd) {
-                    segmentBytesByIndexLRU.put(segmentIndex + i, bytes);
+                    // chunk data is already compressed
+                    // key bucket data need not compress here, compress when after read
+                    if (isChunkFd) {
+                        segmentBytesByIndexLRU.put(segmentIndex + i, bytes);
+                    }
                 }
-            }
-        } else {
-            for (int i = 0; i < segmentCount; i++) {
-                segmentBytesByIndexLRU.remove(segmentIndex + i);
+            } else {
+                for (int i = 0; i < segmentCount; i++) {
+                    segmentBytesByIndexLRU.remove(segmentIndex + i);
+                }
             }
         }
 

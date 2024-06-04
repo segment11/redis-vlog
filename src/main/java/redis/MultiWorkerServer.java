@@ -504,9 +504,6 @@ public class MultiWorkerServer extends Launcher {
 
                         if (config.getChild("bucket.lruPerFd.maxSize").hasValue()) {
                             c.confBucket.lruPerFd.maxSize = config.get(toInt, "bucket.lruPerFd.maxSize");
-                        } else {
-                            // default 50% compressed buckets in cache
-                            c.confBucket.lruPerFd.maxSize = c.confBucket.bucketsPerSlot / 2;
                         }
 
                         // override chunk conf

@@ -84,7 +84,7 @@ public enum ConfForSlot {
         public byte initialSplitNumber;
 
         // 4KB one segment, 25 * 1000 * 4KB = 100MB
-        public ConfLru lruPerFd = new ConfLru(1000 * 25);
+        public ConfLru lruPerFd = new ConfLru(0);
 
         @Override
         public String toString() {
@@ -118,7 +118,7 @@ public enum ConfForSlot {
         public int segmentLength;
 
         // 4KB one segment, 25 * 1000 * 4KB = 100MB
-        public ConfLru lruPerFd = new ConfLru(1000 * 25);
+        public ConfLru lruPerFd = new ConfLru(0);
 
         public int maxSegmentNumber() {
             return segmentNumberPerFd * fdPerChunk;
