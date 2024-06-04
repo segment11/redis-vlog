@@ -17,7 +17,7 @@ public class IterateKeyBuckets {
         byte slot = 0;
         byte splitIndex = 0;
         byte splitNumber = 3;
-        var bucketsPerSlot = ConfForSlot.ConfBucket.c1m.bucketsPerSlot;
+        var bucketsPerSlot = ConfForSlot.ConfBucket.c10m.bucketsPerSlot;
         int[] sumArray = new int[bucketsPerSlot];
 
         // change here
@@ -49,10 +49,13 @@ public class IterateKeyBuckets {
 
     private static Map<Integer, Set<String>> keysByBucketIndex = new HashMap<>();
 
+    private static String persistDir = "/tmp/redis-vlog-test-data";
+//    private static String persistDir = "/tmp/redis-vlog/persist";
+
     public static void iterateOneSplitIndex(byte slot, byte splitIndex, byte splitNumber, int[] sumArray) throws IOException {
         var bucketsPerSlot = sumArray.length;
 
-        var slotDir = new File("/tmp/redis-vlog/persist/slot-" + slot);
+        var slotDir = new File(persistDir + "/slot-" + slot);
         var splitKeyBucketsFile = new File(slotDir, "key-bucket-split-" + splitIndex + ".dat");
         if (!splitKeyBucketsFile.exists()) {
             return;

@@ -17,7 +17,7 @@ import static redis.persist.LocalPersist.PAGE_SIZE;
 
 public class KeyLoader {
     private static final int PAGE_NUMBER_PER_BUCKET = 1;
-    static final int KEY_BUCKET_ONE_COST_SIZE = PAGE_NUMBER_PER_BUCKET * PAGE_SIZE;
+    public static final int KEY_BUCKET_ONE_COST_SIZE = PAGE_NUMBER_PER_BUCKET * PAGE_SIZE;
 
     // one split file max 2GB, 2 * 1024 * 1024 / 4 = 524288
     // one split index one file

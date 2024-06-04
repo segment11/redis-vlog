@@ -148,6 +148,14 @@ public class CompressedValue {
         return buf.array();
     }
 
+    public static byte[] encodeAsShortString(long seq, byte[] data) {
+        var buf = ByteBuffer.allocate(1 + 8 + data.length);
+        buf.put((byte) SP_TYPE_SHORT_STRING);
+        buf.putLong(seq);
+        buf.put(data);
+        return buf.array();
+    }
+
     public Number numberValue() {
         return switch (dictSeqOrSpType) {
             case SP_TYPE_NUM_BYTE -> compressedData[0];

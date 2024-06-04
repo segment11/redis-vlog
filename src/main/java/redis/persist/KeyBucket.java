@@ -221,6 +221,11 @@ public class KeyBucket {
 
     private ByteBuffer buffer;
 
+    public void putMeta() {
+        updateSeq();
+        buffer.position(0).putLong(lastUpdateSeq).putShort(size).putShort(cellCost);
+    }
+
     public byte[] encode(boolean doUpdateSeq) {
         if (doUpdateSeq) {
             updateSeq();
