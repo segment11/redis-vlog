@@ -143,11 +143,15 @@ public class KeyBucket {
         this.size = buffer.getShort();
         this.cellCost = buffer.getShort();
 
-        if (this.lastUpdateSeq != 0 && lastUpdateSplitNumber != splitNumber) {
-            if (splitNumber == -1) {
-                // use seq split number
+        if (splitNumber == -1) {
+            // use seq split number
+            if (this.lastUpdateSeq != 0) {
                 this.splitNumber = lastUpdateSplitNumber;
             } else {
+                this.splitNumber = 1;
+            }
+        } else {
+            if (this.lastUpdateSeq != 0 && lastUpdateSplitNumber != splitNumber) {
                 throw new IllegalStateException("Key bucket last update split number not match, last=" + lastUpdateSplitNumber + ", current=" + splitNumber
                         + ", slot=" + slot + ", bucket index=" + bucketIndex + ", split index=" + splitIndex);
             }

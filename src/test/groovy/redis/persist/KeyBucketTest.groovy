@@ -134,5 +134,12 @@ class KeyBucketTest extends Specification {
 
         then:
         lastUpdateSplitNumber == 3
+
+        when:
+        var encoded = keyBucket.encode(true)
+        var keyBucket2 = new KeyBucket((byte) 0, 0, (byte) 0, (byte) -1, encoded, snowFlake)
+
+        then:
+        keyBucket2.splitNumber == 3
     }
 }
