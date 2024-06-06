@@ -14,7 +14,7 @@ public enum ConfForSlot {
     public final ConfChunk confChunk;
     public final ConfWal confWal;
     public final ConfLru lruBigString = new ConfLru(1000);
-    public final ConfLru lruKeyAndCompressedValueEncoded = new ConfLru(1_000_000);
+    public final ConfLru lruKeyAndCompressedValueEncoded = new ConfLru(1_00_000);
 
     public boolean pureMemory = false;
     public short slotNumber = 1;
@@ -135,8 +135,8 @@ public enum ConfForSlot {
     }
 
     public enum ConfWal {
-        debugMode(16, 1000, 1000),
-        c1m(16, 1000, 1000),
+        debugMode(64, 1000, 1000),
+        c1m(64, 1000, 1000),
         c10m(64, 1000, 1000),
         c100m(64, 1000, 1000);
 
