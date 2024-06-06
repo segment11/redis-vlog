@@ -67,7 +67,7 @@ public class ChunkMergeJob {
         }
 
         public CompressedValue cv;
-        final String key;
+        public final String key;
         final int segmentOffset;
         final int segmentIndex;
         final byte subBlockIndex;
@@ -100,6 +100,8 @@ public class ChunkMergeJob {
         int invalidCvCount;
         final int segmentIndex;
     }
+
+    private long logMergeCount = 0;
 
     void mergeSegments(List<Integer> needMergeSegmentIndexList) {
         var firstSegmentIndex = needMergeSegmentIndexList.getFirst();
@@ -157,8 +159,13 @@ public class ChunkMergeJob {
         var beginT = System.nanoTime();
         var segmentBytesBatchRead = oneSlot.preadForMerge(firstSegmentIndex);
 
-        // only log slot 0, just for less log
-        var doLog = (firstSegmentIndex % 10000 == 0 && slot == 0) || Debug.getInstance().logMerge;
+        var doLog = Debug.getInstance().logMerge;
+        if (doLog) {
+            logMergeCount++;
+            if (logMergeCount % 100 != 0) {
+                doLog = false;
+            }
+        }
 
         // read all segments to memory, then compare with key buckets
         ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(npagesMerge * 20);

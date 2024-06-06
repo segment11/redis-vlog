@@ -983,14 +983,20 @@ public class OneSlot {
     public void persistMergeSegmentsUndone() {
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
 
+        final int[] lastMergedAndPersistSegmentIndexArray = {-1};
         this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq) -> {
             if (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGING) {
                 log.warn("Segment not persisted after merging, s={}, i={}, flag={}", slot, segmentIndex, flag);
                 needMergeSegmentIndexList.add(segmentIndex);
             }
+
+            if (flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED) {
+                lastMergedAndPersistSegmentIndexArray[0] = segmentIndex;
+            }
         });
 
         if (needMergeSegmentIndexList.isEmpty()) {
+            chunk.needMergeSegmentIndexEndLastTime = lastMergedAndPersistSegmentIndexArray[0];
             return;
         }
 
@@ -1023,6 +1029,8 @@ public class OneSlot {
                 doMergeJobOnceList(onceList);
             }
         }
+
+        chunk.needMergeSegmentIndexEndLastTime = lastSegmentIndex;
     }
 
     private void doMergeJobOnceList(ArrayList<Integer> onceList) {

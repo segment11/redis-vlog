@@ -38,7 +38,7 @@ public class ChunkMergeWorker {
 
     private static final int MERGING_CV_SIZE_THRESHOLD = 100;
     // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
-    private static final int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 16;
+    static final int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 16;
 
     private final List<CvWithKeyAndBucketIndex> mergedCvList = new ArrayList<>(MERGING_CV_SIZE_THRESHOLD);
 
@@ -52,8 +52,6 @@ public class ChunkMergeWorker {
                 return false;
             }
         }
-
-        ArrayList<Integer> needMergeSegmentIndexListAll = new ArrayList<>();
 
         var groupByWalGroupIndex = mergedCvList.stream().collect(Collectors.groupingBy(one -> Wal.calWalGroupIndex(one.bucketIndex)));
         for (var entry : groupByWalGroupIndex.entrySet()) {
@@ -77,8 +75,6 @@ public class ChunkMergeWorker {
                 log.error("Merge worker persist merged cv list error, s={}, v list size={}", slot, list.size());
                 throw new IllegalStateException("Merge worker persist merged cv list error, s=" + slot + ", v list size=" + list.size());
             }
-
-            needMergeSegmentIndexListAll.addAll(needMergeSegmentIndexList);
         }
 
         if (!mergedSegmentSet.isEmpty()) {
@@ -96,23 +92,23 @@ public class ChunkMergeWorker {
                 sb.append(one.index).append(";");
             }
 
-            var doLog = (lastPersistedSegmentIndex % 500 == 0 && slot == 0) || Debug.getInstance().logMerge;
+            var doLog = Debug.getInstance().logMerge;
+            if (doLog) {
+                logMergeCount++;
+                if (logMergeCount % 100 != 0) {
+                    doLog = false;
+                }
+            }
+
             if (doLog) {
                 log.info("P s:{}, {}", slot, sb);
             }
         }
 
-        if (!needMergeSegmentIndexListAll.isEmpty()) {
-            if (oneSlot.chunkMergeWorker == null) {
-                // for unit test
-                log.info("Merge worker is null, skip do merge job, s={}, i={}", slot, needMergeSegmentIndexListAll);
-            } else {
-                oneSlot.doMergeJob(needMergeSegmentIndexListAll);
-            }
-        }
-
         return true;
     }
+
+    private long logMergeCount = 0;
 
     // for log
     private int lastPersistedSegmentIndex;

@@ -5,6 +5,7 @@ import jnr.posix.LibC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.Debug;
 import redis.SnowFlake;
 import redis.repl.MasterUpdateCallback;
 
@@ -214,6 +215,8 @@ public class Chunk {
     // 32 segments is enough for 1000 Wal.V persist
     static final int ONCE_PREPARE_SEGMENT_COUNT = 32;
 
+    int needMergeSegmentIndexEndLastTime = -1;
+
     // return need merge segment index array
     public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge) {
         moveIndexForPrepare();
@@ -347,6 +350,11 @@ public class Chunk {
         updatePvmBatchCostTimeTotalUs.labels(slotStr).inc(costT);
 
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
+        if (isMerge) {
+            // return empty list
+            return needMergeSegmentIndexList;
+        }
+
         for (var segment : segments) {
             var toMergeSegmentIndex = needMergeSegmentIndex(isNewAppendAfterBatch, segment.segmentIndex());
             if (toMergeSegmentIndex != NO_NEED_MERGE_SEGMENT_INDEX) {
@@ -355,8 +363,60 @@ public class Chunk {
         }
 
         oneSlot.setChunkWriteSegmentIndex(segmentIndex);
+
+        if (!needMergeSegmentIndexList.isEmpty()) {
+            var firstNeedMergeSegmentIndex = needMergeSegmentIndexList.getFirst();
+            if (needMergeSegmentIndexEndLastTime == -1) {
+                if (firstNeedMergeSegmentIndex != 0) {
+                    throw new IllegalStateException("First need merge segment index not 0, s=" + slot + ", i=" + firstNeedMergeSegmentIndex);
+                }
+            } else {
+                var diff = firstNeedMergeSegmentIndex - needMergeSegmentIndexEndLastTime;
+                if (diff > 0) {
+                    if (diff != 1) {
+                        if (diff > ONCE_PREPARE_SEGMENT_COUNT + ChunkMergeWorker.MERGED_SEGMENT_SET_SIZE_THRESHOLD) {
+                            throw new IllegalStateException("Need merge segment index not continuous, s=" + slot +
+                                    ", first need merge segment index=" + firstNeedMergeSegmentIndex + ", last time end segment index =" + needMergeSegmentIndexEndLastTime);
+                        } else {
+                            // prepend to make continuous
+                            for (int i = 1; i < diff; i++) {
+                                needMergeSegmentIndexList.add(needMergeSegmentIndexEndLastTime + i);
+                            }
+                        }
+                    }
+                } else {
+                    var diff2 = maxSegmentIndex + 1 - needMergeSegmentIndexEndLastTime + firstNeedMergeSegmentIndex;
+                    if (diff2 > ONCE_PREPARE_SEGMENT_COUNT + ChunkMergeWorker.MERGED_SEGMENT_SET_SIZE_THRESHOLD) {
+                        throw new IllegalStateException("Need merge segment index not continuous, s=" + slot +
+                                ", first need merge segment index=" + firstNeedMergeSegmentIndex + ", last time end segment index =" + needMergeSegmentIndexEndLastTime);
+                    } else {
+                        // prepend to make continuous
+                        for (int i = needMergeSegmentIndexEndLastTime + 1; i <= maxSegmentIndex; i++) {
+                            needMergeSegmentIndexList.add(i);
+                        }
+                        for (int i = 0; i < firstNeedMergeSegmentIndex; i++) {
+                            needMergeSegmentIndexList.add(i);
+                        }
+                    }
+                }
+            }
+
+            needMergeSegmentIndexList.sort(Integer::compareTo);
+            needMergeSegmentIndexEndLastTime = needMergeSegmentIndexList.getLast();
+
+            var doLog = Debug.getInstance().logMerge;
+            if (doLog) {
+                logMergeCount++;
+                if (logMergeCount % 100 == 0) {
+                    log.info("Chunk persist need merge segment index list, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
+                }
+            }
+        }
+
         return needMergeSegmentIndexList;
     }
+
+    private long logMergeCount = 0;
 
     private void moveIndexForPrepare() {
         int leftSegmentCountThisFd = segmentNumberPerFd - segmentIndex % segmentNumberPerFd;

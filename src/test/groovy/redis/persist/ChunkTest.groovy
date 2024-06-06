@@ -80,6 +80,9 @@ class ChunkTest extends Specification {
             needMergeSegmentIndexListNotNewAppend << chunk.needMergeSegmentIndex(false, it)
         }
 
+        println needMergeSegmentIndexListNewAppend
+        println needMergeSegmentIndexListNotNewAppend
+
         then:
         chunk.needMergeSegmentIndex(true, halfSegmentNumber) == 0
         chunk.needMergeSegmentIndex(true, halfSegmentNumber + 10) == 10
