@@ -498,6 +498,18 @@ public class MultiWorkerServer extends Launcher {
                             c.confWal.oneChargeBucketNumber = ConfForSlot.ConfWal.debugMode.oneChargeBucketNumber;
                         }
 
+                        boolean debugLogMerge = config.get(ofBoolean(), "debugLogMerge", false);
+                        Debug.getInstance().logMerge = debugLogMerge;
+
+                        boolean debugLogTrainDict = config.get(ofBoolean(), "debugLogTrainDict", false);
+                        Debug.getInstance().logTrainDict = debugLogTrainDict;
+
+                        boolean debugLogRestore = config.get(ofBoolean(), "debugLogRestore", false);
+                        Debug.getInstance().logRestore = debugLogRestore;
+
+                        boolean bulkLoad = config.get(ofBoolean(), "bulkLoad", false);
+                        Debug.getInstance().bulkLoad = bulkLoad;
+
                         // override bucket conf
                         if (config.getChild("bucket.bucketsPerSlot").hasValue()) {
                             c.confBucket.bucketsPerSlot = config.get(ofInteger(), "bucket.bucketsPerSlot");
