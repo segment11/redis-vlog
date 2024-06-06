@@ -60,11 +60,9 @@ public class LocalPersist {
         return (int) Math.abs(keyHash % ConfForSlot.global.confBucket.bucketsPerSlot);
     }
 
-    public void init(byte netWorkers, short slotNumber, SnowFlake[] snowFlakes, File dirFile, Config persistConfig) throws IOException {
+    public void initSlots(byte netWorkers, short slotNumber, SnowFlake[] snowFlakes, File persistDir, Config persistConfig) throws IOException {
         this.slotNumber = slotNumber;
-
-        // already created
-        this.persistDir = new File(dirFile, "persist");
+        this.persistDir = persistDir;
         ConfVolumeDirsForSlot.initFromConfig(persistConfig, slotNumber);
 
         this.oneSlots = new OneSlot[slotNumber];

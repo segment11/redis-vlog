@@ -573,7 +573,10 @@ public class MultiWorkerServer extends Launcher {
                         TrainSampleJob.setDictPrefixKeyMaxLen(configCompress.get(toInt, "dictPrefixKeyMaxLen", 5));
 
                         // init local persist
-                        LocalPersist.getInstance().init((byte) netWorkers, (short) slotNumber, snowFlakes, dirFile, config.getChild("persist"));
+                        // already created when inject
+                        var persistDir = new File(dirFile, "persist");
+                        LocalPersist.getInstance().initSlots((byte) netWorkers, (short) slotNumber, snowFlakes, persistDir,
+                                config.getChild("persist"));
 
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
                         if (debugMode) {
