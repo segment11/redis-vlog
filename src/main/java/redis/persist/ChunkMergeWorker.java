@@ -23,7 +23,6 @@ public class ChunkMergeWorker {
     // metrics
     long mergedSegmentCount = 0;
     long mergedSegmentCostTimeTotalUs = 0;
-    byte lastMergedSlot = -1;
     int lastMergedSegmentIndex = -1;
 
     long validCvCountTotal = 0;
@@ -171,8 +170,7 @@ public class ChunkMergeWorker {
                 map.put("valid_cv_rate", new SimpleGauge.ValueWithLabelValues(validCvRate, labelValues));
             }
 
-            map.put("last_merged_slot", new SimpleGauge.ValueWithLabelValues((double) lastMergedSlot, labelValues));
-            map.put("last_merged_segment_index", new SimpleGauge.ValueWithLabelValues((double) lastMergedSegmentIndex, labelValues));
+            map.put("chunk_last_merged_segment_index", new SimpleGauge.ValueWithLabelValues((double) lastMergedSegmentIndex, labelValues));
 
             return map;
         });

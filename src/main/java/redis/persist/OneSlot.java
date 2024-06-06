@@ -30,8 +30,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import static io.activej.config.converter.ConfigConverters.ofInteger;
@@ -977,12 +975,12 @@ public class OneSlot {
         metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(segmentIndex, segmentCount, flag, segmentSeqList);
     }
 
-    CompletableFuture<Integer> doMergeJob(ArrayList<Integer> needMergeSegmentIndexList) {
+    int doMergeJob(ArrayList<Integer> needMergeSegmentIndexList) {
         var job = new ChunkMergeJob(slot, needMergeSegmentIndexList, chunkMergeWorker, snowFlake);
-        return netWorkerEventloop.submit(AsyncComputation.of(job::run));
+        return job.run();
     }
 
-    public void persistMergeSegmentsUndone() throws ExecutionException, InterruptedException {
+    public void persistMergeSegmentsUndone() {
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
 
         this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq) -> {
@@ -1000,17 +998,9 @@ public class OneSlot {
         var lastSegmentIndex = needMergeSegmentIndexList.getLast();
 
         if (lastSegmentIndex - firstSegmentIndex + 1 == needMergeSegmentIndexList.size()) {
-            var f = doMergeJob(needMergeSegmentIndexList);
-            f.whenComplete((validCvCount, e) -> {
-                if (e != null) {
-                    log.error("Merge segments error, s={}, i={}, end i={}, valid cv count after run: {}",
-                            slot, firstSegmentIndex, lastSegmentIndex, validCvCount, e);
-                } else {
-                    log.warn("Merge segments undone, s={}, i={}, end i={}, valid cv count after run: {}",
-                            slot, firstSegmentIndex, lastSegmentIndex, validCvCount);
-                }
-            });
-            f.get();
+            var validCvCount = doMergeJob(needMergeSegmentIndexList);
+            log.warn("Merge segments undone, s={}, i={}, end i={}, valid cv count after run: {}",
+                    slot, firstSegmentIndex, lastSegmentIndex, validCvCount);
         } else {
             // split
             ArrayList<Integer> onceList = new ArrayList<>();
@@ -1035,18 +1025,10 @@ public class OneSlot {
         }
     }
 
-    private void doMergeJobOnceList(ArrayList<Integer> onceList) throws ExecutionException, InterruptedException {
-        var f = doMergeJob(onceList);
-        f.whenComplete((validCvCount, e) -> {
-            if (e != null) {
-                log.error("Merge segments error, s={}, i={}, end i={}, valid cv count after run: {}",
-                        slot, onceList.get(0), onceList.get(onceList.size() - 1), validCvCount, e);
-            } else {
-                log.warn("Merge segments undone, s={}, i={}, end i={} valid cv count after run: {}",
-                        slot, onceList.get(0), onceList.get(onceList.size() - 1), validCvCount);
-            }
-        });
-        f.get();
+    private void doMergeJobOnceList(ArrayList<Integer> onceList) {
+        var validCvCount = doMergeJob(onceList);
+        log.warn("Merge segments undone, s={}, i={}, end i={} valid cv count after run: {}",
+                slot, onceList.get(0), onceList.get(onceList.size() - 1), validCvCount);
     }
 
     public void setChunkWriteSegmentIndex(int segmentIndex) {
@@ -1086,6 +1068,7 @@ public class OneSlot {
             map.put("dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
             map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
             map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
+            map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.segmentIndex, labelValues));
 
             if (slot == 0) {
                 map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
