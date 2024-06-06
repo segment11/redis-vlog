@@ -12,7 +12,6 @@ import redis.SnowFlake;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
 
 public class LocalPersist {
     public static final int PAGE_SIZE = (int) PageManager.getInstance().pageSize();
@@ -38,7 +37,7 @@ public class LocalPersist {
 
     public static final int O_DIRECT = 040000;
 
-    public void persistMergeSegmentsUndone() throws ExecutionException, InterruptedException {
+    public void persistMergeSegmentsUndone() {
         for (var oneSlot : oneSlots) {
             oneSlot.persistMergeSegmentsUndone();
         }
