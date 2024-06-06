@@ -41,6 +41,10 @@ public class PersistValueMeta {
         return KeyBucket.KVMeta.calcCellCount((short) keyBytes.length, (byte) valueLength);
     }
 
+    public String shortString() {
+        return "l=" + length + ", si=" + segmentIndex + ", sbi=" + subBlockIndex + ", so=" + segmentOffset;
+    }
+
     @Override
     public String toString() {
         return "PersistValueMeta{" +

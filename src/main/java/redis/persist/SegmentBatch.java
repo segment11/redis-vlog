@@ -87,11 +87,11 @@ public class SegmentBatch {
     }
 
     // zstd compress ratio usually < 0.25, max 4 blocks tight to one segment
-    static final int MAX_BLOCK_NUMBER = 4;
+    public static final int MAX_BLOCK_NUMBER = 4;
     // seq long + total bytes length int + each sub block * (offset short + length short)
     private static final int HEADER_LENGTH = 8 + 4 + MAX_BLOCK_NUMBER * (2 + 2);
 
-    static int subBlockMetaPosition(int subBlockIndex) {
+    public static int subBlockMetaPosition(int subBlockIndex) {
         return 8 + 4 + subBlockIndex * 4;
     }
 
@@ -289,7 +289,7 @@ public class SegmentBatch {
         return new SegmentCompressedBytesWithIndex(compressedBytes, segmentIndex, segmentSeq);
     }
 
-    interface CvCallback {
+    public interface CvCallback {
         void callback(String key, CompressedValue cv, int offsetInThisSegment);
     }
 
@@ -304,7 +304,7 @@ public class SegmentBatch {
         iterateFromSegmentBytes(decompressedBytes, new ForDebugCvCallback());
     }
 
-    static void iterateFromSegmentBytes(byte[] decompressedBytes, CvCallback cvCallback) {
+    public static void iterateFromSegmentBytes(byte[] decompressedBytes, CvCallback cvCallback) {
         var buf = Unpooled.wrappedBuffer(decompressedBytes);
         // for crc check
         var segmentSeq = buf.readLong();

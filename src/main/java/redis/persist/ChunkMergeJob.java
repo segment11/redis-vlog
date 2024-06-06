@@ -57,7 +57,7 @@ public class ChunkMergeJob {
         }
     }
 
-    private static class CvWithKeyAndSegmentOffset {
+    public static class CvWithKeyAndSegmentOffset {
         public CvWithKeyAndSegmentOffset(CompressedValue cv, String key, int segmentOffset, int segmentIndex, byte subBlockIndex) {
             this.cv = cv;
             this.key = key;
@@ -66,15 +66,29 @@ public class ChunkMergeJob {
             this.subBlockIndex = subBlockIndex;
         }
 
-        CompressedValue cv;
+        public CompressedValue cv;
         final String key;
-        final long segmentOffset;
+        final int segmentOffset;
         final int segmentIndex;
         final byte subBlockIndex;
 
         // calc for batch pread key buckets, for performance
         int bucketIndex;
         int walGroupIndex;
+
+        public String shortString() {
+            return "k=" + key + ", s=" + segmentIndex + ", sbi=" + subBlockIndex + ", so=" + segmentOffset;
+        }
+
+        @Override
+        public String toString() {
+            return "CvWithKeyAndSegmentOffset{" +
+                    "key='" + key + '\'' +
+                    ", segmentOffset=" + segmentOffset +
+                    ", segmentIndex=" + segmentIndex +
+                    ", subBlockIndex=" + subBlockIndex +
+                    '}';
+        }
     }
 
     private static class ValidCvCountRecord {
