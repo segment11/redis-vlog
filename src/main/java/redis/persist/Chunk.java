@@ -19,8 +19,8 @@ import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 import static redis.repl.content.ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
 
 public class Chunk {
-    private final int maxSegmentNumberPerFd;
-    private final byte maxFdPerChunk;
+    private final int segmentNumberPerFd;
+    private final byte fdPerChunk;
     private final int maxSegmentIndex;
     private final int halfSegmentNumber;
 
@@ -68,10 +68,11 @@ public class Chunk {
 
     public Chunk(byte slot, File slotDir, OneSlot oneSlot,
                  SnowFlake snowFlake, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {
-        this.maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
-        this.maxFdPerChunk = ConfForSlot.global.confChunk.fdPerChunk;
+        var c = ConfForSlot.global.confChunk;
+        this.segmentNumberPerFd = c.segmentNumberPerFd;
+        this.fdPerChunk = c.fdPerChunk;
 
-        int maxSegmentNumber = maxSegmentNumberPerFd * maxFdPerChunk;
+        int maxSegmentNumber = c.maxSegmentNumber();
         this.maxSegmentIndex = maxSegmentNumber - 1;
         this.halfSegmentNumber = maxSegmentNumber / 2;
 
@@ -79,7 +80,7 @@ public class Chunk {
         this.slotStr = String.valueOf(slot);
         this.slotDir = slotDir;
 
-        this.segmentLength = ConfForSlot.global.confChunk.segmentLength;
+        this.segmentLength = c.segmentLength;
 
         this.oneSlot = oneSlot;
         this.keyLoader = keyLoader;
@@ -88,9 +89,9 @@ public class Chunk {
     }
 
     void initFds(LibC libC) throws IOException {
-        this.fdLengths = new int[maxFdPerChunk];
-        this.fdReadWriteArray = new FdReadWrite[maxFdPerChunk];
-        for (int i = 0; i < maxFdPerChunk; i++) {
+        this.fdLengths = new int[fdPerChunk];
+        this.fdReadWriteArray = new FdReadWrite[fdPerChunk];
+        for (int i = 0; i < fdPerChunk; i++) {
             // prometheus metric labels use _ instead of -
             var name = "chunk_data_index_" + i;
             var file = new File(slotDir, "chunk-data-" + i);
@@ -144,19 +145,19 @@ public class Chunk {
     }
 
     int targetFdIndex() {
-        return segmentIndex / maxSegmentNumberPerFd;
+        return segmentIndex / segmentNumberPerFd;
     }
 
     int targetFdIndex(int targetSegmentIndex) {
-        return targetSegmentIndex / maxSegmentNumberPerFd;
+        return targetSegmentIndex / segmentNumberPerFd;
     }
 
     int targetSegmentIndexTargetFd() {
-        return segmentIndex % maxSegmentNumberPerFd;
+        return segmentIndex % segmentNumberPerFd;
     }
 
     int targetSegmentIndexTargetFd(int targetSegmentIndex) {
-        return targetSegmentIndex % maxSegmentNumberPerFd;
+        return targetSegmentIndex % segmentNumberPerFd;
     }
 
     public boolean initSegmentIndexWhenFirstStart(int segmentIndex) {
@@ -358,7 +359,7 @@ public class Chunk {
     }
 
     private void moveIndexForPrepare() {
-        int leftSegmentCountThisFd = maxSegmentNumberPerFd - segmentIndex % maxSegmentNumberPerFd;
+        int leftSegmentCountThisFd = segmentNumberPerFd - segmentIndex % segmentNumberPerFd;
         if (leftSegmentCountThisFd < ONCE_PREPARE_SEGMENT_COUNT) {
             // begin with next fd
             segmentIndex += leftSegmentCountThisFd;
@@ -462,11 +463,11 @@ public class Chunk {
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
         if (segmentCount == 1) {
-            fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, true);
+            fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, false);
         } else if (segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
-            fdReadWrite.writeSegmentBatch(segmentIndex, bytes, true);
+            fdReadWrite.writeSegmentBatch(segmentIndexTargetFd, bytes, false);
         } else if (segmentCount == ONCE_SEGMENT_COUNT) {
-            fdReadWrite.writeSegmentForRepl(segmentIndex, bytes, 0);
+            fdReadWrite.writeSegmentForRepl(segmentIndexTargetFd, bytes, 0);
         } else {
             throw new IllegalArgumentException("Write segment count not support: " + segmentCount);
         }
