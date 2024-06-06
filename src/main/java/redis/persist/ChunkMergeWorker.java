@@ -37,8 +37,9 @@ public class ChunkMergeWorker {
     record CvWithKeyAndBucketIndex(CompressedValue cv, String key, int bucketIndex) {
     }
 
-    private static final int MERGING_CV_SIZE_THRESHOLD = 1000;
-    private static final int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 100;
+    private static final int MERGING_CV_SIZE_THRESHOLD = 100;
+    // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
+    private static final int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 16;
 
     private final List<CvWithKeyAndBucketIndex> mergedCvList = new ArrayList<>(MERGING_CV_SIZE_THRESHOLD);
 
