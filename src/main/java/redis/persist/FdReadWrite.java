@@ -591,26 +591,19 @@ public class FdReadWrite {
     }
 
     public int writeSegmentBatch(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
-        return writeSegmentBatch(segmentIndex, bytes, 0, isRefreshLRUCache);
-    }
-
-    public int writeSegmentBatch(int segmentIndex, byte[] bytes, int position, boolean isRefreshLRUCache) {
         var segmentCount = bytes.length / segmentLength;
         if (segmentCount != BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
             throw new IllegalArgumentException("Batch write bytes length not match once batch write segment count");
         }
 
         if (ConfForSlot.global.pureMemory) {
+            final int position = 0;
             return writeSegmentBatchToMemory(segmentIndex, bytes, position);
         }
 
         return writeInnerNotPureMemory(segmentIndex, writePageBufferB, (buffer) -> {
             buffer.clear();
-            if (position == 0) {
-                buffer.put(bytes);
-            } else {
-                buffer.put(bytes, position, bytes.length - position);
-            }
+            buffer.put(bytes);
         }, isRefreshLRUCache);
     }
 
