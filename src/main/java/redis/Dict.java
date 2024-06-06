@@ -51,15 +51,15 @@ public class Dict implements Serializable {
         return dictBytes;
     }
 
-    // seq int + create time long + key length short + key + dict bytes length short + dict bytes
+    // seq int + create time long + key prefix length short + key prefix + dict bytes length short + dict bytes
     private static final int ENCODED_HEADER_LENGTH = 4 + 8 + 2 + 2;
 
-    public int encodeLength(String key) {
-        return 4 + ENCODED_HEADER_LENGTH + key.length() + dictBytes.length;
+    public int encodeLength(String keyPrefix) {
+        return 4 + ENCODED_HEADER_LENGTH + keyPrefix.length() + dictBytes.length;
     }
 
-    public byte[] encode(String key) {
-        int vLength = ENCODED_HEADER_LENGTH + key.length() + dictBytes.length;
+    public byte[] encode(String keyPrefix) {
+        int vLength = ENCODED_HEADER_LENGTH + keyPrefix.length() + dictBytes.length;
 
         var bytes = new byte[4 + vLength];
         var buffer = ByteBuffer.wrap(bytes);
@@ -67,25 +67,25 @@ public class Dict implements Serializable {
         buffer.putInt(vLength);
         buffer.putInt(seq);
         buffer.putLong(createdTime);
-        buffer.putShort((short) key.length());
-        buffer.put(key.getBytes());
+        buffer.putShort((short) keyPrefix.length());
+        buffer.put(keyPrefix.getBytes());
         buffer.putShort((short) dictBytes.length);
         buffer.put(dictBytes);
 
         return bytes;
     }
 
-    public record DictWithKey(String key, Dict dict) {
+    public record DictWithKeyPrefix(String keyPrefix, Dict dict) {
         @Override
         public String toString() {
             return "DictWithKey{" +
-                    "key='" + key + '\'' +
+                    "keyPrefix='" + keyPrefix + '\'' +
                     ", dict=" + dict +
                     '}';
         }
     }
 
-    public static DictWithKey decode(DataInputStream is) throws IOException {
+    public static DictWithKeyPrefix decode(DataInputStream is) throws IOException {
         if (is.available() < 4) {
             return null;
         }
@@ -97,14 +97,18 @@ public class Dict implements Serializable {
 
         var seq = is.readInt();
         var createdTime = is.readLong();
-        var keyLength = is.readShort();
-        var keyBytes = new byte[keyLength];
-        is.readFully(keyBytes);
+        var keyPrefixLength = is.readShort();
+        if (keyPrefixLength > CompressedValue.KEY_MAX_LENGTH || keyPrefixLength < 0) {
+            throw new IllegalStateException("Key prefix length error, key length: " + keyPrefixLength);
+        }
+
+        var keyPrefixBytes = new byte[keyPrefixLength];
+        is.readFully(keyPrefixBytes);
         var dictBytesLength = is.readShort();
         var dictBytes = new byte[dictBytesLength];
         is.readFully(dictBytes);
 
-        if (vLength != ENCODED_HEADER_LENGTH + keyLength + dictBytesLength) {
+        if (vLength != ENCODED_HEADER_LENGTH + keyPrefixLength + dictBytesLength) {
             throw new IllegalStateException("Invalid length: " + vLength);
         }
 
@@ -113,7 +117,7 @@ public class Dict implements Serializable {
         dict.createdTime = createdTime;
         dict.dictBytes = dictBytes;
 
-        return new DictWithKey(new String(keyBytes), dict);
+        return new DictWithKeyPrefix(new String(keyPrefixBytes), dict);
     }
 
     private Dict() {

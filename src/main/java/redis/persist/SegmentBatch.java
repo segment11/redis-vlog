@@ -323,6 +323,10 @@ public class SegmentBatch {
                 break;
             }
 
+            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength < 0) {
+                throw new IllegalStateException("Key length error, key length: " + keyLength);
+            }
+
             var keyBytes = new byte[keyLength];
             buf.readBytes(keyBytes);
             var key = new String(keyBytes);

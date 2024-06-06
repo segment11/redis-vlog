@@ -1,5 +1,6 @@
 package redis.type;
 
+import redis.CompressedValue;
 import redis.KeyHash;
 
 import java.nio.ByteBuffer;
@@ -86,9 +87,17 @@ public class RedisHH {
         var r = new RedisHH();
         for (int i = 0; i < size; i++) {
             int keyLength = buffer.getShort();
+            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength < 0) {
+                throw new IllegalStateException("Key length error, key length: " + keyLength);
+            }
+
             var keyBytes = new byte[keyLength];
             buffer.get(keyBytes);
             var valueLength = buffer.getShort();
+            if (valueLength > CompressedValue.VALUE_MAX_LENGTH || valueLength < 0) {
+                throw new IllegalStateException("Value length error, value length: " + valueLength);
+            }
+
             var valueBytes = new byte[valueLength];
             buffer.get(valueBytes);
             r.map.put(new String(keyBytes), valueBytes);

@@ -586,6 +586,10 @@ public class OneSlot {
 
         // skip key header or check key
         var keyLength = buf.readShort();
+        if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength < 0) {
+            throw new IllegalStateException("Key length error, key length: " + keyLength);
+        }
+
         var keyBytesRead = new byte[keyLength];
         buf.readBytes(keyBytesRead);
 

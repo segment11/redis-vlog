@@ -263,7 +263,7 @@ public class XGroup extends BaseCommand {
         var is = new DataInputStream(new ByteArrayInputStream(contentBytes));
         try {
             var dictWithKey = Dict.decode(is);
-            DictMap.getInstance().putDict(dictWithKey.key(), dictWithKey.dict());
+            DictMap.getInstance().putDict(dictWithKey.keyPrefix(), dictWithKey.dict());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -612,7 +612,7 @@ public class XGroup extends BaseCommand {
                 var dictWithKey = Dict.decode(is);
 
                 var dict = dictWithKey.dict();
-                dictMap.putDict(dictWithKey.key(), dict);
+                dictMap.putDict(dictWithKey.keyPrefix(), dict);
 
                 log.warn("Repl handle s exists dict: dict with key={}", dictWithKey);
             }

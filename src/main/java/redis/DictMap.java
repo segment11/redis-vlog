@@ -38,25 +38,25 @@ public class DictMap {
         return cacheDictBySeq.get(seq);
     }
 
-    public Dict getDict(String key) {
-        return cacheDict.get(key);
+    public Dict getDict(String keyPrefix) {
+        return cacheDict.get(keyPrefix);
     }
 
-    public Dict putDict(String key, Dict dict) {
+    public Dict putDict(String keyPrefix, Dict dict) {
         synchronized (fos) {
             try {
-                fos.write(dict.encode(key));
+                fos.write(dict.encode(keyPrefix));
             } catch (IOException e) {
                 log.error("Write dict to file error", e);
             }
         }
 
         if (masterUpdateCallback != null) {
-            masterUpdateCallback.onDictCreate(key, dict);
+            masterUpdateCallback.onDictCreate(keyPrefix, dict);
         }
 
         cacheDictBySeq.put(dict.seq, dict);
-        return cacheDict.put(key, dict);
+        return cacheDict.put(keyPrefix, dict);
     }
 
     public HashMap<String, Dict> getCacheDictCopy() {
@@ -127,7 +127,7 @@ public class DictMap {
                 }
 
                 var dict = dictWithKey.dict();
-                cacheDict.put(dictWithKey.key(), dict);
+                cacheDict.put(dictWithKey.keyPrefix(), dict);
                 cacheDictBySeq.put(dict.seq, dict);
 
                 if (dict.seq > maxSeq) {

@@ -2,6 +2,7 @@ package redis.persist;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.CompressedValue;
 import redis.SnowFlake;
 
 import javax.annotation.Nullable;
@@ -176,9 +177,16 @@ public class KeyBucket {
             buffer.position(oneCellOffset(cellIndex));
 
             var keyLength = buffer.getShort();
+            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength < 0) {
+                throw new IllegalStateException("Key length error, key length: " + keyLength);
+            }
             var keyBytes = new byte[keyLength];
             buffer.get(keyBytes);
+
             var valueLength = buffer.get();
+            if (valueLength > CompressedValue.VALUE_MAX_LENGTH || valueLength < 0) {
+                throw new IllegalStateException("Value length error, value length: " + valueLength);
+            }
             var valueBytes = new byte[valueLength];
             buffer.get(valueBytes);
 
