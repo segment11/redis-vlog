@@ -30,6 +30,10 @@ import io.activej.worker.WorkerPoolModule;
 import io.activej.worker.WorkerPools;
 import io.activej.worker.annotation.Worker;
 import io.activej.worker.annotation.WorkerId;
+import io.prometheus.client.CollectorRegistry;
+import io.prometheus.client.hotspot.BufferPoolsExports;
+import io.prometheus.client.hotspot.GarbageCollectorExports;
+import io.prometheus.client.hotspot.MemoryPoolsExports;
 import redis.decode.Request;
 import redis.decode.RequestDecoder;
 import redis.persist.KeyBucket;
@@ -411,6 +415,12 @@ public class MultiWorkerServer extends Launcher {
             thread.start();
         }
         logger.info("Multi slot request eventloop threads started");
+
+        // metrics
+        CollectorRegistry.defaultRegistry.register(new BufferPoolsExports());
+        CollectorRegistry.defaultRegistry.register(new MemoryPoolsExports());
+        CollectorRegistry.defaultRegistry.register(new GarbageCollectorExports());
+        logger.info("Prometheus jvm hotspot metrics registered");
     }
 
     @Override
