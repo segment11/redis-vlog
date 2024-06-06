@@ -163,6 +163,9 @@ public class Chunk {
 
     public boolean initSegmentIndexWhenFirstStart(int segmentIndex) {
         log.info("Chunk init s={}, i={}", slot, segmentIndex);
+        if (segmentIndex > maxSegmentIndex) {
+            segmentIndex = 0;
+        }
         this.segmentIndex = segmentIndex;
         return reuseSegments(true, 1, true);
     }
@@ -406,10 +409,10 @@ public class Chunk {
 
             var doLog = Debug.getInstance().logMerge;
             if (doLog) {
-                logMergeCount++;
                 if (logMergeCount % 100 == 0) {
                     log.info("Chunk persist need merge segment index list, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
                 }
+                logMergeCount++;
             }
         }
 

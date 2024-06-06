@@ -78,6 +78,14 @@ public class ChunkMergeWorker {
         }
 
         if (!mergedSegmentSet.isEmpty()) {
+            var doLog = Debug.getInstance().logMerge;
+//            if (doLog) {
+//                if (logMergeCount % 100 != 0) {
+//                    doLog = false;
+//                }
+//                logMergeCount++;
+//            }
+
             var sb = new StringBuilder();
             var it = mergedSegmentSet.iterator();
 
@@ -87,17 +95,14 @@ public class ChunkMergeWorker {
                 oneSlot.setSegmentMergeFlag(one.index, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
                 it.remove();
 
-                lastPersistedSegmentIndex = one.index;
+                if (doLog) {
+                    log.info("Compare chunk merge segment index end, wal i: {}, merged and persisted i: {}", oneSlot.chunk.needMergeSegmentIndexEndLastTime, one.index);
+                }
+                if (oneSlot.chunk.needMergeSegmentIndexEndLastTime < one.index) {
+                    throw new IllegalStateException("Merge segment index end error");
+                }
 
                 sb.append(one.index).append(";");
-            }
-
-            var doLog = Debug.getInstance().logMerge;
-            if (doLog) {
-                logMergeCount++;
-                if (logMergeCount % 100 != 0) {
-                    doLog = false;
-                }
             }
 
             if (doLog) {

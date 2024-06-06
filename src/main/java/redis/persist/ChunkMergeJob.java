@@ -161,10 +161,10 @@ public class ChunkMergeJob {
 
         var doLog = Debug.getInstance().logMerge;
         if (doLog) {
-            logMergeCount++;
             if (logMergeCount % 100 != 0) {
                 doLog = false;
             }
+            logMergeCount++;
         }
 
         // read all segments to memory, then compare with key buckets

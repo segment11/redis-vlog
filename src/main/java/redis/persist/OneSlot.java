@@ -33,6 +33,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static io.activej.config.converter.ConfigConverters.ofInteger;
+import static redis.persist.Chunk.ONCE_PREPARE_SEGMENT_COUNT;
 import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
 public class OneSlot {
@@ -865,12 +866,12 @@ public class OneSlot {
         this.chunk = new Chunk(slot, slotDir, this, snowFlake, keyLoader, masterUpdateCallback);
         chunk.initFds(libC);
 
-        var segmentIndex = metaChunkSegmentIndex.get();
+        var segmentIndexLastSaved = metaChunkSegmentIndex.get();
 
         // write index mmap crash recovery
         boolean isBreak = false;
-        for (int i = 0; i < 10; i++) {
-            boolean canWrite = chunk.initSegmentIndexWhenFirstStart(segmentIndex);
+        for (int i = 0; i < ONCE_PREPARE_SEGMENT_COUNT; i++) {
+            boolean canWrite = chunk.initSegmentIndexWhenFirstStart(segmentIndexLastSaved + i);
             // when restart server, set persisted flag
             if (!canWrite) {
                 int currentSegmentIndex = chunk.currentSegmentIndex();
@@ -1076,7 +1077,7 @@ public class OneSlot {
             map.put("dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
             map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
             map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
-            map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.segmentIndex, labelValues));
+            map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.currentSegmentIndex(), labelValues));
 
             if (slot == 0) {
                 map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
