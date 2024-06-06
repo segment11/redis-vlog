@@ -1,0 +1,54 @@
+plugins {
+    id 'java'
+}
+
+version = '1.0.0'
+
+repositories {
+    maven {
+        url 'https://maven.aliyun.com/repository/public'
+    }
+    mavenCentral()
+}
+
+sourceCompatibility = 21
+targetCompatibility = 21
+
+def activejVersion = '6.0-beta2'
+
+dependencies {
+    implementation group: 'io.activej', name: 'activej-types', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-common', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-bytebuf', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-datastream', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-csp', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-eventloop', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-net', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-http', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-inject', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-launcher', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-launchers-common', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-servicegraph', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-config', version: activejVersion
+    implementation group: 'io.activej', name: 'activej-boot', version: activejVersion
+
+    implementation group: 'net.bytebuddy', name: 'byte-buddy', version: '1.14.17'
+
+    implementation group: 'net.openhft', name: 'affinity', version: '3.23.3'
+}
+
+jar {
+    manifest {
+        attributes "Premain-Class": 'redis.MyAgent', "Can-Retransform-Classes": "true"
+    }
+    from {
+        configurations.runtimeClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    zip64 true
+}
+
+tasks.withType(Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

@@ -1,2 +1,5 @@
 rootProject.name = 'redis-vlog'
 
+//include ':redis-vlog-agent'
+//project(':redis-vlog-agent').projectDir = new File(settingsDir, './agent')
+

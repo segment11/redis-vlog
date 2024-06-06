@@ -69,7 +69,7 @@ public class MultiWorkerServer extends Launcher {
 
     public static final String PROPERTIES_FILE = "redis-vlog.properties";
 
-    private static final int MAX_NET_WORKERS = 32;
+    private static final int MAX_NET_WORKERS = 128;
 
     ConfigConverter<Integer> toInt = ofInteger();
 
@@ -572,6 +572,10 @@ public class MultiWorkerServer extends Launcher {
                         int netWorkers = config.get(toInt, "netWorkers", 1);
                         if (netWorkers > MAX_NET_WORKERS) {
                             throw new IllegalStateException("Net workers too large, net workers should be less than " + MAX_NET_WORKERS);
+                        }
+                        var cpuNumber = Runtime.getRuntime().availableProcessors();
+                        if (netWorkers >= cpuNumber) {
+                            throw new IllegalStateException("Net workers should be less than cpu number");
                         }
                         confForSlot.netWorkers = (byte) netWorkers;
 

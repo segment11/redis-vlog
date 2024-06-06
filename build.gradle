@@ -71,6 +71,8 @@ dependencies {
     implementation group: 'io.prometheus', name: 'simpleclient_httpserver', version: '0.15.0'
     implementation group: 'io.prometheus', name: 'simpleclient_hotspot', version: '0.15.0'
 
+//    implementation project(':redis-vlog-agent')
+
     testImplementation group: 'org.openjdk.jol', name: 'jol-core', version: '0.17'
     testImplementation group: 'org.apache.groovy', name: 'groovy', version: '4.0.12'
     testImplementation group: 'com.github.kevinsawicki', name: 'http-request', version: '6.0'
