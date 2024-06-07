@@ -96,10 +96,11 @@ public class ChunkMergeWorker {
                 it.remove();
 
                 if (doLog) {
-                    log.info("Compare chunk merge segment index end, wal i: {}, merged and persisted i: {}", oneSlot.chunk.needMergeSegmentIndexEndLastTime, one.index);
+                    log.info("Compare chunk merged segment index end last time, end last time i: {}, just merged and persisted i: {}",
+                            oneSlot.chunk.mergedSegmentIndexEndLastTime, one.index);
                 }
-                if (oneSlot.chunk.needMergeSegmentIndexEndLastTime < one.index) {
-                    throw new IllegalStateException("Merge segment index end error");
+                if (oneSlot.chunk.mergedSegmentIndexEndLastTime < one.index) {
+                    throw new IllegalStateException("Chunk merged segment index end last time is less than just merged and persisted");
                 }
 
                 sb.append(one.index).append(";");
@@ -113,7 +114,7 @@ public class ChunkMergeWorker {
         return true;
     }
 
-    private long logMergeCount = 0;
+//    private long logMergeCount = 0;
 
     // for log
     private int lastPersistedSegmentIndex;

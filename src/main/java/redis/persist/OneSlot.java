@@ -427,7 +427,15 @@ public class OneSlot {
         metaChunkSegmentFlagSeq.overwriteInMemoryCachedBytes(bytes);
     }
 
-    MetaChunkSegmentIndex metaChunkSegmentIndex;
+    private MetaChunkSegmentIndex metaChunkSegmentIndex;
+
+    private int getChunkWriteSegmentIndex() {
+        return metaChunkSegmentIndex.get();
+    }
+
+    public void setChunkWriteSegmentIndex(int segmentIndex) {
+        metaChunkSegmentIndex.set(segmentIndex);
+    }
 
     // read only, important
     public byte[] getMetaChunkSegmentIndexBytesToSlaveExists() {
@@ -866,26 +874,26 @@ public class OneSlot {
         this.chunk = new Chunk(slot, slotDir, this, snowFlake, keyLoader, masterUpdateCallback);
         chunk.initFds(libC);
 
-        var segmentIndexLastSaved = metaChunkSegmentIndex.get();
+        var segmentIndexLastSaved = getChunkWriteSegmentIndex();
 
         // write index mmap crash recovery
         boolean isBreak = false;
         for (int i = 0; i < ONCE_PREPARE_SEGMENT_COUNT; i++) {
             boolean canWrite = chunk.initSegmentIndexWhenFirstStart(segmentIndexLastSaved + i);
+            int currentSegmentIndex = chunk.currentSegmentIndex();
+            log.warn("Move segment to write, s={}, i={}", slot, currentSegmentIndex);
+
             // when restart server, set persisted flag
             if (!canWrite) {
-                int currentSegmentIndex = chunk.currentSegmentIndex();
                 log.warn("Segment can not write, s={}, i={}", slot, currentSegmentIndex);
 
                 // set persisted flag, for next loop reuse
                 setSegmentMergeFlag(currentSegmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, snowFlake.nextId());
-                log.warn("Reset persisted when init");
+                log.warn("Reset segment persisted when init");
 
-                chunk.moveSegmentIndexNext(1);
                 setChunkWriteSegmentIndex(currentSegmentIndex);
-
-                log.warn("Move to next segment, s={}, i={}", slot, currentSegmentIndex);
             } else {
+                setChunkWriteSegmentIndex(currentSegmentIndex);
                 isBreak = true;
                 break;
             }
@@ -981,10 +989,10 @@ public class OneSlot {
         return job.run();
     }
 
-    public void persistMergeSegmentsUndone() {
+    public void persistMergingOrMergedSegmentsButNotPersisted() {
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
 
-        final int[] lastMergedAndPersistSegmentIndexArray = {-1};
+        final int[] lastMergedAndPersistedSegmentIndexArray = {-1};
         this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq) -> {
             if (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGING) {
                 log.warn("Segment not persisted after merging, s={}, i={}, flag={}", slot, segmentIndex, flag);
@@ -992,24 +1000,25 @@ public class OneSlot {
             }
 
             if (flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED) {
-                lastMergedAndPersistSegmentIndexArray[0] = segmentIndex;
+                lastMergedAndPersistedSegmentIndexArray[0] = segmentIndex;
             }
         });
 
         if (needMergeSegmentIndexList.isEmpty()) {
-            chunk.needMergeSegmentIndexEndLastTime = lastMergedAndPersistSegmentIndexArray[0];
+            chunk.mergedSegmentIndexEndLastTime = lastMergedAndPersistedSegmentIndexArray[0];
             return;
         }
 
         var firstSegmentIndex = needMergeSegmentIndexList.getFirst();
         var lastSegmentIndex = needMergeSegmentIndexList.getLast();
 
+        // continuous
         if (lastSegmentIndex - firstSegmentIndex + 1 == needMergeSegmentIndexList.size()) {
             var validCvCount = doMergeJob(needMergeSegmentIndexList);
             log.warn("Merge segments undone, s={}, i={}, end i={}, valid cv count after run: {}",
                     slot, firstSegmentIndex, lastSegmentIndex, validCvCount);
         } else {
-            // split
+            // not continuous, need split
             ArrayList<Integer> onceList = new ArrayList<>();
             onceList.add(firstSegmentIndex);
 
@@ -1031,17 +1040,13 @@ public class OneSlot {
             }
         }
 
-        chunk.needMergeSegmentIndexEndLastTime = lastSegmentIndex;
+        chunk.mergedSegmentIndexEndLastTime = lastSegmentIndex;
     }
 
     private void doMergeJobOnceList(ArrayList<Integer> onceList) {
         var validCvCount = doMergeJob(onceList);
         log.warn("Merge segments undone, s={}, i={}, end i={} valid cv count after run: {}",
                 slot, onceList.get(0), onceList.get(onceList.size() - 1), validCvCount);
-    }
-
-    public void setChunkWriteSegmentIndex(int segmentIndex) {
-        metaChunkSegmentIndex.set(segmentIndex);
     }
 
     // metrics

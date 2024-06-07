@@ -218,7 +218,7 @@ public class Chunk {
     // 32 segments is enough for 1000 Wal.V persist
     static final int ONCE_PREPARE_SEGMENT_COUNT = 32;
 
-    int needMergeSegmentIndexEndLastTime = -1;
+    int mergedSegmentIndexEndLastTime = -1;
 
     // return need merge segment index array
     public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge) {
@@ -369,32 +369,33 @@ public class Chunk {
 
         if (!needMergeSegmentIndexList.isEmpty()) {
             var firstNeedMergeSegmentIndex = needMergeSegmentIndexList.getFirst();
-            if (needMergeSegmentIndexEndLastTime == -1) {
+            if (mergedSegmentIndexEndLastTime == -1) {
                 if (firstNeedMergeSegmentIndex != 0) {
                     throw new IllegalStateException("First need merge segment index not 0, s=" + slot + ", i=" + firstNeedMergeSegmentIndex);
                 }
             } else {
-                var diff = firstNeedMergeSegmentIndex - needMergeSegmentIndexEndLastTime;
+                // todo, check reuse from beginning case
+                var diff = firstNeedMergeSegmentIndex - mergedSegmentIndexEndLastTime;
                 if (diff > 0) {
                     if (diff != 1) {
                         if (diff > ONCE_PREPARE_SEGMENT_COUNT + ChunkMergeWorker.MERGED_SEGMENT_SET_SIZE_THRESHOLD) {
                             throw new IllegalStateException("Need merge segment index not continuous, s=" + slot +
-                                    ", first need merge segment index=" + firstNeedMergeSegmentIndex + ", last time end segment index =" + needMergeSegmentIndexEndLastTime);
+                                    ", first need merge segment index=" + firstNeedMergeSegmentIndex + ", last time merged segment index =" + mergedSegmentIndexEndLastTime);
                         } else {
                             // prepend to make continuous
                             for (int i = 1; i < diff; i++) {
-                                needMergeSegmentIndexList.add(needMergeSegmentIndexEndLastTime + i);
+                                needMergeSegmentIndexList.add(mergedSegmentIndexEndLastTime + i);
                             }
                         }
                     }
                 } else {
-                    var diff2 = maxSegmentIndex + 1 - needMergeSegmentIndexEndLastTime + firstNeedMergeSegmentIndex;
+                    var diff2 = maxSegmentIndex + 1 - mergedSegmentIndexEndLastTime + firstNeedMergeSegmentIndex;
                     if (diff2 > ONCE_PREPARE_SEGMENT_COUNT + ChunkMergeWorker.MERGED_SEGMENT_SET_SIZE_THRESHOLD) {
                         throw new IllegalStateException("Need merge segment index not continuous, s=" + slot +
-                                ", first need merge segment index=" + firstNeedMergeSegmentIndex + ", last time end segment index =" + needMergeSegmentIndexEndLastTime);
+                                ", first need merge segment index=" + firstNeedMergeSegmentIndex + ", last time merged segment index =" + mergedSegmentIndexEndLastTime);
                     } else {
                         // prepend to make continuous
-                        for (int i = needMergeSegmentIndexEndLastTime + 1; i <= maxSegmentIndex; i++) {
+                        for (int i = mergedSegmentIndexEndLastTime + 1; i <= maxSegmentIndex; i++) {
                             needMergeSegmentIndexList.add(i);
                         }
                         for (int i = 0; i < firstNeedMergeSegmentIndex; i++) {
@@ -404,8 +405,9 @@ public class Chunk {
                 }
             }
 
+            // need sort, so that merge worker can merge in order
             needMergeSegmentIndexList.sort(Integer::compareTo);
-            needMergeSegmentIndexEndLastTime = needMergeSegmentIndexList.getLast();
+            mergedSegmentIndexEndLastTime = needMergeSegmentIndexList.getLast();
 
             var doLog = Debug.getInstance().logMerge;
             if (doLog) {
