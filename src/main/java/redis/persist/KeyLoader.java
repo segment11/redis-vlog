@@ -128,7 +128,7 @@ public class KeyLoader {
     }
 
     private void updateKeyCountBatchCached(int[] keyCountTmp, int beginBucketIndex) {
-        if (beginBucketIndex < 0 || beginBucketIndex + keyCountTmp.length >= bucketsPerSlot) {
+        if (beginBucketIndex < 0 || beginBucketIndex + keyCountTmp.length > bucketsPerSlot) {
             throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
         }
 
