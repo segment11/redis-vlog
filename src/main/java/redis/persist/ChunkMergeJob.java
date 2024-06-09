@@ -39,6 +39,30 @@ public class ChunkMergeJob {
     }
 
     public int run() {
+        // recycle, need spit to two part
+        if (needMergeSegmentIndexList.getLast() - needMergeSegmentIndexList.getFirst() > oneSlot.chunk.halfSegmentNumber) {
+            assert needMergeSegmentIndexList.contains(0);
+
+            var onePart = new ArrayList<Integer>();
+            var anotherPart = new ArrayList<Integer>();
+            for (var segmentIndex : needMergeSegmentIndexList) {
+                if (segmentIndex < oneSlot.chunk.halfSegmentNumber) {
+                    onePart.add(segmentIndex);
+                } else {
+                    anotherPart.add(segmentIndex);
+                }
+            }
+            log.warn("Recycle merge chunk, s={}, one part need merge segment index list ={}, another part need merge segment index list={}",
+                    slot, onePart, anotherPart);
+
+            var job1 = new ChunkMergeJob(slot, onePart, chunkMergeWorker, snowFlake);
+            var job2 = new ChunkMergeJob(slot, anotherPart, chunkMergeWorker, snowFlake);
+
+            var validCvCount1 = job1.run();
+            var validCvCount2 = job2.run();
+            return validCvCount1 + validCvCount2;
+        }
+
         var batchCount = needMergeSegmentIndexList.size() / MERGE_READ_ONCE_SEGMENT_COUNT;
         if (needMergeSegmentIndexList.size() % MERGE_READ_ONCE_SEGMENT_COUNT != 0) {
             batchCount++;
@@ -265,7 +289,7 @@ public class ChunkMergeJob {
                     }
 
                     // add to merged set
-                    chunkMergeWorker.mergedSegmentSet.add(new ChunkMergeWorker.MergedSegment(segmentIndex, validCvCountRecord.validCvCount));
+                    chunkMergeWorker.addMergedSegment(segmentIndex, validCvCountRecord.validCvCount);
                 } else {
                     oneSlot.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
 

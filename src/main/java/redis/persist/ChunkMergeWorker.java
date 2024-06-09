@@ -46,6 +46,27 @@ public class ChunkMergeWorker {
         mergedCvList.add(cvWithKeyAndBucketIndex);
     }
 
+    private record MergedSegment(int index, int validCvCount) implements Comparable<MergedSegment> {
+        @Override
+        public String toString() {
+            return "MergedSegment{" +
+                    ", index=" + index +
+                    ", validCvCount=" + validCvCount +
+                    '}';
+        }
+
+        @Override
+        public int compareTo(@NotNull ChunkMergeWorker.MergedSegment o) {
+            return this.index - o.index;
+        }
+    }
+
+    private final TreeSet<MergedSegment> mergedSegmentSet = new TreeSet<>();
+
+    void addMergedSegment(int segmentIndex, int validCvCount) {
+        mergedSegmentSet.add(new MergedSegment(segmentIndex, validCvCount));
+    }
+
     boolean persistMergedCvList() {
         if (mergedCvList.size() < MERGING_CV_SIZE_THRESHOLD) {
             if (mergedSegmentSet.size() < MERGED_SEGMENT_SET_SIZE_THRESHOLD) {
@@ -53,6 +74,7 @@ public class ChunkMergeWorker {
             }
         }
 
+        // perf bad, need optimize, todo
         var groupByWalGroupIndex = mergedCvList.stream().collect(Collectors.groupingBy(one -> Wal.calWalGroupIndex(one.bucketIndex)));
         for (var entry : groupByWalGroupIndex.entrySet()) {
             var walGroupIndex = entry.getKey();
@@ -69,22 +91,18 @@ public class ChunkMergeWorker {
             }
 
             // refer Chunk.ONCE_PREPARE_SEGMENT_COUNT
-            // if list size is too large, need multi batch persist, todo
-            var needMergeSegmentIndexList = oneSlot.chunk.persist(walGroupIndex, list, true);
-            if (needMergeSegmentIndexList == null) {
-                log.error("Merge worker persist merged cv list error, s={}, v list size={}", slot, list.size());
-                throw new IllegalStateException("Merge worker persist merged cv list error, s=" + slot + ", v list size=" + list.size());
-            }
+            // list size is not large, need not multi batch persist
+            oneSlot.chunk.persist(walGroupIndex, list, true);
         }
 
         if (!mergedSegmentSet.isEmpty()) {
             var doLog = Debug.getInstance().logMerge;
-//            if (doLog) {
-//                if (logMergeCount % 100 != 0) {
-//                    doLog = false;
-//                }
-//                logMergeCount++;
-//            }
+            if (doLog) {
+                if (logMergeCount % 10 != 0) {
+                    doLog = false;
+                }
+                logMergeCount++;
+            }
 
             var sb = new StringBuilder();
             var it = mergedSegmentSet.iterator();
@@ -111,30 +129,11 @@ public class ChunkMergeWorker {
             }
         }
 
+        mergedCvList.clear();
         return true;
     }
 
-//    private long logMergeCount = 0;
-
-    // for log
-    private int lastPersistedSegmentIndex;
-
-    public record MergedSegment(int index, int validCvCount) implements Comparable<MergedSegment> {
-        @Override
-        public String toString() {
-            return "MergedSegment{" +
-                    ", index=" + index +
-                    ", validCvCount=" + validCvCount +
-                    '}';
-        }
-
-        @Override
-        public int compareTo(@NotNull ChunkMergeWorker.MergedSegment o) {
-            return this.index - o.index;
-        }
-    }
-
-    final TreeSet<MergedSegment> mergedSegmentSet = new TreeSet<>();
+    private long logMergeCount = 0;
 
     public ChunkMergeWorker(byte slot, OneSlot oneSlot) {
         this.slot = slot;
