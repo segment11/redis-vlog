@@ -434,6 +434,10 @@ public class OneSlot {
     }
 
     public void setChunkWriteSegmentIndex(int segmentIndex) {
+        if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
+            throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
+        }
+
         metaChunkSegmentIndex.set(segmentIndex);
     }
 
@@ -969,18 +973,34 @@ public class OneSlot {
     }
 
     Chunk.SegmentFlag getSegmentMergeFlag(int segmentIndex) {
+        if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
+            throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
+        }
+
         return metaChunkSegmentFlagSeq.getSegmentMergeFlag(segmentIndex);
     }
 
     public List<Long> getSegmentMergeFlagListBatchForRepl(int segmentIndex, int segmentCount) {
+        if (segmentIndex < 0 || segmentIndex + segmentCount > chunk.maxSegmentIndex) {
+            throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
+        }
+
         return metaChunkSegmentFlagSeq.getSegmentSeqListBatchForRepl(segmentIndex, segmentCount);
     }
 
     void setSegmentMergeFlag(int segmentIndex, byte flag, long segmentSeq) {
+        if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
+            throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
+        }
+
         metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, flag, segmentSeq);
     }
 
     void setSegmentMergeFlagBatch(int segmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
+        if (segmentIndex < 0 || segmentIndex + segmentCount > chunk.maxSegmentIndex) {
+            throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
+        }
+
         metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(segmentIndex, segmentCount, flag, segmentSeqList);
     }
 
@@ -989,23 +1009,18 @@ public class OneSlot {
         return job.run();
     }
 
-    public void persistMergingOrMergedSegmentsButNotPersisted() {
+    void persistMergingOrMergedSegmentsButNotPersisted() {
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
 
-        final int[] lastMergedAndPersistedSegmentIndexArray = {-1};
         this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq) -> {
             if (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGING) {
                 log.warn("Segment not persisted after merging, s={}, i={}, flag={}", slot, segmentIndex, flag);
                 needMergeSegmentIndexList.add(segmentIndex);
             }
-
-            if (flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED) {
-                lastMergedAndPersistedSegmentIndexArray[0] = segmentIndex;
-            }
         });
 
         if (needMergeSegmentIndexList.isEmpty()) {
-            chunk.mergedSegmentIndexEndLastTime = lastMergedAndPersistedSegmentIndexArray[0];
+            log.warn("No segment need merge when server start, s={}", slot);
             return;
         }
 
@@ -1027,7 +1042,9 @@ public class OneSlot {
                 var segmentIndex = needMergeSegmentIndexList.get(i);
                 if (segmentIndex - last != 1) {
                     if (!onceList.isEmpty()) {
-                        doMergeJobOnceList(onceList);
+                        var validCvCount = doMergeJob(onceList);
+                        log.warn("Merge segments undone, once list, s={}, i={}, end i={}, valid cv count after run: {}",
+                                slot, onceList.getFirst(), onceList.getLast(), validCvCount);
                         onceList.clear();
                     }
                 }
@@ -1036,17 +1053,29 @@ public class OneSlot {
             }
 
             if (!onceList.isEmpty()) {
-                doMergeJobOnceList(onceList);
+                var validCvCount = doMergeJob(onceList);
+                log.warn("Merge segments undone, once list, s={}, i={}, end i={}, valid cv count after run: {}",
+                        slot, onceList.getFirst(), onceList.getLast(), validCvCount);
             }
         }
-
-        chunk.mergedSegmentIndexEndLastTime = lastSegmentIndex;
     }
 
-    private void doMergeJobOnceList(ArrayList<Integer> onceList) {
-        var validCvCount = doMergeJob(onceList);
-        log.warn("Merge segments undone, s={}, i={}, end i={} valid cv count after run: {}",
-                slot, onceList.get(0), onceList.get(onceList.size() - 1), validCvCount);
+    void getMergedSegmentIndexEndLastTime() {
+        var currentSegmentIndex = chunk.currentSegmentIndex();
+        if (currentSegmentIndex < chunk.halfSegmentNumber) {
+            this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq) -> {
+                if (segmentIndex >= chunk.halfSegmentNumber && flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED) {
+                    chunk.mergedSegmentIndexEndLastTime = segmentIndex;
+                }
+            });
+        } else {
+            this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq) -> {
+                if (segmentIndex < chunk.halfSegmentNumber && flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED) {
+                    chunk.mergedSegmentIndexEndLastTime = segmentIndex;
+                }
+            });
+        }
+        log.info("Get merged segment index end last time, s={}, i={}", slot, chunk.mergedSegmentIndexEndLastTime);
     }
 
     // metrics

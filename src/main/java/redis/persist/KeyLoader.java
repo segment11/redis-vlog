@@ -50,10 +50,18 @@ public class KeyLoader {
     MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
 
     byte[] getMetaKeyBucketSplitNumberBatch(int beginBucketIndex, int bucketCount) {
+        if (beginBucketIndex < 0 || beginBucketIndex >= bucketsPerSlot) {
+            throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
+        }
+
         return metaKeyBucketSplitNumber.getBatch(beginBucketIndex, bucketCount);
     }
 
     boolean updateMetaKeyBucketSplitNumberBatchIfChanged(int beginBucketIndex, byte[] splitNumberArray) {
+        if (beginBucketIndex < 0 || beginBucketIndex >= bucketsPerSlot) {
+            throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
+        }
+
         // if not change, need not an extra ssd io
         // even though random access file use os page cache
         var currentBytes = metaKeyBucketSplitNumber.getBatch(beginBucketIndex, splitNumberArray.length);
@@ -79,6 +87,10 @@ public class KeyLoader {
     }
 
     void setMetaKeyBucketSplitNumberForTest(int bucketIndex, byte splitNumber) {
+        if (bucketIndex < 0 || bucketIndex >= bucketsPerSlot) {
+            throw new IllegalArgumentException("Bucket index out of range, slot: " + slot + ", begin bucket index: " + bucketIndex);
+        }
+
         metaKeyBucketSplitNumber.setForTest(bucketIndex, splitNumber);
     }
 
@@ -104,6 +116,10 @@ public class KeyLoader {
     StatKeyCountInBuckets statKeyCountInBuckets;
 
     public short getKeyCountInBucketIndex(int bucketIndex) {
+        if (bucketIndex < 0 || bucketIndex >= bucketsPerSlot) {
+            throw new IllegalArgumentException("Bucket index out of range, slot: " + slot + ", bucket index: " + bucketIndex);
+        }
+
         return statKeyCountInBuckets.getKeyCountForBucketIndex(bucketIndex);
     }
 
@@ -112,6 +128,10 @@ public class KeyLoader {
     }
 
     private void updateKeyCountBatchCached(int[] keyCountTmp, int beginBucketIndex) {
+        if (beginBucketIndex < 0 || beginBucketIndex + keyCountTmp.length >= bucketsPerSlot) {
+            throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
+        }
+
         for (int i = 0; i < keyCountTmp.length; i++) {
             var bucketIndex = beginBucketIndex + i;
             var keyCount = keyCountTmp[i];

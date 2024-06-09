@@ -40,6 +40,7 @@ public class LocalPersist {
     public void persistMergeSegmentsUndone() {
         for (var oneSlot : oneSlots) {
             oneSlot.persistMergingOrMergedSegmentsButNotPersisted();
+            oneSlot.getMergedSegmentIndexEndLastTime();
         }
     }
 
