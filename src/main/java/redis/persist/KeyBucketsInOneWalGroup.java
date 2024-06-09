@@ -118,12 +118,15 @@ public class KeyBucketsInOneWalGroup {
         var sharedBytesList = new byte[maxSplitNumberTmp][];
 
         for (int splitIndex = 0; splitIndex < listList.size(); splitIndex++) {
+            if (!isUpdatedBySplitIndex[splitIndex]) {
+                continue;
+            }
+
             var list = listList.get(splitIndex);
             for (int i = 0; i < list.size(); i++) {
                 var keyBucket = list.get(i);
                 if (keyBucket != null) {
-                    var currentSplitNumber = splitNumberTmp[i];
-                    keyBucket.splitNumber = currentSplitNumber;
+                    keyBucket.splitNumber = splitNumberTmp[i];
                     keyBucket.encode(true);
                 }
             }
@@ -160,6 +163,8 @@ public class KeyBucketsInOneWalGroup {
 
     boolean isSplit = false;
 
+    private final boolean[] isUpdatedBySplitIndex = new boolean[KeyLoader.MAX_SPLIT_NUMBER];
+
     private void putPvmListToTargetBucketAfterClearAllIfSplit(List<PersistValueMeta> needAddNewList,
                                                               List<PersistValueMeta> needUpdateList,
                                                               List<PersistValueMeta> needDeleteList, Integer bucketIndex) {
@@ -184,9 +189,10 @@ public class KeyBucketsInOneWalGroup {
                 // log all keys
                 log.warn("Failed keys to put: {}", needAddNewList.stream().map(pvmInner -> new String(pvmInner.keyBytes)).collect(Collectors.toList()));
                 throw new BucketFullException("Bucket full, slot: " + slot + ", bucket index: " + bucketIndex +
-                        ", split index: " + splitIndex + ", key: " + new String(pvm.keyBytes) + "");
+                        ", split index: " + splitIndex + ", key: " + new String(pvm.keyBytes));
             }
 
+            isUpdatedBySplitIndex[splitIndex] = true;
             if (!doPutResult.isUpdate()) {
                 keyCountForStatsTmp[relativeBucketIndex]++;
             }
@@ -203,6 +209,7 @@ public class KeyBucketsInOneWalGroup {
 
             var isDeleted = keyBucket.del(pvm.keyBytes, pvm.keyHash, true);
             if (isDeleted) {
+                isUpdatedBySplitIndex[splitIndex] = true;
                 keyCountForStatsTmp[relativeBucketIndex]--;
             }
         }

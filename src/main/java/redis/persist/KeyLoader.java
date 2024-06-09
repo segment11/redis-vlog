@@ -141,7 +141,7 @@ public class KeyLoader {
 
             // prometheus metric labels use _ instead of -
             var name = "key_bucket_split_" + splitIndex + "_slot_" + slot;
-            FdReadWrite fdReadWrite = null;
+            FdReadWrite fdReadWrite;
             try {
                 fdReadWrite = new FdReadWrite(name, libC, file);
             } catch (IOException e) {
@@ -359,6 +359,9 @@ public class KeyLoader {
     void writeSharedBytesList(byte[][] sharedBytesListBySplitIndex, int beginBucketIndex) {
         for (int splitIndex = 0; splitIndex < sharedBytesListBySplitIndex.length; splitIndex++) {
             var sharedBytes = sharedBytesListBySplitIndex[splitIndex];
+            if (sharedBytes == null) {
+                continue;
+            }
 
             var fdReadWrite = fdReadWriteArray[splitIndex];
             if (fdReadWrite == null) {
