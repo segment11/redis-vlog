@@ -38,7 +38,7 @@ public class ChunkMergeWorker {
 
     private static final int MERGING_CV_SIZE_THRESHOLD = 100;
     // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
-    static final int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 16;
+    static final int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 8;
 
     private final List<CvWithKeyAndBucketIndex> mergedCvList = new ArrayList<>(MERGING_CV_SIZE_THRESHOLD);
 
@@ -68,6 +68,9 @@ public class ChunkMergeWorker {
     }
 
     boolean persistMergedCvList() {
+        logMergeCount++;
+        var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
+
         if (mergedCvList.size() < MERGING_CV_SIZE_THRESHOLD) {
             if (mergedSegmentSet.size() < MERGED_SEGMENT_SET_SIZE_THRESHOLD) {
                 return false;
@@ -96,12 +99,9 @@ public class ChunkMergeWorker {
         }
 
         if (!mergedSegmentSet.isEmpty()) {
-            var doLog = Debug.getInstance().logMerge;
             if (doLog) {
-                if (logMergeCount % 10 != 0) {
-                    doLog = false;
-                }
-                logMergeCount++;
+                log.info("Compare chunk merged segment index end last time, end last time i: {}, ready to merged and persisted last i: {}",
+                        oneSlot.chunk.mergedSegmentIndexEndLastTime, mergedSegmentSet.getLast().index);
             }
 
             var sb = new StringBuilder();
@@ -112,15 +112,6 @@ public class ChunkMergeWorker {
                 // can reuse this chunk by segment index
                 oneSlot.setSegmentMergeFlag(one.index, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
                 it.remove();
-
-                if (doLog) {
-                    log.info("Compare chunk merged segment index end last time, end last time i: {}, just merged and persisted i: {}",
-                            oneSlot.chunk.mergedSegmentIndexEndLastTime, one.index);
-                }
-                if (oneSlot.chunk.mergedSegmentIndexEndLastTime < one.index) {
-                    throw new IllegalStateException("Chunk merged segment index end last time is less than just merged and persisted");
-                }
-
                 sb.append(one.index).append(";");
             }
 
@@ -133,7 +124,7 @@ public class ChunkMergeWorker {
         return true;
     }
 
-    private long logMergeCount = 0;
+    long logMergeCount = 0;
 
     public ChunkMergeWorker(byte slot, OneSlot oneSlot) {
         this.slot = slot;

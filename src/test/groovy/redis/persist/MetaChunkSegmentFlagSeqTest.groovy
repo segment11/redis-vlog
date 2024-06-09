@@ -9,51 +9,73 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
     def "read write seq"() {
         given:
         ConfForSlot.global.pureMemory = false
-        def seq = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
         when:
-        seq.setSegmentMergeFlag(10, (byte) 1, 1L)
+        one.setSegmentMergeFlag(10, (byte) 1, 1L)
         then:
-        seq.getSegmentMergeFlag(10).flag() == 1
-        seq.getSegmentMergeFlag(10).segmentSeq() == 1L
+        one.getSegmentMergeFlag(10).flag() == 1
+        one.getSegmentMergeFlag(10).segmentSeq() == 1L
 
         cleanup:
-        seq.clear()
-        seq.cleanUp()
+        one.clear()
+        one.cleanUp()
     }
 
     def "read write seq pure memory"() {
         given:
         ConfForSlot.global.pureMemory = true
-        def seq = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
         when:
-        seq.setSegmentMergeFlag(10, (byte) 1, 1L)
+        one.setSegmentMergeFlag(10, (byte) 1, 1L)
         then:
-        seq.getSegmentMergeFlag(10).flag() == 1
-        seq.getSegmentMergeFlag(10).segmentSeq() == 1L
+        one.getSegmentMergeFlag(10).flag() == 1
+        one.getSegmentMergeFlag(10).segmentSeq() == 1L
 
         cleanup:
-        seq.clear()
-        seq.cleanUp()
+        one.clear()
+        one.cleanUp()
     }
 
     def 'read batch for repl'() {
         given:
-        def seq = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
         when:
         List<Long> seqLongList = []
         10.times {
             seqLongList << (it as Long)
         }
-        seq.setSegmentMergeFlagBatch(10, 10, (byte) 1, seqLongList)
+        one.setSegmentMergeFlagBatch(10, 10, (byte) 1, seqLongList)
 
         then:
-        seq.getSegmentSeqListBatchForRepl(10, 10) == seqLongList
+        one.getSegmentSeqListBatchForRepl(10, 10) == seqLongList
 
         cleanup:
-        seq.clear()
-        seq.cleanUp()
+        one.clear()
+        one.cleanUp()
+    }
+
+    def 'iterate'() {
+        given:
+        def confChunk = ConfForSlot.global.confChunk
+        def debugConfChunk = ConfForSlot.ConfChunk.debugMode
+        confChunk.segmentNumberPerFd = debugConfChunk.segmentNumberPerFd
+        confChunk.fdPerChunk = debugConfChunk.fdPerChunk
+
+        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+
+        when:
+        one.iterate { segmentIndex, flag, seq ->
+            println "segment index: $segmentIndex, flag: $flag, seq: $seq"
+        }
+
+        then:
+        1 == 1
+
+        cleanup:
+        one.clear()
+        one.cleanUp()
     }
 }

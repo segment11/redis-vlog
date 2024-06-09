@@ -58,8 +58,9 @@ public class ChunkMergeJob {
             var job1 = new ChunkMergeJob(slot, onePart, chunkMergeWorker, snowFlake);
             var job2 = new ChunkMergeJob(slot, anotherPart, chunkMergeWorker, snowFlake);
 
-            var validCvCount1 = job1.run();
+            // first do job2, then do job1
             var validCvCount2 = job2.run();
+            var validCvCount1 = job1.run();
             return validCvCount1 + validCvCount2;
         }
 
@@ -125,9 +126,10 @@ public class ChunkMergeJob {
         final int segmentIndex;
     }
 
-    private long logMergeCount = 0;
-
     void mergeSegments(List<Integer> needMergeSegmentIndexList) {
+        chunkMergeWorker.logMergeCount++;
+        var doLog = Debug.getInstance().logMerge && chunkMergeWorker.logMergeCount % 1000 == 0;
+
         var firstSegmentIndex = needMergeSegmentIndexList.getFirst();
         var lastSegmentIndex = needMergeSegmentIndexList.getLast();
         assert needMergeSegmentIndexList.size() == lastSegmentIndex - firstSegmentIndex + 1;
@@ -183,14 +185,6 @@ public class ChunkMergeJob {
         var beginT = System.nanoTime();
         var segmentBytesBatchRead = oneSlot.preadForMerge(firstSegmentIndex);
 
-        var doLog = Debug.getInstance().logMerge;
-        if (doLog) {
-            if (logMergeCount % 100 != 0) {
-                doLog = false;
-            }
-            logMergeCount++;
-        }
-
         // read all segments to memory, then compare with key buckets
         ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(npagesMerge * 20);
 
@@ -202,12 +196,23 @@ public class ChunkMergeJob {
                 continue;
             }
 
+            int relativeOffsetInBatchBytes = i * segmentLength;
+            // refer to Chunk.ONCE_PREPARE_SEGMENT_COUNT
+            // last segments not write at all, need skip
+            if (segmentBytesBatchRead == null || relativeOffsetInBatchBytes >= segmentBytesBatchRead.length) {
+                oneSlot.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
+                if (doLog) {
+                    log.info("Set segment flag to persisted as not write at all, s={}, i={}", slot, segmentIndex);
+                }
+                i++;
+                continue;
+            }
+
             oneSlot.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGING, snowFlake.nextId());
             if (doLog) {
                 log.info("Set segment flag to merging, s={}, i={}", slot, segmentIndex);
             }
 
-            int relativeOffsetInBatchBytes = i * segmentLength;
             var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength).slice();
             // sub blocks
             // refer to SegmentBatch tight HEADER_LENGTH

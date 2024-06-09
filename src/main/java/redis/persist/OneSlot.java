@@ -996,12 +996,12 @@ public class OneSlot {
         metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, flag, segmentSeq);
     }
 
-    void setSegmentMergeFlagBatch(int segmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
-        if (segmentIndex < 0 || segmentIndex + segmentCount > chunk.maxSegmentIndex) {
-            throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
+    void setSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
+        if (beginSegmentIndex < 0 || beginSegmentIndex + segmentCount > chunk.maxSegmentIndex) {
+            throw new IllegalStateException("Begin segment index out of bound, s=" + slot + ", i=" + beginSegmentIndex);
         }
 
-        metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(segmentIndex, segmentCount, flag, segmentSeqList);
+        metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(beginSegmentIndex, segmentCount, flag, segmentSeqList);
     }
 
     int doMergeJob(ArrayList<Integer> needMergeSegmentIndexList) {
@@ -1064,17 +1064,21 @@ public class OneSlot {
         var currentSegmentIndex = chunk.currentSegmentIndex();
         if (currentSegmentIndex < chunk.halfSegmentNumber) {
             this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq) -> {
-                if (segmentIndex >= chunk.halfSegmentNumber && flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED) {
+                if (segmentIndex >= chunk.halfSegmentNumber &&
+                        (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED)) {
                     chunk.mergedSegmentIndexEndLastTime = segmentIndex;
                 }
             });
         } else {
             this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq) -> {
-                if (segmentIndex < chunk.halfSegmentNumber && flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED) {
+                if (segmentIndex < chunk.halfSegmentNumber &&
+                        (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED)) {
                     chunk.mergedSegmentIndexEndLastTime = segmentIndex;
                 }
             });
         }
+
+        chunk.checkMergedSegmentIndexEndLastTimeValidAfterServerStart();
         log.info("Get merged segment index end last time, s={}, i={}", slot, chunk.mergedSegmentIndexEndLastTime);
     }
 
