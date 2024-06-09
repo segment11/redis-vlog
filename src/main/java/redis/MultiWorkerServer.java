@@ -485,8 +485,7 @@ public class MultiWorkerServer extends Launcher {
                             c.pureMemory = config.get(ofBoolean(), "pureMemory");
                         }
 
-                        int idleMillis = config.get(toInt, "eventloop.idleMillis", 10);
-                        c.eventLoopIdleMillis = idleMillis;
+                        c.eventLoopIdleMillis = config.get(toInt, "eventloop.idleMillis", 10);
 
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
                         if (debugMode) {
@@ -498,17 +497,11 @@ public class MultiWorkerServer extends Launcher {
                             c.confWal.oneChargeBucketNumber = ConfForSlot.ConfWal.debugMode.oneChargeBucketNumber;
                         }
 
-                        boolean debugLogMerge = config.get(ofBoolean(), "debugLogMerge", false);
-                        Debug.getInstance().logMerge = debugLogMerge;
-
-                        boolean debugLogTrainDict = config.get(ofBoolean(), "debugLogTrainDict", false);
-                        Debug.getInstance().logTrainDict = debugLogTrainDict;
-
-                        boolean debugLogRestore = config.get(ofBoolean(), "debugLogRestore", false);
-                        Debug.getInstance().logRestore = debugLogRestore;
-
-                        boolean bulkLoad = config.get(ofBoolean(), "bulkLoad", false);
-                        Debug.getInstance().bulkLoad = bulkLoad;
+                        var debugInstance = Debug.getInstance();
+                        debugInstance.logMerge = config.get(ofBoolean(), "debugLogMerge", false);
+                        debugInstance.logTrainDict = config.get(ofBoolean(), "debugLogTrainDict", false);
+                        debugInstance.logRestore = config.get(ofBoolean(), "debugLogRestore", false);
+                        debugInstance.bulkLoad = config.get(ofBoolean(), "bulkLoad", false);
 
                         // override bucket conf
                         if (config.getChild("bucket.bucketsPerSlot").hasValue()) {
