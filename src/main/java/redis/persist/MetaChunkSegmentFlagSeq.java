@@ -98,11 +98,11 @@ public class MetaChunkSegmentFlagSeq {
     }
 
     void iterate(IterateCallBack callBack) {
-        for (int i = 0; i < allCapacity; i += ONE_LENGTH) {
-            var segmentIndex = i;
+        for (int segmentIndex = 0; segmentIndex < ConfForSlot.global.confChunk.maxSegmentNumber(); segmentIndex++) {
+            var offset = segmentIndex * ONE_LENGTH;
 
-            var flag = inMemoryCachedByteBuffer.get(i);
-            var segmentSeq = inMemoryCachedByteBuffer.getLong(i + 1);
+            var flag = inMemoryCachedByteBuffer.get(offset);
+            var segmentSeq = inMemoryCachedByteBuffer.getLong(offset + 1);
 
             callBack.call(segmentIndex, flag, segmentSeq);
         }
@@ -138,7 +138,7 @@ public class MetaChunkSegmentFlagSeq {
         }
     }
 
-    void setSegmentMergeFlagBatch(int segmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
+    void setSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
         var bytes = new byte[segmentCount * ONE_LENGTH];
         var buffer = ByteBuffer.wrap(bytes);
         for (int i = 0; i < segmentCount; i++) {
@@ -146,7 +146,7 @@ public class MetaChunkSegmentFlagSeq {
             buffer.putLong(i * ONE_LENGTH + 1, segmentSeqList.get(i));
         }
 
-        var offset = segmentIndex * ONE_LENGTH;
+        var offset = beginSegmentIndex * ONE_LENGTH;
         if (ConfForSlot.global.pureMemory) {
             inMemoryCachedByteBuffer.put(offset, bytes);
             return;
