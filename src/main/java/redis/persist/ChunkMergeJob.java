@@ -171,12 +171,12 @@ public class ChunkMergeJob {
             // continue to merge
         }
 
+        chunkMergeWorker.lastMergedSegmentIndex = lastSegmentIndex;
+
         var allSkipped = needMergeSegmentIndexList.size() == skipSegmentIndexSet.size();
         if (allSkipped) {
             return;
         }
-
-        chunkMergeWorker.lastMergedSegmentIndex = lastSegmentIndex;
 
         chunkMergeWorker.mergedSegmentCount++;
 

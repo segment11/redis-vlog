@@ -12,6 +12,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import static redis.persist.Chunk.*;
+
 public class MetaChunkSegmentFlagSeq {
     private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
     // flag byte + seq long + wal group index int
@@ -107,6 +109,30 @@ public class MetaChunkSegmentFlagSeq {
 
             callBack.call(segmentIndex, flag, segmentSeq, walGroupIndex);
         }
+    }
+
+    int getMergedSegmentIndexEndLastTime(int currentSegmentIndex, int halfSegmentNumber) {
+        var max = NO_NEED_MERGE_SEGMENT_INDEX;
+
+        int begin = 0;
+        int end = halfSegmentNumber;
+        if (currentSegmentIndex < halfSegmentNumber) {
+            begin = halfSegmentNumber;
+            end = ConfForSlot.global.confChunk.maxSegmentNumber();
+        }
+
+        for (int segmentIndex = begin; segmentIndex < end; segmentIndex++) {
+            var offset = segmentIndex * ONE_LENGTH;
+
+            var flag = inMemoryCachedByteBuffer.get(offset);
+            if (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGED_AND_PERSISTED) {
+                max = segmentIndex;
+            } else {
+                break;
+            }
+        }
+
+        return max;
     }
 
     List<Long> getSegmentSeqListBatchForRepl(int beginSegmentIndex, int segmentCount) {

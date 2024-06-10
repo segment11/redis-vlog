@@ -1185,25 +1185,12 @@ public class OneSlot {
     }
 
     void getMergedSegmentIndexEndLastTime() {
-        var currentSegmentIndex = chunk.currentSegmentIndex();
-        if (currentSegmentIndex < chunk.halfSegmentNumber) {
-            this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq, segmentFlag) -> {
-                if (segmentIndex >= chunk.halfSegmentNumber &&
-                        (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGED_AND_PERSISTED)) {
-                    chunk.mergedSegmentIndexEndLastTime = segmentIndex;
-                }
-            });
-        } else {
-            this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq, segmentFlag) -> {
-                if (segmentIndex < chunk.halfSegmentNumber &&
-                        (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGED_AND_PERSISTED)) {
-                    chunk.mergedSegmentIndexEndLastTime = segmentIndex;
-                }
-            });
-        }
-
+        chunk.mergedSegmentIndexEndLastTime = metaChunkSegmentFlagSeq.getMergedSegmentIndexEndLastTime(
+                chunk.currentSegmentIndex(), chunk.halfSegmentNumber);
         chunk.checkMergedSegmentIndexEndLastTimeValidAfterServerStart();
         log.info("Get merged segment index end last time, s={}, i={}", slot, chunk.mergedSegmentIndexEndLastTime);
+
+        chunkMergeWorker.lastMergedSegmentIndex = chunk.mergedSegmentIndexEndLastTime;
     }
 
     // metrics
