@@ -393,8 +393,13 @@ public class Chunk {
 
         // recycle, need spit to two part
         if (needMergeSegmentIndexList.getLast() - needMergeSegmentIndexList.getFirst() > halfSegmentNumber) {
-            assert needMergeSegmentIndexList.contains(0);
-            assert mergedSegmentIndexEndLastTime != NO_NEED_MERGE_SEGMENT_INDEX;
+            if (!needMergeSegmentIndexList.contains(0)) {
+                throw new IllegalStateException("Need merge segment index list not contains 0 while reuse from the beginning, s="
+                        + slot + ", list=" + needMergeSegmentIndexList);
+            }
+            if (mergedSegmentIndexEndLastTime == NO_NEED_MERGE_SEGMENT_INDEX) {
+                throw new IllegalStateException("Merged segment index end last time not set, s=" + slot);
+            }
 
             var onePart = new ArrayList<Integer>();
             var anotherPart = new ArrayList<Integer>();
@@ -411,7 +416,9 @@ public class Chunk {
 
             // prepend from merged segment index end last time
             var firstNeedMergeSegmentIndex = anotherPart.getFirst();
-            assert mergedSegmentIndexEndLastTime < firstNeedMergeSegmentIndex;
+
+            // mergedSegmentIndexEndLastTime maybe > firstNeedMergeSegmentIndex when server restart, because pre read merge before persist wal
+//            assert mergedSegmentIndexEndLastTime < firstNeedMergeSegmentIndex;
             for (int i = mergedSegmentIndexEndLastTime + 1; i < firstNeedMergeSegmentIndex; i++) {
                 anotherPart.add(i);
             }
@@ -429,7 +436,7 @@ public class Chunk {
                 }
             } else {
                 // prepend from merged segment index end last time
-                assert mergedSegmentIndexEndLastTime < firstNeedMergeSegmentIndex;
+//                assert mergedSegmentIndexEndLastTime < firstNeedMergeSegmentIndex;
                 for (int i = mergedSegmentIndexEndLastTime + 1; i < firstNeedMergeSegmentIndex; i++) {
                     needMergeSegmentIndexList.add(i);
                 }
