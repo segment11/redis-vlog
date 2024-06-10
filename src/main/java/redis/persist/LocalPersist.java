@@ -6,7 +6,6 @@ import jnr.ffi.LibraryLoader;
 import jnr.posix.LibC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.ConfForSlot;
 import redis.ConfVolumeDirsForSlot;
 import redis.SnowFlake;
 
@@ -54,10 +53,6 @@ public class LocalPersist {
 
     public OneSlot oneSlot(byte slot) {
         return oneSlots[slot];
-    }
-
-    public int bucketIndex(long keyHash) {
-        return (int) Math.abs(keyHash % ConfForSlot.global.confBucket.bucketsPerSlot);
     }
 
     public void initSlots(byte netWorkers, short slotNumber, SnowFlake[] snowFlakes, File persistDir, Config persistConfig) throws IOException {

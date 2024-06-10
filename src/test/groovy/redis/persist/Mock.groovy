@@ -14,7 +14,7 @@ class Mock {
             def keyHash = KeyHash.hash(keyBytes)
 
             def v = new Wal.V(it, bucketIndex, keyHash, redis.CompressedValue.NO_EXPIRE,
-                    key, valueBytes, valueBytes.length)
+                    key, valueBytes, valueBytes.length, false)
 
             shortValueList << v
         }
@@ -38,7 +38,7 @@ class Mock {
             cv.uncompressedLength = 10
 
             def v = new Wal.V(it, bucketIndex, keyHash, redis.CompressedValue.NO_EXPIRE,
-                    key, cv.encode(), cv.compressedLength())
+                    key, cv.encode(), cv.compressedLength(), false)
 
             valueList << v
         }

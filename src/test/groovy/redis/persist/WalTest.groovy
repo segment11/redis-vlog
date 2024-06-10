@@ -45,7 +45,7 @@ class WalTest extends Specification {
             def cvEncoded = cv.encode()
 
             def v = new Wal.V(snowFlake.nextId(), 0, cv.keyHash, CompressedValue.NO_EXPIRE,
-                    key, cvEncoded, cvEncoded.length)
+                    key, cvEncoded, cvEncoded.length, false)
 
             wal.put(true, key, v)
 
@@ -71,9 +71,9 @@ class WalTest extends Specification {
         given:
         def wal = new Wal((byte) 0, 0, null, null, null)
         def key = 'test-key'
-        def shortV = new Wal.V(1, 0, 0, 0, key, 'short-value'.bytes, 10)
-        def v = new Wal.V(2, 0, 0, 0, key, 'value'.bytes, 30)
-        def shortV2 = new Wal.V(3, 0, 0, 0, key, 'short-value-x'.bytes, 10)
+        def shortV = new Wal.V(1, 0, 0, 0, key, 'short-value'.bytes, 10, false)
+        def v = new Wal.V(2, 0, 0, 0, key, 'value'.bytes, 30, false)
+        def shortV2 = new Wal.V(3, 0, 0, 0, key, 'short-value-x'.bytes, 10, false)
 
         expect:
         wal.get(key) == null

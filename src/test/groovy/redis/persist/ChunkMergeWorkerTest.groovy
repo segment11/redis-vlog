@@ -106,8 +106,8 @@ class ChunkMergeWorkerTest extends Specification {
 
             pvmList2 << pvm
         }
-        keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList1, false)
-        keyLoader.updatePvmListBatchAfterWriteSegments(1, pvmList2, false)
+        keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList1)
+        keyLoader.updatePvmListBatchAfterWriteSegments(1, pvmList2)
         println 'prepare key size: ' + (pvmList1.size() + pvmList2.size())
 
         def keyCount1 = keyLoader.getKeyCountInBucketIndex(bucketIndexTarget)

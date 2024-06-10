@@ -116,12 +116,16 @@ public class Chunk {
         }
     }
 
-    byte[] preadForMerge(int targetSegmentIndex) {
+    byte[] preadForMerge(int targetSegmentIndex, int segmentCount) {
+        if (segmentCount > FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT) {
+            throw new IllegalArgumentException("Merge read segment count too large: " + segmentCount);
+        }
+
         var fdIndex = targetFdIndex(targetSegmentIndex);
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
-        return fdReadWrite.readSegmentForMerge(segmentIndexTargetFd);
+        return fdReadWrite.readSegmentForMerge(segmentIndexTargetFd, segmentCount);
     }
 
     byte[] preadForRepl(int targetSegmentIndex) {
@@ -358,7 +362,7 @@ public class Chunk {
         persistCvCounter.labels(slotStr).inc(list.size());
 
         var beginT = System.nanoTime();
-        keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, pvmList, isMerge);
+        keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, pvmList);
         var costT = (System.nanoTime() - beginT) / 1000;
         if (costT == 0) {
             costT = 1;
@@ -507,7 +511,7 @@ public class Chunk {
         }
     }
 
-    private static final int NO_NEED_MERGE_SEGMENT_INDEX = -1;
+    static final int NO_NEED_MERGE_SEGMENT_INDEX = -1;
 
     int needMergeSegmentIndex(boolean isNewAppend, int targetIndex) {
         int segmentIndexToMerge = NO_NEED_MERGE_SEGMENT_INDEX;

@@ -344,11 +344,17 @@ public class FdReadWrite {
     }
 
     private byte[] readInnerNotPureMemory(int segmentIndex, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache) {
+        return readInnerNotPureMemory(segmentIndex, buffer, callback, isRefreshLRUCache, buffer.capacity());
+    }
+
+    private byte[] readInnerNotPureMemory(int segmentIndex, ByteBuffer buffer, ReadBufferCallback callback, boolean isRefreshLRUCache, int length) {
         checkSegmentIndex(segmentIndex);
+        if (length > buffer.capacity()) {
+            throw new IllegalArgumentException("Read length must be less than buffer capacity: " + buffer.capacity() + ", read length: " + length);
+        }
 
         // for from lru cache if only read one segment
-        int capacity = buffer.capacity();
-        var isOnlyOneSegment = capacity == segmentLength;
+        var isOnlyOneSegment = length == segmentLength;
         int segmentCount;
         if (isOnlyOneSegment) {
             segmentCount = 1;
@@ -376,7 +382,7 @@ public class FdReadWrite {
                 }
             }
         } else {
-            segmentCount = capacity / segmentLength;
+            segmentCount = length / segmentLength;
         }
 
         var offset = segmentIndex * segmentLength;
@@ -384,13 +390,13 @@ public class FdReadWrite {
             return null;
         }
 
-        int readLength = capacity;
+        int readLength = length;
         var lastSegmentOffset = offset + (segmentCount * segmentLength);
         if (writeIndex <= lastSegmentOffset) {
             readLength = (int) (writeIndex - offset);
         }
-        if (readLength < 0 || readLength > capacity) {
-            throw new IllegalArgumentException("Read length must be less than capacity: " + capacity + ", read length: " + readLength);
+        if (readLength < 0 || readLength > length) {
+            throw new IllegalArgumentException("Read length must be less than given length: " + length + ", read length: " + readLength);
         }
 
         buffer.clear();
@@ -522,12 +528,12 @@ public class FdReadWrite {
         return readInnerNotPureMemory(segmentIndex, readPageBuffer, null, isRefreshLRUCache);
     }
 
-    public byte[] readSegmentForMerge(int segmentIndex) {
+    public byte[] readSegmentForMerge(int segmentIndex, int segmentCount) {
         if (ConfForSlot.global.pureMemory) {
-            return readSegmentBatchFromMemory(segmentIndex, MERGE_READ_ONCE_SEGMENT_COUNT);
+            return readSegmentBatchFromMemory(segmentIndex, segmentCount);
         }
 
-        return readInnerNotPureMemory(segmentIndex, readForMergeBatchBuffer, null, false);
+        return readInnerNotPureMemory(segmentIndex, readForMergeBatchBuffer, null, false, segmentCount * segmentLength);
     }
 
     public byte[] readSegmentForRepl(int segmentIndex) {

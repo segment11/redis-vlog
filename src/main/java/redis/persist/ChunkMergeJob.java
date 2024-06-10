@@ -26,8 +26,6 @@ public class ChunkMergeJob {
     // for unit test
     int testTargetBucketIndex = -1;
 
-    private final LocalPersist localPersist = LocalPersist.getInstance();
-
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     public ChunkMergeJob(byte slot, ArrayList<Integer> needMergeSegmentIndexList, ChunkMergeWorker chunkMergeWorker, SnowFlake snowFlake) {
@@ -144,13 +142,13 @@ public class ChunkMergeJob {
             // not write yet, skip
             if (segmentFlag == null || segmentFlag.flag() == Chunk.SEGMENT_FLAG_INIT) {
                 skipSegmentIndexSet.add(segmentIndex);
-                break;
+                continue;
             }
 
             var flag = segmentFlag.flag();
             if (flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED) {
                 skipSegmentIndexSet.add(segmentIndex);
-                break;
+                continue;
             }
 
             if (flag == Chunk.SEGMENT_FLAG_MERGED) {
@@ -158,7 +156,7 @@ public class ChunkMergeJob {
                 // need a persist trigger
                 // this chunk batch is already merged by other worker, skip
                 skipSegmentIndexSet.add(segmentIndex);
-                break;
+                continue;
             }
 
             // flag == Chunk.SEGMENT_FLAG_REUSE:
@@ -183,7 +181,7 @@ public class ChunkMergeJob {
         chunkMergeWorker.mergedSegmentCount++;
 
         var beginT = System.nanoTime();
-        var segmentBytesBatchRead = oneSlot.preadForMerge(firstSegmentIndex);
+        var segmentBytesBatchRead = oneSlot.preadForMerge(firstSegmentIndex, MERGE_READ_ONCE_SEGMENT_COUNT);
 
         // read all segments to memory, then compare with key buckets
         ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(npagesMerge * 20);
@@ -213,32 +211,7 @@ public class ChunkMergeJob {
                 log.info("Set segment flag to merging, s={}, i={}", slot, segmentIndex);
             }
 
-            var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength).slice();
-            // sub blocks
-            // refer to SegmentBatch tight HEADER_LENGTH
-            for (int subBlockIndex = 0; subBlockIndex < SegmentBatch.MAX_BLOCK_NUMBER; subBlockIndex++) {
-                // position to target sub block
-                buffer.position(SegmentBatch.subBlockMetaPosition(subBlockIndex));
-                var subBlockOffset = buffer.getShort();
-                if (subBlockOffset == 0) {
-                    break;
-                }
-                var subBlockLength = buffer.getShort();
-
-                var decompressedBytes = new byte[segmentLength];
-                var d = Zstd.decompressByteArray(decompressedBytes, 0, segmentLength,
-                        segmentBytesBatchRead, relativeOffsetInBatchBytes + subBlockOffset, subBlockLength);
-                if (d != segmentLength) {
-                    throw new IllegalStateException("Decompress error, s=" + slot
-                            + ", i=" + segmentIndex + ", sbi=" + subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
-                }
-
-                int finalSubBlockIndex = subBlockIndex;
-                SegmentBatch.iterateFromSegmentBytes(decompressedBytes, (key, cv, offsetInThisSegment) -> {
-                    cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetInThisSegment, segmentIndex, (byte) finalSubBlockIndex));
-                });
-            }
-
+            readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength, segmentIndex, slot);
             i++;
         }
 
@@ -252,7 +225,7 @@ public class ChunkMergeJob {
             if (testTargetBucketIndex != -1) {
                 one.bucketIndex = testTargetBucketIndex;
             } else {
-                one.bucketIndex = localPersist.bucketIndex(one.cv.getKeyHash());
+                one.bucketIndex = KeyHash.bucketIndex(one.cv.getKeyHash(), oneSlot.keyLoader.bucketsPerSlot);
             }
             one.walGroupIndex = Wal.calWalGroupIndex(one.bucketIndex);
         }
@@ -314,6 +287,34 @@ public class ChunkMergeJob {
 
         chunkMergeWorker.validCvCountTotal += validCvCountAfterRun;
         chunkMergeWorker.invalidCvCountTotal += invalidCvCountAfterRun;
+    }
+
+    static void readToCvList(ArrayList<CvWithKeyAndSegmentOffset> cvList, byte[] segmentBytesBatchRead, int relativeOffsetInBatchBytes, int segmentLength, int segmentIndex, byte slot) {
+        var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength).slice();
+        // sub blocks
+        // refer to SegmentBatch tight HEADER_LENGTH
+        for (int subBlockIndex = 0; subBlockIndex < SegmentBatch.MAX_BLOCK_NUMBER; subBlockIndex++) {
+            // position to target sub block
+            buffer.position(SegmentBatch.subBlockMetaPosition(subBlockIndex));
+            var subBlockOffset = buffer.getShort();
+            if (subBlockOffset == 0) {
+                break;
+            }
+            var subBlockLength = buffer.getShort();
+
+            var decompressedBytes = new byte[segmentLength];
+            var d = Zstd.decompressByteArray(decompressedBytes, 0, segmentLength,
+                    segmentBytesBatchRead, relativeOffsetInBatchBytes + subBlockOffset, subBlockLength);
+            if (d != segmentLength) {
+                throw new IllegalStateException("Decompress error, s=" + slot
+                        + ", i=" + segmentIndex + ", sbi=" + subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
+            }
+
+            int finalSubBlockIndex = subBlockIndex;
+            SegmentBatch.iterateFromSegmentBytes(decompressedBytes, (key, cv, offsetInThisSegment) -> {
+                cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetInThisSegment, segmentIndex, (byte) finalSubBlockIndex));
+            });
+        }
     }
 
     private void removeOld(OneSlot oneSlot, ArrayList<CvWithKeyAndSegmentOffset> cvList, ArrayList<ValidCvCountRecord> validCvCountRecordList) {

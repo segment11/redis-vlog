@@ -76,12 +76,14 @@ class FdReadWriteTest extends Specification {
         println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(108, bytesBatch, false)
 
         def firstSegmentBytes = fdReadWrite.readSegment(0, false)
-        def index100SegmentBytesForMerge = fdReadWrite.readSegmentForMerge(100)
+        def index100SegmentBytesForMerge = fdReadWrite.readSegmentForMerge(100, FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT)
+        def index100SegmentBytesForMergeJust2Segment = fdReadWrite.readSegmentForMerge(100, 2)
         def index100SegmentBytes = fdReadWrite.readSegment(100, false)
 
         then:
         firstSegmentBytes.length == segmentLength
         index100SegmentBytesForMerge.length == segmentLength * FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT
+        index100SegmentBytesForMergeJust2Segment.length == segmentLength * 2
         ByteBuffer.wrap(firstSegmentBytes).getInt() == 100
         ByteBuffer.wrap(index100SegmentBytes).getInt() == 100
 

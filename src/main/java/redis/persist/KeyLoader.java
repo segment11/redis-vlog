@@ -248,7 +248,7 @@ public class KeyLoader {
         return firstLong != 0;
     }
 
-    private KeyBucket readKeyBucketForSingleKey(int bucketIndex, byte splitIndex, byte splitNumber, long keyHash, boolean isRefreshLRUCache) {
+    KeyBucket readKeyBucketForSingleKey(int bucketIndex, byte splitIndex, byte splitNumber, long keyHash, boolean isRefreshLRUCache) {
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
             return null;
@@ -259,15 +259,14 @@ public class KeyLoader {
             return null;
         }
 
-        var keyBucket = new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, bytes, snowFlake);
-        return keyBucket;
+        return new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, bytes, snowFlake);
     }
 
     KeyBucket.ValueBytesWithExpireAtAndSeq getValueByKey(int bucketIndex, byte[] keyBytes, long keyHash) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
 
-        var keyBucket = readKeyBucketForSingleKey(bucketIndex, (byte) splitIndex, splitNumber, keyHash, true);
+        var keyBucket = readKeyBucketForSingleKey(bucketIndex, splitIndex, splitNumber, keyHash, true);
         if (keyBucket == null) {
             return null;
         }
@@ -280,9 +279,9 @@ public class KeyLoader {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
 
-        var keyBucket = readKeyBucketForSingleKey(bucketIndex, (byte) splitIndex, splitNumber, keyHash, false);
+        var keyBucket = readKeyBucketForSingleKey(bucketIndex, splitIndex, splitNumber, keyHash, false);
         if (keyBucket == null) {
-            keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, null, snowFlake);
+            keyBucket = new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, null, snowFlake);
         }
 
         keyBucket.put(keyBytes, keyHash, expireAt, seq, valueBytes);
@@ -347,9 +346,9 @@ public class KeyLoader {
         return fdReadWrite.readSegmentForKeyBucketsInOneWalGroup(beginBucketIndex);
     }
 
-    public void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList, boolean isMerge) {
+    public void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
-        inner.putAllPvmList(pvmList, isMerge);
+        inner.putAllPvmList(pvmList);
         updateKeyCountBatchCached(inner.keyCountForStatsTmp, inner.beginBucketIndex);
 
         var sharedBytesList = inner.writeAfterPutBatch();
@@ -398,7 +397,7 @@ public class KeyLoader {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
 
-        var keyBucket = readKeyBucketForSingleKey(bucketIndex, (byte) splitIndex, splitNumber, keyHash, false);
+        var keyBucket = readKeyBucketForSingleKey(bucketIndex, splitIndex, splitNumber, keyHash, false);
         if (keyBucket == null) {
             return false;
         }

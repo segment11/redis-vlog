@@ -90,7 +90,7 @@ public class ChunkMergeWorker {
                 var bucketIndex = cvWithKeyAndBucketIndex.bucketIndex;
 
                 list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                        key, cv.encode(), cv.compressedLength()));
+                        key, cv.encode(), cv.compressedLength(), true));
             }
 
             // refer Chunk.ONCE_PREPARE_SEGMENT_COUNT

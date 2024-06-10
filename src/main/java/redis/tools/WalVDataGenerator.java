@@ -40,7 +40,7 @@ public interface WalVDataGenerator {
         var dataBytes = new byte[10];
         var cvEncoded = CompressedValue.encodeAsShortString(seq, dataBytes);
         return new Wal.V(nextId(), bucketIndex, keyHash, CompressedValue.NO_EXPIRE,
-                key, cvEncoded, cvEncoded.length);
+                key, cvEncoded, cvEncoded.length, false);
     }
 
     default Map<Integer, List<Wal.V>> generateVListByWalGroupIndex(int bucketsPerSlot, int oneChargeBucketNumber, int keyLength, String keyPrefix) {

@@ -18,7 +18,7 @@ import static redis.CompressedValue.EXPIRE_NOW;
 
 public class Wal {
     public record V(long seq, int bucketIndex, long keyHash, long expireAt,
-                    String key, byte[] cvEncoded, int cvEncodedLength) {
+                    String key, byte[] cvEncoded, int cvEncodedLength, boolean isFromMerge) {
         @Override
         public String toString() {
             return "V{" +
@@ -93,7 +93,7 @@ public class Wal {
                 throw new IllegalStateException("Invalid length: " + vLength);
             }
 
-            return new V(seq, bucketIndex, keyHash, expireAt, new String(keyBytes), cvEncoded, cvEncodedLength);
+            return new V(seq, bucketIndex, keyHash, expireAt, new String(keyBytes), cvEncoded, cvEncodedLength, false);
         }
     }
 
@@ -290,7 +290,7 @@ public class Wal {
 
     PutResult removeDelay(String key, int bucketIndex, long keyHash) {
         byte[] encoded = {CompressedValue.SP_FLAG_DELETE_TMP};
-        var v = new V(snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, key, encoded, 1);
+        var v = new V(snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, key, encoded, 1, false);
 
         return put(true, key, v);
     }

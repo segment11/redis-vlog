@@ -33,6 +33,8 @@ public class PersistValueMeta {
 
     byte[] extendBytes;
 
+    boolean isFromMerge;
+
     int cellCostInKeyBucket() {
         var valueLength = extendBytes != null ? extendBytes.length : ENCODED_LENGTH;
         if (valueLength > Byte.MAX_VALUE) {

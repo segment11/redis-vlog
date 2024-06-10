@@ -57,15 +57,15 @@ class ChunkMergeJobTest extends Specification {
         keyLoader.metaKeyBucketSplitNumber.setForTest(bucketIndex, (byte) 1)
         keyLoader.statKeyCountInBuckets = new StatKeyCountInBuckets(slot, keyLoader.bucketsPerSlot, Consts.slotDir)
 
-        keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, somePvmList, false)
+        keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, somePvmList)
         println 'bucket ' + bucketIndex + ' key count: ' + keyLoader.getKeyCountInBucketIndex(bucketIndex)
 
         when:
 
         def wal = new Wal(slot, walGroupIndex, null, null, snowFlake)
         def oneSlot = new OneSlot(slot, Consts.slotDir, keyLoader, wal)
-        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L)
-        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex + 1, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, 0)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex + 1, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, 0)
 
         var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader, null)
         chunk.fdReadWriteArray = [fdReadWriteForChunkSegments]

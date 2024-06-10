@@ -215,7 +215,7 @@ public class KeyBucketsInOneWalGroup {
         }
     }
 
-    void putPvmListToTargetBucket(List<PersistValueMeta> pvmListThisBucket, Integer bucketIndex, boolean isMerge) {
+    void putPvmListToTargetBucket(List<PersistValueMeta> pvmListThisBucket, Integer bucketIndex) {
         int relativeBucketIndex = bucketIndex - beginBucketIndex;
         var currentSplitNumber = splitNumberTmp[relativeBucketIndex];
 
@@ -224,7 +224,7 @@ public class KeyBucketsInOneWalGroup {
         List<PersistValueMeta> needUpdateList = new ArrayList<>();
 
         var splitMultiStep = checkIfNeedSplit(pvmListThisBucket, needAddNewList, needUpdateList, needDeleteList,
-                bucketIndex, currentSplitNumber, isMerge);
+                bucketIndex, currentSplitNumber);
         if (splitMultiStep > 1) {
             var newMaxSplitNumber = currentSplitNumber * splitMultiStep;
             if (newMaxSplitNumber > KeyLoader.MAX_SPLIT_NUMBER) {
@@ -289,7 +289,7 @@ public class KeyBucketsInOneWalGroup {
     }
 
     int checkIfNeedSplit(List<PersistValueMeta> pvmListThisBucket, List<PersistValueMeta> needAddNewList, List<PersistValueMeta> needUpdateList,
-                         List<PersistValueMeta> needDeleteList, int bucketIndex, byte currentSplitNumber, boolean isMerge) {
+                         List<PersistValueMeta> needDeleteList, int bucketIndex, byte currentSplitNumber) {
         var relativeBucketIndex = bucketIndex - beginBucketIndex;
 
         int currentTotalKeyCountThisBucket = 0;
@@ -322,7 +322,7 @@ public class KeyBucketsInOneWalGroup {
             var list = listList.get(splitIndex);
             var keyBucket = list.get(relativeBucketIndex);
             if (keyBucket == null) {
-                if (!isMerge) {
+                if (!pvm.isFromMerge) {
                     needAddNewList.add(pvm);
 
                     needAddKeyCountBySplitIndex[splitIndex]++;
@@ -332,38 +332,35 @@ public class KeyBucketsInOneWalGroup {
             }
 
             var currentOne = keyBucket.getValueByKey(pvm.keyBytes, pvm.keyHash);
-            if (isMerge) {
-                // only put if seq match, as between merge worker compare and persist, the value may be updated
-                if (currentOne == null) {
-                    // already removed
-                    continue;
-                }
-
-                if (currentOne.seq() != pvm.seq) {
-                    // already updated
-                    continue;
-                }
-            }
-
-            // wal remove delay use expire now
-            if (pvm.expireAt == CompressedValue.EXPIRE_NOW) {
-                if (currentOne != null) {
+            if (currentOne != null) {
+                // wal remove delay use expire now
+                if (pvm.expireAt == CompressedValue.EXPIRE_NOW) {
                     needDeleteList.add(pvm);
 
                     needDeleteKeyCountBySplitIndex[splitIndex]++;
                     needDeleteCellCostBySplitIndex[splitIndex] += pvm.cellCostInKeyBucket();
+                    continue;
                 }
-                continue;
-            }
 
-            if (currentOne == null) {
+                // pvm list include those from merge, so need check seq
+                if (pvm.seq >= currentOne.seq()) {
+                    needUpdateList.add(pvm);
+                }
+            } else {
+                if (pvm.isFromMerge) {
+                    continue;
+                }
+
+                if (pvm.expireAt == CompressedValue.EXPIRE_NOW) {
+                    // not exists
+                    continue;
+                }
+
                 // not exists
                 needAddNewList.add(pvm);
 
                 needAddKeyCountBySplitIndex[splitIndex]++;
                 needAddCellCostBySplitIndex[splitIndex] += pvm.cellCostInKeyBucket();
-            } else {
-                needUpdateList.add(pvm);
             }
         }
 
@@ -428,14 +425,14 @@ public class KeyBucketsInOneWalGroup {
         }
     }
 
-    void putAllPvmList(ArrayList<PersistValueMeta> pvmList, boolean isMerge) {
+    void putAllPvmList(ArrayList<PersistValueMeta> pvmList) {
         // group by bucket index
         var pvmListGroupByBucketIndex = pvmList.stream().collect(Collectors.groupingBy(pvm -> pvm.bucketIndex));
         for (var entry : pvmListGroupByBucketIndex.entrySet()) {
             var bucketIndex = entry.getKey();
             var pvmListThisBucket = entry.getValue();
 
-            putPvmListToTargetBucket(pvmListThisBucket, bucketIndex, isMerge);
+            putPvmListToTargetBucket(pvmListThisBucket, bucketIndex);
         }
     }
 
@@ -444,7 +441,7 @@ public class KeyBucketsInOneWalGroup {
         for (var v : shortValueList) {
             pvmList.add(transferWalV(v));
         }
-        putAllPvmList(pvmList, false);
+        putAllPvmList(pvmList);
     }
 
     static PersistValueMeta transferWalV(Wal.V v) {
@@ -454,6 +451,7 @@ public class KeyBucketsInOneWalGroup {
         pvm.keyBytes = v.key().getBytes();
         pvm.keyHash = v.keyHash();
         pvm.bucketIndex = v.bucketIndex();
+        pvm.isFromMerge = v.isFromMerge();
         pvm.extendBytes = v.cvEncoded();
         return pvm;
     }

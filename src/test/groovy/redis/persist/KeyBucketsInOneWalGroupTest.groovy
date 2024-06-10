@@ -63,13 +63,12 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         }
 
         when:
-        def isMerge = false
         int bucketIndex = 0
         byte currentSplitNumber = 1
 
         inner.listList = [[null]]
         var splitMultiStep = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
-                bucketIndex, currentSplitNumber, isMerge)
+                bucketIndex, currentSplitNumber)
 
         then:
         splitMultiStep == 1
@@ -84,7 +83,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
         needAddNewList.clear()
         var splitMultiStep2 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
-                bucketIndex, currentSplitNumber, isMerge)
+                bucketIndex, currentSplitNumber)
 
         then:
         splitMultiStep2 == 1
@@ -97,7 +96,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         needAddNewList.clear()
         needUpdateList.clear()
         var splitMultiStep3 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
-                bucketIndex, currentSplitNumber, isMerge)
+                bucketIndex, currentSplitNumber)
 
         then:
         splitMultiStep3 == 1

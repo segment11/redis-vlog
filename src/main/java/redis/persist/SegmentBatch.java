@@ -241,6 +241,7 @@ public class SegmentBatch {
             pvm.keyBytes = keyBytes;
             pvm.keyHash = v.keyHash();
             pvm.bucketIndex = v.bucketIndex();
+            pvm.isFromMerge = v.isFromMerge();
 
             pvm.slot = slot;
             // tmp 0, then update

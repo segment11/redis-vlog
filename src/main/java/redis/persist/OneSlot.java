@@ -33,8 +33,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static io.activej.config.converter.ConfigConverters.ofInteger;
-import static redis.persist.Chunk.ONCE_PREPARE_SEGMENT_COUNT;
-import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
+import static redis.persist.Chunk.*;
+import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
 
 public class OneSlot {
     // for unit test
@@ -703,8 +703,12 @@ public class OneSlot {
 
     long threadIdProtectedWhenPut = -1;
 
-    // thread safe, same slot, same event loop
     public void put(String key, int bucketIndex, CompressedValue cv) {
+        put(key, bucketIndex, cv, false);
+    }
+
+    // thread safe, same slot, same event loop
+    public void put(String key, int bucketIndex, CompressedValue cv, boolean isFromMerge) {
         var threadId = Thread.currentThread().getId();
         if (threadId != threadIdProtectedWhenPut) {
             throw new IllegalStateException("Thread id not match, thread id: " + threadId + ", thread id protected: " + threadIdProtectedWhenPut);
@@ -729,7 +733,7 @@ public class OneSlot {
             cvEncoded = cv.encode();
         }
         var v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                key, cvEncoded, cv.compressedLength());
+                key, cvEncoded, cv.compressedLength(), isFromMerge);
 
         // for big string, use single file
         boolean isPersistLengthOverSegmentLength = v.persistLength() + SEGMENT_HEADER_LENGTH > segmentLength;
@@ -745,7 +749,7 @@ public class OneSlot {
             // encode again
             cvEncoded = cv.encodeAsBigStringMeta(uuid);
             v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                    key, cvEncoded, cv.compressedLength());
+                    key, cvEncoded, cv.compressedLength(), isFromMerge);
 
             isValueShort = true;
         }
@@ -892,7 +896,7 @@ public class OneSlot {
                 log.warn("Segment can not write, s={}, i={}", slot, currentSegmentIndex);
 
                 // set persisted flag, for next loop reuse
-                updateSegmentMergeFlag(currentSegmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, snowFlake.nextId());
+                updateSegmentMergeFlag(currentSegmentIndex, SEGMENT_FLAG_REUSE_AND_PERSISTED, snowFlake.nextId());
                 log.warn("Reset segment persisted when init");
 
                 setChunkWriteSegmentIndex(currentSegmentIndex);
@@ -917,8 +921,8 @@ public class OneSlot {
         chunk.writeSegmentsFromMasterExists(bytes, segmentIndex, segmentCount, segmentSeqList, walGroupIndex, bytes.length);
     }
 
-    byte[] preadForMerge(int segmentIndex) {
-        return chunk.preadForMerge(segmentIndex);
+    byte[] preadForMerge(int segmentIndex, int segmentCount) {
+        return chunk.preadForMerge(segmentIndex, segmentCount);
     }
 
     public byte[] preadForRepl(int segmentIndex) {
@@ -953,17 +957,132 @@ public class OneSlot {
         }
     }
 
+
+    private record BeforePersistWalExtFromMerge(ArrayList<Integer> segmentIndexList,
+                                                ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList) {
+    }
+
+    // for performance, before persist wal, read some segment in same wal group and  merge immediately
+    private BeforePersistWalExtFromMerge readSomeSegmentsBeforePersistWal(int walGroupIndex) {
+        var currentSegmentIndex = chunk.currentSegmentIndex();
+        var needMergeSegmentIndex = chunk.needMergeSegmentIndex(false, currentSegmentIndex);
+        if (needMergeSegmentIndex == NO_NEED_MERGE_SEGMENT_INDEX) {
+            return null;
+        }
+
+        // find continuous segments those wal group index is same from need merge segment index
+        final int[] firstSegmentIndexWithReadSegmentCountArray = {NO_NEED_MERGE_SEGMENT_INDEX, 1};
+        metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq, walGroupIndex1) -> {
+            // already find
+            if (firstSegmentIndexWithReadSegmentCountArray[0] != NO_NEED_MERGE_SEGMENT_INDEX) {
+                return;
+            }
+
+            if (walGroupIndex1 == walGroupIndex && segmentIndex >= needMergeSegmentIndex) {
+                if (flag == SEGMENT_FLAG_NEW || flag == SEGMENT_FLAG_REUSE_AND_PERSISTED) {
+                    firstSegmentIndexWithReadSegmentCountArray[0] = segmentIndex;
+
+                    int segmentCount = Math.min(MERGE_READ_ONCE_SEGMENT_COUNT, chunk.maxSegmentIndex - segmentIndex + 1);
+                    var targetFdIndex = chunk.targetFdIndex(segmentIndex);
+                    var targetFdIndexEnd = chunk.targetFdIndex(segmentIndex + segmentCount - 1);
+                    // cross two files, just read one segment
+                    if (targetFdIndexEnd != targetFdIndex) {
+                        segmentCount = 1;
+                    }
+
+                    firstSegmentIndexWithReadSegmentCountArray[1] = segmentCount;
+                }
+            }
+        });
+
+        logMergeCount++;
+        var doLog = Debug.getInstance().logMerge && logMergeCount % 100 == 0;
+
+        if (firstSegmentIndexWithReadSegmentCountArray[0] == NO_NEED_MERGE_SEGMENT_INDEX) {
+            if (doLog) {
+                log.warn("No segment need merge when persist wal, s={}, i={}", slot, currentSegmentIndex);
+            }
+            return null;
+        }
+
+        var firstSegmentIndex = firstSegmentIndexWithReadSegmentCountArray[0];
+        var segmentCount = firstSegmentIndexWithReadSegmentCountArray[1];
+        var segmentBytesBatchRead = preadForMerge(firstSegmentIndex, segmentCount);
+
+        ArrayList<Integer> segmentIndexList = new ArrayList<>(segmentCount);
+        ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(MERGE_READ_ONCE_SEGMENT_COUNT * 10);
+
+        for (int i = 0; i < segmentCount; i++) {
+            var segmentIndex = firstSegmentIndex + i;
+            var segmentFlag = getSegmentMergeFlag(segmentIndex);
+            // need check again ?
+            if (segmentFlag.walGroupIndex() != walGroupIndex) {
+                continue;
+            }
+
+            if (segmentFlag.flag() != SEGMENT_FLAG_NEW && segmentFlag.flag() != SEGMENT_FLAG_REUSE_AND_PERSISTED) {
+                continue;
+            }
+
+            int relativeOffsetInBatchBytes = i * segmentLength;
+            // refer to Chunk.ONCE_PREPARE_SEGMENT_COUNT
+            // last segments not write at all, need skip
+            if (segmentBytesBatchRead == null || relativeOffsetInBatchBytes >= segmentBytesBatchRead.length) {
+                setSegmentMergeFlag(segmentIndex, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L, 0);
+                if (doLog) {
+                    log.info("Set segment flag to persisted as not write at all, s={}, i={}", slot, segmentIndex);
+                }
+                continue;
+            }
+
+            ChunkMergeJob.readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength, segmentIndex, slot);
+            segmentIndexList.add(segmentIndex);
+        }
+
+        return new BeforePersistWalExtFromMerge(segmentIndexList, cvList);
+    }
+
+    private long logMergeCount = 0;
+
     private void persistWal(boolean isShortValue, Wal targetWal) {
+        var walGroupIndex = targetWal.groupIndex;
         if (isShortValue) {
-            keyLoader.persistShortValueListBatchInOneWalGroup(targetWal.groupIndex, targetWal.delayToKeyBucketShortValues.values());
+            keyLoader.persistShortValueListBatchInOneWalGroup(walGroupIndex, targetWal.delayToKeyBucketShortValues.values());
         } else {
-            var list = new ArrayList<>(targetWal.delayToKeyBucketValues.values());
+            var delayToKeyBucketValues = targetWal.delayToKeyBucketValues;
+            var list = new ArrayList<>(delayToKeyBucketValues.values());
             // sort by bucket index for future merge better
             list.sort(Comparator.comparingInt(Wal.V::bucketIndex));
 
-            var needMergeSegmentIndexList = chunk.persist(targetWal.groupIndex, list, false);
+            var ext = readSomeSegmentsBeforePersistWal(walGroupIndex);
+
+            // remove those wal exist
+            if (ext != null) {
+                var cvList = ext.cvList;
+                cvList.removeIf(one -> delayToKeyBucketValues.containsKey(one.key));
+                if (!cvList.isEmpty()) {
+                    for (var one : cvList) {
+                        var cv = one.cv;
+                        var bucketIndex = KeyHash.bucketIndex(cv.getKeyHash(), keyLoader.bucketsPerSlot);
+                        list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+                                one.key, cv.encode(), cv.compressedLength(), true));
+                    }
+                }
+            }
+
+            var needMergeSegmentIndexList = chunk.persist(walGroupIndex, list, false);
             if (needMergeSegmentIndexList == null) {
                 throw new IllegalStateException("Persist error, need merge segment index list is null, slot: " + slot);
+            }
+
+            if (ext != null) {
+                var segmentIndexList = ext.segmentIndexList;
+                for (var segmentIndex : segmentIndexList) {
+                    setSegmentMergeFlag(segmentIndex, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L, walGroupIndex);
+                }
+
+                // do not remove, keep segment index continuous, chunk merge job will skip as flag is merged and persisted
+//                needMergeSegmentIndexList.removeIf(segmentIndexList::contains);
             }
 
             if (!needMergeSegmentIndexList.isEmpty()) {
@@ -972,7 +1091,7 @@ public class OneSlot {
         }
     }
 
-    Chunk.SegmentFlag getSegmentMergeFlag(int segmentIndex) {
+    SegmentFlag getSegmentMergeFlag(int segmentIndex) {
         if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
             throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
         }
@@ -1018,7 +1137,7 @@ public class OneSlot {
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
 
         this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq, walGroupIndex) -> {
-            if (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGING) {
+            if (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGING) {
                 log.warn("Segment not persisted after merging, s={}, i={}, flag={}", slot, segmentIndex, flag);
                 needMergeSegmentIndexList.add(segmentIndex);
             }
@@ -1070,14 +1189,14 @@ public class OneSlot {
         if (currentSegmentIndex < chunk.halfSegmentNumber) {
             this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq, segmentFlag) -> {
                 if (segmentIndex >= chunk.halfSegmentNumber &&
-                        (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED)) {
+                        (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGED_AND_PERSISTED)) {
                     chunk.mergedSegmentIndexEndLastTime = segmentIndex;
                 }
             });
         } else {
             this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq, segmentFlag) -> {
                 if (segmentIndex < chunk.halfSegmentNumber &&
-                        (flag == Chunk.SEGMENT_FLAG_MERGED || flag == Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED)) {
+                        (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGED_AND_PERSISTED)) {
                     chunk.mergedSegmentIndexEndLastTime = segmentIndex;
                 }
             });
