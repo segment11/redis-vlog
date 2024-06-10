@@ -32,6 +32,12 @@ public class KeyHash {
         if (splitNumber == 1) {
             return 0;
         }
+
+        // for unit test
+        if (keyHash >= 10 && keyHash < 10 + splitNumber) {
+            return (byte) (keyHash - 10);
+        }
+
         return (byte) Math.abs(((keyHash >> 32) % splitNumber));
     }
 

@@ -35,15 +35,20 @@ class KeyLoaderTest extends Specification {
         def keyLoader = prepareKeyLoader()
 
         when:
-        keyLoader.putValueByKeyForTest(0, 'a'.getBytes(), 3L, 0L, 1L, 'a'.bytes)
-        def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 3L)
+        keyLoader.putValueByKeyForTest(0, 'a'.getBytes(), 10L, 0L, 1L, 'a'.bytes)
+        def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 10L)
 
         then:
         valueBytesWithExpireAt.valueBytes() == 'a'.bytes
 
         when:
+        var k0 = keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 1, 10L, false)
+        k0.splitNumber = (byte) 2
+        var bytes = k0.encode(true)
+        keyLoader.fdReadWriteArray[0].writeSegment(0, bytes, false)
+
         keyLoader.setMetaKeyBucketSplitNumberForTest(0, (byte) 2)
-        keyLoader.putValueByKeyForTest(0, 'b'.getBytes(), 2L, 0L, 1L, 'b'.bytes)
+        keyLoader.putValueByKeyForTest(0, 'b'.getBytes(), 11L, 0L, 1L, 'b'.bytes)
 
         def keyBuckets = keyLoader.readKeyBuckets(0)
 
@@ -53,15 +58,15 @@ class KeyLoaderTest extends Specification {
             if (!it) {
                 return false
             }
-            it.getValueByKey('b'.bytes, 2L)?.valueBytes() == 'b'.bytes
+            it.getValueByKey('b'.bytes, 11L)?.valueBytes() == 'b'.bytes
         } == 1
 
         when:
-        def isRemoved = keyLoader.removeSingleKeyForTest(0, 'a'.getBytes(), 3L)
+        def isRemoved = keyLoader.removeSingleKeyForTest(0, 'a'.getBytes(), 10L)
 
         then:
         isRemoved
-        keyLoader.getValueByKey(0, 'a'.bytes, 3L) == null
+        keyLoader.getValueByKey(0, 'a'.bytes, 10L) == null
 
         cleanup:
         keyLoader.cleanUp()
@@ -107,7 +112,7 @@ class KeyLoaderTest extends Specification {
         }
 
         when:
-        keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList, false)
+        keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList)
 
         then:
         pvmList.every {
