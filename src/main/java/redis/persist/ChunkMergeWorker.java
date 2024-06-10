@@ -33,41 +33,89 @@ public class ChunkMergeWorker {
     // just for config parameter
     int compressLevel;
 
-    record CvWithKeyAndBucketIndex(CompressedValue cv, String key, int bucketIndex) {
+    record CvWithKeyAndBucketIndexAndSegmentIndex(CompressedValue cv, String key, int bucketIndex, int segmentIndex) {
     }
 
-    private static final int MERGING_CV_SIZE_THRESHOLD = 100;
+    private static final int MERGING_CV_SIZE_THRESHOLD = 1000;
     // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
-    static final int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 8;
+    final static int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 64;
+    final static int MERGED_SEGMENT_SET_SIZE_THRESHOLD_ONCE_PERSIST = 8;
 
-    private final List<CvWithKeyAndBucketIndex> mergedCvList = new ArrayList<>(MERGING_CV_SIZE_THRESHOLD);
+    final List<CvWithKeyAndBucketIndexAndSegmentIndex> mergedCvList = new ArrayList<>(MERGING_CV_SIZE_THRESHOLD);
 
-    void addMergedCv(CvWithKeyAndBucketIndex cvWithKeyAndBucketIndex) {
-        mergedCvList.add(cvWithKeyAndBucketIndex);
+    void addMergedCv(CvWithKeyAndBucketIndexAndSegmentIndex cvWithKeyAndBucketIndexAndSegmentIndex) {
+        mergedCvList.add(cvWithKeyAndBucketIndexAndSegmentIndex);
     }
 
-    private record MergedSegment(int index, int validCvCount) implements Comparable<MergedSegment> {
+    record MergedSegment(int segmentIndex, int validCvCount) implements Comparable<MergedSegment> {
         @Override
         public String toString() {
             return "MergedSegment{" +
-                    ", index=" + index +
+                    ", segmentIndex=" + segmentIndex +
                     ", validCvCount=" + validCvCount +
                     '}';
         }
 
         @Override
         public int compareTo(@NotNull ChunkMergeWorker.MergedSegment o) {
-            return this.index - o.index;
+            return this.segmentIndex - o.segmentIndex;
         }
     }
 
-    private final TreeSet<MergedSegment> mergedSegmentSet = new TreeSet<>();
+    final TreeSet<MergedSegment> mergedSegmentSet = new TreeSet<>();
 
     void addMergedSegment(int segmentIndex, int validCvCount) {
         mergedSegmentSet.add(new MergedSegment(segmentIndex, validCvCount));
     }
 
-    boolean persistMergedCvList() {
+    OneSlot.BeforePersistWalExt2FromMerge getMergedButNotPersistedBeforePersistWal(int walGroupIndex) {
+        if (mergedCvList.isEmpty()) {
+            return null;
+        }
+
+        ArrayList<Integer> segmentIndexList = new ArrayList<>();
+
+        ArrayList<Wal.V> vList = new ArrayList<>();
+        for (var one : mergedCvList) {
+            var cv = one.cv;
+            var key = one.key;
+            var bucketIndex = one.bucketIndex;
+
+            var calWalGroupIndex = Wal.calWalGroupIndex(bucketIndex);
+            if (calWalGroupIndex != walGroupIndex) {
+                continue;
+            }
+
+            vList.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+                    key, cv.encode(), cv.compressedLength(), true));
+            if (!segmentIndexList.contains(one.segmentIndex)) {
+                segmentIndexList.add(one.segmentIndex);
+            }
+        }
+
+        if (vList.isEmpty()) {
+            return null;
+        }
+
+        return new OneSlot.BeforePersistWalExt2FromMerge(segmentIndexList, vList);
+    }
+
+    void removeMergedButNotPersistedAfterPersistWal(ArrayList<Integer> segmentIndexList, int walGroupIndex) {
+        var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
+
+        if (doLog) {
+            log.info("Before remove merged but not persisted, merged segment set: {}, merged cv list size: {}", mergedSegmentSet, mergedCvList.size());
+        }
+
+        mergedCvList.removeIf(one -> Wal.calWalGroupIndex(one.bucketIndex) == walGroupIndex);
+        mergedSegmentSet.removeIf(one -> segmentIndexList.contains(one.segmentIndex));
+
+        if (doLog) {
+            log.info("After remove merged but not persisted, merged segment set: {}, merged cv list size: {}", mergedSegmentSet, mergedCvList.size());
+        }
+    }
+
+    boolean persistFIFOMergedCvListIfBatchSizeOk() {
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
 
@@ -77,17 +125,31 @@ public class ChunkMergeWorker {
             }
         }
 
-        // perf bad, need optimize, todo
-        var groupByWalGroupIndex = mergedCvList.stream().collect(Collectors.groupingBy(one -> Wal.calWalGroupIndex(one.bucketIndex)));
+        // once only persist firstly merged segments
+        ArrayList<Integer> oncePersistSegmentIndexList = new ArrayList<>(MERGED_SEGMENT_SET_SIZE_THRESHOLD_ONCE_PERSIST);
+        // already sorted by segmentIndex
+        for (var mergedSegment : mergedSegmentSet) {
+            if (oncePersistSegmentIndexList.size() >= MERGED_SEGMENT_SET_SIZE_THRESHOLD_ONCE_PERSIST) {
+                break;
+            }
+
+            oncePersistSegmentIndexList.add(mergedSegment.segmentIndex);
+        }
+
+        var groupByWalGroupIndex = mergedCvList.stream()
+                .filter(one -> oncePersistSegmentIndexList.contains(one.segmentIndex))
+                .collect(Collectors.groupingBy(one -> Wal.calWalGroupIndex(one.bucketIndex)));
+
+        log.warn("Go to persist merged cv list once, perf bad, group by wal group index size: {}", groupByWalGroupIndex.size());
         for (var entry : groupByWalGroupIndex.entrySet()) {
             var walGroupIndex = entry.getKey();
-            var cvList = entry.getValue();
+            var subMergedCvList = entry.getValue();
 
             ArrayList<Wal.V> list = new ArrayList<>();
-            for (var cvWithKeyAndBucketIndex : cvList) {
-                var cv = cvWithKeyAndBucketIndex.cv;
-                var key = cvWithKeyAndBucketIndex.key;
-                var bucketIndex = cvWithKeyAndBucketIndex.bucketIndex;
+            for (var one : subMergedCvList) {
+                var cv = one.cv;
+                var key = one.key;
+                var bucketIndex = one.bucketIndex;
 
                 list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                         key, cv.encode(), cv.compressedLength(), true));
@@ -98,29 +160,31 @@ public class ChunkMergeWorker {
             oneSlot.chunk.persist(walGroupIndex, list, true);
         }
 
-        if (!mergedSegmentSet.isEmpty()) {
-            if (doLog) {
-                log.info("Compare chunk merged segment index end last time, end last time i: {}, ready to merged and persisted last i: {}",
-                        oneSlot.chunk.mergedSegmentIndexEndLastTime, mergedSegmentSet.getLast().index);
-            }
-
-            var sb = new StringBuilder();
-            var it = mergedSegmentSet.iterator();
-
-            while (it.hasNext()) {
-                var one = it.next();
-                // can reuse this chunk by segment index
-                oneSlot.updateSegmentMergeFlag(one.index, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
-                it.remove();
-                sb.append(one.index).append(";");
-            }
-
-            if (doLog) {
-                log.info("P s:{}, {}", slot, sb);
-            }
+        if (doLog) {
+            log.info("Compare chunk merged segment index end last time, end last time i: {}, ready to merged and persisted last i: {}",
+                    oneSlot.chunk.mergedSegmentIndexEndLastTime, oncePersistSegmentIndexList.getLast());
         }
 
-        mergedCvList.clear();
+        var sb = new StringBuilder();
+        var it = mergedSegmentSet.iterator();
+
+        while (it.hasNext()) {
+            var one = it.next();
+            if (!oncePersistSegmentIndexList.contains(one.segmentIndex)) {
+                continue;
+            }
+
+            // can reuse this chunk by segment segmentIndex
+            oneSlot.updateSegmentMergeFlag(one.segmentIndex, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
+            it.remove();
+            sb.append(one.segmentIndex).append(";");
+        }
+
+        if (doLog) {
+            log.info("P s:{}, {}", slot, sb);
+        }
+
+        mergedCvList.removeIf(one -> oncePersistSegmentIndexList.contains(one.segmentIndex));
         return true;
     }
 

@@ -958,8 +958,12 @@ public class OneSlot {
     }
 
 
-    private record BeforePersistWalExtFromMerge(ArrayList<Integer> segmentIndexList,
-                                                ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList) {
+    record BeforePersistWalExtFromMerge(ArrayList<Integer> segmentIndexList,
+                                        ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList) {
+    }
+
+    record BeforePersistWalExt2FromMerge(ArrayList<Integer> segmentIndexList,
+                                         ArrayList<Wal.V> vList) {
     }
 
     // for performance, before persist wal, read some segment in same wal group and  merge immediately
@@ -1055,6 +1059,7 @@ public class OneSlot {
             list.sort(Comparator.comparingInt(Wal.V::bucketIndex));
 
             var ext = readSomeSegmentsBeforePersistWal(walGroupIndex);
+            var ext2 = chunkMergeWorker.getMergedButNotPersistedBeforePersistWal(walGroupIndex);
 
             // remove those wal exist
             if (ext != null) {
@@ -1067,6 +1072,14 @@ public class OneSlot {
                         list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                                 one.key, cv.encode(), cv.compressedLength(), true));
                     }
+                }
+            }
+
+            if (ext2 != null) {
+                var vList = ext2.vList;
+                vList.removeIf(one -> delayToKeyBucketValues.containsKey(one.key()));
+                if (!vList.isEmpty()) {
+                    list.addAll(vList);
                 }
             }
 
@@ -1083,6 +1096,15 @@ public class OneSlot {
 
                 // do not remove, keep segment index continuous, chunk merge job will skip as flag is merged and persisted
 //                needMergeSegmentIndexList.removeIf(segmentIndexList::contains);
+            }
+
+            if (ext2 != null) {
+                var segmentIndexList = ext2.segmentIndexList;
+                for (var segmentIndex : segmentIndexList) {
+                    setSegmentMergeFlag(segmentIndex, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L, walGroupIndex);
+                }
+
+                chunkMergeWorker.removeMergedButNotPersistedAfterPersistWal(segmentIndexList, walGroupIndex);
             }
 
             if (!needMergeSegmentIndexList.isEmpty()) {
