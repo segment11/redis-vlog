@@ -26,6 +26,7 @@ public class ToSlaveExistsSegmentOncePull implements ReplContent {
         // seq long
         oneSlot.getSegmentMergeFlagListBatchForRepl(oncePull.beginSegmentIndex(), oncePull.segmentCount())
                 .forEach(toBuf::writeLong);
+        toBuf.writeInt(oncePull.walGroupIndex());
 
         // read 4M data and send to slave
         var bytes = oneSlot.preadForRepl(oncePull.beginSegmentIndex());

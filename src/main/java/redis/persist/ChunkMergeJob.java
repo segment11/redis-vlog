@@ -200,7 +200,7 @@ public class ChunkMergeJob {
             // refer to Chunk.ONCE_PREPARE_SEGMENT_COUNT
             // last segments not write at all, need skip
             if (segmentBytesBatchRead == null || relativeOffsetInBatchBytes >= segmentBytesBatchRead.length) {
-                oneSlot.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
+                oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
                 if (doLog) {
                     log.info("Set segment flag to persisted as not write at all, s={}, i={}", slot, segmentIndex);
                 }
@@ -208,7 +208,7 @@ public class ChunkMergeJob {
                 continue;
             }
 
-            oneSlot.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGING, snowFlake.nextId());
+            oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGING, snowFlake.nextId());
             if (doLog) {
                 log.info("Set segment flag to merging, s={}, i={}", slot, segmentIndex);
             }
@@ -274,7 +274,7 @@ public class ChunkMergeJob {
         boolean isPersisted = chunkMergeWorker.persistMergedCvList();
         if (isPersisted) {
             for (var segmentIndex : needMergeSegmentIndexList) {
-                oneSlot.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
+                oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
 
                 if (doLog) {
                     var validCvCountRecord = validCvCountRecordList.get(segmentIndex - firstSegmentIndex);
@@ -286,7 +286,7 @@ public class ChunkMergeJob {
             for (var segmentIndex : needMergeSegmentIndexList) {
                 var validCvCountRecord = validCvCountRecordList.get(segmentIndex - firstSegmentIndex);
                 if (hasValidCvSegmentIndexSet.contains(segmentIndex)) {
-                    oneSlot.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED, snowFlake.nextId());
+                    oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED, snowFlake.nextId());
 
                     if (doLog) {
                         log.info("Set segment flag to merged, s={}, i={}, valid cv count={}, invalid cv count={}",
@@ -296,7 +296,7 @@ public class ChunkMergeJob {
                     // add to merged set
                     chunkMergeWorker.addMergedSegment(segmentIndex, validCvCountRecord.validCvCount);
                 } else {
-                    oneSlot.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
+                    oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
 
                     if (doLog) {
                         log.info("Set segment flag to persisted, s={}, i={}, valid cv count={}, invalid cv count={}",

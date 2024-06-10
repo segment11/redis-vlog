@@ -194,7 +194,7 @@ public class Chunk {
 
             if (flag == SEGMENT_FLAG_MERGED_AND_PERSISTED || flag == SEGMENT_FLAG_REUSE_AND_PERSISTED) {
                 if (updateAsReuseFlag) {
-                    oneSlot.setSegmentMergeFlag(targetIndex, SEGMENT_FLAG_REUSE, 0L);
+                    oneSlot.setSegmentMergeFlag(targetIndex, SEGMENT_FLAG_REUSE, 0L, segmentFlag.walGroupIndex);
                 }
                 continue;
             }
@@ -207,12 +207,13 @@ public class Chunk {
         return true;
     }
 
-    public record SegmentFlag(byte flag, long segmentSeq) {
+    public record SegmentFlag(byte flag, long segmentSeq, int walGroupIndex) {
         @Override
         public String toString() {
             return "SegmentFlag{" +
                     "flag=" + flag +
                     ", segmentSeq=" + segmentSeq +
+                    ", walGroupIndex=" + walGroupIndex +
                     '}';
         }
     }
@@ -256,7 +257,7 @@ public class Chunk {
             segmentSeqListAll.add(segment.segmentSeq());
         }
         oneSlot.setSegmentMergeFlagBatch(segmentIndex, segments.size(),
-                SEGMENT_FLAG_REUSE, segmentSeqListAll);
+                SEGMENT_FLAG_REUSE, segmentSeqListAll, walGroupIndex);
 
         boolean isNewAppendAfterBatch = true;
 
@@ -280,7 +281,7 @@ public class Chunk {
             segmentIndex += segments.size();
 
             oneSlot.setSegmentMergeFlagBatch(segmentIndex, segments.size(),
-                    isNewAppendAfterBatch ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqListAll);
+                    isNewAppendAfterBatch ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqListAll, walGroupIndex);
         } else {
             if (segments.size() < BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
                 for (var segment : segments) {
@@ -292,7 +293,7 @@ public class Chunk {
 
                     // need set segment flag so that merge worker can merge
                     oneSlot.setSegmentMergeFlag(segment.segmentIndex(),
-                            isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segment.segmentSeq());
+                            isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segment.segmentSeq(), walGroupIndex);
 
                     moveSegmentIndexNext(1);
                 }
@@ -329,7 +330,7 @@ public class Chunk {
 
                     // need set segment flag so that merge worker can merge
                     oneSlot.setSegmentMergeFlagBatch(segmentIndex, BATCH_ONCE_SEGMENT_COUNT_PWRITE,
-                            isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqListSubBatch);
+                            isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqListSubBatch, walGroupIndex);
 
                     moveSegmentIndexNext(BATCH_ONCE_SEGMENT_COUNT_PWRITE);
                 }
@@ -345,7 +346,7 @@ public class Chunk {
 
                     // need set segment flag so that merge worker can merge
                     oneSlot.setSegmentMergeFlag(segment.segmentIndex(),
-                            isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segment.segmentSeq());
+                            isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segment.segmentSeq(), walGroupIndex);
 
                     moveSegmentIndexNext(1);
                 }
@@ -522,7 +523,7 @@ public class Chunk {
         return segmentIndexToMerge;
     }
 
-    public boolean writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int capacity) {
+    public boolean writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int walGroupIndex, int capacity) {
         if (ConfForSlot.global.pureMemory) {
             if (capacity != bytes.length) {
                 throw new IllegalArgumentException("Write buffer capacity not match, expect: " + capacity + ", actual: " + bytes.length);
@@ -538,7 +539,7 @@ public class Chunk {
                 fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, false);
 
                 oneSlot.setSegmentMergeFlag(segmentIndex,
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList.getFirst());
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList.getFirst(), walGroupIndex);
             } else {
                 for (int i = 0; i < segmentCount; i++) {
                     var oneSegmentBytes = new byte[segmentLength];
@@ -548,7 +549,7 @@ public class Chunk {
                 }
 
                 oneSlot.setSegmentMergeFlagBatch(segmentIndex, segmentCount,
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList);
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList, walGroupIndex);
             }
 
             return isNewAppend;
@@ -558,10 +559,10 @@ public class Chunk {
 
             if (segmentCount == 1) {
                 oneSlot.setSegmentMergeFlag(segmentIndex,
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList.getFirst());
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList.getFirst(), walGroupIndex);
             } else {
                 oneSlot.setSegmentMergeFlagBatch(segmentIndex, segmentCount,
-                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList);
+                        isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList, walGroupIndex);
             }
 
             return isNewAppend;

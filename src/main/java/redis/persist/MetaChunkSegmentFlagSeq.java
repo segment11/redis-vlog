@@ -14,8 +14,8 @@ import java.util.List;
 
 public class MetaChunkSegmentFlagSeq {
     private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
-    // flag byte + seq long
-    public static final int ONE_LENGTH = 1 + 8;
+    // flag byte + seq long + wal group index int
+    public static final int ONE_LENGTH = 1 + 8 + 4;
 
     private final byte slot;
     private final int allCapacity;
@@ -26,7 +26,7 @@ public class MetaChunkSegmentFlagSeq {
         var times = innerBytes.length / ONE_LENGTH;
         for (int i = 0; i < times; i++) {
             innerBuffer.put(Chunk.SEGMENT_FLAG_INIT);
-            innerBuffer.position(innerBuffer.position() + 8);
+            innerBuffer.position(innerBuffer.position() + 8 + 4);
         }
     }
 
@@ -94,7 +94,7 @@ public class MetaChunkSegmentFlagSeq {
     }
 
     interface IterateCallBack {
-        void call(int segmentIndex, byte flag, long segmentSeq);
+        void call(int segmentIndex, byte flag, long segmentSeq, int walGroupIndex);
     }
 
     void iterate(IterateCallBack callBack) {
@@ -103,8 +103,9 @@ public class MetaChunkSegmentFlagSeq {
 
             var flag = inMemoryCachedByteBuffer.get(offset);
             var segmentSeq = inMemoryCachedByteBuffer.getLong(offset + 1);
+            var walGroupIndex = inMemoryCachedByteBuffer.getInt(offset + 1 + 8);
 
-            callBack.call(segmentIndex, flag, segmentSeq);
+            callBack.call(segmentIndex, flag, segmentSeq, walGroupIndex);
         }
     }
 
@@ -118,11 +119,13 @@ public class MetaChunkSegmentFlagSeq {
         return list;
     }
 
-    void setSegmentMergeFlag(int segmentIndex, byte flag, long segmentSeq) {
+    void setSegmentMergeFlag(int segmentIndex, byte flag, long segmentSeq, int walGroupIndex) {
         var offset = segmentIndex * ONE_LENGTH;
         var bytes = new byte[ONE_LENGTH];
-        bytes[0] = flag;
-        ByteBuffer.wrap(bytes, 1, 8).putLong(segmentSeq);
+        ByteBuffer wrap = ByteBuffer.wrap(bytes);
+        wrap.put(flag);
+        wrap.putLong(segmentSeq);
+        wrap.putInt(walGroupIndex);
 
         if (ConfForSlot.global.pureMemory) {
             inMemoryCachedByteBuffer.put(offset, bytes);
@@ -138,12 +141,13 @@ public class MetaChunkSegmentFlagSeq {
         }
     }
 
-    void setSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList) {
+    void setSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount, byte flag, List<Long> segmentSeqList, int walGroupIndex) {
         var bytes = new byte[segmentCount * ONE_LENGTH];
-        var buffer = ByteBuffer.wrap(bytes);
+        var wrap = ByteBuffer.wrap(bytes);
         for (int i = 0; i < segmentCount; i++) {
-            buffer.put(i * ONE_LENGTH, flag);
-            buffer.putLong(i * ONE_LENGTH + 1, segmentSeqList.get(i));
+            wrap.put(i * ONE_LENGTH, flag);
+            wrap.putLong(i * ONE_LENGTH + 1, segmentSeqList.get(i));
+            wrap.putInt(i * ONE_LENGTH + 1 + 8, walGroupIndex);
         }
 
         var offset = beginSegmentIndex * ONE_LENGTH;
@@ -163,7 +167,9 @@ public class MetaChunkSegmentFlagSeq {
 
     Chunk.SegmentFlag getSegmentMergeFlag(int segmentIndex) {
         var offset = segmentIndex * ONE_LENGTH;
-        return new Chunk.SegmentFlag(inMemoryCachedByteBuffer.get(offset), inMemoryCachedByteBuffer.getLong(offset + 1));
+        return new Chunk.SegmentFlag(inMemoryCachedByteBuffer.get(offset),
+                inMemoryCachedByteBuffer.getLong(offset + 1),
+                inMemoryCachedByteBuffer.getInt(offset + 1 + 8));
     }
 
     void clear() {

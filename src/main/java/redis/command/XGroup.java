@@ -348,10 +348,12 @@ public class XGroup extends BaseCommand {
                 segmentSeqList.add(buffer.getLong());
             }
 
+            var walGroupIndex = buffer.getInt();
+
             var bytes = new byte[buffer.remaining()];
             buffer.get(bytes);
 
-            oneSlot.writeSegmentsFromMasterExists(beginSegmentIndex, segmentCount, segmentSeqList, bytes);
+            oneSlot.writeSegmentsFromMasterExists(beginSegmentIndex, segmentCount, segmentSeqList, walGroupIndex, bytes);
             var nextOncePull = oneSlot.removeOncePull(beginSegmentIndex);
             if (nextOncePull == null) {
                 return nextExistsSegmentMetaReply(oneSlot);

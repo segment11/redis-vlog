@@ -110,7 +110,7 @@ public class ChunkMergeWorker {
             while (it.hasNext()) {
                 var one = it.next();
                 // can reuse this chunk by segment index
-                oneSlot.setSegmentMergeFlag(one.index, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
+                oneSlot.updateSegmentMergeFlag(one.index, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
                 it.remove();
                 sb.append(one.index).append(";");
             }

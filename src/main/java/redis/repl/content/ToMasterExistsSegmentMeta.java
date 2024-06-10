@@ -33,13 +33,14 @@ public class ToMasterExistsSegmentMeta implements ReplContent {
     // 4K one segment, 1024 segments means read 4M data and send to slave
     public static final int ONCE_SEGMENT_COUNT = 1024;
 
-    public record OncePull(int beginSegmentIndex, int segmentCount) {
-        public static final int ENCODED_LENGTH = 4 + 4;
+    public record OncePull(int beginSegmentIndex, int segmentCount, int walGroupIndex) {
+        public static final int ENCODED_LENGTH = 4 + 4 + 4;
 
         public static OncePull decode(ByteBuffer buffer) {
             int beginSegmentIndex = buffer.getInt();
             int segmentCount = buffer.getInt();
-            return new OncePull(beginSegmentIndex, segmentCount);
+            int walGroupIndex = buffer.getInt();
+            return new OncePull(beginSegmentIndex, segmentCount, walGroupIndex);
         }
     }
 
@@ -64,7 +65,9 @@ public class ToMasterExistsSegmentMeta implements ReplContent {
                 continue;
             }
 
-            oncePulls.add(new OncePull(beginSegmentIndex, ONCE_SEGMENT_COUNT));
+            // todo
+            // once pull group by walGroupIndex
+            oncePulls.add(new OncePull(beginSegmentIndex, ONCE_SEGMENT_COUNT, 0));
         }
 
         return oncePulls;
