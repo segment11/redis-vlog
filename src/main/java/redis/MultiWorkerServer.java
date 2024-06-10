@@ -83,6 +83,11 @@ public class MultiWorkerServer extends Launcher {
 
     // for cross net workers' eventloop
     record WrapRequestHandlerArray(RequestHandler[] requestHandlerArray) {
+        public void stop() {
+            for (var requestHandler : requestHandlerArray) {
+                requestHandler.stop();
+            }
+        }
     }
 
     record WrapEventloopArray(Eventloop[] multiSlotEventloopArray) {
@@ -431,10 +436,7 @@ public class MultiWorkerServer extends Launcher {
     @Override
     protected void onStop() throws Exception {
         try {
-            for (var requestHandler : multiSlotMultiThreadRequestHandlersArray.requestHandlerArray) {
-                requestHandler.stop();
-            }
-
+            multiSlotMultiThreadRequestHandlersArray.stop();
             for (var requestHandler : requestHandlerArray) {
                 requestHandler.stop();
             }
@@ -447,11 +449,6 @@ public class MultiWorkerServer extends Launcher {
                 multiSlotEventloop.breakEventloop();
             }
             System.out.println("Multi slot request eventloop threads stopped");
-
-            for (var netWorkerEventloop : netWorkerEventloopArray) {
-                netWorkerEventloop.breakEventloop();
-            }
-            System.out.println("Net worker eventloop threads stopped");
 
             // disconnect all clients
             socketInspector.closeAll();
@@ -635,7 +632,7 @@ public class MultiWorkerServer extends Launcher {
 
                         var list = new RequestHandler[multiSlotMultiThreadNumber];
                         for (int i = 0; i < multiSlotMultiThreadNumber; i++) {
-                            list[i] = new RequestHandler((byte) -i, (byte) multiSlotMultiThreadNumber, (short) slotNumber, null, null, config);
+                            list[i] = new RequestHandler((byte) (-i - 1), (byte) multiSlotMultiThreadNumber, (short) slotNumber, null, null, config);
                         }
                         return new WrapRequestHandlerArray(list);
                     }
