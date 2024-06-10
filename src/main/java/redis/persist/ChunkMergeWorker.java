@@ -227,6 +227,8 @@ public class ChunkMergeWorker {
             }
 
             map.put("chunk_last_merged_segment_index", new SimpleGauge.ValueWithLabelValues((double) lastMergedSegmentIndex, labelValues));
+            map.put("chunk_merged_but_not_persisted_segment_count", new SimpleGauge.ValueWithLabelValues((double) mergedSegmentSet.size(), labelValues));
+            map.put("chunk_merged_but_not_persisted_cv_count", new SimpleGauge.ValueWithLabelValues((double) mergedCvList.size(), labelValues));
 
             return map;
         });
