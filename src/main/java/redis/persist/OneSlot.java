@@ -1091,10 +1091,13 @@ public class OneSlot {
                 }
             }
 
-            if (list.size() > 1000) {
+            if (list.size() > 1000 * 4) {
                 log.warn("Ready to persist wal with merged valid cv list, too large, s={}, wal group index={}, list size={}",
                         slot, walGroupIndex, list.size());
             }
+
+//            checkNotMergedAndPersistedNextRangeSegmentIndex();
+
             var needMergeSegmentIndexList = chunk.persist(walGroupIndex, list, false);
             if (needMergeSegmentIndexList == null) {
                 throw new IllegalStateException("Persist error, need merge segment index list is null, slot: " + slot);
@@ -1121,19 +1124,36 @@ public class OneSlot {
 
             if (!needMergeSegmentIndexList.isEmpty()) {
                 doMergeJob(needMergeSegmentIndexList);
+                checkFirstMergedButNotPersistedSegmentIndexTooNear();
+            }
+        }
+    }
 
-                if (!chunkMergeWorker.mergedSegmentSet.isEmpty()) {
-                    var currentSegmentIndex = chunk.currentSegmentIndex();
-                    var firstMergedButNotPersisted = chunkMergeWorker.mergedSegmentSet.first().segmentIndex();
+//    private void checkNotMergedAndPersistedNextRangeSegmentIndex() {
+//        var currentSegmentIndex = chunk.currentSegmentIndex();
+//
+//        for (int i = 0; i < ONCE_PREPARE_SEGMENT_COUNT; i++) {
+//            var targetSegmentIndex = currentSegmentIndex + i;
+//            var segmentFlag = getSegmentMergeFlag(targetSegmentIndex);
+//            var flag = segmentFlag.flag();
+//
+//            if (flag != SEGMENT_FLAG_INIT && flag != SEGMENT_FLAG_MERGED_AND_PERSISTED) {
+//
+//            }
+//        }
+//    }
 
-                    // need persist merged segments immediately, or next time wal persist will not prepare ready
-                    boolean needPersistMergedButNotPersisted = isNeedPersistMergedButNotPersisted(currentSegmentIndex, firstMergedButNotPersisted);
-                    if (needPersistMergedButNotPersisted) {
-                        log.warn("Persist merged segments immediately, s={}, begin merged segment index={}",
-                                slot, firstMergedButNotPersisted);
-                        chunkMergeWorker.persistFIFOMergedCvList();
-                    }
-                }
+    private void checkFirstMergedButNotPersistedSegmentIndexTooNear() {
+        if (!chunkMergeWorker.mergedSegmentSet.isEmpty()) {
+            var currentSegmentIndex = chunk.currentSegmentIndex();
+            var firstMergedButNotPersisted = chunkMergeWorker.mergedSegmentSet.first().segmentIndex();
+
+            // need persist merged segments immediately, or next time wal persist will not prepare ready
+            boolean needPersistMergedButNotPersisted = isNeedPersistMergedButNotPersisted(currentSegmentIndex, firstMergedButNotPersisted);
+            if (needPersistMergedButNotPersisted) {
+                log.warn("Persist merged segments immediately, s={}, begin merged segment index={}",
+                        slot, firstMergedButNotPersisted);
+                chunkMergeWorker.persistFIFOMergedCvList();
             }
         }
     }
