@@ -64,16 +64,17 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
     def 'iterate'() {
         given:
         def confChunk = ConfForSlot.global.confChunk
-        def debugConfChunk = ConfForSlot.ConfChunk.debugMode
-        confChunk.segmentNumberPerFd = debugConfChunk.segmentNumberPerFd
-        confChunk.fdPerChunk = debugConfChunk.fdPerChunk
+        def targetConfChunk = ConfForSlot.ConfChunk.c1m
+//        def targetConfChunk = ConfForSlot.ConfChunk.debugMode
+        confChunk.segmentNumberPerFd = targetConfChunk.segmentNumberPerFd
+        confChunk.fdPerChunk = targetConfChunk.fdPerChunk
 
         def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
         when:
-        one.iterate { segmentIndex, flag, seq, walGroupIndex ->
-            if (segmentIndex % 256 == 0) {
-                println "segment index: $segmentIndex, flag: $flag, seq: $seq, wal group index: $walGroupIndex"
+        new File('chunk_segment_flag.txt').withWriter { writer ->
+            one.iterate { segmentIndex, flag, seq, walGroupIndex ->
+                writer.writeLine("$segmentIndex, $flag, $seq, $walGroupIndex")
             }
         }
 
