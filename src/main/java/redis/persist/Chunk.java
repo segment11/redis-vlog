@@ -244,13 +244,22 @@ public class Chunk {
         var doLog = (Debug.getInstance().logMerge && logMergeCount % 1000 == 0);
 
         moveIndexForPrepare();
-        boolean canWrite = reuseSegments(false, ONCE_PREPARE_SEGMENT_COUNT, false);
-        if (!canWrite) {
-            throw new SegmentOverflowException("Segment can not write, s=" + slot + ", i=" + segmentIndex);
+        // merge, valid cv list is smaller, only need one segment, or need 4 or 8 ? todo
+        if (isMerge) {
+            boolean canWrite = reuseSegments(false, 1, false);
+            if (!canWrite) {
+                throw new SegmentOverflowException("Segment can not write, s=" + slot + ", i=" + segmentIndex);
+            }
+        } else {
+            boolean canWrite = reuseSegments(false, ONCE_PREPARE_SEGMENT_COUNT, false);
+            if (!canWrite) {
+                throw new SegmentOverflowException("Segment can not write, s=" + slot + ", i=" + segmentIndex);
+            }
         }
 
-        int[] nextNSegmentIndex = new int[ONCE_PREPARE_SEGMENT_COUNT];
-        for (int i = 0; i < ONCE_PREPARE_SEGMENT_COUNT; i++) {
+        var oncePrepareSegmentCount = isMerge ? 1 : ONCE_PREPARE_SEGMENT_COUNT;
+        int[] nextNSegmentIndex = new int[oncePrepareSegmentCount];
+        for (int i = 0; i < oncePrepareSegmentCount; i++) {
             nextNSegmentIndex[i] = segmentIndex + i;
         }
 
