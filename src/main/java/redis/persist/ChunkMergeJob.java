@@ -186,6 +186,7 @@ public class ChunkMergeJob {
         // read all segments to memory, then compare with key buckets
         ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(npagesMerge * 20);
 
+        boolean alreadyDoLog = false;
         int i = 0;
         for (var segmentIndex : needMergeSegmentIndexList) {
             if (skipSegmentIndexSet.contains(segmentIndex)) {
@@ -207,8 +208,9 @@ public class ChunkMergeJob {
             }
 
             oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGING, snowFlake.nextId());
-            if (doLog) {
+            if (doLog && !alreadyDoLog) {
                 log.info("Set segment flag to merging, s={}, i={}", slot, segmentIndex);
+                alreadyDoLog = true;
             }
 
             readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength, segmentIndex, slot);
@@ -259,7 +261,7 @@ public class ChunkMergeJob {
             } else {
                 oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
 
-                if (doLog) {
+                if (doLog && segmentIndex == firstSegmentIndex) {
                     log.info("Set segment flag to persisted, s={}, i={}, valid cv count={}, invalid cv count={}",
                             slot, segmentIndex, validCvCountRecord.validCvCount, validCvCountRecord.invalidCvCount);
                 }

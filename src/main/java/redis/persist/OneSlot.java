@@ -325,12 +325,17 @@ public class OneSlot {
 
     private final Map<Integer, LRUMap<String, byte[]>> kvByWalGroupIndexLRU = new HashMap<>();
 
+    private int lruClearedCount = 0;
+
     void clearKvLRUByWalGroupIndex(int walGroupIndex) {
         var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
         if (lru != null) {
             lru.clear();
             if (walGroupIndex == 0) {
-                log.info("KV LRU cleared for wal group index: {}, I am alive, act normal", walGroupIndex);
+                lruClearedCount++;
+                if (lruClearedCount % 10 == 0) {
+                    log.info("KV LRU cleared for wal group index: {}, I am alive, act normal", walGroupIndex);
+                }
             }
         }
     }

@@ -69,9 +69,9 @@ public class ChunkMergeWorker {
     record MergedSegment(int segmentIndex, int validCvCount) implements Comparable<MergedSegment> {
         @Override
         public String toString() {
-            return "MergedSegment{" +
-                    ", segmentIndex=" + segmentIndex +
-                    ", validCvCount=" + validCvCount +
+            return "S{" +
+                    ", s=" + segmentIndex +
+                    ", count=" + validCvCount +
                     '}';
         }
 
