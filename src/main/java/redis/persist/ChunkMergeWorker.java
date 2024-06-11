@@ -36,12 +36,28 @@ public class ChunkMergeWorker {
     record CvWithKeyAndBucketIndexAndSegmentIndex(CompressedValue cv, String key, int bucketIndex, int segmentIndex) {
     }
 
-    private static final int MERGING_CV_SIZE_THRESHOLD = 1000;
+    private int MERGED_CV_SIZE_THRESHOLD = 128 * 16;
     // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
-    final static int MERGED_SEGMENT_SET_SIZE_THRESHOLD = 64;
-    final static int MERGED_SEGMENT_SET_SIZE_THRESHOLD_ONCE_PERSIST = 8;
+    private int MERGED_SEGMENT_SIZE_THRESHOLD = 128;
+    private int MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = 8;
 
-    final List<CvWithKeyAndBucketIndexAndSegmentIndex> mergedCvList = new ArrayList<>(MERGING_CV_SIZE_THRESHOLD);
+    void resetThreshold(int walGroupNumber) {
+        MERGED_SEGMENT_SIZE_THRESHOLD = walGroupNumber;
+        MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = Math.max(MERGED_SEGMENT_SIZE_THRESHOLD / 1024, 8);
+
+        MERGED_CV_SIZE_THRESHOLD = MERGED_SEGMENT_SIZE_THRESHOLD * 16;
+
+        final var maybeOneMergedCvBytesLength = 200;
+        var lruMemoryRequireMB = MERGED_CV_SIZE_THRESHOLD * maybeOneMergedCvBytesLength / 1024 / 1024;
+        log.info("LRU max size for chunk segment merged cv buffer: {}, maybe one merged cv bytes length is {}B, memory require: {}MB, slot: {}",
+                MERGED_CV_SIZE_THRESHOLD,
+                maybeOneMergedCvBytesLength,
+                lruMemoryRequireMB,
+                slot);
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer, lruMemoryRequireMB, false);
+    }
+
+    final List<CvWithKeyAndBucketIndexAndSegmentIndex> mergedCvList = new ArrayList<>(MERGED_CV_SIZE_THRESHOLD);
 
     void addMergedCv(CvWithKeyAndBucketIndexAndSegmentIndex cvWithKeyAndBucketIndexAndSegmentIndex) {
         mergedCvList.add(cvWithKeyAndBucketIndexAndSegmentIndex);
@@ -119,17 +135,17 @@ public class ChunkMergeWorker {
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
 
-        if (mergedCvList.size() < MERGING_CV_SIZE_THRESHOLD) {
-            if (mergedSegmentSet.size() < MERGED_SEGMENT_SET_SIZE_THRESHOLD) {
+        if (mergedCvList.size() < MERGED_CV_SIZE_THRESHOLD) {
+            if (mergedSegmentSet.size() < MERGED_SEGMENT_SIZE_THRESHOLD) {
                 return false;
             }
         }
 
         // once only persist firstly merged segments
-        ArrayList<Integer> oncePersistSegmentIndexList = new ArrayList<>(MERGED_SEGMENT_SET_SIZE_THRESHOLD_ONCE_PERSIST);
+        ArrayList<Integer> oncePersistSegmentIndexList = new ArrayList<>(MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST);
         // already sorted by segmentIndex
         for (var mergedSegment : mergedSegmentSet) {
-            if (oncePersistSegmentIndexList.size() >= MERGED_SEGMENT_SET_SIZE_THRESHOLD_ONCE_PERSIST) {
+            if (oncePersistSegmentIndexList.size() >= MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST) {
                 break;
             }
 

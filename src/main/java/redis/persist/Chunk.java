@@ -459,7 +459,7 @@ public class Chunk {
             return;
         }
 
-        final int maxSize = ONCE_PREPARE_SEGMENT_COUNT * 2 + ChunkMergeWorker.MERGED_SEGMENT_SET_SIZE_THRESHOLD;
+        final int maxSize = ONCE_PREPARE_SEGMENT_COUNT * 2;
 
         list.sort(Integer::compareTo);
         if (list.getLast() - list.getFirst() != list.size() - 1) {
@@ -476,6 +476,11 @@ public class Chunk {
                     ", last need merge segment index=" + list.getLast() +
                     ", last time merged segment index =" + mergedSegmentIndexEndLastTime +
                     ", list size=" + list.size());
+        }
+
+        if (list.size() >= 16) {
+            log.warn("Chunk persist need merge segment index list too large, performance bad, s={}, i={}, list={}",
+                    slot, segmentIndex, list);
         }
     }
 

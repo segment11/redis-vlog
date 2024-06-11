@@ -180,8 +180,8 @@ public class FdReadWrite {
         if (isChunkFd) {
             var maxSize = ConfForSlot.global.confChunk.lruPerFd.maxSize;
             var lruMemoryRequireMB = 1L * maxSize * segmentLength / 1024 / 1024;
-            log.info("Chunk lru max size for one chunk fd: {}, segment length: {}, memory require: {}MB",
-                    maxSize, lruMemoryRequireMB);
+            log.info("Chunk lru max size for one chunk fd: {}, segment length: {}, memory require: {}MB, name: {}",
+                    maxSize, lruMemoryRequireMB, name);
             LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, (int) lruMemoryRequireMB, true);
 
             if (maxSize > 0) {
@@ -194,8 +194,8 @@ public class FdReadWrite {
             // need to compare with metrics
             final var compressRatio = 0.25;
             var lruMemoryRequireMB = 1L * maxSize * segmentLength / 1024 / 1024 * compressRatio;
-            log.info("Key bucket lru max size for one key bucket fd: {}, segment length: {}， compress ratio maybe: {}, memory require: {}MB",
-                    maxSize, segmentLength, compressRatio, lruMemoryRequireMB);
+            log.info("Key bucket lru max size for one key bucket fd: {}, segment length: {}， compress ratio maybe: {}, memory require: {}MB, name: {}",
+                    maxSize, segmentLength, compressRatio, lruMemoryRequireMB, name);
             LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, (int) lruMemoryRequireMB, false);
 
             if (maxSize > 0) {

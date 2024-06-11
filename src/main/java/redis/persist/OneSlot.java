@@ -104,6 +104,8 @@ public class OneSlot {
         var walGroupNumber = Wal.calcWalGroupNumber();
         this.walArray = new Wal[walGroupNumber];
 
+        this.chunkMergeWorker.resetThreshold(walGroupNumber);
+
         var walSharedFile = new File(slotDir, "wal.dat");
         if (!walSharedFile.exists()) {
             FileUtils.touch(walSharedFile);
@@ -140,11 +142,12 @@ public class OneSlot {
         var maxSizeForEachWalGroup = maxSizeForAllWalGroups / walGroupNumber;
         final var maybeOneCompressedValueEncodedLength = 200;
         var lruMemoryRequireMBReadGroupByWalGroup = maxSizeForAllWalGroups * maybeOneCompressedValueEncodedLength / 1024 / 1024;
-        log.info("LRU max size for each wal group: {}, all wal group number: {}, maybe one compressed value encoded length is {}B, memory require: {}MB",
+        log.info("LRU max size for each wal group: {}, all wal group number: {}, maybe one compressed value encoded length is {}B, memory require: {}MB, slot: {}",
                 maxSizeForEachWalGroup,
                 walGroupNumber,
                 maybeOneCompressedValueEncodedLength,
-                lruMemoryRequireMBReadGroupByWalGroup);
+                lruMemoryRequireMBReadGroupByWalGroup,
+                slot);
         LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_read_group_by_wal_group, lruMemoryRequireMBReadGroupByWalGroup, false);
 
         for (int walGroupIndex = 0; walGroupIndex < walGroupNumber; walGroupIndex++) {
@@ -1261,6 +1264,8 @@ public class OneSlot {
                         (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_write_in_wal), labelValues));
                 map.put("lru_prepare_mb_kv_big_string_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.big_string), labelValues));
+                map.put("lru_prepare_mb_chunk_segment_merged_cv_buffer_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer), labelValues));
 
                 map.put("lru_prepare_mb_all", new SimpleGauge.ValueWithLabelValues(
                         (double) LRUPrepareBytesStats.sum(), labelValues));
