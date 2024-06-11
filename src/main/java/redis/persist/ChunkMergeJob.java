@@ -132,10 +132,6 @@ public class ChunkMergeJob {
         var lastSegmentIndex = needMergeSegmentIndexList.getLast();
         assert needMergeSegmentIndexList.size() == lastSegmentIndex - firstSegmentIndex + 1;
 
-        int segmentLength = ConfForSlot.global.confChunk.segmentLength;
-        var npages0 = segmentLength / PAGE_SIZE;
-        int npagesMerge = npages0 * MERGE_READ_ONCE_SEGMENT_COUNT;
-
         HashSet<Integer> skipSegmentIndexSet = new HashSet<>();
         for (var segmentIndex : needMergeSegmentIndexList) {
             var segmentFlag = oneSlot.getSegmentMergeFlag(segmentIndex);
@@ -161,11 +157,15 @@ public class ChunkMergeJob {
 
         chunkMergeWorker.mergedSegmentCount++;
 
+        int segmentLength = ConfForSlot.global.confChunk.segmentLength;
+        var npages0 = segmentLength / PAGE_SIZE;
+        int npagesMerge = npages0 * MERGE_READ_ONCE_SEGMENT_COUNT;
+
         var beginT = System.nanoTime();
         var segmentBytesBatchRead = oneSlot.preadForMerge(firstSegmentIndex, MERGE_READ_ONCE_SEGMENT_COUNT);
 
         // read all segments to memory, then compare with key buckets
-        ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(npagesMerge * 20);
+        ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(npagesMerge * 100);
 
         boolean alreadyDoLog = false;
         int i = 0;
