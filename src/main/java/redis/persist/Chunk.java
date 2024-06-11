@@ -17,7 +17,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
-import static redis.repl.content.ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
+import static redis.repl.content.ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT;
 
 public class Chunk {
     private final int segmentNumberPerFd;
@@ -450,6 +450,22 @@ public class Chunk {
                 for (int i = mergedSegmentIndexEndLastTime + 1; i < firstNeedMergeSegmentIndex; i++) {
                     needMergeSegmentIndexList.add(i);
                 }
+
+                // last ONCE_PREPARE_SEGMENT_COUNT segments, need merge
+                var lastNeedMergeSegmentIndex = needMergeSegmentIndexList.getLast();
+                if (lastNeedMergeSegmentIndex >= maxSegmentIndex - ONCE_PREPARE_SEGMENT_COUNT) {
+                    for (int i = lastNeedMergeSegmentIndex + 1; i <= maxSegmentIndex; i++) {
+                        needMergeSegmentIndexList.add(i);
+                    }
+                    log.warn("Add extra need merge segment index to the end, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
+                } else if (lastNeedMergeSegmentIndex < halfSegmentNumber &&
+                        lastNeedMergeSegmentIndex >= halfSegmentNumber - 1 - ONCE_PREPARE_SEGMENT_COUNT) {
+                    for (int i = lastNeedMergeSegmentIndex + 1; i < halfSegmentNumber; i++) {
+                        needMergeSegmentIndexList.add(i);
+                    }
+                    log.warn("Add extra need merge segment index to the half end, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
+                }
+
                 needMergeSegmentIndexList.sort(Integer::compareTo);
             }
 
@@ -604,7 +620,7 @@ public class Chunk {
             fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, false);
         } else if (segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
             fdReadWrite.writeSegmentBatch(segmentIndexTargetFd, bytes, false);
-        } else if (segmentCount == ONCE_SEGMENT_COUNT) {
+        } else if (segmentCount == REPL_ONCE_SEGMENT_COUNT) {
             fdReadWrite.writeSegmentForRepl(segmentIndexTargetFd, bytes, 0);
         } else {
             throw new IllegalArgumentException("Write segment count not support: " + segmentCount);
