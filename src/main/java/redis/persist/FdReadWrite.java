@@ -222,7 +222,7 @@ public class FdReadWrite {
             this.writePageAddressB = pageManager.allocatePages(oneSegmentPage * BATCH_ONCE_SEGMENT_COUNT_PWRITE, PROTECTION);
             this.writePageBufferB = m.newDirectByteBuffer(writePageAddressB, segmentLength * BATCH_ONCE_SEGMENT_COUNT_PWRITE);
 
-            var npagesRepl = oneSegmentPage * ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
+            var npagesRepl = oneSegmentPage * ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT;
             this.readForReplAddress = pageManager.allocatePages(npagesRepl, PROTECTION);
             this.readForReplBuffer = m.newDirectByteBuffer(readForReplAddress, npagesRepl * PAGE_SIZE);
 
@@ -273,7 +273,7 @@ public class FdReadWrite {
             writePageBufferB = null;
         }
 
-        var npagesRepl = oneSegmentPage * ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
+        var npagesRepl = oneSegmentPage * ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT;
         if (readForReplAddress != 0) {
             pageManager.freePages(readForReplAddress, npagesRepl);
             System.out.println("Clean up fd read repl, name: " + name + ", read page address: " + readForReplAddress);
@@ -538,7 +538,7 @@ public class FdReadWrite {
 
     public byte[] readSegmentForRepl(int segmentIndex) {
         if (ConfForSlot.global.pureMemory) {
-            return readSegmentBatchFromMemory(segmentIndex, ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT);
+            return readSegmentBatchFromMemory(segmentIndex, ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT);
         }
 
         return readInnerNotPureMemory(segmentIndex, readForReplBuffer, null, false);
@@ -631,7 +631,7 @@ public class FdReadWrite {
 
     public int writeSegmentForRepl(int segmentIndex, byte[] bytes, int position) {
         var segmentCount = bytes.length / segmentLength;
-        if (segmentCount != ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT) {
+        if (segmentCount != ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT) {
             throw new IllegalArgumentException("Repl write bytes length not match once repl segment count");
         }
 

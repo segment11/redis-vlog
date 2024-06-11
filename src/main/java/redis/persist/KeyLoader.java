@@ -111,7 +111,7 @@ public class KeyLoader {
 
     private final Logger log = org.slf4j.LoggerFactory.getLogger(KeyLoader.class);
 
-    public static final int BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL = ToMasterExistsSegmentMeta.ONCE_SEGMENT_COUNT;
+    public static final int BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL = ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT;
 
     StatKeyCountInBuckets statKeyCountInBuckets;
 

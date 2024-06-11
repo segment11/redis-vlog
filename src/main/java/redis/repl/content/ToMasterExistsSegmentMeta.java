@@ -31,7 +31,7 @@ public class ToMasterExistsSegmentMeta implements ReplContent {
     }
 
     // 4K one segment, 1024 segments means read 4M data and send to slave
-    public static final int ONCE_SEGMENT_COUNT = 1024;
+    public static final int REPL_ONCE_SEGMENT_COUNT = 1024;
 
     public record OncePull(int beginSegmentIndex, int segmentCount, int walGroupIndex) {
         public static final int ENCODED_LENGTH = 4 + 4 + 4;
@@ -53,8 +53,8 @@ public class ToMasterExistsSegmentMeta implements ReplContent {
         var oncePulls = new ArrayList<OncePull>();
         var maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber();
 
-        int length = ONCE_SEGMENT_COUNT * MetaChunkSegmentFlagSeq.ONE_LENGTH;
-        for (int segmentIndex = 0; segmentIndex < maxSegmentNumber; segmentIndex += ONCE_SEGMENT_COUNT) {
+        int length = REPL_ONCE_SEGMENT_COUNT * MetaChunkSegmentFlagSeq.ONE_LENGTH;
+        for (int segmentIndex = 0; segmentIndex < maxSegmentNumber; segmentIndex += REPL_ONCE_SEGMENT_COUNT) {
             int beginSegmentIndex = segmentIndex;
             int offset = beginSegmentIndex * MetaChunkSegmentFlagSeq.ONE_LENGTH;
 
@@ -67,7 +67,7 @@ public class ToMasterExistsSegmentMeta implements ReplContent {
 
             // todo
             // once pull group by walGroupIndex
-            oncePulls.add(new OncePull(beginSegmentIndex, ONCE_SEGMENT_COUNT, 0));
+            oncePulls.add(new OncePull(beginSegmentIndex, REPL_ONCE_SEGMENT_COUNT, 0));
         }
 
         return oncePulls;
