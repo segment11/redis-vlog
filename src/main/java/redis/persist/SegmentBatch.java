@@ -184,8 +184,8 @@ public class SegmentBatch {
                 onceList.add(v);
             } else {
                 if (i >= ONCE_PREPARE_SEGMENT_COUNT) {
-                    log.warn("Batch next {} segment prepare is not enough.", ONCE_PREPARE_SEGMENT_COUNT);
-                    throw new IllegalArgumentException("Batch next " + ONCE_PREPARE_SEGMENT_COUNT + " segment prepare is not enough.");
+                    log.warn("Batch next {} segment prepare is not enough, list size: {}", ONCE_PREPARE_SEGMENT_COUNT, list.size());
+                    throw new IllegalArgumentException("Batch next " + ONCE_PREPARE_SEGMENT_COUNT + " segment prepare is not enough, list size: " + list.size());
                 }
 
                 result.add(compressAsSegment(onceList, nextNSegmentIndex[i], returnPvmList));
@@ -199,8 +199,8 @@ public class SegmentBatch {
 
         if (!onceList.isEmpty()) {
             if (i >= ONCE_PREPARE_SEGMENT_COUNT) {
-                log.warn("Batch next {} segment prepare is not enough.", ONCE_PREPARE_SEGMENT_COUNT);
-                throw new IllegalArgumentException("Batch next " + ONCE_PREPARE_SEGMENT_COUNT + " segment prepare is not enough.");
+                log.warn("Batch next {} segment prepare is not enough, list size: {}", ONCE_PREPARE_SEGMENT_COUNT, list.size());
+                throw new IllegalArgumentException("Batch next " + ONCE_PREPARE_SEGMENT_COUNT + " segment prepare is not enough, list size: " + list.size());
             }
 
             result.add(compressAsSegment(onceList, nextNSegmentIndex[i], returnPvmList));

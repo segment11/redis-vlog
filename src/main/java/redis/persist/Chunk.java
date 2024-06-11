@@ -223,9 +223,10 @@ public class Chunk {
     }
 
     // need refer Wal valueSizeTrigger
-    // 32 not tight segments is enough for 1000 Wal.V persist ?, need check, todo
+    // 64 not tight segments is enough for 1000 Wal.V persist ?, need check, todo
     // one wal group charges 64 key buckets, 64 * 4KB = 256KB
-    static final int ONCE_PREPARE_SEGMENT_COUNT = 32;
+    // with merged valid cv list together, once read 10 segments, valid cv list may be > 1000
+    static final int ONCE_PREPARE_SEGMENT_COUNT = 64;
 
     int mergedSegmentIndexEndLastTime = NO_NEED_MERGE_SEGMENT_INDEX;
 
@@ -478,7 +479,7 @@ public class Chunk {
                     ", list size=" + list.size());
         }
 
-        if (list.size() >= 16) {
+        if (list.size() >= ONCE_PREPARE_SEGMENT_COUNT) {
             log.debug("Chunk persist need merge segment index list too large, performance bad, maybe many is skipped, s={}, i={}, list={}",
                     slot, segmentIndex, list);
         }
