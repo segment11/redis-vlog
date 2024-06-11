@@ -1105,8 +1105,17 @@ public class OneSlot {
 
             if (ext != null) {
                 var segmentIndexList = ext.segmentIndexList;
-                for (var segmentIndex : segmentIndexList) {
-                    setSegmentMergeFlag(segmentIndex, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L, walGroupIndex);
+                // continuous segment index
+                if (segmentIndexList.getLast() - segmentIndexList.getFirst() == segmentIndexList.size() - 1) {
+                    List<Long> seq0List = new ArrayList<>(segmentIndexList.size());
+                    for (var ignored : segmentIndexList) {
+                        seq0List.add(0L);
+                    }
+                    setSegmentMergeFlagBatch(segmentIndexList.getFirst(), segmentIndexList.size(), SEGMENT_FLAG_MERGED_AND_PERSISTED, seq0List, walGroupIndex);
+                } else {
+                    for (var segmentIndex : segmentIndexList) {
+                        setSegmentMergeFlag(segmentIndex, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L, walGroupIndex);
+                    }
                 }
 
                 // do not remove, keep segment index continuous, chunk merge job will skip as flag is merged and persisted
@@ -1115,6 +1124,7 @@ public class OneSlot {
 
             if (ext2 != null) {
                 var segmentIndexList = ext2.segmentIndexList;
+                // usually not continuous
                 for (var segmentIndex : segmentIndexList) {
                     setSegmentMergeFlag(segmentIndex, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L, walGroupIndex);
                 }
