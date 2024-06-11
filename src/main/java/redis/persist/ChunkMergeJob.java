@@ -150,25 +150,6 @@ public class ChunkMergeJob {
                 skipSegmentIndexSet.add(segmentIndex);
                 continue;
             }
-
-            if (flag == Chunk.SEGMENT_FLAG_MERGED) {
-                // if in merge chunk batch for very long time and not persisted yet, means valid cv count is too small
-                // need a persist trigger
-                // this chunk batch is already merged by other worker, skip
-                skipSegmentIndexSet.add(segmentIndex);
-                continue;
-            }
-
-            // flag == Chunk.SEGMENT_FLAG_REUSE:
-            // do nothing
-            // write segment increase mush faster than merge segment (diff 16384+), merge executor already reject
-            // will never happen here
-
-            // flag == Chunk.SEGMENT_FLAG_MERGING:
-            // do nothing
-            // when server start, already recover segment flag
-            // maybe crash before
-            // continue to merge
         }
 
         chunkMergeWorker.lastMergedSegmentIndex = lastSegmentIndex;
