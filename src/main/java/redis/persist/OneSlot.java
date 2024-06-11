@@ -1003,7 +1003,7 @@ public class OneSlot {
         });
 
         logMergeCount++;
-        var doLog = Debug.getInstance().logMerge && logMergeCount % 100 == 0;
+        var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
 
         if (firstSegmentIndexWithReadSegmentCountArray[0] == NO_NEED_MERGE_SEGMENT_INDEX) {
             if (doLog) {
@@ -1252,6 +1252,7 @@ public class OneSlot {
             map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
             map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
             map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.currentSegmentIndex(), labelValues));
+            map.put("chunk_max_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.maxSegmentIndex, labelValues));
 
             if (slot == 0) {
                 map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(

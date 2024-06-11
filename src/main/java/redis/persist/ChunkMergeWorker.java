@@ -36,16 +36,19 @@ public class ChunkMergeWorker {
     record CvWithKeyAndBucketIndexAndSegmentIndex(CompressedValue cv, String key, int bucketIndex, int segmentIndex) {
     }
 
-    private int MERGED_CV_SIZE_THRESHOLD = 128 * 16;
     // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
-    private int MERGED_SEGMENT_SIZE_THRESHOLD = 128;
+    private int MERGED_SEGMENT_SIZE_THRESHOLD = 1024;
     private int MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = 8;
+    private int MERGED_CV_SIZE_THRESHOLD = 1024 * 16;
 
     void resetThreshold(int walGroupNumber) {
-        MERGED_SEGMENT_SIZE_THRESHOLD = walGroupNumber;
+        MERGED_SEGMENT_SIZE_THRESHOLD = Math.max(walGroupNumber, 1024);
         MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = Math.max(MERGED_SEGMENT_SIZE_THRESHOLD / 1024, 8);
-
         MERGED_CV_SIZE_THRESHOLD = MERGED_SEGMENT_SIZE_THRESHOLD * 16;
+
+        log.info("Reset chunk merge worker threshold, wal group number: {}, merged segment size threshold: {}, " +
+                        "merged segment size threshold once persist: {}, merged cv size threshold: {}",
+                walGroupNumber, MERGED_SEGMENT_SIZE_THRESHOLD, MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST, MERGED_CV_SIZE_THRESHOLD);
 
         final var maybeOneMergedCvBytesLength = 200;
         var lruMemoryRequireMB = MERGED_CV_SIZE_THRESHOLD * maybeOneMergedCvBytesLength / 1024 / 1024;
