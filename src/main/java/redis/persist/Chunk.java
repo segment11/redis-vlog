@@ -479,7 +479,7 @@ public class Chunk {
         }
 
         if (list.size() >= 16) {
-            log.warn("Chunk persist need merge segment index list too large, performance bad, s={}, i={}, list={}",
+            log.debug("Chunk persist need merge segment index list too large, performance bad, maybe many is skipped, s={}, i={}, list={}",
                     slot, segmentIndex, list);
         }
     }

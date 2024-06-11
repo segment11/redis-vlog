@@ -37,14 +37,14 @@ public class ChunkMergeWorker {
     }
 
     // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
-    private int MERGED_SEGMENT_SIZE_THRESHOLD = 1024;
+    private int MERGED_SEGMENT_SIZE_THRESHOLD = 256;
     private int MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = 8;
-    private int MERGED_CV_SIZE_THRESHOLD = 1024 * 16;
+    private int MERGED_CV_SIZE_THRESHOLD = 256 * 64;
 
     void resetThreshold(int walGroupNumber) {
-        MERGED_SEGMENT_SIZE_THRESHOLD = Math.max(walGroupNumber, 1024);
-        MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = Math.max(MERGED_SEGMENT_SIZE_THRESHOLD / 1024, 8);
-        MERGED_CV_SIZE_THRESHOLD = MERGED_SEGMENT_SIZE_THRESHOLD * 16;
+        MERGED_SEGMENT_SIZE_THRESHOLD = Math.min(walGroupNumber, 256);
+        MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = Math.max(MERGED_SEGMENT_SIZE_THRESHOLD / 32, 8);
+        MERGED_CV_SIZE_THRESHOLD = MERGED_SEGMENT_SIZE_THRESHOLD * 64;
 
         log.info("Reset chunk merge worker threshold, wal group number: {}, merged segment size threshold: {}, " +
                         "merged segment size threshold once persist: {}, merged cv size threshold: {}",
@@ -120,29 +120,18 @@ public class ChunkMergeWorker {
     }
 
     void removeMergedButNotPersistedAfterPersistWal(ArrayList<Integer> segmentIndexList, int walGroupIndex) {
-        var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
-
-        if (doLog) {
-            log.info("Before remove merged but not persisted, merged segment set: {}, merged cv list size: {}", mergedSegmentSet, mergedCvList.size());
-        }
-
         mergedCvList.removeIf(one -> Wal.calWalGroupIndex(one.bucketIndex) == walGroupIndex);
         mergedSegmentSet.removeIf(one -> segmentIndexList.contains(one.segmentIndex));
 
+        var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
         if (doLog) {
             log.info("After remove merged but not persisted, merged segment set: {}, merged cv list size: {}", mergedSegmentSet, mergedCvList.size());
         }
     }
 
-    boolean persistFIFOMergedCvListIfBatchSizeOk() {
+    void persistFIFOMergedCvList() {
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
-
-        if (mergedCvList.size() < MERGED_CV_SIZE_THRESHOLD) {
-            if (mergedSegmentSet.size() < MERGED_SEGMENT_SIZE_THRESHOLD) {
-                return false;
-            }
-        }
 
         // once only persist firstly merged segments
         ArrayList<Integer> oncePersistSegmentIndexList = new ArrayList<>(MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST);
@@ -204,6 +193,16 @@ public class ChunkMergeWorker {
         }
 
         mergedCvList.removeIf(one -> oncePersistSegmentIndexList.contains(one.segmentIndex));
+    }
+
+    boolean persistFIFOMergedCvListIfBatchSizeOk() {
+        if (mergedCvList.size() < MERGED_CV_SIZE_THRESHOLD) {
+            if (mergedSegmentSet.size() < MERGED_SEGMENT_SIZE_THRESHOLD) {
+                return false;
+            }
+        }
+
+        persistFIFOMergedCvList();
         return true;
     }
 
