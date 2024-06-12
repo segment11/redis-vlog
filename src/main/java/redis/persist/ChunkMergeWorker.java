@@ -148,7 +148,9 @@ public class ChunkMergeWorker {
                 .filter(one -> oncePersistSegmentIndexList.contains(one.segmentIndex))
                 .collect(Collectors.groupingBy(one -> Wal.calWalGroupIndex(one.bucketIndex)));
 
-        log.warn("Go to persist merged cv list once, perf bad, group by wal group index size: {}", groupByWalGroupIndex.size());
+        if (groupByWalGroupIndex.size() > MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST) {
+            log.warn("Go to persist merged cv list once, perf bad, group by wal group index size: {}", groupByWalGroupIndex.size());
+        }
         for (var entry : groupByWalGroupIndex.entrySet()) {
             var walGroupIndex = entry.getKey();
             var subMergedCvList = entry.getValue();
