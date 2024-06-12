@@ -72,8 +72,8 @@ public enum ConfForSlot {
     public enum ConfBucket {
         debugMode(4096, (byte) 1),
         c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT, (byte) 1),
-        c10m(KeyBucket.MAX_BUCKETS_PER_SLOT / 2, (byte) 1),
-        c100m(KeyBucket.MAX_BUCKETS_PER_SLOT, (byte) 3);
+        c10m(KeyBucket.MAX_BUCKETS_PER_SLOT, (byte) 1),
+        c100m(KeyBucket.MAX_BUCKETS_PER_SLOT, (byte) 9);
 
         ConfBucket(int bucketsPerSlot, byte initialSplitNumber) {
             this.bucketsPerSlot = bucketsPerSlot;
@@ -97,8 +97,8 @@ public enum ConfForSlot {
     public enum ConfChunk {
         debugMode(4 * 1024, (byte) 2, PAGE_SIZE),
         c1m(64 * 1024, (byte) 2, PAGE_SIZE),
-        c10m(256 * 1024, (byte) 4, PAGE_SIZE),
-        c100m(512 * 1024, (byte) 4, PAGE_SIZE);
+        c10m(256 * 1024, (byte) 2, PAGE_SIZE),
+        c100m(512 * 1024, (byte) 8, PAGE_SIZE);
 
         ConfChunk(int segmentNumberPerFd, byte fdPerChunk, int segmentLength) {
             this.segmentNumberPerFd = segmentNumberPerFd;

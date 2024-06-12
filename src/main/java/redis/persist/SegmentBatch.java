@@ -16,7 +16,6 @@ import java.util.Arrays;
 
 import static redis.CompressedValue.KEY_HEADER_LENGTH;
 import static redis.CompressedValue.VALUE_HEADER_LENGTH;
-import static redis.persist.Chunk.ONCE_PREPARE_SEGMENT_COUNT;
 import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
 public class SegmentBatch {
@@ -183,9 +182,9 @@ public class SegmentBatch {
             if (persistLength < segmentLength) {
                 onceList.add(v);
             } else {
-                if (i >= ONCE_PREPARE_SEGMENT_COUNT) {
-                    log.warn("Batch next {} segment prepare is not enough, list size: {}", ONCE_PREPARE_SEGMENT_COUNT, list.size());
-                    throw new IllegalArgumentException("Batch next " + ONCE_PREPARE_SEGMENT_COUNT + " segment prepare is not enough, list size: " + list.size());
+                if (i >= nextNSegmentIndex.length) {
+                    log.warn("Batch next {} segment prepare is not enough, list size: {}", nextNSegmentIndex.length, list.size());
+                    throw new IllegalArgumentException("Batch next " + nextNSegmentIndex.length + " segment prepare is not enough, list size: " + list.size());
                 }
 
                 result.add(compressAsSegment(onceList, nextNSegmentIndex[i], returnPvmList));
@@ -198,9 +197,9 @@ public class SegmentBatch {
         }
 
         if (!onceList.isEmpty()) {
-            if (i >= ONCE_PREPARE_SEGMENT_COUNT) {
-                log.warn("Batch next {} segment prepare is not enough, list size: {}", ONCE_PREPARE_SEGMENT_COUNT, list.size());
-                throw new IllegalArgumentException("Batch next " + ONCE_PREPARE_SEGMENT_COUNT + " segment prepare is not enough, list size: " + list.size());
+            if (i >= nextNSegmentIndex.length) {
+                log.warn("Batch next {} segment prepare is not enough, list size: {}", nextNSegmentIndex.length, list.size());
+                throw new IllegalArgumentException("Batch next " + nextNSegmentIndex.length + " segment prepare is not enough, list size: " + list.size());
             }
 
             result.add(compressAsSegment(onceList, nextNSegmentIndex[i], returnPvmList));

@@ -43,7 +43,7 @@ public class ChunkMergeWorker {
 
     void resetThreshold(int walGroupNumber) {
         MERGED_SEGMENT_SIZE_THRESHOLD = Math.min(walGroupNumber, 256);
-        MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = Math.max(MERGED_SEGMENT_SIZE_THRESHOLD / 32, 8);
+        MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = Math.max(MERGED_SEGMENT_SIZE_THRESHOLD / 32, 4);
         MERGED_CV_SIZE_THRESHOLD = MERGED_SEGMENT_SIZE_THRESHOLD * 64;
 
         log.info("Reset chunk merge worker threshold, wal group number: {}, merged segment size threshold: {}, " +

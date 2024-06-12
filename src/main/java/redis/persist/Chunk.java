@@ -238,15 +238,17 @@ public class Chunk {
         }
     }
 
+    // merge, valid cv list is smaller, only need one segment, or need 4 or 8 ? todo
+    private final int mergeOncePrepareSegmentCount = 2;
+
     // return need merge segment index array
     public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge) {
         logMergeCount++;
         var doLog = (Debug.getInstance().logMerge && logMergeCount % 1000 == 0);
 
         moveIndexForPrepare();
-        // merge, valid cv list is smaller, only need one segment, or need 4 or 8 ? todo
         if (isMerge) {
-            boolean canWrite = reuseSegments(false, 1, false);
+            boolean canWrite = reuseSegments(false, mergeOncePrepareSegmentCount, false);
             if (!canWrite) {
                 throw new SegmentOverflowException("Segment can not write, s=" + slot + ", i=" + segmentIndex);
             }
@@ -257,7 +259,7 @@ public class Chunk {
             }
         }
 
-        var oncePrepareSegmentCount = isMerge ? 1 : ONCE_PREPARE_SEGMENT_COUNT;
+        var oncePrepareSegmentCount = isMerge ? mergeOncePrepareSegmentCount : ONCE_PREPARE_SEGMENT_COUNT;
         int[] nextNSegmentIndex = new int[oncePrepareSegmentCount];
         for (int i = 0; i < oncePrepareSegmentCount; i++) {
             nextNSegmentIndex[i] = segmentIndex + i;
