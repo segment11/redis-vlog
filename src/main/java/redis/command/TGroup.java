@@ -2,6 +2,9 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.promise.Promise;
+import io.activej.promise.Promises;
+import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.reply.*;
 import redis.type.RedisHashKeys;
@@ -23,6 +26,24 @@ public class TGroup extends BaseCommand {
     }
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        if ("test-cross-worker".equals(cmd)) {
+            if (data.length != 2) {
+                return null;
+            }
+
+            ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+
+            var keyBytes = data[1];
+            var key = new String(keyBytes);
+            var array = key.split(",");
+            for (int i = 0; i < array.length; i++) {
+                var keyBytes1 = array[i].getBytes();
+                slotWithKeyHashList.add(slot(keyBytes1, slotNumber));
+            }
+
+            return slotWithKeyHashList;
+        }
+
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
         slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
         return slotWithKeyHashList;
@@ -47,6 +68,10 @@ public class TGroup extends BaseCommand {
 
         if ("ttl".equals(cmd)) {
             return ttl(false);
+        }
+
+        if ("test-cross-worker".equals(cmd)) {
+            return testCrossWorker();
         }
 
         return NilReply.INSTANCE;
@@ -107,5 +132,37 @@ public class TGroup extends BaseCommand {
 
         var ttlMilliseconds = expireAt - System.currentTimeMillis();
         return new IntegerReply(isMilliseconds ? ttlMilliseconds : ttlMilliseconds / 1000);
+    }
+
+    private Reply testCrossWorker() {
+        if (data.length != 2) {
+            return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        var key = new String(keyBytes);
+        var array = key.split(",");
+
+        ArrayList<Promise<Void>> promises = new ArrayList<>();
+
+        for (int i = 0; i < array.length; i++) {
+            log.info("test cross worker, delay: {} ms", i * 1);
+            promises.add(Promises.delay(i * 1));
+        }
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("mset error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
+            }
+
+            finalPromise.set(OKReply.INSTANCE);
+        });
+
+        return asyncReply;
     }
 }

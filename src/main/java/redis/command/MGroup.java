@@ -2,6 +2,9 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.promise.Promise;
+import io.activej.promise.Promises;
+import io.activej.promise.SettablePromise;
 import org.apache.commons.io.FileUtils;
 import redis.BaseCommand;
 import redis.Debug;
@@ -10,7 +13,6 @@ import redis.reply.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public class MGroup extends BaseCommand {
@@ -101,51 +103,53 @@ public class MGroup extends BaseCommand {
             list.add(new KeyBytesAndSlotWithKeyHash(keyBytes, i - 1, slotWithKeyHash));
         }
 
-        ArrayList<CompletableFuture<ArrayList<ValueBytesAndIndex>>> futureList = new ArrayList<>();
+        ArrayList<Promise<ArrayList<ValueBytesAndIndex>>> promises = new ArrayList<>();
         var groupBySlot = list.stream().collect(Collectors.groupingBy(one -> one.slotWithKeyHash.slot()));
         for (var entry : groupBySlot.entrySet()) {
             var slot = entry.getKey();
             var subList = entry.getValue();
 
             var oneSlot = localPersist.oneSlot(slot);
-            // todo
-//            var f = oneSlot.threadSafeHandle(() -> {
-//                ArrayList<ValueBytesAndIndex> valueList = new ArrayList<>();
-//                for (var one : subList) {
-//                    var valueBytes = get(one.keyBytes, one.slotWithKeyHash);
-//                    valueList.add(new ValueBytesAndIndex(valueBytes, one.index));
-//                }
-//                return valueList;
-//            });
-//            futureList.add(f);
+            var p = oneSlot.asyncCall(() -> {
+                ArrayList<ValueBytesAndIndex> valueList = new ArrayList<>();
+                for (var one : subList) {
+                    var valueBytes = get(one.keyBytes, one.slotWithKeyHash);
+                    valueList.add(new ValueBytesAndIndex(valueBytes, one.index));
+                }
+                return valueList;
+            });
+            promises.add(p);
         }
 
-        ArrayList<ValueBytesAndIndex> valueList = new ArrayList<>();
-        var allFutures = CompletableFuture.allOf(futureList.toArray(new CompletableFuture[futureList.size()])).whenComplete((v, e) -> {
-            for (var f : futureList) {
-                synchronized (valueList) {
-                    valueList.addAll(f.getNow(null));
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("mget error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
+            }
+
+            ArrayList<ValueBytesAndIndex> valueList = new ArrayList<>();
+            for (var p : promises) {
+                valueList.addAll(p.getResult());
+            }
+
+            var replies = new Reply[data.length - 1];
+            for (var one : valueList) {
+                var index = one.index();
+                var valueBytes = one.valueBytes();
+                if (valueBytes == null) {
+                    replies[index] = NilReply.INSTANCE;
+                } else {
+                    replies[index] = new BulkReply(valueBytes);
                 }
             }
+            finalPromise.set(new MultiBulkReply(replies));
         });
-        try {
-            allFutures.get();
-        } catch (Exception e) {
-            log.error("mget error", e);
-            return new ErrorReply(e.getMessage());
-        }
 
-        var replies = new Reply[data.length - 1];
-        for (var one : valueList) {
-            var index = one.index();
-            var valueBytes = one.valueBytes();
-            if (valueBytes == null) {
-                replies[index] = NilReply.INSTANCE;
-            } else {
-                replies[index] = new BulkReply(valueBytes);
-            }
-        }
-        return new MultiBulkReply(replies);
+        return asyncReply;
     }
 
     private Reply mset() {
@@ -171,32 +175,35 @@ public class MGroup extends BaseCommand {
             list.add(new KeyValueBytesAndSlotWithKeyHash(keyBytes, valueBytes, slotWithKeyHash));
         }
 
-        ArrayList<CompletableFuture<Boolean>> futureList = new ArrayList<>();
+        ArrayList<Promise<Void>> promises = new ArrayList<>();
         var groupBySlot = list.stream().collect(Collectors.groupingBy(one -> one.slotWithKeyHash.slot()));
         for (var entry : groupBySlot.entrySet()) {
             var slot = entry.getKey();
             var subList = entry.getValue();
 
             var oneSlot = localPersist.oneSlot(slot);
-            // todo
-//            var f = oneSlot.threadSafeHandle(() -> {
-//                for (var one : subList) {
-//                    set(one.keyBytes, one.valueBytes, one.slotWithKeyHash);
-//                }
-//                return true;
-//            });
-//            futureList.add(f);
+            var p = oneSlot.asyncRun(() -> {
+                for (var one : subList) {
+                    set(one.keyBytes, one.valueBytes, one.slotWithKeyHash);
+                }
+            });
+            promises.add(p);
         }
 
-        var allFutures = CompletableFuture.allOf(futureList.toArray(new CompletableFuture[futureList.size()]));
-        try {
-            allFutures.get();
-        } catch (Exception e) {
-            log.error("mset error", e);
-            return new ErrorReply(e.getMessage());
-        }
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
 
-        return OKReply.INSTANCE;
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("mset error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
+            }
+
+            finalPromise.set(OKReply.INSTANCE);
+        });
+
+        return asyncReply;
     }
 
     private Reply manage() {

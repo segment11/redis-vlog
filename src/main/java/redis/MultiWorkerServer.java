@@ -39,6 +39,7 @@ import redis.decode.RequestDecoder;
 import redis.persist.KeyBucket;
 import redis.persist.LocalPersist;
 import redis.persist.Wal;
+import redis.reply.AsyncReply;
 import redis.reply.ErrorReply;
 import redis.reply.NilReply;
 import redis.reply.Reply;
@@ -58,6 +59,7 @@ import static io.activej.inject.module.Modules.combine;
 import static io.activej.launchers.initializers.Initializers.ofEventloop;
 import static io.activej.launchers.initializers.Initializers.ofPrimaryServer;
 import static redis.decode.HttpHeaderBody.*;
+import static redis.decode.Request.SLOT_CAN_HANDLE_BY_ANY_WORKER;
 
 public class MultiWorkerServer extends Launcher {
 //    static {
@@ -227,8 +229,7 @@ public class MultiWorkerServer extends Launcher {
         }
 
         var slot = request.getSingleSlot();
-        // slot == -1 means any net worker can handle it
-        if (slot == -1) {
+        if (slot == SLOT_CAN_HANDLE_BY_ANY_WORKER) {
             RequestHandler targetHandler;
             if (requestHandlerArray.length == 1) {
                 targetHandler = requestHandlerArray[0];
@@ -237,10 +238,11 @@ public class MultiWorkerServer extends Launcher {
                 targetHandler = requestHandlerArray[i];
             }
             var reply = targetHandler.handle(request, socket);
-            if (request.isHttp()) {
-                return Promise.of(wrapHttpResponse(reply));
+            if (reply instanceof AsyncReply) {
+                var promise = ((AsyncReply) reply).getSettablePromise();
+                return promise.map(r -> request.isHttp() ? wrapHttpResponse(r) : r.buffer());
             } else {
-                return Promise.of(reply.buffer());
+                return request.isHttp() ? Promise.of(wrapHttpResponse(reply)) : Promise.of(reply.buffer());
             }
         }
 
@@ -260,18 +262,16 @@ public class MultiWorkerServer extends Launcher {
                                                                Eventloop targetEventloop) {
         var p = targetEventloop == null ? Promises.first(AsyncSupplier.of(() -> targetHandler.handle(request, socket))) :
                 Promise.ofFuture(targetEventloop.submit(AsyncComputation.of(() -> targetHandler.handle(request, socket))));
-        return p.map(reply -> {
+
+        return p.then(reply -> {
             if (reply == null) {
                 return null;
             }
-            if (request.isHttp()) {
-                return wrapHttpResponse(reply);
+            if (reply instanceof AsyncReply) {
+                return ((AsyncReply) reply).getSettablePromise().map(r -> request.isHttp() ? wrapHttpResponse(r) : r.buffer());
             } else {
-                return reply.buffer();
+                return Promise.of(request.isHttp() ? wrapHttpResponse(reply) : reply.buffer());
             }
-        }, err -> {
-            logger.error("Handle request error", err);
-            return null;
         });
     }
 

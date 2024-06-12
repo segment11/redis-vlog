@@ -75,6 +75,8 @@ public class Request {
         this.slotWithKeyHashList = slotWithKeyHashList;
     }
 
+    public static final byte SLOT_CAN_HANDLE_BY_ANY_WORKER = -1;
+
     public byte getSingleSlot() {
         if (isRepl) {
             // refer to Repl.decode
@@ -82,11 +84,11 @@ public class Request {
         }
 
         if (slotWithKeyHashList == null) {
-            return -1;
+            return SLOT_CAN_HANDLE_BY_ANY_WORKER;
         }
         var first = slotWithKeyHashList.getFirst();
         if (first == null) {
-            return -1;
+            return SLOT_CAN_HANDLE_BY_ANY_WORKER;
         }
         return first.slot();
     }
