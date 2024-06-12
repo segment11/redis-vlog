@@ -627,7 +627,7 @@ public class Chunk {
         }
 
         boolean isNewAppend = false;
-        int afterThisBatchOffset = (segmentIndex + segmentCount) * segmentLength;
+        int afterThisBatchOffset = (segmentIndexTargetFd + segmentCount) * segmentLength;
         if (fdLengths[fdIndex] < afterThisBatchOffset) {
             fdLengths[fdIndex] = afterThisBatchOffset;
             isNewAppend = true;
