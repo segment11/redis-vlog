@@ -342,6 +342,7 @@ public class OneSlot {
 
     private long kvLRUHitTotal = 0;
     private long kvLRUMissTotal = 0;
+    private long kvLRUCvEncodedLengthTotal = 0;
 
     final ChunkMergeWorker chunkMergeWorker;
 
@@ -574,6 +575,7 @@ public class OneSlot {
         var cvEncodedBytesFromLRU = lru.get(key);
         if (cvEncodedBytesFromLRU != null) {
             kvLRUHitTotal++;
+            kvLRUCvEncodedLengthTotal += cvEncodedBytesFromLRU.length;
             return new BufOrCompressedValue(Unpooled.wrappedBuffer(cvEncodedBytesFromLRU), null);
         }
         kvLRUMissTotal++;
@@ -1352,6 +1354,12 @@ public class OneSlot {
 
             map.put("kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
             map.put("kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
+            map.put("kv_lru_cv_encoded_length_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUCvEncodedLengthTotal, labelValues));
+
+            if (kvLRUHitTotal > 0) {
+                var kvLRUCvEncodedLengthAvg = (double) kvLRUCvEncodedLengthTotal / kvLRUHitTotal;
+                map.put("kv_lru_cv_encoded_length_avg", new SimpleGauge.ValueWithLabelValues(kvLRUCvEncodedLengthAvg, labelValues));
+            }
 
             map.put("segment_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressTimeTotalUs, labelValues));
             map.put("segment_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressCountTotal, labelValues));
