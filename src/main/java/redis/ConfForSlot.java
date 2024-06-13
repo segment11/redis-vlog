@@ -5,7 +5,8 @@ import redis.persist.KeyBucket;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
 public enum ConfForSlot {
-    c1m(1_000_000L), c10m(10_000_000L), c100m(100_000_000L);
+    debugMode(100_000), c1m(1_000_000L),
+    c10m(10_000_000L), c100m(100_000_000L);
 
     public long estimateKeyNumber;
     public String netListenAddresses;
@@ -22,7 +23,9 @@ public enum ConfForSlot {
     public int eventLoopIdleMillis = 10;
 
     public static ConfForSlot from(long estimateKeyNumber) {
-        if (estimateKeyNumber <= 1_000_000L) {
+        if (estimateKeyNumber <= 100_000L) {
+            return debugMode;
+        } else if (estimateKeyNumber <= 1_000_000L) {
             return c1m;
         } else if (estimateKeyNumber <= 10_000_000L) {
             return c10m;
@@ -36,7 +39,11 @@ public enum ConfForSlot {
     ConfForSlot(long estimateKeyNumber) {
         this.estimateKeyNumber = estimateKeyNumber;
 
-        if (estimateKeyNumber == 1_000_000L) {
+        if (estimateKeyNumber == 100_000L) {
+            this.confChunk = ConfChunk.debugMode;
+            this.confBucket = ConfBucket.debugMode;
+            this.confWal = ConfWal.debugMode;
+        } else if (estimateKeyNumber == 1_000_000L) {
             this.confChunk = ConfChunk.c1m;
             this.confBucket = ConfBucket.c1m;
             this.confWal = ConfWal.c1m;

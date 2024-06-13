@@ -487,11 +487,15 @@ public class MultiWorkerServer extends Launcher {
                         boolean debugMode = config.get(ofBoolean(), "debugMode", false);
                         if (debugMode) {
                             c.confBucket.bucketsPerSlot = ConfForSlot.ConfBucket.debugMode.bucketsPerSlot;
+                            c.confBucket.initialSplitNumber = ConfForSlot.ConfBucket.debugMode.initialSplitNumber;
 
                             c.confChunk.segmentNumberPerFd = ConfForSlot.ConfChunk.debugMode.segmentNumberPerFd;
                             c.confChunk.fdPerChunk = ConfForSlot.ConfChunk.debugMode.fdPerChunk;
+                            c.confChunk.segmentLength = ConfForSlot.ConfChunk.debugMode.segmentLength;
 
                             c.confWal.oneChargeBucketNumber = ConfForSlot.ConfWal.debugMode.oneChargeBucketNumber;
+                            c.confWal.valueSizeTrigger = ConfForSlot.ConfWal.debugMode.valueSizeTrigger;
+                            c.confWal.shortValueSizeTrigger = ConfForSlot.ConfWal.debugMode.shortValueSizeTrigger;
                         }
 
                         var debugInstance = Debug.getInstance();
