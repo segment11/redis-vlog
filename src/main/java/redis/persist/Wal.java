@@ -32,8 +32,12 @@ public class Wal {
 
         public int persistLength() {
             // include key
-            // 2 -> key length short
-            return 2 + key.length() + cvEncoded.length;
+            return CompressedValue.KEY_HEADER_LENGTH + key.length() + cvEncoded.length;
+        }
+
+        public static int persistLength(int keyLength, int cvEncodedLength) {
+            // include key
+            return CompressedValue.KEY_HEADER_LENGTH + keyLength + cvEncodedLength;
         }
 
         // seq long + bucket index int + key hash long + expire at long +

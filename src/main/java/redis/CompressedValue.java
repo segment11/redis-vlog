@@ -295,11 +295,12 @@ public class CompressedValue {
         return encoded.length == 1 && encoded[0] == SP_FLAG_DELETE_TMP;
     }
 
-    public byte[] encode() {
-        int len = VALUE_HEADER_LENGTH;
-        len += compressedLength;
+    public int encodedLength() {
+        return VALUE_HEADER_LENGTH + compressedLength;
+    }
 
-        var bytes = new byte[len];
+    public byte[] encode() {
+        var bytes = new byte[encodedLength()];
         var buf = ByteBuf.wrapForWriting(bytes);
         buf.writeLong(seq);
         buf.writeLong(expireAt);
@@ -326,17 +327,12 @@ public class CompressedValue {
     }
 
     public byte[] encodeAsBigStringMeta(long uuid) {
-        int len = VALUE_HEADER_LENGTH;
-
         // uuid + dict int
         compressedLength = 8 + 4;
-
-        len += compressedLength;
-
         compressedData = new byte[12];
         ByteBuffer.wrap(compressedData).putLong(uuid).putInt(dictSeqOrSpType);
 
-        var bytes = new byte[len];
+        var bytes = new byte[encodedLength()];
         var buf = ByteBuf.wrapForWriting(bytes);
         buf.writeLong(seq);
         buf.writeLong(expireAt);

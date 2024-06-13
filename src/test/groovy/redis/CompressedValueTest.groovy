@@ -35,13 +35,13 @@ class CompressedValueTest extends Specification {
         cv.isShortString()
 
         when:
-        cv.compressedData= new byte[19]
+        cv.compressedData = new byte[CompressedValue.SP_TYPE_SHORT_STRING_MIN_LEN]
 
         then:
         cv.isShortString()
 
         when:
-        cv.compressedData= new byte[20]
+        cv.compressedData = new byte[CompressedValue.SP_TYPE_SHORT_STRING_MIN_LEN + 1]
 
         then:
         !cv.isShortString()

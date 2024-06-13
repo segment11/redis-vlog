@@ -38,7 +38,7 @@ class Mock {
             cv.uncompressedLength = 10
 
             def v = new Wal.V(it, bucketIndex, keyHash, redis.CompressedValue.NO_EXPIRE,
-                    key, cv.encode(), cv.compressedLength(), false)
+                    key, cv.encode(), cv.encodedLength(), false)
 
             valueList << v
         }

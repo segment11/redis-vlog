@@ -14,8 +14,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import static redis.CompressedValue.KEY_HEADER_LENGTH;
-import static redis.CompressedValue.VALUE_HEADER_LENGTH;
 import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
 public class SegmentBatch {
@@ -232,9 +230,7 @@ public class SegmentBatch {
             buffer.put(keyBytes);
             buffer.put(v.cvEncoded());
 
-            int lenKey = KEY_HEADER_LENGTH + keyBytes.length;
-            int lenValue = VALUE_HEADER_LENGTH + v.cvEncodedLength();
-            int length = lenKey + lenValue;
+            int length = v.persistLength();
 
             var pvm = new PersistValueMeta();
             pvm.keyBytes = keyBytes;
@@ -330,10 +326,7 @@ public class SegmentBatch {
             var key = new String(keyBytes);
 
             var cv = CompressedValue.decode(buf, keyBytes, 0);
-
-            int lenKey = KEY_HEADER_LENGTH + keyLength;
-            int lenValue = VALUE_HEADER_LENGTH + cv.compressedLength();
-            int length = lenKey + lenValue;
+            int length = Wal.V.persistLength(keyLength, cv.encodedLength());
 
             cvCallback.callback(key, cv, offsetInThisSegment);
 

@@ -76,7 +76,7 @@ public class GetOneCvFromChunkSegments {
         }
 
         for (var one : cvList) {
-            System.out.println(one.shortString() + ", value length=" + one.cv.compressedLength());
+            System.out.println(one.shortString() + ", encoded length=" + one.cv.encodedLength());
         }
     }
 

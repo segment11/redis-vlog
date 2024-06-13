@@ -742,7 +742,7 @@ public class OneSlot {
             cvEncoded = cv.encode();
         }
         var v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                key, cvEncoded, cv.compressedLength(), isFromMerge);
+                key, cvEncoded, cv.encodedLength(), isFromMerge);
 
         // for big string, use single file
         boolean isPersistLengthOverSegmentLength = v.persistLength() + SEGMENT_HEADER_LENGTH > segmentLength;
@@ -758,7 +758,7 @@ public class OneSlot {
             // encode again
             cvEncoded = cv.encodeAsBigStringMeta(uuid);
             v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                    key, cvEncoded, cv.compressedLength(), isFromMerge);
+                    key, cvEncoded, cv.encodedLength(), isFromMerge);
 
             isValueShort = true;
         }
@@ -1079,7 +1079,7 @@ public class OneSlot {
                         var cv = one.cv;
                         var bucketIndex = KeyHash.bucketIndex(cv.getKeyHash(), keyLoader.bucketsPerSlot);
                         list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                                one.key, cv.encode(), cv.compressedLength(), true));
+                                one.key, cv.encode(), cv.encodedLength(), true));
                     }
                 }
             }

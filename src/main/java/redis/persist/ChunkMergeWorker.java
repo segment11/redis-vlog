@@ -106,7 +106,7 @@ public class ChunkMergeWorker {
             }
 
             vList.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                    key, cv.encode(), cv.compressedLength(), true));
+                    key, cv.encode(), cv.encodedLength(), true));
             if (!segmentIndexList.contains(one.segmentIndex)) {
                 segmentIndexList.add(one.segmentIndex);
             }
@@ -162,7 +162,7 @@ public class ChunkMergeWorker {
                 var bucketIndex = one.bucketIndex;
 
                 list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                        key, cv.encode(), cv.compressedLength(), true));
+                        key, cv.encode(), cv.encodedLength(), true));
             }
 
             // refer Chunk.ONCE_PREPARE_SEGMENT_COUNT
