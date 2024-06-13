@@ -79,7 +79,7 @@ class CompressedValueTest extends Specification {
 
         when:
         def encoded = cv.encode()
-        def cvDecode = CompressedValue.decode(Unpooled.wrappedBuffer(encoded), null, 0L, false)
+        def cvDecode = CompressedValue.decode(Unpooled.wrappedBuffer(encoded), null, 0L)
 
         then:
         cvDecode.seq == cv.seq
@@ -94,7 +94,7 @@ class CompressedValueTest extends Specification {
         cv.compressedData[0] = Byte.MAX_VALUE
         def encodedNumber = cv.encodeAsNumber()
         def encodedBufferNumber = ByteBuffer.wrap(encodedNumber)
-        def cvDecodeNumber = CompressedValue.decode(Unpooled.wrappedBuffer(encodedNumber), null, 0L, false)
+        def cvDecodeNumber = CompressedValue.decode(Unpooled.wrappedBuffer(encodedNumber), null, 0L)
 
         then:
         encodedNumber.length == 10
@@ -116,7 +116,7 @@ class CompressedValueTest extends Specification {
         when:
         cv.dictSeqOrSpType = 100
         def encodedBigStringMeta = cv.encodeAsBigStringMeta(890L)
-        def cvDecodeBigStringMeta = CompressedValue.decode(Unpooled.wrappedBuffer(encodedBigStringMeta), null, 0L, false)
+        def cvDecodeBigStringMeta = CompressedValue.decode(Unpooled.wrappedBuffer(encodedBigStringMeta), null, 0L)
         def bufferBigStringMeta = ByteBuffer.wrap(cvDecodeBigStringMeta.compressedData)
 
         then:

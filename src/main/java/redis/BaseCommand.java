@@ -234,7 +234,7 @@ public abstract class BaseCommand {
         }
 
         var cv = bufOrCompressedValue.cv() != null ? bufOrCompressedValue.cv() :
-                CompressedValue.decode(bufOrCompressedValue.buf(), keyBytes, slotWithKeyHash.keyHash(), false);
+                CompressedValue.decode(bufOrCompressedValue.buf(), keyBytes, slotWithKeyHash.keyHash());
         if (cv.isExpired()) {
             return null;
         }

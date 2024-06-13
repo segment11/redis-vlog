@@ -91,7 +91,7 @@ public class SegmentBatch {
     private static final int HEADER_LENGTH = 8 + 4 + MAX_BLOCK_NUMBER * (2 + 2);
 
     public static int subBlockMetaPosition(int subBlockIndex) {
-        return 8 + 4 + subBlockIndex * 4;
+        return 8 + 4 + subBlockIndex * (2 + 2);
     }
 
     private SegmentTightBytesWithLengthAndSegmentIndex tightSegments(int afterTightSegmentIndex, ArrayList<SegmentCompressedBytesWithIndex> onceList, ArrayList<PersistValueMeta> returnPvmList) {
@@ -329,7 +329,7 @@ public class SegmentBatch {
             buf.readBytes(keyBytes);
             var key = new String(keyBytes);
 
-            var cv = CompressedValue.decode(buf, keyBytes, 0, false);
+            var cv = CompressedValue.decode(buf, keyBytes, 0);
 
             int lenKey = KEY_HEADER_LENGTH + keyLength;
             int lenValue = VALUE_HEADER_LENGTH + cv.compressedLength();

@@ -619,7 +619,7 @@ public class OneSlot {
         }
 
         // set to lru cache, just target bytes
-        var cv = CompressedValue.decode(buf, keyBytes, keyHash, false);
+        var cv = CompressedValue.decode(buf, keyBytes, keyHash);
         lru.put(key, cv.encode());
 
         return new BufOrCompressedValue(null, cv);
@@ -642,14 +642,13 @@ public class OneSlot {
         var subBlockOffset = buffer.getShort();
         var subBlockLength = buffer.getShort();
 
-        // memory copy
-//        var compressedBytes = new byte[subBlockLength];
-//        buffer.position(subBlockOffset).get(compressedBytes);
+        if (subBlockOffset == 0) {
+            throw new IllegalStateException("Sub block offset is 0, pvm: " + pvm);
+        }
 
         var decompressedBytes = new byte[segmentLength];
 
         var beginT = System.nanoTime();
-//        var decompressedBytes = Zstd.decompress(compressedBytes, segmentLength);
         var d = Zstd.decompressByteArray(decompressedBytes, 0, segmentLength,
                 tightBytesWithLength, subBlockOffset, subBlockLength);
         var costT = (System.nanoTime() - beginT) / 1000;
@@ -660,7 +659,7 @@ public class OneSlot {
         segmentDecompressCountTotal++;
 
         if (d != segmentLength) {
-            throw new IllegalStateException("Decompress error, s=" + pvm.slot +
+            throw new IllegalStateException("Decompress segment sub block error, s=" + pvm.slot +
                     ", i=" + pvm.segmentIndex + ", sbi=" + pvm.subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
         }
 

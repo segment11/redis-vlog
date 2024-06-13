@@ -50,7 +50,7 @@ class WalTest extends Specification {
             wal.put(true, key, v)
 
             def bytes = wal.get(key)
-            def cv2 = CompressedValue.decode(Unpooled.wrappedBuffer(bytes), key.bytes, cv.keyHash, false)
+            def cv2 = CompressedValue.decode(Unpooled.wrappedBuffer(bytes), key.bytes, cv.keyHash)
             def value2 = new String(cv2.compressedData)
             println "key: $key, cv2: $cv2, value2: $value2"
         }
