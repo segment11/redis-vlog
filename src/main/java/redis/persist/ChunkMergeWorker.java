@@ -218,7 +218,7 @@ public class ChunkMergeWorker {
         this.initMetricsCollect();
     }
 
-    private static final SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
+    private final static SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
             "slot");
 
     static {

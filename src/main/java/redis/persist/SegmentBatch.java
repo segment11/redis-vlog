@@ -51,19 +51,23 @@ public class SegmentBatch {
 
         this.snowFlake = snowFlake;
 
+        this.initMetricsCollect();
+    }
+
+    private void initMetricsCollect() {
         segmentBatchGauge.addRawGetter(() -> {
             var labelValues = List.of(slotStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            map.put("segment_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) segmentCompressTimeTotalUs, labelValues));
-            map.put("segment_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentCompressCountTotal, labelValues));
             if (segmentCompressCountTotal > 0) {
+                map.put("segment_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) segmentCompressTimeTotalUs, labelValues));
+                map.put("segment_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentCompressCountTotal, labelValues));
                 map.put("segment_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) segmentCompressTimeTotalUs / segmentCompressCountTotal, labelValues));
             }
 
-            map.put("compress_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressBytesTotal, labelValues));
-            map.put("compressed_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressedBytesTotal, labelValues));
             if (compressBytesTotal > 0) {
+                map.put("compress_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressBytesTotal, labelValues));
+                map.put("compressed_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressedBytesTotal, labelValues));
                 map.put("compress_ratio", new SimpleGauge.ValueWithLabelValues((double) compressedBytesTotal / compressBytesTotal, labelValues));
             }
 

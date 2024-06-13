@@ -4,7 +4,6 @@ import com.github.luben.zstd.Zstd;
 import io.activej.config.Config;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.net.socket.tcp.TcpSocket;
-import io.activej.promise.Promise;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
 import org.jetbrains.annotations.NotNull;
@@ -170,12 +169,7 @@ public class RequestHandler {
         request.setSlotWithKeyHashList(slotWithKeyHashList);
     }
 
-    private final byte[] urlFirstParamBytes = "metrics".getBytes();
-
-    public Promise<Reply> handleAndReturnPromise(@NotNull Request request, ITcpSocket socket) {
-        // todo
-        return null;
-    }
+    private static final byte[] URL_QUERY_METRICS_FIRST_PARAM_BYTES = "metrics".getBytes();
 
     Reply handle(@NotNull Request request, ITcpSocket socket) {
         if (isStopped) {
@@ -198,7 +192,7 @@ public class RequestHandler {
 
         // metrics, prometheus format
         // url should be ?metrics
-        if (request.isHttp() && data[0] != null && Arrays.equals(data[0], urlFirstParamBytes)) {
+        if (request.isHttp() && data[0] != null && Arrays.equals(data[0], URL_QUERY_METRICS_FIRST_PARAM_BYTES)) {
             var sw = new StringWriter();
             try {
                 TextFormat.write004(sw, CollectorRegistry.defaultRegistry.metricFamilySamples());
@@ -358,7 +352,7 @@ public class RequestHandler {
         return ErrorReply.FORMAT;
     }
 
-    private static final SimpleGauge sampleToTrainSizeGauge = new SimpleGauge("sample_to_train_size", "sample to train size",
+    private final static SimpleGauge sampleToTrainSizeGauge = new SimpleGauge("sample_to_train_size", "sample to train size",
             "worker_id");
 
     static {

@@ -1351,18 +1351,22 @@ public class OneSlot {
                         (double) LRUPrepareBytesStats.sum(), labelValues));
             }
 
-            map.put("kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
-            map.put("kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
-            map.put("kv_lru_cv_encoded_length_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUCvEncodedLengthTotal, labelValues));
+            var hitMissTotal = kvLRUHitTotal + kvLRUMissTotal;
+            if (hitMissTotal > 0) {
+                map.put("kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
+                map.put("kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
+                map.put("kv_lru_hit_rate", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal / hitMissTotal, labelValues));
+            }
 
             if (kvLRUHitTotal > 0) {
+                map.put("kv_lru_cv_encoded_length_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUCvEncodedLengthTotal, labelValues));
                 var kvLRUCvEncodedLengthAvg = (double) kvLRUCvEncodedLengthTotal / kvLRUHitTotal;
                 map.put("kv_lru_cv_encoded_length_avg", new SimpleGauge.ValueWithLabelValues(kvLRUCvEncodedLengthAvg, labelValues));
             }
 
-            map.put("segment_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressTimeTotalUs, labelValues));
-            map.put("segment_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressCountTotal, labelValues));
             if (segmentDecompressCountTotal > 0) {
+                map.put("segment_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressTimeTotalUs, labelValues));
+                map.put("segment_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressCountTotal, labelValues));
                 double segmentDecompressedCostTAvg = (double) segmentDecompressTimeTotalUs / segmentDecompressCountTotal;
                 map.put("segment_decompress_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(segmentDecompressedCostTAvg, labelValues));
             }

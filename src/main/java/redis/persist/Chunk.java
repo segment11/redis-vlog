@@ -88,6 +88,10 @@ public class Chunk {
         this.masterUpdateCallback = masterUpdateCallback;
         this.segmentBatch = new SegmentBatch(slot, snowFlake);
 
+        this.initMetricsCollect();
+    }
+
+    private void initMetricsCollect() {
         chunkPersistGauge.addRawGetter(() -> {
             var labelValues = List.of(slotStr);
 

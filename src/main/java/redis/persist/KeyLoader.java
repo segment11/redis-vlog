@@ -433,7 +433,7 @@ public class KeyLoader {
         }
     }
 
-    private static final SimpleGauge keyLoaderInnerGauge = new SimpleGauge("key_loader_inner", "key loader inner",
+    private final static SimpleGauge keyLoaderInnerGauge = new SimpleGauge("key_loader_inner", "key loader inner",
             "slot");
 
     static {
