@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static redis.persist.Chunk.*;
+import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
 
 public class MetaChunkSegmentFlagSeq {
     private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
@@ -20,6 +21,7 @@ public class MetaChunkSegmentFlagSeq {
     public static final int ONE_LENGTH = 1 + 8 + 4;
 
     private final byte slot;
+    private final int maxSegmentNumber;
     private final int allCapacity;
     private RandomAccessFile raf;
 
@@ -64,7 +66,8 @@ public class MetaChunkSegmentFlagSeq {
 
     public MetaChunkSegmentFlagSeq(byte slot, File slotDir) throws IOException {
         this.slot = slot;
-        this.allCapacity = ConfForSlot.global.confChunk.maxSegmentNumber() * ONE_LENGTH;
+        this.maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber();
+        this.allCapacity = maxSegmentNumber * ONE_LENGTH;
 
         // max max segment number <= 512KB * 8, 512KB * 8 * 9 = 36MB
         this.inMemoryCachedBytes = new byte[allCapacity];
@@ -99,7 +102,57 @@ public class MetaChunkSegmentFlagSeq {
         void call(int segmentIndex, byte flag, long segmentSeq, int walGroupIndex);
     }
 
-    void iterate(IterateCallBack callBack) {
+    int[] iterateAndFind(int beginSegmentIndex, int nextSegmentCount, int targetWalGroupIndex, Chunk chunk) {
+        var findSegmentIndexWithSegmentCount = new int[]{NO_NEED_MERGE_SEGMENT_INDEX, 0};
+
+        var end = Math.min(beginSegmentIndex + nextSegmentCount, maxSegmentNumber);
+        for (int segmentIndex = beginSegmentIndex; segmentIndex < end; segmentIndex++) {
+            if (findSegmentIndexWithSegmentCount[0] != NO_NEED_MERGE_SEGMENT_INDEX) {
+                break;
+            }
+
+            var offset = segmentIndex * ONE_LENGTH;
+
+            var flag = inMemoryCachedByteBuffer.get(offset);
+//            var segmentSeq = inMemoryCachedByteBuffer.getLong(offset + 1);
+            var walGroupIndex = inMemoryCachedByteBuffer.getInt(offset + 1 + 8);
+
+            if (walGroupIndex != targetWalGroupIndex) {
+                continue;
+            }
+
+            if (flag == SEGMENT_FLAG_NEW || flag == SEGMENT_FLAG_REUSE_AND_PERSISTED) {
+                findSegmentIndexWithSegmentCount[0] = segmentIndex;
+
+                int segmentCount = Math.min(MERGE_READ_ONCE_SEGMENT_COUNT, chunk.maxSegmentIndex - segmentIndex + 1);
+                var targetFdIndex = chunk.targetFdIndex(segmentIndex);
+                var targetFdIndexEnd = chunk.targetFdIndex(segmentIndex + segmentCount - 1);
+                // cross two files, just read one segment
+                if (targetFdIndexEnd != targetFdIndex) {
+                    segmentCount = 1;
+                }
+
+                findSegmentIndexWithSegmentCount[1] = segmentCount;
+            }
+        }
+
+        return findSegmentIndexWithSegmentCount;
+    }
+
+    void iterateRange(int beginSegmentIndex, int segmentCount, IterateCallBack callBack) {
+        var end = Math.min(beginSegmentIndex + segmentCount, maxSegmentNumber);
+        for (int segmentIndex = beginSegmentIndex; segmentIndex < end; segmentIndex++) {
+            var offset = segmentIndex * ONE_LENGTH;
+
+            var flag = inMemoryCachedByteBuffer.get(offset);
+            var segmentSeq = inMemoryCachedByteBuffer.getLong(offset + 1);
+            var walGroupIndex = inMemoryCachedByteBuffer.getInt(offset + 1 + 8);
+
+            callBack.call(segmentIndex, flag, segmentSeq, walGroupIndex);
+        }
+    }
+
+    void iterateAll(IterateCallBack callBack) {
         for (int segmentIndex = 0; segmentIndex < ConfForSlot.global.confChunk.maxSegmentNumber(); segmentIndex++) {
             var offset = segmentIndex * ONE_LENGTH;
 

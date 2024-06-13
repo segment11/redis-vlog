@@ -52,6 +52,7 @@ public class OneSlot {
         this.bigStringFiles = null;
         this.chunkMergeWorker = null;
         this.dynConfig = null;
+        this.walGroupNumber = 1;
         this.walArray = new Wal[]{wal};
         this.raf = null;
         this.rafShortValue = null;
@@ -101,7 +102,7 @@ public class OneSlot {
             dynConfig.setMasterUuid(masterUuid);
         }
 
-        var walGroupNumber = Wal.calcWalGroupNumber();
+        this.walGroupNumber = Wal.calcWalGroupNumber();
         this.walArray = new Wal[walGroupNumber];
 
         this.chunkMergeWorker.resetThreshold(walGroupNumber);
@@ -393,6 +394,7 @@ public class OneSlot {
         return bigStringFiles.bigStringDir;
     }
 
+    private final int walGroupNumber;
     // index is group index
     private final Wal[] walArray;
 
@@ -984,29 +986,7 @@ public class OneSlot {
         }
 
         // find continuous segments those wal group index is same from need merge segment index
-        final int[] firstSegmentIndexWithReadSegmentCountArray = {NO_NEED_MERGE_SEGMENT_INDEX, 1};
-        metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq, walGroupIndex1) -> {
-            // already find
-            if (firstSegmentIndexWithReadSegmentCountArray[0] != NO_NEED_MERGE_SEGMENT_INDEX) {
-                return;
-            }
-
-            if (walGroupIndex1 == walGroupIndex && segmentIndex >= needMergeSegmentIndex) {
-                if (flag == SEGMENT_FLAG_NEW || flag == SEGMENT_FLAG_REUSE_AND_PERSISTED) {
-                    firstSegmentIndexWithReadSegmentCountArray[0] = segmentIndex;
-
-                    int segmentCount = Math.min(MERGE_READ_ONCE_SEGMENT_COUNT, chunk.maxSegmentIndex - segmentIndex + 1);
-                    var targetFdIndex = chunk.targetFdIndex(segmentIndex);
-                    var targetFdIndexEnd = chunk.targetFdIndex(segmentIndex + segmentCount - 1);
-                    // cross two files, just read one segment
-                    if (targetFdIndexEnd != targetFdIndex) {
-                        segmentCount = 1;
-                    }
-
-                    firstSegmentIndexWithReadSegmentCountArray[1] = segmentCount;
-                }
-            }
-        });
+        final int[] firstSegmentIndexWithReadSegmentCountArray = metaChunkSegmentFlagSeq.iterateAndFind(needMergeSegmentIndex, walGroupNumber, walGroupIndex, chunk);
 
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
@@ -1240,7 +1220,7 @@ public class OneSlot {
     void persistMergingOrMergedSegmentsButNotPersisted() {
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
 
-        this.metaChunkSegmentFlagSeq.iterate((segmentIndex, flag, segmentSeq, walGroupIndex) -> {
+        this.metaChunkSegmentFlagSeq.iterateAll((segmentIndex, flag, segmentSeq, walGroupIndex) -> {
             if (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGING) {
                 log.warn("Segment not persisted after merging, s={}, i={}, flag={}", slot, segmentIndex, flag);
                 needMergeSegmentIndexList.add(segmentIndex);
