@@ -2,17 +2,19 @@ package redis.persist;
 
 import com.github.luben.zstd.Zstd;
 import io.netty.buffer.Unpooled;
-import io.prometheus.client.Counter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.ConfForSlot;
 import redis.KeyHash;
 import redis.SnowFlake;
+import redis.metric.SimpleGauge;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
 
 import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
@@ -25,26 +27,17 @@ public class SegmentBatch {
     private final int segmentLength;
     private final SnowFlake snowFlake;
 
-    private static final Counter segmentCompressTimeTotalUs = Counter.build().name("segment_compress_time_total_us").
-            help("segment compress time total us").
-            labelNames("slot")
-            .register();
+    private final static SimpleGauge segmentBatchGauge = new SimpleGauge("segment_batch", "chunk segment compress",
+            "slot");
 
-    private static final Counter segmentCompressCountTotal = Counter.build().name("segment_compress_count_total").
-            help("segment compress count total").
-            labelNames("slot")
-            .register();
+    static {
+        segmentBatchGauge.register();
+    }
 
-
-    private static final Counter compressBytesCounter = Counter.build().name("compress_bytes").
-            help("segment batch compress bytes").
-            labelNames("slot")
-            .register();
-
-    private static final Counter compressedBytesCounter = Counter.build().name("compressed_bytes").
-            help("segment batch compressed bytes").
-            labelNames("slot")
-            .register();
+    private long segmentCompressTimeTotalUs;
+    private long segmentCompressCountTotal;
+    private long compressBytesTotal;
+    private long compressedBytesTotal;
 
     private final Logger log = LoggerFactory.getLogger(SegmentBatch.class);
 
@@ -57,6 +50,25 @@ public class SegmentBatch {
         this.buffer = ByteBuffer.wrap(bytes);
 
         this.snowFlake = snowFlake;
+
+        segmentBatchGauge.addRawGetter(() -> {
+            var labelValues = List.of(slotStr);
+
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            map.put("segment_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) segmentCompressTimeTotalUs, labelValues));
+            map.put("segment_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentCompressCountTotal, labelValues));
+            if (segmentCompressCountTotal > 0) {
+                map.put("segment_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) segmentCompressTimeTotalUs / segmentCompressCountTotal, labelValues));
+            }
+
+            map.put("compress_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressBytesTotal, labelValues));
+            map.put("compressed_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressedBytesTotal, labelValues));
+            if (compressBytesTotal > 0) {
+                map.put("compress_ratio", new SimpleGauge.ValueWithLabelValues((double) compressedBytesTotal / compressBytesTotal, labelValues));
+            }
+
+            return map;
+        });
     }
 
     private record SegmentCompressedBytesWithIndex(byte[] compressedBytes, int segmentIndex, long segmentSeq) {
@@ -266,16 +278,16 @@ public class SegmentBatch {
         // important: 4KB decompress cost ~200us, so use 4KB segment length for better read latency
         // double compress
 
-        segmentCompressCountTotal.labels(slotStr).inc();
+        segmentCompressCountTotal++;
         var beginT = System.nanoTime();
         var compressedBytes = Zstd.compress(bytes);
         var costT = (System.nanoTime() - beginT) / 1000;
         if (costT == 0) {
             costT = 1;
         }
-        segmentCompressTimeTotalUs.labels(slotStr).inc(costT);
-        compressBytesCounter.labels(slotStr).inc(bytes.length);
-        compressedBytesCounter.labels(slotStr).inc(compressedBytes.length);
+        segmentCompressTimeTotalUs += costT;
+        compressBytesTotal += bytes.length;
+        compressedBytesTotal += compressedBytes.length;
 
         buffer.clear();
         Arrays.fill(bytes, (byte) 0);

@@ -3,7 +3,6 @@ package redis.persist;
 import com.github.luben.zstd.Zstd;
 import com.kenai.jffi.MemoryIO;
 import com.kenai.jffi.PageManager;
-import io.prometheus.client.Counter;
 import jnr.constants.platform.OpenFlags;
 import jnr.posix.LibC;
 import org.apache.commons.collections4.map.LRUMap;
@@ -47,11 +46,40 @@ public class FdReadWrite {
         this.writeIndex = file.length();
         log.info("Opened fd: {}, name: {}, file length: {}MB", fd, name, this.writeIndex / 1024 / 1024);
 
-        fdLengthGauge.addRawGetter(() -> {
+        fdReadWriteGauge.addRawGetter(() -> {
             var labelValues = List.of(name);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
             map.put("fd_length", new SimpleGauge.ValueWithLabelValues((double) writeIndex, labelValues));
+
+            map.put("after_lru_read_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) afterLRUReadDecompressTimeTotalUs, labelValues));
+            if (lruHitCounter > 0) {
+                map.put("after_lru_read_decompress_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) afterLRUReadDecompressTimeTotalUs / lruHitCounter, labelValues));
+            }
+
+            map.put("after_fd_pread_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) afterFdPreadCompressTimeTotalUs, labelValues));
+            map.put("after_fd_pread_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) afterFdPreadCompressCountTotal, labelValues));
+            if (afterFdPreadCompressCountTotal > 0) {
+                map.put("after_fd_pread_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) afterFdPreadCompressTimeTotalUs / afterFdPreadCompressCountTotal, labelValues));
+            }
+
+            map.put("read_bytes_total", new SimpleGauge.ValueWithLabelValues((double) readBytesTotal, labelValues));
+            map.put("read_time_total_us", new SimpleGauge.ValueWithLabelValues((double) readTimeTotalUs, labelValues));
+            map.put("read_count_total", new SimpleGauge.ValueWithLabelValues((double) readCountTotal, labelValues));
+            if (readCountTotal > 0) {
+                map.put("read_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) readTimeTotalUs / readCountTotal, labelValues));
+            }
+
+            map.put("write_bytes_total", new SimpleGauge.ValueWithLabelValues((double) writeBytesTotal, labelValues));
+            map.put("write_time_total_us", new SimpleGauge.ValueWithLabelValues((double) writeTimeTotalUs, labelValues));
+            map.put("write_count_total", new SimpleGauge.ValueWithLabelValues((double) writeCountTotal, labelValues));
+            if (writeCountTotal > 0) {
+                map.put("write_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) writeTimeTotalUs / writeCountTotal, labelValues));
+            }
+
+            map.put("lru_hit_counter", new SimpleGauge.ValueWithLabelValues((double) lruHitCounter, labelValues));
+            map.put("lru_miss_counter", new SimpleGauge.ValueWithLabelValues((double) lruMissCounter, labelValues));
+
             return map;
         });
     }
@@ -66,70 +94,30 @@ public class FdReadWrite {
 
     private boolean isLRUOn = false;
 
-    private final static SimpleGauge fdLengthGauge = new SimpleGauge("fd_length", "chunk or key buckets files length",
+    private final static SimpleGauge fdReadWriteGauge = new SimpleGauge("fd_read_write", "chunk or key buckets file read write",
             "name");
 
     static {
-        fdLengthGauge.register();
+        fdReadWriteGauge.register();
     }
 
     // avg = this time / cache hit count
-    private static final Counter afterLRUReadDecompressTimeTotalUs = Counter.build().name("after_lru_read_decompress_time_total_us").
-            help("after lru read decompress time total us").
-            labelNames("fd_name")
-            .register();
+    private long afterLRUReadDecompressTimeTotalUs;
 
     // avg = this time / after fd pread compress count total
-    private static final Counter afterFdPreadCompressTimeTotalUs = Counter.build().name("after_fd_pread_compress_time_total_us").
-            help("after fd pread compress time total us").
-            labelNames("fd_name")
-            .register();
+    private long afterFdPreadCompressTimeTotalUs;
+    private long afterFdPreadCompressCountTotal;
 
-    private static final Counter afterFdPreadCompressCountTotal = Counter.build().name("after_fd_pread_compress_count_total").
-            help("after fd pread compress count total").
-            labelNames("fd_name")
-            .register();
+    private long readBytesTotal;
+    private long readTimeTotalUs;
+    private long readCountTotal;
 
-    private static final Counter readTimeTotalUs = Counter.build().name("pread_time_total_us").
-            help("fd read time total us").
-            labelNames("fd_name")
-            .register();
+    private long writeBytesTotal;
+    private long writeTimeTotalUs;
+    private long writeCountTotal;
 
-    private static final Counter readCountTotal = Counter.build().name("pread_count_total").
-            help("fd read count total").
-            labelNames("fd_name")
-            .register();
-
-    private static final Counter readBytesCounter = Counter.build().name("pread_bytes_total").
-            help("fd read bytes total").
-            labelNames("fd_name")
-            .register();
-
-    private static final Counter writeTimeTotalUs = Counter.build().name("pwrite_time_total_us").
-            help("fd write time total us").
-            labelNames("fd_name")
-            .register();
-
-    private static final Counter writeCountTotal = Counter.build().name("pwrite_count_total").
-            help("fd write count total").
-            labelNames("fd_name")
-            .register();
-
-    private static final Counter writeBytesCounter = Counter.build().name("pwrite_bytes_total").
-            help("fd write bytes total").
-            labelNames("fd_name")
-            .register();
-
-    private static final Counter lruHitCounter = Counter.build().name("pread_lru_hit").
-            help("fd read lru hit").
-            labelNames("fd_name")
-            .register();
-
-    private static final Counter lruMissCounter = Counter.build().name("pread_lru_miss").
-            help("fd read lru miss").
-            labelNames("fd_name")
-            .register();
-
+    private long lruHitCounter;
+    private long lruMissCounter;
 
     public static final int BATCH_ONCE_SEGMENT_COUNT_PWRITE = 4;
 
@@ -362,7 +350,7 @@ public class FdReadWrite {
             if (isLRUOn) {
                 var bytesCached = segmentBytesByIndexLRU.get(segmentIndex);
                 if (bytesCached != null) {
-                    lruHitCounter.labels(name).inc();
+                    lruHitCounter++;
 
                     if (isChunkFd) {
                         return bytesCached;
@@ -374,11 +362,11 @@ public class FdReadWrite {
                         if (costT == 0) {
                             costT = 1;
                         }
-                        afterLRUReadDecompressTimeTotalUs.labels(name).inc(costT);
+                        afterLRUReadDecompressTimeTotalUs += costT;
                         return bytesDecompressedCached;
                     }
                 } else {
-                    lruMissCounter.labels(name).inc();
+                    lruMissCounter++;
                 }
             }
         } else {
@@ -401,15 +389,15 @@ public class FdReadWrite {
 
         buffer.clear();
 
-        readCountTotal.labels(name).inc();
+        readCountTotal++;
         var beginT = System.nanoTime();
         var n = libC.pread(fd, buffer, readLength, offset);
         var costT = (System.nanoTime() - beginT) / 1000;
         if (costT == 0) {
             costT = 1;
         }
-        readTimeTotalUs.labels(name).inc(costT);
-        readBytesCounter.labels(name).inc(n);
+        readTimeTotalUs += costT;
+        readBytesTotal += n;
 
         if (n != readLength) {
             log.error("Read error, n: {}, read length: {}, name: {}", n, readLength, name);
@@ -438,8 +426,8 @@ public class FdReadWrite {
                     if (costT2 == 0) {
                         costT2 = 1;
                     }
-                    afterFdPreadCompressTimeTotalUs.labels(name).inc(costT2);
-                    afterFdPreadCompressCountTotal.labels(name).inc();
+                    afterFdPreadCompressTimeTotalUs += costT2;
+                    afterFdPreadCompressCountTotal++;
                     segmentBytesByIndexLRU.put(segmentIndex, bytesCompressed);
                 }
             }
@@ -466,15 +454,15 @@ public class FdReadWrite {
         }
         buffer.rewind();
 
-        writeCountTotal.labels(name).inc();
+        writeCountTotal++;
         var beginT = System.nanoTime();
         var n = libC.pwrite(fd, buffer, capacity, offset);
         var costT = (System.nanoTime() - beginT) / 1000;
         if (costT == 0) {
             costT = 1;
         }
-        writeTimeTotalUs.labels(name).inc(costT);
-        writeBytesCounter.labels(name).inc(n);
+        writeTimeTotalUs += costT;
+        writeBytesTotal += n;
 
         if (n != capacity) {
             log.error("Write error, n: {}, buffer capacity: {}, name: {}", n, capacity, name);

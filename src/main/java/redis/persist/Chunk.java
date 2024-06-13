@@ -1,12 +1,12 @@
 package redis.persist;
 
-import io.prometheus.client.Counter;
 import jnr.posix.LibC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
+import redis.metric.SimpleGauge;
 import redis.repl.MasterUpdateCallback;
 
 import java.io.File;
@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
@@ -44,20 +45,16 @@ public class Chunk {
     // for better latency, segment length = 4096 decompress performance is better
     final int segmentLength;
 
-    private static final Counter persistCounter = Counter.build().name("chunk_persist_count").
-            help("chunk persist count").
-            labelNames("slot")
-            .register();
+    private final static SimpleGauge chunkPersistGauge = new SimpleGauge("chunk_persist", "chunk persist segments",
+            "slot");
 
-    private static final Counter persistCvCounter = Counter.build().name("chunk_persist_cv_count").
-            help("chunk persist cv count").
-            labelNames("slot")
-            .register();
+    static {
+        chunkPersistGauge.register();
+    }
 
-    private static final Counter updatePvmBatchCostTimeTotalUs = Counter.build().name("pvm_update_cost_time_total_us").
-            help("key loader pvm update cost time total us").
-            labelNames("slot")
-            .register();
+    private long persistCountTotal;
+    private long persistCvCountTotal;
+    private long updatePvmBatchCostTimeTotalUsTotal;
 
     private final OneSlot oneSlot;
     private final KeyLoader keyLoader;
@@ -90,6 +87,23 @@ public class Chunk {
         this.keyLoader = keyLoader;
         this.masterUpdateCallback = masterUpdateCallback;
         this.segmentBatch = new SegmentBatch(slot, snowFlake);
+
+        chunkPersistGauge.addRawGetter(() -> {
+            var labelValues = List.of(slotStr);
+
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            map.put("persist_count_total", new SimpleGauge.ValueWithLabelValues((double) persistCountTotal, labelValues));
+            map.put("persist_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) persistCvCountTotal, labelValues));
+
+            map.put("update_pvm_batch_cost_time_total_us_total", new SimpleGauge.ValueWithLabelValues((double) updatePvmBatchCostTimeTotalUsTotal, labelValues));
+
+            if (persistCountTotal > 0) {
+                map.put("persist_cv_count_avg", new SimpleGauge.ValueWithLabelValues((double) persistCvCountTotal / persistCountTotal, labelValues));
+                map.put("update_pvm_batch_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) updatePvmBatchCostTimeTotalUsTotal / persistCountTotal, labelValues));
+            }
+
+            return map;
+        });
     }
 
     void initFds(LibC libC) throws IOException {
@@ -370,8 +384,8 @@ public class Chunk {
         }
 
         // stats
-        persistCounter.labels(slotStr).inc();
-        persistCvCounter.labels(slotStr).inc(list.size());
+        persistCountTotal++;
+        persistCvCountTotal += list.size();
 
         var beginT = System.nanoTime();
         keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, pvmList);
@@ -379,7 +393,7 @@ public class Chunk {
         if (costT == 0) {
             costT = 1;
         }
-        updatePvmBatchCostTimeTotalUs.labels(slotStr).inc(costT);
+        updatePvmBatchCostTimeTotalUsTotal += costT;
 
         // update meta, segment index for next time
         oneSlot.setChunkWriteSegmentIndex(segmentIndex);
