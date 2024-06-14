@@ -139,21 +139,25 @@ public class Wal {
     }
 
     // each bucket group use 128K in shared file
-    // chunk batch write 4 segments, each segment has 3 or 4 sub blocks, each blocks may contain 10-40 keys, 64K is enough for 1 batch
+    // chunk batch write 4 segments, each segment has 3 or 4 sub blocks, each blocks may contain 10-40 keys, 128K is enough for 1 batch about 500 keys
     // the smaller, latency will be better, MAX_WAL_GROUP_NUMBER will be larger, wal memory will be larger
-    private static final int ONE_GROUP_SIZE = 1024 * 64;
-    // for prepend
-    public static final byte[] K64 = new byte[ONE_GROUP_SIZE];
+    private static final int ONE_GROUP_SIZE = 1024 * 128;
+    public static final byte[] K128 = new byte[ONE_GROUP_SIZE];
+    // 1 file max 2GB, 2GB / 128K = 16K wal groups
+    public static final int MAX_WAL_GROUP_NUMBER = (int) (2L * 1024 * 1024 * 1024 / ONE_GROUP_SIZE);
+    // for init prepend wal file
     public static final byte[] INIT_M4 = new byte[1024 * 1024 * 4];
-    public static final int INIT_M4_TIMES = 1024 * 4 / 128;
-    // 1 file max 2GB, 2GB / 64K = 32K groups
-    public static final int MAX_WAL_GROUP_NUMBER = 32 * 1024;
+    public static final int GROUP_COUNT_IN_M4 = 1024 * 1024 * 4 / ONE_GROUP_SIZE;
+
+    private static final Logger log = LoggerFactory.getLogger(Wal.class);
+
+    static {
+        log.warn("Init wal groups, one group size: {}KB, max wal group number: {}", ONE_GROUP_SIZE / 1024, MAX_WAL_GROUP_NUMBER);
+    }
 
     // current wal group write position in target group of wal file
     private final int[] writePositionArray = new int[MAX_WAL_GROUP_NUMBER];
     private final int[] writePositionArrayShortValue = new int[MAX_WAL_GROUP_NUMBER];
-
-    private final Logger log = LoggerFactory.getLogger(Wal.class);
 
     private final byte slot;
     final int groupIndex;
@@ -222,7 +226,7 @@ public class Wal {
             var raf = isShortValue ? walSharedFileShortValue : walSharedFile;
             try {
                 raf.seek(targetGroupBeginOffset);
-                raf.write(K64);
+                raf.write(K128);
             } catch (IOException e) {
                 log.error("Truncate wal group error", e);
             }
@@ -325,6 +329,8 @@ public class Wal {
         positionArray[groupIndex] += encodeLength;
     }
 
+    private long needPersistCount = 0;
+
     // return need persist
     PutResult put(boolean isValueShort, String key, V v) {
         var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
@@ -333,6 +339,12 @@ public class Wal {
 
         var encodeLength = v.encodeLength();
         if (offset + encodeLength > ONE_GROUP_SIZE) {
+            needPersistCount++;
+            if (needPersistCount % 100 == 0) {
+                var keyCount = isValueShort ? delayToKeyBucketShortValues.size() : delayToKeyBucketValues.size();
+                log.info("Wal will batch persist, key count: {}, raf position/offset: {}, slot: {}, group index: {}",
+                        keyCount, offset + encodeLength, slot, groupIndex);
+            }
             return new PutResult(true, isValueShort, v, 0);
         }
 
@@ -355,6 +367,13 @@ public class Wal {
             delayToKeyBucketValues.remove(key);
 
             boolean needPersist = delayToKeyBucketShortValues.size() >= ConfForSlot.global.confWal.shortValueSizeTrigger;
+            if (needPersist) {
+                needPersistCount++;
+                if (needPersistCount % 100 == 0) {
+                    log.info("Wal will batch persist for short value, key count: {}, raf position/offset: {}, slot: {}, group index: {}",
+                            delayToKeyBucketShortValues.size(), positionArray[groupIndex], slot, groupIndex);
+                }
+            }
             return new PutResult(needPersist, true, null, needPersist ? 0 : offset);
         }
 
@@ -362,6 +381,13 @@ public class Wal {
         delayToKeyBucketShortValues.remove(key);
 
         boolean needPersist = delayToKeyBucketValues.size() >= ConfForSlot.global.confWal.valueSizeTrigger;
+        if (needPersist) {
+            needPersistCount++;
+            if (needPersistCount % 100 == 0) {
+                log.info("Wal will batch persist for value, key count: {}, raf position/offset: {}, slot: {}, group index: {}",
+                        delayToKeyBucketValues.size(), positionArray[groupIndex], slot, groupIndex);
+            }
+        }
         return new PutResult(needPersist, false, null, needPersist ? 0 : offset);
     }
 }

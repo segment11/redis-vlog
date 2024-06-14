@@ -142,10 +142,10 @@ public enum ConfForSlot {
     }
 
     public enum ConfWal {
-        debugMode(64, 1000, 1000),
-        c1m(64, 1000, 1000),
-        c10m(64, 1000, 1000),
-        c100m(64, 1000, 1000);
+        debugMode(32, 1000, 1000),
+        c1m(32, 1000, 1000),
+        c10m(32, 1000, 1000),
+        c100m(32, 1000, 1000);
 
         ConfWal(int oneChargeBucketNumber, int valueSizeTrigger, int shortValueSizeTrigger) {
             this.oneChargeBucketNumber = oneChargeBucketNumber;

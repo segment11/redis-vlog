@@ -111,7 +111,7 @@ public class OneSlot {
         if (!walSharedFile.exists()) {
             FileUtils.touch(walSharedFile);
 
-            var initTimes = walGroupNumber / Wal.INIT_M4_TIMES;
+            var initTimes = walGroupNumber / Wal.GROUP_COUNT_IN_M4;
             for (int j = 0; j < initTimes; j++) {
                 FileUtils.writeByteArrayToFile(walSharedFile, Wal.INIT_M4, true);
             }
@@ -124,7 +124,7 @@ public class OneSlot {
         if (!walSharedFileShortValue.exists()) {
             FileUtils.touch(walSharedFileShortValue);
 
-            var initTimes = walGroupNumber / Wal.INIT_M4_TIMES;
+            var initTimes = walGroupNumber / Wal.GROUP_COUNT_IN_M4;
             for (int j = 0; j < initTimes; j++) {
                 FileUtils.writeByteArrayToFile(walSharedFileShortValue, Wal.INIT_M4, true);
             }
