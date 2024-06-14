@@ -39,6 +39,12 @@ public class SegmentBatch {
     private long compressBytesTotal;
     private long compressedBytesTotal;
 
+    private long batchSegmentCountTotal;
+    private long batchKvCountTotal;
+
+    private long beforeTightSegmentCountTotal;
+    private long afterTightSegmentCountTotal;
+
     private final Logger log = LoggerFactory.getLogger(SegmentBatch.class);
 
     public SegmentBatch(byte slot, SnowFlake snowFlake) {
@@ -69,6 +75,18 @@ public class SegmentBatch {
                 map.put("compress_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressBytesTotal, labelValues));
                 map.put("compressed_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressedBytesTotal, labelValues));
                 map.put("compress_ratio", new SimpleGauge.ValueWithLabelValues((double) compressedBytesTotal / compressBytesTotal, labelValues));
+            }
+
+            if (batchSegmentCountTotal > 0) {
+                map.put("batch_segment_count_total", new SimpleGauge.ValueWithLabelValues((double) batchSegmentCountTotal, labelValues));
+                map.put("batch_kv_count_total", new SimpleGauge.ValueWithLabelValues((double) batchKvCountTotal, labelValues));
+                map.put("batch_kv_count_avg", new SimpleGauge.ValueWithLabelValues((double) batchKvCountTotal / batchSegmentCountTotal, labelValues));
+            }
+
+            if (afterTightSegmentCountTotal > 0) {
+                map.put("before_tight_segment_count_total", new SimpleGauge.ValueWithLabelValues((double) beforeTightSegmentCountTotal, labelValues));
+                map.put("after_tight_segment_count_total", new SimpleGauge.ValueWithLabelValues((double) afterTightSegmentCountTotal, labelValues));
+                map.put("tight_segment_ratio", new SimpleGauge.ValueWithLabelValues((double) afterTightSegmentCountTotal / beforeTightSegmentCountTotal, labelValues));
             }
 
             return map;
@@ -152,6 +170,8 @@ public class SegmentBatch {
     }
 
     private ArrayList<SegmentTightBytesWithLengthAndSegmentIndex> tight(ArrayList<SegmentCompressedBytesWithIndex> segments, ArrayList<PersistValueMeta> returnPvmList) {
+        beforeTightSegmentCountTotal += segments.size();
+
         ArrayList<SegmentTightBytesWithLengthAndSegmentIndex> r = new ArrayList<>(segments.size());
 
         ArrayList<SegmentCompressedBytesWithIndex> onceList = new ArrayList<>(MAX_BLOCK_NUMBER);
@@ -180,6 +200,7 @@ public class SegmentBatch {
             r.add(tightOne);
         }
 
+        afterTightSegmentCountTotal += r.size();
         return r;
     }
 
@@ -223,6 +244,9 @@ public class SegmentBatch {
     }
 
     private SegmentCompressedBytesWithIndex compressAsSegment(ArrayList<Wal.V> list, int segmentIndex, ArrayList<PersistValueMeta> returnPvmList) {
+        batchSegmentCountTotal++;
+        batchKvCountTotal += list.size();
+
         long segmentSeq = snowFlake.nextId();
 
         // only use key bytes hash to calculate crc
