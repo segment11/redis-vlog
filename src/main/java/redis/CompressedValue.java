@@ -200,7 +200,7 @@ public class CompressedValue {
                 ", dictSeqOrSpType=" + dictSeqOrSpType +
                 ", keyHash=" + keyHash +
                 ", uncompressedLength=" + uncompressedLength +
-                ", cvEncodedLength=" + compressedLength +
+                ", compressedLength=" + compressedLength +
                 '}';
     }
 
