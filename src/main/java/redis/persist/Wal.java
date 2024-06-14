@@ -329,7 +329,9 @@ public class Wal {
         positionArray[groupIndex] += encodeLength;
     }
 
-    private long needPersistCount = 0;
+    long needPersistCountTotal = 0;
+    long needPersistKvCountTotal = 0;
+    long needPersistOffsetTotal = 0;
 
     // return need persist
     PutResult put(boolean isValueShort, String key, V v) {
@@ -339,12 +341,11 @@ public class Wal {
 
         var encodeLength = v.encodeLength();
         if (offset + encodeLength > ONE_GROUP_SIZE) {
-            needPersistCount++;
-            if (needPersistCount % 100 == 0) {
-                var keyCount = isValueShort ? delayToKeyBucketShortValues.size() : delayToKeyBucketValues.size();
-                log.info("Wal will batch persist, key count: {}, raf position/offset: {}, slot: {}, group index: {}",
-                        keyCount, offset + encodeLength, slot, groupIndex);
-            }
+            needPersistCountTotal++;
+            var keyCount = isValueShort ? delayToKeyBucketShortValues.size() : delayToKeyBucketValues.size();
+            needPersistKvCountTotal += keyCount;
+            needPersistOffsetTotal += offset;
+
             return new PutResult(true, isValueShort, v, 0);
         }
 
@@ -368,11 +369,9 @@ public class Wal {
 
             boolean needPersist = delayToKeyBucketShortValues.size() >= ConfForSlot.global.confWal.shortValueSizeTrigger;
             if (needPersist) {
-                needPersistCount++;
-                if (needPersistCount % 100 == 0) {
-                    log.info("Wal will batch persist for short value, key count: {}, raf position/offset: {}, slot: {}, group index: {}",
-                            delayToKeyBucketShortValues.size(), positionArray[groupIndex], slot, groupIndex);
-                }
+                needPersistCountTotal++;
+                needPersistKvCountTotal += delayToKeyBucketShortValues.size();
+                needPersistOffsetTotal += positionArray[groupIndex];
             }
             return new PutResult(needPersist, true, null, needPersist ? 0 : offset);
         }
@@ -382,11 +381,9 @@ public class Wal {
 
         boolean needPersist = delayToKeyBucketValues.size() >= ConfForSlot.global.confWal.valueSizeTrigger;
         if (needPersist) {
-            needPersistCount++;
-            if (needPersistCount % 100 == 0) {
-                log.info("Wal will batch persist for value, key count: {}, raf position/offset: {}, slot: {}, group index: {}",
-                        delayToKeyBucketValues.size(), positionArray[groupIndex], slot, groupIndex);
-            }
+            needPersistCountTotal++;
+            needPersistKvCountTotal += delayToKeyBucketValues.size();
+            needPersistOffsetTotal += positionArray[groupIndex];
         }
         return new PutResult(needPersist, false, null, needPersist ? 0 : offset);
     }

@@ -1313,6 +1313,13 @@ public class OneSlot {
             map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.currentSegmentIndex(), labelValues));
             map.put("chunk_max_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.maxSegmentIndex, labelValues));
 
+            var firstWalGroup = walArray[0];
+            map.put("first_wal_group_delay_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketValues.size(), labelValues));
+            map.put("first_wal_group_delay_short_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketShortValues.size(), labelValues));
+            map.put("first_wal_group_need_persist_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistCountTotal, labelValues));
+            map.put("first_wal_group_need_persist_kv_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistKvCountTotal, labelValues));
+            map.put("first_wal_group_need_persist_offset_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistOffsetTotal, labelValues));
+
             if (slot == 0) {
                 map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket), labelValues));
