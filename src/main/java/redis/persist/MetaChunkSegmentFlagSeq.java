@@ -69,7 +69,7 @@ public class MetaChunkSegmentFlagSeq {
         this.maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber();
         this.allCapacity = maxSegmentNumber * ONE_LENGTH;
 
-        // max max segment number <= 512KB * 8, 512KB * 8 * 9 = 36MB
+        // max max segment number <= 512KB * 8, 512KB * 8 * 13 = 56MB
         this.inMemoryCachedBytes = new byte[allCapacity];
         fillSegmentFlagInit(inMemoryCachedBytes);
 

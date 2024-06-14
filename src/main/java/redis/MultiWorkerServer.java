@@ -531,7 +531,7 @@ public class MultiWorkerServer extends Launcher {
                         if (config.getChild("chunk.fdPerChunk").hasValue()) {
                             c.confChunk.fdPerChunk = Byte.parseByte(config.get("chunk.fdPerChunk"));
                         } else {
-                            c.confChunk.resetFdPerChunkByOneValueLength(estimateOneValueLength);
+                            c.confChunk.resetByOneValueLength(estimateOneValueLength);
                         }
                         if (c.confChunk.fdPerChunk > ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK) {
                             throw new IllegalArgumentException("Chunk fd per chunk too large, fd per chunk should be less than " + ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK);

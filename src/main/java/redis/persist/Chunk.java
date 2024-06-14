@@ -43,7 +43,7 @@ public class Chunk {
     private final File slotDir;
 
     // for better latency, segment length = 4096 decompress performance is better
-    final int segmentLength;
+    final int chunkSegmentLength;
 
     private final static SimpleGauge chunkPersistGauge = new SimpleGauge("chunk_persist", "chunk persist segments",
             "slot");
@@ -66,11 +66,11 @@ public class Chunk {
 
     public Chunk(byte slot, File slotDir, OneSlot oneSlot,
                  SnowFlake snowFlake, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {
-        var c = ConfForSlot.global.confChunk;
-        this.segmentNumberPerFd = c.segmentNumberPerFd;
-        this.fdPerChunk = c.fdPerChunk;
+        var confChunk = ConfForSlot.global.confChunk;
+        this.segmentNumberPerFd = confChunk.segmentNumberPerFd;
+        this.fdPerChunk = confChunk.fdPerChunk;
 
-        int maxSegmentNumber = c.maxSegmentNumber();
+        int maxSegmentNumber = confChunk.maxSegmentNumber();
         this.maxSegmentIndex = maxSegmentNumber - 1;
         this.halfSegmentNumber = maxSegmentNumber / 2;
 
@@ -81,7 +81,7 @@ public class Chunk {
         this.slotStr = String.valueOf(slot);
         this.slotDir = slotDir;
 
-        this.segmentLength = c.segmentLength;
+        this.chunkSegmentLength = confChunk.segmentLength;
 
         this.oneSlot = oneSlot;
         this.keyLoader = keyLoader;
@@ -151,7 +151,7 @@ public class Chunk {
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
-        return fdReadWrite.readSegmentForRepl(segmentIndexTargetFd);
+        return fdReadWrite.readOneInnerForRepl(segmentIndexTargetFd);
     }
 
     byte[] preadSegmentTightBytesWithLength(int targetSegmentIndex) {
@@ -159,7 +159,7 @@ public class Chunk {
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
-        return fdReadWrite.readSegment(segmentIndexTargetFd, true);
+        return fdReadWrite.readOneInner(segmentIndexTargetFd, true);
     }
 
     // begin with 0
@@ -257,7 +257,8 @@ public class Chunk {
     }
 
     // merge, valid cv list is smaller, only need one segment, or need 4 or 8 ? todo
-    private final int mergeOncePrepareSegmentCount = 2;
+    // but even list size is smaller, one v maybe is not compressed, one v encoded length is large
+    private final int mergeOncePrepareSegmentCount = 4;
 
     // return need merge segment index array
     public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge) {
@@ -305,7 +306,7 @@ public class Chunk {
             isNewAppendAfterBatch = fdReadWrite.isTargetSegmentIndexNullInMemory(segmentIndexTargetFd);
             for (var segment : segments) {
                 byte[] bytes = segment.tightBytesWithLength();
-                fdReadWrite.writeSegment(targetFdIndex(segment.segmentIndex()), bytes, false);
+                fdReadWrite.writeOneInner(targetFdIndex(segment.segmentIndex()), bytes, false);
 
                 if (masterUpdateCallback != null) {
                     List<Long> segmentSeqList = new ArrayList<>();
@@ -336,7 +337,7 @@ public class Chunk {
                 var batchCount = segments.size() / BATCH_ONCE_SEGMENT_COUNT_PWRITE;
                 var remainCount = segments.size() % BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 
-                var tmpBatchBytes = new byte[segmentLength * BATCH_ONCE_SEGMENT_COUNT_PWRITE];
+                var tmpBatchBytes = new byte[chunkSegmentLength * BATCH_ONCE_SEGMENT_COUNT_PWRITE];
                 var buffer = ByteBuffer.wrap(tmpBatchBytes);
 
                 for (int i = 0; i < batchCount; i++) {
@@ -352,8 +353,8 @@ public class Chunk {
                         buffer.put(tightBytesWithLength);
 
                         // padding to segment length
-                        if (tightBytesWithLength.length < segmentLength) {
-                            buffer.position(buffer.position() + segmentLength - tightBytesWithLength.length);
+                        if (tightBytesWithLength.length < chunkSegmentLength) {
+                            buffer.position(buffer.position() + chunkSegmentLength - tightBytesWithLength.length);
                         }
 
                         segmentSeqListSubBatch.add(segment.segmentSeq());
@@ -598,16 +599,16 @@ public class Chunk {
 
             var isNewAppend = fdReadWrite.isTargetSegmentIndexNullInMemory(segmentIndexTargetFd);
             if (segmentCount == 1) {
-                fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, false);
+                fdReadWrite.writeOneInner(segmentIndexTargetFd, bytes, false);
 
                 oneSlot.setSegmentMergeFlag(segmentIndex,
                         isNewAppend ? SEGMENT_FLAG_NEW : SEGMENT_FLAG_REUSE_AND_PERSISTED, segmentSeqList.getFirst(), walGroupIndex);
             } else {
                 for (int i = 0; i < segmentCount; i++) {
-                    var oneSegmentBytes = new byte[segmentLength];
-                    System.arraycopy(bytes, i * segmentLength, oneSegmentBytes, 0, segmentLength);
+                    var oneSegmentBytes = new byte[chunkSegmentLength];
+                    System.arraycopy(bytes, i * chunkSegmentLength, oneSegmentBytes, 0, chunkSegmentLength);
 
-                    fdReadWrite.writeSegment(segmentIndexTargetFd + i, oneSegmentBytes, false);
+                    fdReadWrite.writeOneInner(segmentIndexTargetFd + i, oneSegmentBytes, false);
                 }
 
                 oneSlot.setSegmentMergeFlagBatch(segmentIndex, segmentCount,
@@ -637,17 +638,17 @@ public class Chunk {
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
         if (segmentCount == 1) {
-            fdReadWrite.writeSegment(segmentIndexTargetFd, bytes, false);
+            fdReadWrite.writeOneInner(segmentIndexTargetFd, bytes, false);
         } else if (segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
             fdReadWrite.writeSegmentBatch(segmentIndexTargetFd, bytes, false);
         } else if (segmentCount == REPL_ONCE_SEGMENT_COUNT) {
-            fdReadWrite.writeSegmentForRepl(segmentIndexTargetFd, bytes, 0);
+            fdReadWrite.writeOneInnerForRepl(segmentIndexTargetFd, bytes, 0);
         } else {
             throw new IllegalArgumentException("Write segment count not support: " + segmentCount);
         }
 
         boolean isNewAppend = false;
-        int afterThisBatchOffset = (segmentIndexTargetFd + segmentCount) * segmentLength;
+        int afterThisBatchOffset = (segmentIndexTargetFd + segmentCount) * chunkSegmentLength;
         if (fdLengths[fdIndex] < afterThisBatchOffset) {
             fdLengths[fdIndex] = afterThisBatchOffset;
             isNewAppend = true;

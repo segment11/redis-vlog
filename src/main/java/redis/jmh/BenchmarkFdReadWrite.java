@@ -122,7 +122,7 @@ BenchmarkFdReadWrite.write             1   avgt        0.042           ms/op
     public void read() {
         int segmentIndex = random.nextInt(PAGE_NUMBER);
         for (var fdReadWrite : fdReadWriteList) {
-            var bytes = fdReadWrite.readSegment(segmentIndex, false);
+            var bytes = fdReadWrite.readOneInner(segmentIndex, false);
             var intValueInit = ByteBuffer.wrap(bytes).getInt();
             initIntValueSet.add(intValueInit);
         }
@@ -134,7 +134,7 @@ BenchmarkFdReadWrite.write             1   avgt        0.042           ms/op
     public void write() {
         int segmentIndex = random.nextInt(PAGE_NUMBER);
         for (var fdReadWrite : fdReadWriteList) {
-            var n = fdReadWrite.writeSegment(segmentIndex, writeBytes, false);
+            var n = fdReadWrite.writeOneInner(segmentIndex, writeBytes, false);
             if (n != PAGE_SIZE) {
                 throw new RuntimeException("write failed");
             }

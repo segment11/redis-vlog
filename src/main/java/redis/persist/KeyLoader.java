@@ -95,7 +95,7 @@ public class KeyLoader {
     }
 
     // split 2 times, 1 * 3 * 3 = 9
-    // when get bigger, batch persist pvm, will slot stall and read all 8 files, read and write perf will be bad
+    // when get bigger, batch persist pvm, will slot stall and read all 9 files, read and write perf will be bad
     // end to end read perf ok, because only read one key bucket and lru cache
     // increase buckets per slot value, then will split fewer times, but will cost more wal memory
     // or decrease wal delay persist value size, then will once put less key values, may be better for latency
@@ -200,7 +200,7 @@ public class KeyLoader {
         if (fdReadWrite == null) {
             return null;
         }
-        return fdReadWrite.readSegmentForRepl(beginBucketIndex);
+        return fdReadWrite.readOneInnerForRepl(beginBucketIndex);
     }
 
     public void writeKeyBucketBytesBatchFromMasterExists(byte[] contentBytes) {
@@ -220,7 +220,7 @@ public class KeyLoader {
         if (ConfForSlot.global.pureMemory) {
             if (leftLength == 0) {
                 for (int i = 0; i < BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL; i++) {
-                    fdReadWrite.clearOneSegmentToMemory(beginBucketIndex + i);
+                    fdReadWrite.clearOneOneInnerToMemory(beginBucketIndex + i);
                 }
             } else {
                 var bucketCount = leftLength / KEY_BUCKET_ONE_COST_SIZE;
@@ -229,10 +229,10 @@ public class KeyLoader {
                             + slot + ", split index: " + splitIndex + ", begin bucket index: " + beginBucketIndex + ", bucket count: " + bucketCount);
                 }
 
-                fdReadWrite.writeSegmentBatchToMemory(beginBucketIndex, contentBytes, position);
+                fdReadWrite.writeOneInnerBatchToMemory(beginBucketIndex, contentBytes, position);
             }
         } else {
-            fdReadWrite.writeSegmentForRepl(beginBucketIndex, contentBytes, position);
+            fdReadWrite.writeOneInnerForRepl(beginBucketIndex, contentBytes, position);
         }
         log.info("Write key bucket from master success, slot: {}, split index: {}, begin bucket index: {}",
                 slot, splitIndex, beginBucketIndex);
@@ -254,7 +254,7 @@ public class KeyLoader {
             return null;
         }
 
-        var bytes = fdReadWrite.readSegment(bucketIndex, isRefreshLRUCache);
+        var bytes = fdReadWrite.readOneInner(bucketIndex, isRefreshLRUCache);
         if (!isBytesValidAsKeyBucket(bytes)) {
             return null;
         }
@@ -300,7 +300,7 @@ public class KeyLoader {
                 continue;
             }
 
-            var bytes = fdReadWrite.readSegment(bucketIndex, false);
+            var bytes = fdReadWrite.readOneInner(bucketIndex, false);
             if (!isBytesValidAsKeyBucket(bytes)) {
                 keyBuckets.add(null);
             } else {
@@ -335,7 +335,7 @@ public class KeyLoader {
             fdReadWrite = fdReadWriteArray[splitIndex];
         }
 
-        fdReadWrite.writeSegment(bucketIndex, bytes, isRefreshLRUCache);
+        fdReadWrite.writeOneInner(bucketIndex, bytes, isRefreshLRUCache);
     }
 
     byte[] readBatchInOneWalGroup(byte splitIndex, int beginBucketIndex) {
@@ -343,7 +343,7 @@ public class KeyLoader {
         if (fdReadWrite == null) {
             return null;
         }
-        return fdReadWrite.readSegmentForKeyBucketsInOneWalGroup(beginBucketIndex);
+        return fdReadWrite.readOneInnerForKeyBucketsInOneWalGroup(beginBucketIndex);
     }
 
     public void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList) {
@@ -388,7 +388,7 @@ public class KeyLoader {
                 fdReadWrite = fdReadWriteArray[splitIndex];
             }
 
-            fdReadWrite.writeSegmentForKeyBucketsInOneWalGroup(beginBucketIndex, sharedBytes);
+            fdReadWrite.writeOneInnerForKeyBucketsInOneWalGroup(beginBucketIndex, sharedBytes);
         }
     }
 

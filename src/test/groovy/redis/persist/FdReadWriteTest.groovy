@@ -37,8 +37,8 @@ class FdReadWriteTest extends Specification {
         loop.times { i ->
             var bytes = new byte[segmentLength]
             Arrays.fill(bytes, (byte) i)
-            var f = fdReadWrite.writeSegment(i, bytes, false)
-            var f2 = fdReadWrite2.writeSegment(i, bytes, false)
+            var f = fdReadWrite.writeOneInner(i, bytes, false)
+            var f2 = fdReadWrite2.writeOneInner(i, bytes, false)
             array[i] = f
             array[i + loop] = f2
         }
@@ -75,10 +75,10 @@ class FdReadWriteTest extends Specification {
         println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(104, bytesBatch, false)
         println 'write bytes n: ' + fdReadWrite.writeSegmentBatch(108, bytesBatch, false)
 
-        def firstSegmentBytes = fdReadWrite.readSegment(0, false)
+        def firstSegmentBytes = fdReadWrite.readOneInner(0, false)
         def index100SegmentBytesForMerge = fdReadWrite.readSegmentForMerge(100, FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT)
         def index100SegmentBytesForMergeJust2Segment = fdReadWrite.readSegmentForMerge(100, 2)
-        def index100SegmentBytes = fdReadWrite.readSegment(100, false)
+        def index100SegmentBytes = fdReadWrite.readOneInner(100, false)
 
         then:
         firstSegmentBytes.length == segmentLength
@@ -117,24 +117,24 @@ class FdReadWriteTest extends Specification {
         Arrays.fill(segmentIndex100Bytes, (byte) 100)
 
         when:
-        fdReadWrite.writeSegment(20, segmentIndex20Bytes, false)
-        fdReadWrite.writeSegment(30, segmentIndex30Bytes, false)
-        fdReadWrite.writeSegment(100, segmentIndex100Bytes, false)
+        fdReadWrite.writeOneInner(20, segmentIndex20Bytes, false)
+        fdReadWrite.writeOneInner(30, segmentIndex30Bytes, false)
+        fdReadWrite.writeOneInner(100, segmentIndex100Bytes, false)
 
         def writeIndex = fdReadWrite.writeIndex
 
-        def readSegment20Bytes = fdReadWrite.readSegment(20, false)
-        def readSegment30Bytes = fdReadWrite.readSegment(30, false)
-        def readSegment100Bytes = fdReadWrite.readSegment(100, false)
+        def readSegment20Bytes = fdReadWrite.readOneInner(20, false)
+        def readSegment30Bytes = fdReadWrite.readOneInner(30, false)
+        def readSegment100Bytes = fdReadWrite.readOneInner(100, false)
 
         List<byte[]> readFirst10SegmentBytesList = []
         (0..<10).each {
-            readFirst10SegmentBytesList << fdReadWrite.readSegment(it, false)
+            readFirst10SegmentBytesList << fdReadWrite.readOneInner(it, false)
         }
         [11, 31, 99].each {
-            readFirst10SegmentBytesList << fdReadWrite.readSegment(it, false)
+            readFirst10SegmentBytesList << fdReadWrite.readOneInner(it, false)
         }
-        def readSegment101Bytes = fdReadWrite.readSegment(101, false)
+        def readSegment101Bytes = fdReadWrite.readOneInner(101, false)
 
         then:
         writeIndex == (100 + 1) * segmentLength
@@ -159,7 +159,7 @@ class FdReadWriteTest extends Specification {
         def isOverflow = false
         fdReadWrite.isChunkFd = true
         try {
-            fdReadWrite.writeSegment(ConfForSlot.global.confChunk.segmentNumberPerFd, new byte[0], false)
+            fdReadWrite.writeOneInner(ConfForSlot.global.confChunk.segmentNumberPerFd, new byte[0], false)
         } catch (AssertionError e) {
             isOverflow = true
         }
@@ -171,7 +171,7 @@ class FdReadWriteTest extends Specification {
         isOverflow = false
         fdReadWrite.isChunkFd = false
         try {
-            fdReadWrite.writeSegment(ConfForSlot.global.confBucket.bucketsPerSlot, new byte[0], false)
+            fdReadWrite.writeOneInner(ConfForSlot.global.confBucket.bucketsPerSlot, new byte[0], false)
         } catch (AssertionError e) {
             isOverflow = true
         }

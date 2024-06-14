@@ -45,7 +45,7 @@ class KeyLoaderTest extends Specification {
         var k0 = keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 1, 10L, false)
         k0.splitNumber = (byte) 2
         var bytes = k0.encode(true)
-        keyLoader.fdReadWriteArray[0].writeSegment(0, bytes, false)
+        keyLoader.fdReadWriteArray[0].writeOneInner(0, bytes, false)
 
         keyLoader.setMetaKeyBucketSplitNumberForTest(0, (byte) 2)
         keyLoader.putValueByKeyForTest(0, 'b'.getBytes(), 11L, 0L, 1L, 'b'.bytes)

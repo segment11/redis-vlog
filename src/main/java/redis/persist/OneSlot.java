@@ -47,7 +47,7 @@ public class OneSlot {
         this.keyLoader = keyLoader;
         this.snowFlake = new SnowFlake(1, 1);
         this.persistConfig = Config.create();
-        this.segmentLength = 4096;
+        this.chunkSegmentLength = 4096;
 
         this.bigStringFiles = null;
         this.chunkMergeWorker = null;
@@ -64,7 +64,7 @@ public class OneSlot {
     }
 
     public OneSlot(byte slot, short slotNumber, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
-        this.segmentLength = ConfForSlot.global.confChunk.segmentLength;
+        this.chunkSegmentLength = ConfForSlot.global.confChunk.segmentLength;
 
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
@@ -313,7 +313,7 @@ public class OneSlot {
         return slot;
     }
 
-    private final int segmentLength;
+    private final int chunkSegmentLength;
     private final SnowFlake snowFlake;
     private final Config persistConfig;
     final File slotDir;
@@ -648,10 +648,10 @@ public class OneSlot {
             throw new IllegalStateException("Sub block offset is 0, pvm: " + pvm);
         }
 
-        var decompressedBytes = new byte[segmentLength];
+        var decompressedBytes = new byte[chunkSegmentLength];
 
         var beginT = System.nanoTime();
-        var d = Zstd.decompressByteArray(decompressedBytes, 0, segmentLength,
+        var d = Zstd.decompressByteArray(decompressedBytes, 0, chunkSegmentLength,
                 tightBytesWithLength, subBlockOffset, subBlockLength);
         var costT = (System.nanoTime() - beginT) / 1000;
         if (costT == 0) {
@@ -660,9 +660,9 @@ public class OneSlot {
         segmentDecompressTimeTotalUs += costT;
         segmentDecompressCountTotal++;
 
-        if (d != segmentLength) {
+        if (d != chunkSegmentLength) {
             throw new IllegalStateException("Decompress segment sub block error, s=" + pvm.slot +
-                    ", i=" + pvm.segmentIndex + ", sbi=" + pvm.subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
+                    ", i=" + pvm.segmentIndex + ", sbi=" + pvm.subBlockIndex + ", d=" + d + ", chunkSegmentLength=" + chunkSegmentLength);
         }
 
         return decompressedBytes;
@@ -747,7 +747,7 @@ public class OneSlot {
                 key, cvEncoded, cv.encodedLength(), isFromMerge);
 
         // for big string, use single file
-        boolean isPersistLengthOverSegmentLength = v.persistLength() + SEGMENT_HEADER_LENGTH > segmentLength;
+        boolean isPersistLengthOverSegmentLength = v.persistLength() + SEGMENT_HEADER_LENGTH > chunkSegmentLength;
         if (isPersistLengthOverSegmentLength || key.startsWith("kerry-test-big-string-")) {
             var uuid = snowFlake.nextId();
             var bytes = cv.getCompressedData();
@@ -924,9 +924,9 @@ public class OneSlot {
     }
 
     public void writeSegmentsFromMasterExists(int segmentIndex, int segmentCount, List<Long> segmentSeqList, int walGroupIndex, byte[] bytes) {
-        if (bytes.length != chunk.segmentLength * segmentCount) {
+        if (bytes.length != chunk.chunkSegmentLength * segmentCount) {
             throw new IllegalStateException("Bytes length not match, bytes length: " + bytes.length +
-                    ", segment length: " + chunk.segmentLength + ", segment count: " + segmentCount);
+                    ", chunk segment length: " + chunk.chunkSegmentLength + ", segment count: " + segmentCount);
         }
 
         chunk.writeSegmentsFromMasterExists(bytes, segmentIndex, segmentCount, segmentSeqList, walGroupIndex, bytes.length);
@@ -1017,7 +1017,7 @@ public class OneSlot {
                 continue;
             }
 
-            int relativeOffsetInBatchBytes = i * segmentLength;
+            int relativeOffsetInBatchBytes = i * chunkSegmentLength;
             // refer to Chunk.ONCE_PREPARE_SEGMENT_COUNT
             // last segments not write at all, need skip
             if (segmentBytesBatchRead == null || relativeOffsetInBatchBytes >= segmentBytesBatchRead.length) {
@@ -1028,7 +1028,7 @@ public class OneSlot {
                 continue;
             }
 
-            ChunkMergeJob.readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength, segmentIndex, slot);
+            ChunkMergeJob.readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, slot);
             segmentIndexList.add(segmentIndex);
         }
 

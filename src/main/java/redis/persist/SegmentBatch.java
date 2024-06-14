@@ -24,7 +24,7 @@ public class SegmentBatch {
     private final byte slot;
     private final String slotStr;
 
-    private final int segmentLength;
+    private final int chunkSegmentLength;
     private final SnowFlake snowFlake;
 
     private final static SimpleGauge segmentBatchGauge = new SimpleGauge("segment_batch", "chunk segment compress",
@@ -48,11 +48,11 @@ public class SegmentBatch {
     private final Logger log = LoggerFactory.getLogger(SegmentBatch.class);
 
     public SegmentBatch(byte slot, SnowFlake snowFlake) {
-        this.segmentLength = ConfForSlot.global.confChunk.segmentLength;
+        this.chunkSegmentLength = ConfForSlot.global.confChunk.segmentLength;
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
 
-        this.bytes = new byte[segmentLength];
+        this.bytes = new byte[chunkSegmentLength];
         this.buffer = ByteBuffer.wrap(bytes);
 
         this.snowFlake = snowFlake;
@@ -182,7 +182,7 @@ public class SegmentBatch {
             var segment = segments.get(i);
             var compressedBytes = segment.compressedBytes;
 
-            if (onceList.size() == MAX_BLOCK_NUMBER || onceListBytesLength + compressedBytes.length > segmentLength - HEADER_LENGTH) {
+            if (onceList.size() == MAX_BLOCK_NUMBER || onceListBytesLength + compressedBytes.length > chunkSegmentLength - HEADER_LENGTH) {
                 var tightOne = tightSegments(afterTightSegmentIndex, onceList, returnPvmList);
                 r.add(tightOne);
                 afterTightSegmentIndex++;
@@ -214,7 +214,7 @@ public class SegmentBatch {
         for (Wal.V v : list) {
             persistLength += v.persistLength();
 
-            if (persistLength < segmentLength) {
+            if (persistLength < chunkSegmentLength) {
                 onceList.add(v);
             } else {
                 if (i >= nextNSegmentIndex.length) {

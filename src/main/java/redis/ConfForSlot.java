@@ -115,7 +115,7 @@ public enum ConfForSlot {
             this.segmentLength = segmentLength;
         }
 
-        public static final int MAX_FD_PER_CHUNK = 16;
+        public static final int MAX_FD_PER_CHUNK = 64;
 
         // each slot each worker persist to a file, one file one chunk, each file max 2GB, 4KB page size, each file max 512K pages
         public int segmentNumberPerFd;
@@ -138,11 +138,32 @@ public enum ConfForSlot {
             return segmentNumberPerFd * fdPerChunk;
         }
 
-        public void resetFdPerChunkByOneValueLength(int estimateOneValueLength) {
+        public void resetByOneValueLength(int estimateOneValueLength) {
             if (estimateOneValueLength <= 200) {
                 return;
             }
-            this.fdPerChunk = (byte) (2 * this.fdPerChunk);
+
+            if (estimateOneValueLength <= 500) {
+                this.fdPerChunk = (byte) (2 * this.fdPerChunk);
+                return;
+            }
+
+            if (estimateOneValueLength <= 1000) {
+                this.segmentNumberPerFd = this.segmentNumberPerFd / 4;
+                this.segmentLength = PAGE_SIZE * 4;
+                this.fdPerChunk = (byte) (4 * this.fdPerChunk);
+                return;
+            }
+
+            if (estimateOneValueLength <= 2000) {
+                this.segmentNumberPerFd = this.segmentNumberPerFd / 4;
+                this.segmentLength = PAGE_SIZE * 4;
+                this.fdPerChunk = (byte) (8 * this.fdPerChunk);
+                return;
+            }
+
+            throw new IllegalArgumentException("Chunk estimate one value length too large: " + estimateOneValueLength +
+                    ", should be less than 2000");
         }
 
         @Override

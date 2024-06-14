@@ -38,8 +38,8 @@ class ChunkMergeJobTest extends Specification {
         def fdReadWriteForChunkSegments = new FdReadWrite('chunk_data_index_0', libC, chunkDataFile)
         fdReadWriteForChunkSegments.initByteBuffers(true)
 
-        fdReadWriteForChunkSegments.writeSegment(segmentIndex, r[0].tightBytesWithLength, false)
-        fdReadWriteForChunkSegments.writeSegment(segmentIndex + 1, r[1].tightBytesWithLength, false)
+        fdReadWriteForChunkSegments.writeOneInner(segmentIndex, r[0].tightBytesWithLength, false)
+        fdReadWriteForChunkSegments.writeOneInner(segmentIndex + 1, r[1].tightBytesWithLength, false)
         println 'write segment ' + segmentIndex + ', ' + (segmentIndex + 1)
 
         def keyBucketsDataFile = new File(Consts.slotDir, 'key-bucket-split-0.dat')
@@ -47,7 +47,7 @@ class ChunkMergeJobTest extends Specification {
         fdReadWriteForKeyLoader.initByteBuffers(false)
         // clear old data
         // segment index -> bucket index
-        fdReadWriteForKeyLoader.writeSegment(bucketIndex, new byte[4096], false)
+        fdReadWriteForKeyLoader.writeOneInner(bucketIndex, new byte[4096], false)
 
         and:
         def keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir, snowFlake)

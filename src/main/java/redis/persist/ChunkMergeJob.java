@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
-import static redis.persist.LocalPersist.PAGE_SIZE;
 
 public class ChunkMergeJob {
     private final byte slot;
@@ -157,15 +156,13 @@ public class ChunkMergeJob {
 
         chunkMergeWorker.mergedSegmentCount++;
 
-        int segmentLength = ConfForSlot.global.confChunk.segmentLength;
-        var npages0 = segmentLength / PAGE_SIZE;
-        int npagesMerge = npages0 * MERGE_READ_ONCE_SEGMENT_COUNT;
+        // read all segments to memory, then compare with key buckets
+        int chunkSegmentLength = ConfForSlot.global.confChunk.segmentLength;
+        var tmpCapacity = chunkSegmentLength / ConfForSlot.global.estimateOneValueLength * MERGE_READ_ONCE_SEGMENT_COUNT;
+        ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(tmpCapacity);
 
         var beginT = System.nanoTime();
         var segmentBytesBatchRead = oneSlot.preadForMerge(firstSegmentIndex, MERGE_READ_ONCE_SEGMENT_COUNT);
-
-        // read all segments to memory, then compare with key buckets
-        ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(npagesMerge * 100);
 
         boolean alreadyDoLog = false;
         int i = 0;
@@ -176,7 +173,7 @@ public class ChunkMergeJob {
                 continue;
             }
 
-            int relativeOffsetInBatchBytes = i * segmentLength;
+            int relativeOffsetInBatchBytes = i * chunkSegmentLength;
             // refer to Chunk.ONCE_PREPARE_SEGMENT_COUNT
             // last segments not write at all, need skip
             if (segmentBytesBatchRead == null || relativeOffsetInBatchBytes >= segmentBytesBatchRead.length) {
@@ -194,7 +191,7 @@ public class ChunkMergeJob {
                 alreadyDoLog = true;
             }
 
-            readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength, segmentIndex, slot);
+            readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, slot);
             i++;
         }
 
@@ -261,8 +258,8 @@ public class ChunkMergeJob {
         chunkMergeWorker.invalidCvCountTotal += invalidCvCountAfterRun;
     }
 
-    static void readToCvList(ArrayList<CvWithKeyAndSegmentOffset> cvList, byte[] segmentBytesBatchRead, int relativeOffsetInBatchBytes, int segmentLength, int segmentIndex, byte slot) {
-        var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, segmentLength).slice();
+    static void readToCvList(ArrayList<CvWithKeyAndSegmentOffset> cvList, byte[] segmentBytesBatchRead, int relativeOffsetInBatchBytes, int chunkSegmentLength, int segmentIndex, byte slot) {
+        var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength).slice();
         // sub blocks
         // refer to SegmentBatch tight HEADER_LENGTH
         for (int subBlockIndex = 0; subBlockIndex < SegmentBatch.MAX_BLOCK_NUMBER; subBlockIndex++) {
@@ -274,12 +271,12 @@ public class ChunkMergeJob {
             }
             var subBlockLength = buffer.getShort();
 
-            var decompressedBytes = new byte[segmentLength];
-            var d = Zstd.decompressByteArray(decompressedBytes, 0, segmentLength,
+            var decompressedBytes = new byte[chunkSegmentLength];
+            var d = Zstd.decompressByteArray(decompressedBytes, 0, chunkSegmentLength,
                     segmentBytesBatchRead, relativeOffsetInBatchBytes + subBlockOffset, subBlockLength);
-            if (d != segmentLength) {
+            if (d != chunkSegmentLength) {
                 throw new IllegalStateException("Decompress error, s=" + slot
-                        + ", i=" + segmentIndex + ", sbi=" + subBlockIndex + ", d=" + d + ", segmentLength=" + segmentLength);
+                        + ", i=" + segmentIndex + ", sbi=" + subBlockIndex + ", d=" + d + ", chunkSegmentLength=" + chunkSegmentLength);
             }
 
             int finalSubBlockIndex = subBlockIndex;
