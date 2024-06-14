@@ -9,6 +9,7 @@ public enum ConfForSlot {
     c10m(10_000_000L), c100m(100_000_000L);
 
     public long estimateKeyNumber;
+    public int estimateOneValueLength;
     public String netListenAddresses;
 
     public final ConfBucket confBucket;
@@ -62,6 +63,7 @@ public enum ConfForSlot {
     public String toString() {
         return "ConfForSlot{" +
                 "estimateKeyNumber=" + estimateKeyNumber +
+                "estimateOneValueLength=" + estimateOneValueLength +
                 ", confChunk=" + confChunk +
                 ", confBucket=" + confBucket +
                 ", confWal=" + confWal +
@@ -113,13 +115,18 @@ public enum ConfForSlot {
             this.segmentLength = segmentLength;
         }
 
+        public static final int MAX_FD_PER_CHUNK = 16;
+
         // each slot each worker persist to a file, one file one chunk, each file max 2GB, 4KB page size, each file max 512K pages
         public int segmentNumberPerFd;
         // 16 * 2GB = 32GB per slot (per worker)
-        // suppose one key value encoded length ~= 100 byte, one page size 4096 contains 40 key value pairs
+        // suppose one key value encoded length (value is already compressed) ~= 100 byte, one page size 4096 contains 40 key value pairs
         // one fd contains 512K pages, so one fd contains 20M key value pairs
         // one chunk contains 20M * 16 = 320M key value pairs
         // merge worker is another chunk, so one slot may contain 640M key value pairs
+
+        // if one key value encoded length (value is already compressed) ~= 500 byte, one page size 4096 contains 8 key value pairs
+        // fd per chunk need to be 32 or 64
         public byte fdPerChunk;
         // for better latency, PAGE_SIZE 4K is ok
         public int segmentLength;
@@ -129,6 +136,13 @@ public enum ConfForSlot {
 
         public int maxSegmentNumber() {
             return segmentNumberPerFd * fdPerChunk;
+        }
+
+        public void resetFdPerChunkByOneValueLength(int estimateOneValueLength) {
+            if (estimateOneValueLength <= 200) {
+                return;
+            }
+            this.fdPerChunk = (byte) (2 * this.fdPerChunk);
         }
 
         @Override

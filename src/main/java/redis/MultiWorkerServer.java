@@ -472,7 +472,9 @@ public class MultiWorkerServer extends Launcher {
                     @Provides
                     ConfForSlot confForSlot(Config config) {
                         long estimateKeyNumber = config.get(ofLong(), "estimateKeyNumber", 1_000_000L);
+                        int estimateOneValueLength = config.get(toInt, "estimateOneValueLength", 200);
                         var c = ConfForSlot.from(estimateKeyNumber);
+                        c.estimateOneValueLength = estimateOneValueLength;
                         ConfForSlot.global = c;
 
                         c.netListenAddresses = config.get(ofString(), "net.listenAddresses");
@@ -509,10 +511,10 @@ public class MultiWorkerServer extends Launcher {
                             c.confBucket.bucketsPerSlot = config.get(ofInteger(), "bucket.bucketsPerSlot");
                         }
                         if (c.confBucket.bucketsPerSlot > KeyBucket.MAX_BUCKETS_PER_SLOT) {
-                            throw new IllegalStateException("Bucket count per slot too large, bucket count per slot should be less than " + KeyBucket.MAX_BUCKETS_PER_SLOT);
+                            throw new IllegalArgumentException("Bucket count per slot too large, bucket count per slot should be less than " + KeyBucket.MAX_BUCKETS_PER_SLOT);
                         }
                         if (c.confBucket.bucketsPerSlot % 1024 != 0) {
-                            throw new IllegalStateException("Bucket count per slot should be multiple of 1024");
+                            throw new IllegalArgumentException("Bucket count per slot should be multiple of 1024");
                         }
                         if (config.getChild("bucket.initialSplitNumber").hasValue()) {
                             c.confBucket.initialSplitNumber = config.get(ofInteger(), "bucket.initialSplitNumber").byteValue();
@@ -528,7 +530,13 @@ public class MultiWorkerServer extends Launcher {
                         }
                         if (config.getChild("chunk.fdPerChunk").hasValue()) {
                             c.confChunk.fdPerChunk = Byte.parseByte(config.get("chunk.fdPerChunk"));
+                        } else {
+                            c.confChunk.resetFdPerChunkByOneValueLength(estimateOneValueLength);
                         }
+                        if (c.confChunk.fdPerChunk > ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK) {
+                            throw new IllegalArgumentException("Chunk fd per chunk too large, fd per chunk should be less than " + ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK);
+                        }
+
                         if (config.getChild("chunk.segmentLength").hasValue()) {
                             c.confChunk.segmentLength = config.get(ofInteger(), "chunk.segmentLength");
                         }
