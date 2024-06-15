@@ -986,7 +986,10 @@ public class OneSlot {
         }
 
         // find continuous segments those wal group index is same from need merge segment index
-        final int[] firstSegmentIndexWithReadSegmentCountArray = metaChunkSegmentFlagSeq.iterateAndFind(needMergeSegmentIndex, walGroupNumber, walGroupIndex, chunk);
+        // * 4 make sure to find one
+        int untilSegmentCount = Math.min(Math.max(walGroupNumber * 4, (chunk.maxSegmentIndex + 1) / 4), 16384);
+        final int[] firstSegmentIndexWithReadSegmentCountArray = metaChunkSegmentFlagSeq
+                .iterateAndFind(needMergeSegmentIndex, untilSegmentCount, walGroupIndex, chunk);
 
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
@@ -1077,8 +1080,6 @@ public class OneSlot {
                         slot, walGroupIndex, list.size());
             }
 
-//            checkNotMergedAndPersistedNextRangeSegmentIndex();
-
             var needMergeSegmentIndexList = chunk.persist(walGroupIndex, list, false);
             if (needMergeSegmentIndexList == null) {
                 throw new IllegalStateException("Persist error, need merge segment index list is null, slot: " + slot);
@@ -1117,35 +1118,25 @@ public class OneSlot {
                 doMergeJob(needMergeSegmentIndexList);
                 checkFirstMergedButNotPersistedSegmentIndexTooNear();
             }
+
+            checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
         }
     }
 
-//    private void checkNotMergedAndPersistedNextRangeSegmentIndex() {
-//        var currentSegmentIndex = chunk.currentSegmentIndex();
-//
-//        for (int i = 0; i < ONCE_PREPARE_SEGMENT_COUNT; i++) {
-//            var targetSegmentIndex = currentSegmentIndex + i;
-//            var segmentFlag = getSegmentMergeFlag(targetSegmentIndex);
-//            var flag = segmentFlag.flag();
-//
-//            if (flag != SEGMENT_FLAG_INIT && flag != SEGMENT_FLAG_MERGED_AND_PERSISTED) {
-//
-//            }
-//        }
-//    }
-
     private void checkFirstMergedButNotPersistedSegmentIndexTooNear() {
-        if (!chunkMergeWorker.mergedSegmentSet.isEmpty()) {
-            var currentSegmentIndex = chunk.currentSegmentIndex();
-            var firstMergedButNotPersisted = chunkMergeWorker.mergedSegmentSet.first().segmentIndex();
+        if (chunkMergeWorker.mergedSegmentSet.isEmpty()) {
+            return;
+        }
 
-            // need persist merged segments immediately, or next time wal persist will not prepare ready
-            boolean needPersistMergedButNotPersisted = isNeedPersistMergedButNotPersisted(currentSegmentIndex, firstMergedButNotPersisted);
-            if (needPersistMergedButNotPersisted) {
-                log.warn("Persist merged segments immediately, s={}, begin merged segment index={}",
-                        slot, firstMergedButNotPersisted);
-                chunkMergeWorker.persistFIFOMergedCvList();
-            }
+        var currentSegmentIndex = chunk.currentSegmentIndex();
+        var firstMergedButNotPersisted = chunkMergeWorker.mergedSegmentSet.first().segmentIndex();
+
+        // need persist merged segments immediately, or next time wal persist will not prepare ready
+        boolean needPersistMergedButNotPersisted = isNeedPersistMergedButNotPersisted(currentSegmentIndex, firstMergedButNotPersisted);
+        if (needPersistMergedButNotPersisted) {
+            log.warn("Persist merged segments immediately, s={}, begin merged segment index={}",
+                    slot, firstMergedButNotPersisted);
+            chunkMergeWorker.persistFIFOMergedCvList();
         }
     }
 
@@ -1168,6 +1159,40 @@ public class OneSlot {
             }
         }
         return needPersistMergedButNotPersisted;
+    }
+
+    void checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(boolean isServerStart) {
+        var currentSegmentIndex = chunk.currentSegmentIndex();
+
+        ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
+        for (int i = 0; i < ONCE_PREPARE_SEGMENT_COUNT + chunkMergeWorker.MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST; i++) {
+            var targetSegmentIndex = currentSegmentIndex + i;
+            if (targetSegmentIndex == chunk.maxSegmentIndex + 1) {
+                targetSegmentIndex = 0;
+            }
+
+            var segmentFlag = getSegmentMergeFlag(targetSegmentIndex);
+            var flag = segmentFlag.flag();
+
+            if (isServerStart && flag == SEGMENT_FLAG_REUSE) {
+                continue;
+            }
+
+            if (flag != SEGMENT_FLAG_INIT && flag != SEGMENT_FLAG_MERGED_AND_PERSISTED) {
+                needMergeSegmentIndexList.add(targetSegmentIndex);
+            }
+        }
+
+        if (needMergeSegmentIndexList.isEmpty()) {
+            return;
+        }
+
+        log.warn("Not merged and persisted next range segment index too near, s={}, begin segment index={}",
+                slot, needMergeSegmentIndexList.getFirst());
+
+        needMergeSegmentIndexList.sort(Integer::compareTo);
+        // maybe not continuous
+        mergeTargetSegments(needMergeSegmentIndexList, isServerStart);
     }
 
     SegmentFlag getSegmentMergeFlag(int segmentIndex) {
@@ -1229,17 +1254,20 @@ public class OneSlot {
 
         if (needMergeSegmentIndexList.isEmpty()) {
             log.warn("No segment need merge when server start, s={}", slot);
-            return;
+        } else {
+            mergeTargetSegments(needMergeSegmentIndexList, true);
         }
+    }
 
+    private void mergeTargetSegments(ArrayList<Integer> needMergeSegmentIndexList, boolean isServerStart) {
         var firstSegmentIndex = needMergeSegmentIndexList.getFirst();
         var lastSegmentIndex = needMergeSegmentIndexList.getLast();
 
         // continuous
         if (lastSegmentIndex - firstSegmentIndex + 1 == needMergeSegmentIndexList.size()) {
-            var validCvCount = doMergeJobWhenServerStart(needMergeSegmentIndexList);
-            log.warn("Merge segments undone, s={}, i={}, end i={}, valid cv count after run: {}",
-                    slot, firstSegmentIndex, lastSegmentIndex, validCvCount);
+            var validCvCount = isServerStart ? doMergeJobWhenServerStart(needMergeSegmentIndexList) : doMergeJob(needMergeSegmentIndexList);
+            log.warn("Merge segments, is server start: {}, s={}, i={}, end i={}, valid cv count after run: {}",
+                    isServerStart, slot, firstSegmentIndex, lastSegmentIndex, validCvCount);
         } else {
             // not continuous, need split
             ArrayList<Integer> onceList = new ArrayList<>();
@@ -1250,9 +1278,9 @@ public class OneSlot {
                 var segmentIndex = needMergeSegmentIndexList.get(i);
                 if (segmentIndex - last != 1) {
                     if (!onceList.isEmpty()) {
-                        var validCvCount = doMergeJobWhenServerStart(onceList);
-                        log.warn("Merge segments undone, once list, s={}, i={}, end i={}, valid cv count after run: {}",
-                                slot, onceList.getFirst(), onceList.getLast(), validCvCount);
+                        var validCvCount = isServerStart ? doMergeJobWhenServerStart(onceList) : doMergeJob(onceList);
+                        log.warn("Merge segments, is server start: {}, once list, s={}, i={}, end i={}, valid cv count after run: {}",
+                                isServerStart, slot, onceList.getFirst(), onceList.getLast(), validCvCount);
                         onceList.clear();
                     }
                 }
@@ -1261,9 +1289,9 @@ public class OneSlot {
             }
 
             if (!onceList.isEmpty()) {
-                var validCvCount = doMergeJobWhenServerStart(onceList);
-                log.warn("Merge segments undone, once list, s={}, i={}, end i={}, valid cv count after run: {}",
-                        slot, onceList.getFirst(), onceList.getLast(), validCvCount);
+                var validCvCount = isServerStart ? doMergeJobWhenServerStart(onceList) : doMergeJob(onceList);
+                log.warn("Merge segments, is server start: {}, once list, s={}, i={}, end i={}, valid cv count after run: {}",
+                        isServerStart, slot, onceList.getFirst(), onceList.getLast(), validCvCount);
             }
         }
     }
@@ -1321,6 +1349,9 @@ public class OneSlot {
             map.put("first_wal_group_need_persist_offset_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistOffsetTotal, labelValues));
 
             if (slot == 0) {
+                map.put("estimate_key_number", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.estimateKeyNumber, labelValues));
+                map.put("estimate_one_value_length", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.estimateOneValueLength, labelValues));
+
                 map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket), labelValues));
                 map.put("lru_prepare_mb_fd_chunk_data_all_slots", new SimpleGauge.ValueWithLabelValues(
