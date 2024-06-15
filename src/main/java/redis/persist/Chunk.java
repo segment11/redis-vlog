@@ -197,9 +197,9 @@ public class Chunk {
 
     private boolean reuseSegments(boolean isFirstStart, int segmentCount, boolean updateAsReuseFlag) {
         for (int i = 0; i < segmentCount; i++) {
-            var targetIndex = segmentIndex + i;
+            var targetSegmentIndex = segmentIndex + i;
 
-            var segmentFlag = oneSlot.getSegmentMergeFlag(targetIndex);
+            var segmentFlag = oneSlot.getSegmentMergeFlag(targetSegmentIndex);
             if (segmentFlag == null) {
                 continue;
             }
@@ -216,14 +216,14 @@ public class Chunk {
 
             if (flag == SEGMENT_FLAG_MERGED_AND_PERSISTED || flag == SEGMENT_FLAG_REUSE_AND_PERSISTED) {
                 if (updateAsReuseFlag) {
-                    oneSlot.setSegmentMergeFlag(targetIndex, SEGMENT_FLAG_REUSE, 0L, segmentFlag.walGroupIndex);
+                    oneSlot.setSegmentMergeFlag(targetSegmentIndex, SEGMENT_FLAG_REUSE, 0L, segmentFlag.walGroupIndex);
                 }
                 continue;
             }
 
             // only left SEGMENT_FLAG_NEW, SEGMENT_FLAG_MERGING, SEGMENT_FLAG_MERGED, can not reuse
             log.warn("Chunk segment index is not merged and persisted or reuse and persisted, can not write, s={}, i={}, flag={}",
-                    slot, targetIndex, flag);
+                    slot, targetSegmentIndex, flag);
             return false;
         }
         return true;
@@ -506,7 +506,7 @@ public class Chunk {
             return;
         }
 
-        final int maxSize = ONCE_PREPARE_SEGMENT_COUNT * 2;
+        final int maxSize = ONCE_PREPARE_SEGMENT_COUNT * 4;
 
         list.sort(Integer::compareTo);
         if (list.getLast() - list.getFirst() != list.size() - 1) {
@@ -522,7 +522,8 @@ public class Chunk {
                     ", first need merge segment index=" + list.getFirst() +
                     ", last need merge segment index=" + list.getLast() +
                     ", last time merged segment index =" + mergedSegmentIndexEndLastTime +
-                    ", list size=" + list.size());
+                    ", list size=" + list.size() +
+                    ", max size=" + maxSize);
         }
 
         if (list.size() >= ONCE_PREPARE_SEGMENT_COUNT) {
