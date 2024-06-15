@@ -178,7 +178,7 @@ public class MetaChunkSegmentFlagSeq {
             var offset = segmentIndex * ONE_LENGTH;
 
             var flag = inMemoryCachedByteBuffer.get(offset);
-            if (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGED_AND_PERSISTED) {
+            if (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGED_AND_PERSISTED || flag == SEGMENT_FLAG_INIT) {
                 max = segmentIndex;
             } else {
                 break;
