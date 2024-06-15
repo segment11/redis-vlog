@@ -129,6 +129,12 @@ public class ChunkMergeWorker {
         }
     }
 
+    void persistAllMergedCvListInTargetSegmentIndexList(ArrayList<Integer> targetSegmentIndexList) {
+        while (mergedSegmentSet.stream().anyMatch(one -> targetSegmentIndexList.contains(one.segmentIndex))) {
+            persistFIFOMergedCvList();
+        }
+    }
+
     void persistFIFOMergedCvList() {
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;

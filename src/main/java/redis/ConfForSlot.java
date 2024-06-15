@@ -158,7 +158,7 @@ public enum ConfForSlot {
                 this.segmentLength = PAGE_SIZE * 4;
                 this.fdPerChunk = (byte) (4 * this.fdPerChunk);
 
-                Chunk.ONCE_PREPARE_SEGMENT_COUNT = 16;
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT = 32;
                 Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 4;
                 return;
             }
@@ -168,7 +168,7 @@ public enum ConfForSlot {
                 this.segmentLength = PAGE_SIZE * 4;
                 this.fdPerChunk = (byte) (8 * this.fdPerChunk);
 
-                Chunk.ONCE_PREPARE_SEGMENT_COUNT = 16;
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT = 32;
                 Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 4;
                 return;
             }

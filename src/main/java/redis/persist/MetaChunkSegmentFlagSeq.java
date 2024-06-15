@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static redis.persist.Chunk.*;
@@ -165,6 +166,13 @@ public class MetaChunkSegmentFlagSeq {
     }
 
     int getMergedSegmentIndexEndLastTime(int currentSegmentIndex, int halfSegmentNumber) {
+        var tmpBytes = new byte[allCapacity];
+        fillSegmentFlagInit(tmpBytes);
+        var isAllFlagInit = Arrays.equals(inMemoryCachedBytes, tmpBytes);
+        if (isAllFlagInit) {
+            return NO_NEED_MERGE_SEGMENT_INDEX;
+        }
+
         var max = NO_NEED_MERGE_SEGMENT_INDEX;
 
         int begin = 0;
