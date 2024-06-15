@@ -530,8 +530,6 @@ public class MultiWorkerServer extends Launcher {
                         }
                         if (config.getChild("chunk.fdPerChunk").hasValue()) {
                             c.confChunk.fdPerChunk = Byte.parseByte(config.get("chunk.fdPerChunk"));
-                        } else {
-                            c.confChunk.resetByOneValueLength(estimateOneValueLength);
                         }
                         if (c.confChunk.fdPerChunk > ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK) {
                             throw new IllegalArgumentException("Chunk fd per chunk too large, fd per chunk should be less than " + ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK);
@@ -544,14 +542,19 @@ public class MultiWorkerServer extends Launcher {
                             c.confChunk.lruPerFd.maxSize = config.get(ofInteger(), "chunk.lruPerFd.maxSize");
                         }
 
+                        c.confChunk.resetByOneValueLength(estimateOneValueLength);
+
                         // override wal conf
                         if (config.getChild("wal.oneChargeBucketNumber").hasValue()) {
                             c.confWal.oneChargeBucketNumber = config.get(ofInteger(), "wal.oneChargeBucketNumber");
                         }
+                        if (!Wal.VALID_ONE_CHARGE_BUCKET_NUMBER_LIST.contains(c.confWal.oneChargeBucketNumber)) {
+                            throw new IllegalArgumentException("Wal one charge bucket number invalid, wal one charge bucket number should be in " + Wal.VALID_ONE_CHARGE_BUCKET_NUMBER_LIST);
+                        }
 
                         var walGroupNumber = c.confBucket.bucketsPerSlot / c.confWal.oneChargeBucketNumber;
                         if (walGroupNumber > Wal.MAX_WAL_GROUP_NUMBER) {
-                            throw new IllegalStateException("Wal group number too large, wal group number should be less than " + Wal.MAX_WAL_GROUP_NUMBER);
+                            throw new IllegalArgumentException("Wal group number too large, wal group number should be less than " + Wal.MAX_WAL_GROUP_NUMBER);
                         }
 
                         if (config.getChild("wal.valueSizeTrigger").hasValue()) {
@@ -560,6 +563,8 @@ public class MultiWorkerServer extends Launcher {
                         if (config.getChild("wal.shortValueSizeTrigger").hasValue()) {
                             c.confWal.shortValueSizeTrigger = config.get(ofInteger(), "wal.shortValueSizeTrigger");
                         }
+
+                        c.confWal.resetByOneValueLength(estimateOneValueLength);
 
                         if (config.getChild("big.string.lru.maxSize").hasValue()) {
                             c.lruBigString.maxSize = config.get(ofInteger(), "big.string.lru.maxSize");
@@ -576,20 +581,20 @@ public class MultiWorkerServer extends Launcher {
                     Integer beforeCreateHandler(ConfForSlot confForSlot, SnowFlake[] snowFlakes, Config config) throws IOException {
                         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
                         if (slotNumber > LocalPersist.MAX_SLOT_NUMBER) {
-                            throw new IllegalStateException("Slot number too large, slot number should be less than " + LocalPersist.MAX_SLOT_NUMBER);
+                            throw new IllegalArgumentException("Slot number too large, slot number should be less than " + LocalPersist.MAX_SLOT_NUMBER);
                         }
                         if (slotNumber != 1 && slotNumber % 2 != 0) {
-                            throw new IllegalStateException("Slot number should be 1 or even");
+                            throw new IllegalArgumentException("Slot number should be 1 or even");
                         }
                         confForSlot.slotNumber = (short) slotNumber;
 
                         int netWorkers = config.get(toInt, "netWorkers", 1);
                         if (netWorkers > MAX_NET_WORKERS) {
-                            throw new IllegalStateException("Net workers too large, net workers should be less than " + MAX_NET_WORKERS);
+                            throw new IllegalArgumentException("Net workers too large, net workers should be less than " + MAX_NET_WORKERS);
                         }
                         var cpuNumber = Runtime.getRuntime().availableProcessors();
                         if (netWorkers >= cpuNumber) {
-                            throw new IllegalStateException("Net workers should be less than cpu number");
+                            throw new IllegalArgumentException("Net workers should be less than cpu number");
                         }
                         confForSlot.netWorkers = (byte) netWorkers;
 

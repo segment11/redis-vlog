@@ -244,7 +244,7 @@ public class Chunk {
     // 64 not tight segments is enough for 1000 Wal.V persist ?, need check, todo
     // one wal group charges 64 key buckets, 64 * 4KB = 256KB
     // with merged valid cv list together, once read 10 segments, valid cv list may be > 1000
-    static final int ONCE_PREPARE_SEGMENT_COUNT = 64;
+    public static int ONCE_PREPARE_SEGMENT_COUNT = 64;
 
     int mergedSegmentIndexEndLastTime = NO_NEED_MERGE_SEGMENT_INDEX;
 
@@ -258,7 +258,7 @@ public class Chunk {
 
     // merge, valid cv list is smaller, only need one segment, or need 4 or 8 ? todo
     // but even list size is smaller, one v maybe is not compressed, one v encoded length is large
-    private final int mergeOncePrepareSegmentCount = 4;
+    public static int ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 4;
 
     // return need merge segment index array
     public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge) {
@@ -267,7 +267,7 @@ public class Chunk {
 
         moveIndexForPrepare();
         if (isMerge) {
-            boolean canWrite = reuseSegments(false, mergeOncePrepareSegmentCount, false);
+            boolean canWrite = reuseSegments(false, ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE, false);
             if (!canWrite) {
                 throw new SegmentOverflowException("Segment can not write, s=" + slot + ", i=" + segmentIndex);
             }
@@ -278,7 +278,7 @@ public class Chunk {
             }
         }
 
-        var oncePrepareSegmentCount = isMerge ? mergeOncePrepareSegmentCount : ONCE_PREPARE_SEGMENT_COUNT;
+        var oncePrepareSegmentCount = isMerge ? ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE : ONCE_PREPARE_SEGMENT_COUNT;
         int[] nextNSegmentIndex = new int[oncePrepareSegmentCount];
         for (int i = 0; i < oncePrepareSegmentCount; i++) {
             nextNSegmentIndex[i] = segmentIndex + i;

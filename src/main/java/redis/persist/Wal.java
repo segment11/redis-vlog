@@ -13,8 +13,10 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.List;
 
 import static redis.CompressedValue.EXPIRE_NOW;
+import static redis.persist.LocalPersist.PAGE_SIZE;
 
 public class Wal {
     public record V(long seq, int bucketIndex, long keyHash, long expireAt,
@@ -141,18 +143,22 @@ public class Wal {
     // each bucket group use 128K in shared file
     // chunk batch write 4 segments, each segment has 3 or 4 sub blocks, each blocks may contain 10-40 keys, 128K is enough for 1 batch about 500 keys
     // the smaller, latency will be better, MAX_WAL_GROUP_NUMBER will be larger, wal memory will be larger
-    private static final int ONE_GROUP_SIZE = 1024 * 128;
-    public static final byte[] K128 = new byte[ONE_GROUP_SIZE];
-    // 1 file max 2GB, 2GB / 128K = 16K wal groups
-    public static final int MAX_WAL_GROUP_NUMBER = (int) (2L * 1024 * 1024 * 1024 / ONE_GROUP_SIZE);
+    public static int ONE_GROUP_BUFFER_SIZE = PAGE_SIZE * 32;
+    public static byte[] EMPTY_BYTES_FOR_ONE_GROUP = new byte[ONE_GROUP_BUFFER_SIZE];
     // for init prepend wal file
-    public static final byte[] INIT_M4 = new byte[1024 * 1024 * 4];
-    public static final int GROUP_COUNT_IN_M4 = 1024 * 1024 * 4 / ONE_GROUP_SIZE;
+    static final byte[] INIT_M4 = new byte[1024 * 1024 * 4];
+    public static int GROUP_COUNT_IN_M4 = 1024 * 1024 * 4 / ONE_GROUP_BUFFER_SIZE;
+
+    // for latency, do not configure too large
+    public static final List<Integer> VALID_ONE_CHARGE_BUCKET_NUMBER_LIST = List.of(16, 32, 64);
+    // 1 file max 2GB, 2GB / 64K = 32K wal groups
+    public static final int MAX_WAL_GROUP_NUMBER = (int) (2L * 1024 * 1024 * 1024 / (PAGE_SIZE * VALID_ONE_CHARGE_BUCKET_NUMBER_LIST.getFirst()));
 
     private static final Logger log = LoggerFactory.getLogger(Wal.class);
 
-    static {
-        log.warn("Init wal groups, one group size: {}KB, max wal group number: {}", ONE_GROUP_SIZE / 1024, MAX_WAL_GROUP_NUMBER);
+    public static void doLogAfterInit() {
+        log.warn("Init wal groups, one group buffer size: {}KB, one charge bucket number: {}, wal group number: {}",
+                ONE_GROUP_BUFFER_SIZE / 1024, ConfForSlot.global.confWal.oneChargeBucketNumber, calcWalGroupNumber());
     }
 
     // current wal group write position in target group of wal file
@@ -190,9 +196,9 @@ public class Wal {
             return 0;
         }
 
-        var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
+        var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
 
-        var bufferBytes = new byte[ONE_GROUP_SIZE];
+        var bufferBytes = new byte[ONE_GROUP_BUFFER_SIZE];
         fromWalFile.seek(targetGroupBeginOffset);
         int readN = fromWalFile.read(bufferBytes);
         if (readN == -1) {
@@ -219,14 +225,14 @@ public class Wal {
     }
 
     private void truncateWal(boolean isShortValue) {
-        var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
+        var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
         var positionArray = isShortValue ? writePositionArrayShortValue : writePositionArray;
 
         if (!ConfForSlot.global.pureMemory) {
             var raf = isShortValue ? walSharedFileShortValue : walSharedFile;
             try {
                 raf.seek(targetGroupBeginOffset);
-                raf.write(K128);
+                raf.write(EMPTY_BYTES_FOR_ONE_GROUP);
             } catch (IOException e) {
                 log.error("Truncate wal group error", e);
             }
@@ -311,7 +317,7 @@ public class Wal {
     }
 
     void writeRafAndOffsetFromMasterNewly(boolean isValueShort, V v, int offset) {
-        var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
+        var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
         var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
         var encodeLength = v.encodeLength();
 
@@ -335,12 +341,12 @@ public class Wal {
 
     // return need persist
     PutResult put(boolean isValueShort, String key, V v) {
-        var targetGroupBeginOffset = ONE_GROUP_SIZE * groupIndex;
+        var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
         var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
         int offset = positionArray[groupIndex];
 
         var encodeLength = v.encodeLength();
-        if (offset + encodeLength > ONE_GROUP_SIZE) {
+        if (offset + encodeLength > ONE_GROUP_BUFFER_SIZE) {
             needPersistCountTotal++;
             var keyCount = isValueShort ? delayToKeyBucketShortValues.size() : delayToKeyBucketValues.size();
             needPersistKvCountTotal += keyCount;

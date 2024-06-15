@@ -1,6 +1,8 @@
 package redis;
 
+import redis.persist.Chunk;
 import redis.persist.KeyBucket;
+import redis.persist.Wal;
 
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
@@ -9,7 +11,10 @@ public enum ConfForSlot {
     c10m(10_000_000L), c100m(100_000_000L);
 
     public long estimateKeyNumber;
-    public int estimateOneValueLength;
+    public int estimateOneValueLength = DEFAULT_ESTIMATE_ONE_VALUE_LENGTH;
+    private static final int DEFAULT_ESTIMATE_ONE_VALUE_LENGTH = 200;
+    static final int MAX_ONE_VALUE_LENGTH = 200;
+
     public String netListenAddresses;
 
     public final ConfBucket confBucket;
@@ -63,7 +68,7 @@ public enum ConfForSlot {
     public String toString() {
         return "ConfForSlot{" +
                 "estimateKeyNumber=" + estimateKeyNumber +
-                "estimateOneValueLength=" + estimateOneValueLength +
+                ", estimateOneValueLength=" + estimateOneValueLength +
                 ", confChunk=" + confChunk +
                 ", confBucket=" + confBucket +
                 ", confWal=" + confWal +
@@ -106,7 +111,7 @@ public enum ConfForSlot {
     public enum ConfChunk {
         debugMode(4 * 1024, (byte) 2, PAGE_SIZE),
         c1m(64 * 1024, (byte) 2, PAGE_SIZE),
-        c10m(256 * 1024, (byte) 2, PAGE_SIZE),
+        c10m(512 * 1024, (byte) 1, PAGE_SIZE),
         c100m(512 * 1024, (byte) 8, PAGE_SIZE);
 
         ConfChunk(int segmentNumberPerFd, byte fdPerChunk, int segmentLength) {
@@ -152,18 +157,24 @@ public enum ConfForSlot {
                 this.segmentNumberPerFd = this.segmentNumberPerFd / 4;
                 this.segmentLength = PAGE_SIZE * 4;
                 this.fdPerChunk = (byte) (4 * this.fdPerChunk);
+
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT = 16;
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 4;
                 return;
             }
 
-            if (estimateOneValueLength <= 2000) {
+            if (estimateOneValueLength <= MAX_ONE_VALUE_LENGTH) {
                 this.segmentNumberPerFd = this.segmentNumberPerFd / 4;
                 this.segmentLength = PAGE_SIZE * 4;
                 this.fdPerChunk = (byte) (8 * this.fdPerChunk);
+
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT = 16;
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 4;
                 return;
             }
 
-            throw new IllegalArgumentException("Chunk estimate one value length too large: " + estimateOneValueLength +
-                    ", should be less than 2000");
+            throw new IllegalArgumentException("Estimate one value length too large: " + estimateOneValueLength +
+                    ", should be less than " + MAX_ONE_VALUE_LENGTH);
         }
 
         @Override
@@ -196,6 +207,45 @@ public enum ConfForSlot {
         // 200 make sure there is at least one batch 16KB
         public int valueSizeTrigger;
         public int shortValueSizeTrigger;
+
+        private void resetWalStaticValues() {
+            if (oneChargeBucketNumber != 32) {
+                Wal.ONE_GROUP_BUFFER_SIZE = PAGE_SIZE * oneChargeBucketNumber;
+                Wal.EMPTY_BYTES_FOR_ONE_GROUP = new byte[Wal.ONE_GROUP_BUFFER_SIZE];
+                Wal.GROUP_COUNT_IN_M4 = 4 * 1024 * 1024 / Wal.ONE_GROUP_BUFFER_SIZE;
+            }
+            Wal.doLogAfterInit();
+        }
+
+        public void resetByOneValueLength(int estimateOneValueLength) {
+            if (estimateOneValueLength <= 200) {
+                resetWalStaticValues();
+                return;
+            }
+
+            if (estimateOneValueLength <= 500) {
+                this.valueSizeTrigger = 500;
+                resetWalStaticValues();
+                return;
+            }
+
+            if (estimateOneValueLength <= 1000) {
+                this.valueSizeTrigger = 100;
+                this.oneChargeBucketNumber = 16;
+                resetWalStaticValues();
+                return;
+            }
+
+            if (estimateOneValueLength <= MAX_ONE_VALUE_LENGTH) {
+                this.valueSizeTrigger = 50;
+                this.oneChargeBucketNumber = 16;
+                resetWalStaticValues();
+                return;
+            }
+
+            throw new IllegalArgumentException("Estimate one value length too large: " + estimateOneValueLength +
+                    ", should be less than " + MAX_ONE_VALUE_LENGTH);
+        }
 
         @Override
         public String toString() {

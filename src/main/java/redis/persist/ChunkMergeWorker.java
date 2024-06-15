@@ -38,7 +38,7 @@ public class ChunkMergeWorker {
 
     // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
     private int MERGED_SEGMENT_SIZE_THRESHOLD = 256;
-    private int MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = 8;
+    int MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = 8;
     private int MERGED_CV_SIZE_THRESHOLD = 256 * 64;
 
     void resetThreshold(int walGroupNumber) {
