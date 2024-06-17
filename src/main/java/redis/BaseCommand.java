@@ -221,12 +221,7 @@ public abstract class BaseCommand {
             bufOrCompressedValue = byPassGetSet.getBuf(slot, keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
         } else {
             var oneSlot = localPersist.oneSlot(slot);
-            try {
-                bufOrCompressedValue = oneSlot.get(keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
-            } catch (Exception e) {
-                log.error("Get error, key: {}, message: {}", new String(keyBytes), e.getMessage());
-                return null;
-            }
+            bufOrCompressedValue = oneSlot.get(keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
         }
 
         if (bufOrCompressedValue == null) {
