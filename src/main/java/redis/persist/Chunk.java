@@ -196,6 +196,24 @@ public class Chunk {
     }
 
     private boolean reuseSegments(boolean isFirstStart, int segmentCount, boolean updateAsReuseFlag) {
+        if (!isFirstStart && segmentIndex == 0) {
+            var segmentFlagList = oneSlot.getSegmentMergeFlagBatch(segmentIndex, segmentCount);
+            int j = 0;
+            for (int i = 0; i < segmentFlagList.size(); i++) {
+                var segmentFlag = segmentFlagList.get(i);
+                var flag = segmentFlag.flag();
+                if (flag == SEGMENT_FLAG_NEW || flag == SEGMENT_FLAG_MERGING || flag == SEGMENT_FLAG_MERGED) {
+                    j = i;
+                }
+            }
+
+            // begin with new segment index
+            if (j != 0) {
+                segmentIndex = j;
+                return reuseSegments(false, segmentCount, updateAsReuseFlag);
+            }
+        }
+
         for (int i = 0; i < segmentCount; i++) {
             var targetSegmentIndex = segmentIndex + i;
 
@@ -469,20 +487,26 @@ public class Chunk {
                 // prepend from merged segment index end last time
 //                assert mergedSegmentIndexEndLastTime < firstNeedMergeSegmentIndex;
                 for (int i = mergedSegmentIndexEndLastTime + 1; i < firstNeedMergeSegmentIndex; i++) {
-                    needMergeSegmentIndexList.add(i);
+                    if (!needMergeSegmentIndexList.contains(i)) {
+                        needMergeSegmentIndexList.add(i);
+                    }
                 }
 
                 // last ONCE_PREPARE_SEGMENT_COUNT segments, need merge
                 var lastNeedMergeSegmentIndex = needMergeSegmentIndexList.getLast();
                 if (lastNeedMergeSegmentIndex >= maxSegmentIndex - ONCE_PREPARE_SEGMENT_COUNT) {
                     for (int i = lastNeedMergeSegmentIndex + 1; i <= maxSegmentIndex; i++) {
-                        needMergeSegmentIndexList.add(i);
+                        if (!needMergeSegmentIndexList.contains(i)) {
+                            needMergeSegmentIndexList.add(i);
+                        }
                     }
                     log.warn("Add extra need merge segment index to the end, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
                 } else if (lastNeedMergeSegmentIndex < halfSegmentNumber &&
                         lastNeedMergeSegmentIndex >= halfSegmentNumber - 1 - ONCE_PREPARE_SEGMENT_COUNT) {
                     for (int i = lastNeedMergeSegmentIndex + 1; i < halfSegmentNumber; i++) {
-                        needMergeSegmentIndexList.add(i);
+                        if (!needMergeSegmentIndexList.contains(i)) {
+                            needMergeSegmentIndexList.add(i);
+                        }
                     }
                     log.warn("Add extra need merge segment index to the half end, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
                 }

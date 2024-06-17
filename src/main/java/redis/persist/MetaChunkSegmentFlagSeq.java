@@ -259,6 +259,18 @@ public class MetaChunkSegmentFlagSeq {
                 inMemoryCachedByteBuffer.getInt(offset + 1 + 8));
     }
 
+    ArrayList<Chunk.SegmentFlag> getSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount) {
+        var list = new ArrayList<Chunk.SegmentFlag>(segmentCount);
+        var offset = beginSegmentIndex * ONE_LENGTH;
+        for (int i = 0; i < segmentCount; i++) {
+            list.add(new Chunk.SegmentFlag(inMemoryCachedByteBuffer.get(offset),
+                    inMemoryCachedByteBuffer.getLong(offset + 1),
+                    inMemoryCachedByteBuffer.getInt(offset + 1 + 8)));
+            offset += ONE_LENGTH;
+        }
+        return list;
+    }
+
     void clear() {
         if (ConfForSlot.global.pureMemory) {
             fillSegmentFlagInit(inMemoryCachedBytes);

@@ -1228,6 +1228,14 @@ public class OneSlot {
         return metaChunkSegmentFlagSeq.getSegmentMergeFlag(segmentIndex);
     }
 
+    ArrayList<SegmentFlag> getSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount) {
+        if (beginSegmentIndex < 0 || beginSegmentIndex + segmentCount > chunk.maxSegmentIndex) {
+            throw new IllegalStateException("Begin segment index out of bound, s=" + slot + ", i=" + beginSegmentIndex);
+        }
+
+        return metaChunkSegmentFlagSeq.getSegmentMergeFlagBatch(beginSegmentIndex, segmentCount);
+    }
+
     public List<Long> getSegmentMergeFlagListBatchForRepl(int segmentIndex, int segmentCount) {
         if (segmentIndex < 0 || segmentIndex + segmentCount > chunk.maxSegmentIndex) {
             throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
