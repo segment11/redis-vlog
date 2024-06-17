@@ -473,8 +473,10 @@ public class MultiWorkerServer extends Launcher {
                     ConfForSlot confForSlot(Config config) {
                         long estimateKeyNumber = config.get(ofLong(), "estimateKeyNumber", 1_000_000L);
                         int estimateOneValueLength = config.get(toInt, "estimateOneValueLength", 200);
+                        boolean isValueSetUseCompression = config.get(ofBoolean(), "isValueSetUseCompression", true);
                         var c = ConfForSlot.from(estimateKeyNumber);
                         c.estimateOneValueLength = estimateOneValueLength;
+                        c.isValueSetUseCompression = isValueSetUseCompression;
                         ConfForSlot.global = c;
 
                         c.netListenAddresses = config.get(ofString(), "net.listenAddresses");

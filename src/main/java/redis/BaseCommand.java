@@ -443,11 +443,11 @@ public abstract class BaseCommand {
         var slot = slotWithKeyHash.slot;
 
         var key = new String(keyBytes);
-        var keyPrefix = TrainSampleJob.keyPrefix(key);
 
         Dict dict = null;
         boolean isTypeString = CompressedValue.isTypeString(spType);
-        if (isTypeString) {
+        if (isTypeString && ConfForSlot.global.isValueSetUseCompression) {
+            var keyPrefix = TrainSampleJob.keyPrefix(key);
             dict = dictMap.getDict(keyPrefix);
 
             if (dict == null && valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH) {
@@ -455,7 +455,9 @@ public abstract class BaseCommand {
             }
         }
 
-        if (valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH && (CompressedValue.preferCompress(spType) || dict != null)) {
+        if (ConfForSlot.global.isValueSetUseCompression &&
+                valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH &&
+                (CompressedValue.preferCompress(spType) || dict != null)) {
             var beginT = System.nanoTime();
             // dict may be null
             var cv = CompressedValue.compress(valueBytes, dict, compressLevel);
@@ -507,7 +509,7 @@ public abstract class BaseCommand {
             cvRaw.keyHash = slotWithKeyHash.keyHash;
             cvRaw.expireAt = expireAt;
             cvRaw.uncompressedLength = valueBytes.length;
-            cvRaw.compressedLength = cvRaw.uncompressedLength;
+            cvRaw.compressedLength = valueBytes.length;
             cvRaw.compressedData = valueBytes;
 
             if (byPassGetSet != null) {
@@ -527,21 +529,23 @@ public abstract class BaseCommand {
                 }
             }
 
-            // add train sample list
-            if (sampleToTrainList.size() < trainSampleListMaxSize) {
-                if (valueBytes.length >= DictMap.TO_COMPRESS_MIN_DATA_LENGTH) {
-                    var kv = new TrainSampleJob.TrainSampleKV(key, null, cvRaw.seq, valueBytes);
-                    sampleToTrainList.add(kv);
+            if (ConfForSlot.global.isValueSetUseCompression) {
+                // add train sample list
+                if (sampleToTrainList.size() < trainSampleListMaxSize) {
+                    if (valueBytes.length >= DictMap.TO_COMPRESS_MIN_DATA_LENGTH) {
+                        var kv = new TrainSampleJob.TrainSampleKV(key, null, cvRaw.seq, valueBytes);
+                        sampleToTrainList.add(kv);
+                    }
+                } else {
+                    // no async train, latency sensitive
+                    trainSampleJob.resetSampleToTrainList(sampleToTrainList);
+                    handleTrainSampleResult(trainSampleJob.train());
                 }
-            } else {
-                // no async train, latency sensitive
-                trainSampleJob.resetSampleToTrainList(sampleToTrainList);
-                handleTrainSampleResult(trainSampleJob.train());
-            }
 
-            // stats
-            compressStats.rawCount++;
-            compressStats.compressedTotalLength += valueBytes.length;
+                // stats
+                compressStats.rawCount++;
+                compressStats.compressedTotalLength += valueBytes.length;
+            }
         }
     }
 

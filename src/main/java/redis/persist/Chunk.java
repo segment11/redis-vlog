@@ -276,7 +276,7 @@ public class Chunk {
 
     // merge, valid cv list is smaller, only need one segment, or need 4 or 8 ? todo
     // but even list size is smaller, one v maybe is not compressed, one v encoded length is large
-    public static int ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 4;
+    public static int ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 16;
 
     // return need merge segment index array
     public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge) {

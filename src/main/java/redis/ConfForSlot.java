@@ -13,7 +13,9 @@ public enum ConfForSlot {
     public long estimateKeyNumber;
     public int estimateOneValueLength = DEFAULT_ESTIMATE_ONE_VALUE_LENGTH;
     private static final int DEFAULT_ESTIMATE_ONE_VALUE_LENGTH = 200;
-    static final int MAX_ONE_VALUE_LENGTH = 200;
+    private static final int MAX_ESTIMATE_ONE_VALUE_LENGTH = 2000;
+
+    public boolean isValueSetUseCompression = false;
 
     public String netListenAddresses;
 
@@ -69,6 +71,7 @@ public enum ConfForSlot {
         return "ConfForSlot{" +
                 "estimateKeyNumber=" + estimateKeyNumber +
                 ", estimateOneValueLength=" + estimateOneValueLength +
+                ", isValueSetUseCompression=" + isValueSetUseCompression +
                 ", confChunk=" + confChunk +
                 ", confBucket=" + confBucket +
                 ", confWal=" + confWal +
@@ -144,11 +147,19 @@ public enum ConfForSlot {
         }
 
         public void resetByOneValueLength(int estimateOneValueLength) {
+            boolean isValueSetUseCompression1 = ConfForSlot.global.isValueSetUseCompression;
+            // if not use compression, chunk files number need to be doubled
+            if (!isValueSetUseCompression1) {
+                this.fdPerChunk = (byte) (2 * this.fdPerChunk);
+            }
+
             if (estimateOneValueLength <= 200) {
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 8 : 16;
                 return;
             }
 
             if (estimateOneValueLength <= 500) {
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 8 : 16;
                 this.fdPerChunk = (byte) (2 * this.fdPerChunk);
                 return;
             }
@@ -156,25 +167,25 @@ public enum ConfForSlot {
             if (estimateOneValueLength <= 1000) {
                 this.segmentNumberPerFd = this.segmentNumberPerFd / 4;
                 this.segmentLength = PAGE_SIZE * 4;
-                this.fdPerChunk = (byte) (4 * this.fdPerChunk);
+                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 4 * this.fdPerChunk);
 
                 Chunk.ONCE_PREPARE_SEGMENT_COUNT = 32;
-                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 4;
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 4 : 8;
                 return;
             }
 
-            if (estimateOneValueLength <= MAX_ONE_VALUE_LENGTH) {
+            if (estimateOneValueLength <= MAX_ESTIMATE_ONE_VALUE_LENGTH) {
                 this.segmentNumberPerFd = this.segmentNumberPerFd / 4;
                 this.segmentLength = PAGE_SIZE * 4;
-                this.fdPerChunk = (byte) (8 * this.fdPerChunk);
+                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 8 * this.fdPerChunk);
 
                 Chunk.ONCE_PREPARE_SEGMENT_COUNT = 32;
-                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 4;
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 4 : 8;
                 return;
             }
 
             throw new IllegalArgumentException("Estimate one value length too large: " + estimateOneValueLength +
-                    ", should be less than " + MAX_ONE_VALUE_LENGTH);
+                    ", should be less than " + MAX_ESTIMATE_ONE_VALUE_LENGTH);
         }
 
         @Override
@@ -208,9 +219,9 @@ public enum ConfForSlot {
         public int valueSizeTrigger;
         public int shortValueSizeTrigger;
 
-        private void resetWalStaticValues() {
-            if (oneChargeBucketNumber != 32) {
-                Wal.ONE_GROUP_BUFFER_SIZE = PAGE_SIZE * oneChargeBucketNumber;
+        private void resetWalStaticValues(int oneGroupBufferSize) {
+            if (Wal.ONE_GROUP_BUFFER_SIZE != oneGroupBufferSize) {
+                Wal.ONE_GROUP_BUFFER_SIZE = oneGroupBufferSize;
                 Wal.EMPTY_BYTES_FOR_ONE_GROUP = new byte[Wal.ONE_GROUP_BUFFER_SIZE];
                 Wal.GROUP_COUNT_IN_M4 = 4 * 1024 * 1024 / Wal.ONE_GROUP_BUFFER_SIZE;
             }
@@ -219,32 +230,32 @@ public enum ConfForSlot {
 
         public void resetByOneValueLength(int estimateOneValueLength) {
             if (estimateOneValueLength <= 200) {
-                resetWalStaticValues();
+                resetWalStaticValues(PAGE_SIZE * oneChargeBucketNumber / 4);
                 return;
             }
 
             if (estimateOneValueLength <= 500) {
                 this.valueSizeTrigger = 500;
-                resetWalStaticValues();
+                resetWalStaticValues(PAGE_SIZE * oneChargeBucketNumber / 2);
                 return;
             }
 
             if (estimateOneValueLength <= 1000) {
                 this.valueSizeTrigger = 100;
                 this.oneChargeBucketNumber = 16;
-                resetWalStaticValues();
+                resetWalStaticValues(PAGE_SIZE * oneChargeBucketNumber);
                 return;
             }
 
-            if (estimateOneValueLength <= MAX_ONE_VALUE_LENGTH) {
+            if (estimateOneValueLength <= MAX_ESTIMATE_ONE_VALUE_LENGTH) {
                 this.valueSizeTrigger = 50;
                 this.oneChargeBucketNumber = 16;
-                resetWalStaticValues();
+                resetWalStaticValues(PAGE_SIZE * oneChargeBucketNumber);
                 return;
             }
 
             throw new IllegalArgumentException("Estimate one value length too large: " + estimateOneValueLength +
-                    ", should be less than " + MAX_ONE_VALUE_LENGTH);
+                    ", should be less than " + MAX_ESTIMATE_ONE_VALUE_LENGTH);
         }
 
         @Override

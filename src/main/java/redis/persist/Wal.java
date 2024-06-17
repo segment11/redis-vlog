@@ -140,10 +140,10 @@ public class Wal {
                 '}';
     }
 
-    // each bucket group use 128K in shared file
-    // chunk batch write 4 segments, each segment has 3 or 4 sub blocks, each blocks may contain 10-40 keys, 128K is enough for 1 batch about 500 keys
+    // each bucket group use 64K in shared file
+    // chunk batch write 4 segments, each segment has 3 or 4 sub blocks, each blocks may contain 10-40 keys, 64K is enough for 1 batch about 100-200 keys
     // the smaller, latency will be better, MAX_WAL_GROUP_NUMBER will be larger, wal memory will be larger
-    public static int ONE_GROUP_BUFFER_SIZE = PAGE_SIZE * 32;
+    public static int ONE_GROUP_BUFFER_SIZE = PAGE_SIZE * 16;
     public static byte[] EMPTY_BYTES_FOR_ONE_GROUP = new byte[ONE_GROUP_BUFFER_SIZE];
     // for init prepend wal file
     static final byte[] INIT_M4 = new byte[1024 * 1024 * 4];
