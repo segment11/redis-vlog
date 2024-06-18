@@ -11,7 +11,7 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
-public class LoopGet extends Thread {
+public class LoopSetRandomAndThenGetAndCheckIfMatch extends Thread {
     private final int loopId;
     private final CountDownLatch latch;
 
@@ -19,17 +19,18 @@ public class LoopGet extends Thread {
     private final int port = 7379;
 //    private final int port = 6379;
 
-    private static final int threadNumber = 600;
+    // change here
+    private static final int threadNumber = 10;
 
     private boolean doSet = true;
     private boolean appendFile = false;
-    private boolean isKeyNumberSeq = true;
+    private boolean isKeyNumberSeq = false;
 
     int keyValueEndNotMatchNumber = 0;
     int valueTotalNotMatchNumber = 0;
     int nullGetNumber = 0;
 
-    public LoopGet(int loopId, CountDownLatch latch) {
+    public LoopSetRandomAndThenGetAndCheckIfMatch(int loopId, CountDownLatch latch) {
         this.loopId = loopId;
         this.latch = latch;
     }
@@ -41,7 +42,7 @@ public class LoopGet extends Thread {
         Thread[] threads = new Thread[threadNumber];
         // 10 threads
         for (int i = 0; i < threadNumber; i++) {
-            var thread = new LoopGet(i, latch);
+            var thread = new LoopSetRandomAndThenGetAndCheckIfMatch(i, latch);
             threads[i] = thread;
             thread.start();
         }
@@ -53,7 +54,7 @@ public class LoopGet extends Thread {
         int valueTotalNotMatchNumber = 0;
         int nullGetNumber = 0;
         for (int i = 0; i < threadNumber; i++) {
-            var t = (LoopGet) threads[i];
+            var t = (LoopSetRandomAndThenGetAndCheckIfMatch) threads[i];
             keyValueEndNotMatchNumber += t.keyValueEndNotMatchNumber;
             valueTotalNotMatchNumber += t.valueTotalNotMatchNumber;
             nullGetNumber += t.nullGetNumber;
@@ -80,9 +81,10 @@ public class LoopGet extends Thread {
     @Override
     public void run() {
         var jedis = new Jedis("localhost", port);
+        var userHome = System.getProperty("user.home");
 
         try {
-            var f = new File("/home/kerry/ws/test/loopSetValues-" + loopId + ".txt");
+            var f = new File(new File(userHome), "redis-vlog-loopSetValues-" + loopId + ".txt");
             if (doSet) {
                 FileOutputStream fos = null;
                 if (appendFile) {
