@@ -11,13 +11,14 @@ class ChunkTest extends Specification {
         def snowFlake = new SnowFlake(1, 1)
 
         def oneSlot = new OneSlot(slot, Consts.slotDir, null, null)
-        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(0, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(0, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, 0)
 
         def confChunk = ConfForSlot.global.confChunk
         confChunk.fdPerChunk = 2
         confChunk.segmentNumberPerFd = 4096
 
         var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, null, null)
+        oneSlot.chunk = chunk
 
         when:
         def segmentNumberPerFd = confChunk.segmentNumberPerFd
@@ -101,6 +102,54 @@ class ChunkTest extends Specification {
         needMergeSegmentIndexListNotNewAppend[0] == halfSegmentNumber
         needMergeSegmentIndexListNotNewAppend[halfSegmentNumber - 1] == confChunk.maxSegmentNumber() - 1
         needMergeSegmentIndexListNotNewAppend[-1] == halfSegmentNumber - 1
+
+        cleanup:
+        oneSlot.metaChunkSegmentFlagSeq.cleanUp()
+    }
+
+    def 'test reuse segments'() {
+        given:
+        final byte slot = 0
+        def snowFlake = new SnowFlake(1, 1)
+
+        def oneSlot = new OneSlot(slot, Consts.slotDir, null, null)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(0, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, 0)
+
+        def confChunk = ConfForSlot.global.confChunk
+        confChunk.fdPerChunk = 2
+        confChunk.segmentNumberPerFd = 4096
+
+        var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, null, null)
+        oneSlot.chunk = chunk
+
+        when:
+        chunk.segmentIndex = 0
+        chunk.reuseSegments(true, 1, true)
+
+        then:
+        oneSlot.metaChunkSegmentFlagSeq.getSegmentMergeFlag(0).flag == Chunk.SEGMENT_FLAG_REUSE
+        !chunk.reuseSegments(true, 1, true)
+        chunk.reuseSegments(false, 1, true)
+
+        when:
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(0, Chunk.SEGMENT_FLAG_NEW, 1L, 0)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(1, Chunk.SEGMENT_FLAG_MERGING, 1L, 0)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(2, Chunk.SEGMENT_FLAG_MERGED, 1L, 0)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(3, Chunk.SEGMENT_FLAG_INIT, 1L, 0)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(4, Chunk.SEGMENT_FLAG_INIT, 1L, 0)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(5, Chunk.SEGMENT_FLAG_INIT, 1L, 0)
+
+        then:
+        chunk.reuseSegments(false, 3, false)
+        chunk.segmentIndex == 3
+
+        when:
+        chunk.segmentIndex = 0
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(2, Chunk.SEGMENT_FLAG_INIT, 1L, 0)
+        chunk.reuseSegments(false, 3, false)
+
+        then:
+        chunk.segmentIndex == 2
 
         cleanup:
         oneSlot.metaChunkSegmentFlagSeq.cleanUp()

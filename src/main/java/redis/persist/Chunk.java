@@ -195,7 +195,7 @@ public class Chunk {
         return reuseSegments(true, 1, true);
     }
 
-    private boolean reuseSegments(boolean isFirstStart, int segmentCount, boolean updateAsReuseFlag) {
+    boolean reuseSegments(boolean isFirstStart, int segmentCount, boolean updateAsReuseFlag) {
         if (!isFirstStart && segmentIndex == 0) {
             var segmentFlagList = oneSlot.getSegmentMergeFlagBatch(segmentIndex, segmentCount);
             int j = 0;
@@ -209,7 +209,7 @@ public class Chunk {
 
             // begin with new segment index
             if (j != 0) {
-                segmentIndex = j;
+                segmentIndex = j + 1;
                 return reuseSegments(false, segmentCount, updateAsReuseFlag);
             }
         }
