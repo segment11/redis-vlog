@@ -32,11 +32,22 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
 
         when:
         one.setSegmentMergeFlag(10, (byte) 1, 1L, 0)
+        one.setSegmentMergeFlag(11, (byte) 2, 2L, 11)
         def segmentFlag = one.getSegmentMergeFlag(10)
+        def segmentFlagList = one.getSegmentMergeFlagBatch(10, 2)
+
         then:
         segmentFlag.flag == 1
         segmentFlag.segmentSeq == 1L
         segmentFlag.walGroupIndex == 0
+
+        segmentFlagList.size() == 2
+        segmentFlagList[0].flag == 1
+        segmentFlagList[0].segmentSeq == 1L
+        segmentFlagList[0].walGroupIndex == 0
+        segmentFlagList[1].flag == 2
+        segmentFlagList[1].segmentSeq == 2L
+        segmentFlagList[1].walGroupIndex == 11
 
         cleanup:
         one.clear()
@@ -65,7 +76,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
     def 'iterate'() {
         given:
         def confChunk = ConfForSlot.global.confChunk
-        def targetConfChunk = ConfForSlot.ConfChunk.c100m
+        def targetConfChunk = ConfForSlot.ConfChunk.c1m
 //        def targetConfChunk = ConfForSlot.ConfChunk.debugMode
         confChunk.segmentNumberPerFd = targetConfChunk.segmentNumberPerFd
         confChunk.fdPerChunk = targetConfChunk.fdPerChunk
@@ -73,11 +84,11 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
         when:
-//        new File('chunk_segment_flag.txt').withWriter { writer ->
-//            one.iterateAll { segmentIndex, flag, seq, walGroupIndex ->
-//                writer.writeLine("$segmentIndex, $flag, $seq, $walGroupIndex")
-//            }
-//        }
+        new File('chunk_segment_flag.txt').withWriter { writer ->
+            one.iterateAll { segmentIndex, flag, seq, walGroupIndex ->
+                writer.writeLine("$segmentIndex, $flag, $seq, $walGroupIndex")
+            }
+        }
 
         new File('chunk_segment_flag_range.txt').withWriter { writer ->
             one.iterateRange(1024, 1024) { segmentIndex, flag, seq, walGroupIndex ->
