@@ -59,9 +59,6 @@ dependencies {
 
     implementation group: 'com.moilioncircle', name: 'redis-replicator', version: '3.8.1'
 
-    implementation group: 'org.openjdk.jmh', name: 'jmh-core', version: '1.35'
-    annotationProcessor group: 'org.openjdk.jmh', name: 'jmh-generator-annprocess', version: '1.35'
-
     implementation group: 'redis.clients', name: 'jedis', version: '4.4.7'
 
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.14.3'
@@ -73,6 +70,9 @@ dependencies {
     implementation group: 'io.prometheus', name: 'simpleclient_hotspot', version: '0.15.0'
 
 //    implementation project(':redis-vlog-agent')
+
+    testImplementation group: 'org.openjdk.jmh', name: 'jmh-core', version: '1.35'
+    testAnnotationProcessor group: 'org.openjdk.jmh', name: 'jmh-generator-annprocess', version: '1.35'
 
     testImplementation group: 'org.openjdk.jol', name: 'jol-core', version: '0.17'
     testImplementation group: 'org.apache.groovy', name: 'groovy', version: '4.0.12'
@@ -97,7 +97,7 @@ jacocoTestReport {
     }
 }
 
-test.finalizedBy jacocoTestReport
+//test.finalizedBy jacocoTestReport
 
 /*
 ~/.jdks/azul-21/bin/java \
