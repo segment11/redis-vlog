@@ -105,7 +105,7 @@ public class Request {
     public String toString() {
         return "Request{" +
                 "cmd=" + cmd() +
-                "data.length=" + data.length +
+                ", data.length=" + data.length +
                 ", isHttp=" + isHttp +
                 ", isRepl=" + isRepl +
                 '}';
