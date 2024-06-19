@@ -32,6 +32,8 @@ class KeyLoaderTest extends Specification {
 
     def 'test write and read one key'() {
         given:
+        ConfForSlot.global.confBucket.initialSplitNumber = (byte) 1
+
         def keyLoader = prepareKeyLoader()
 
         when:
@@ -69,6 +71,7 @@ class KeyLoaderTest extends Specification {
         keyLoader.getValueByKey(0, 'a'.bytes, 10L) == null
 
         cleanup:
+        keyLoader.metaKeyBucketSplitNumber.clear()
         keyLoader.cleanUp()
     }
 

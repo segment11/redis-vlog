@@ -9,6 +9,8 @@ import spock.lang.Specification
 class ChunkMergeJobTest extends Specification {
     def 'merge segments'() {
         given:
+        ConfForSlot.global.confBucket.initialSplitNumber = (byte) 1
+
         final byte slot = 0
         final int bucketIndex = 0
         final int segmentIndex = 0
@@ -54,6 +56,7 @@ class ChunkMergeJobTest extends Specification {
         keyLoader.fdReadWriteArray = [fdReadWriteForKeyLoader]
 
         keyLoader.metaKeyBucketSplitNumber = new MetaKeyBucketSplitNumber(slot, Consts.slotDir)
+        keyLoader.metaKeyBucketSplitNumber.clear()
         keyLoader.metaKeyBucketSplitNumber.setForTest(bucketIndex, (byte) 1)
         keyLoader.statKeyCountInBuckets = new StatKeyCountInBuckets(slot, keyLoader.bucketsPerSlot, Consts.slotDir)
 
@@ -85,6 +88,7 @@ class ChunkMergeJobTest extends Specification {
 
         cleanup:
         oneSlot.metaChunkSegmentFlagSeq.cleanUp()
+        keyLoader.metaKeyBucketSplitNumber.clear()
         keyLoader.metaKeyBucketSplitNumber.cleanUp()
         keyLoader.statKeyCountInBuckets.cleanUp()
 

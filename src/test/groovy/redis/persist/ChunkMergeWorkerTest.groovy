@@ -38,6 +38,7 @@ class ChunkMergeWorkerTest extends Specification {
 
         when:
         var chunkMergeWorker = new ChunkMergeWorker(slot, oneSlot)
+        chunkMergeWorker.MERGED_CV_SIZE_THRESHOLD = 1000
         def isPersisted = chunkMergeWorker.persistFIFOMergedCvListIfBatchSizeOk()
 
         then:

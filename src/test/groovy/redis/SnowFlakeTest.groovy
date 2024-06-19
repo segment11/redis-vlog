@@ -6,7 +6,7 @@ class SnowFlakeTest extends Specification {
     def 'NextId'() {
         given:
         def snowFlake = new SnowFlake(1, 1)
-        def idSet = new HashSet<Long>()
+        List<Long> idSet = []
         def times = 1 << (10 + 10)
 
         when:

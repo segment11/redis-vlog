@@ -3,6 +3,7 @@ package redis.persist
 import io.netty.buffer.Unpooled
 import org.apache.commons.io.FileUtils
 import redis.CompressedValue
+import redis.ConfForSlot
 import redis.KeyHash
 import redis.SnowFlake
 import spock.lang.Specification
@@ -11,6 +12,8 @@ class WalTest extends Specification {
 
     def 'put and get'() {
         given:
+        ConfForSlot.global.pureMemory = false
+
         def file = new File('test-raf.wal')
         def fileShortValue = new File('test-raf-short-value.wal')
         if (file.exists()) {
@@ -40,7 +43,7 @@ class WalTest extends Specification {
             def cv = new CompressedValue()
             cv.keyHash = KeyHash.hash(key.bytes)
             cv.compressedData = value.bytes
-            cv.compressedLength = cv.compressedData.length
+            cv.compressedLength = value.bytes.length
 
             def cvEncoded = cv.encode()
 
@@ -65,6 +68,8 @@ class WalTest extends Specification {
         cleanup:
         raf.close()
         rafShortValue.close()
+//        file.delete()
+//        fileShortValue.delete()
     }
 
     def 'test value change to short value'() {
