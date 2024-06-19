@@ -97,7 +97,7 @@ jacocoTestReport {
     }
 }
 
-//test.finalizedBy jacocoTestReport
+test.finalizedBy jacocoTestReport
 
 /*
 ~/.jdks/azul-21/bin/java \
