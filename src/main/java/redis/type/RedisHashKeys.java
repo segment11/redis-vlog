@@ -55,8 +55,8 @@ public class RedisHashKeys {
     public byte[] encode() {
         int len = 0;
         for (var e : set) {
-            // key length use 1 byte is enough
-            len += 1 + e.length();
+            // key length use 2 bytes short
+            len += 2 + e.length();
         }
 
         var buffer = ByteBuffer.allocate(len + HEADER_LENGTH);
@@ -64,7 +64,7 @@ public class RedisHashKeys {
         // tmp crc
         buffer.putInt(0);
         for (var e : set) {
-            buffer.put((byte) e.length());
+            buffer.putShort((short) e.length());
             buffer.put(e.getBytes());
         }
 
@@ -79,12 +79,16 @@ public class RedisHashKeys {
     }
 
     public static RedisHashKeys decode(byte[] data) {
+        return decode(data, true);
+    }
+
+    public static RedisHashKeys decode(byte[] data, boolean doCheckCrc32) {
         var buffer = ByteBuffer.wrap(data);
         int size = buffer.getShort();
         int crc = buffer.getInt();
 
         // check crc
-        if (size > 0) {
+        if (size > 0 && doCheckCrc32) {
             int crcCompare = KeyHash.hash32Offset(data, HEADER_LENGTH, data.length - HEADER_LENGTH);
             if (crc != crcCompare) {
                 throw new IllegalStateException("Crc check failed");
@@ -93,7 +97,11 @@ public class RedisHashKeys {
 
         var r = new RedisHashKeys();
         for (int i = 0; i < size; i++) {
-            int len = buffer.get();
+            int len = buffer.getShort();
+            if (len <= 0) {
+                throw new IllegalStateException("Length error, length: " + len);
+            }
+
             var bytes = new byte[len];
             buffer.get(bytes);
             r.set.add(new String(bytes));

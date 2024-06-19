@@ -12,10 +12,16 @@ class RedisZSetTest extends Specification {
         rz.add(2, 'b')
         rz.add(3, 'c')
 
+        def memberA = rz.get('a')
+        memberA.score(1)
+
         then:
         !rz.isEmpty()
         rz.size() == 3
+        rz.getMemberMap().size() == 3
         rz.contains('a')
+        memberA.initRank == 0
+        !rz.remove('d')
 
         !rz.add(0.9, 'a', false, false)
         rz.add(1.8, 'b', true, true)
@@ -24,23 +30,33 @@ class RedisZSetTest extends Specification {
         rz.betweenByMember('a', true, 'b', true).collect { it.value.score() }.join(',') == '1.0,1.8'
 
         when:
-        rz.remove('a')
+        def isDeletedA = rz.remove('a')
 
         then:
+        isDeletedA
         rz.size() == 2
         !rz.contains('a')
 
         when:
         rz.add(4, 'd')
         rz.add(5, 'e')
+        rz.print()
+        println rz.toString()
 
         then:
         rz.size() == 4
+        rz.getSet().size() == 4
         rz.contains('d')
         rz.contains('e')
 
         rz.pollFirst().member() == 'b'
         rz.pollLast().member() == 'e'
+
+        rz.pollLast().member() == 'd'
+        rz.pollLast().member() == 'c'
+
+        rz.pollFirst() == null
+        rz.pollLast() == null
     }
 
     def 'encode'() {
@@ -53,7 +69,7 @@ class RedisZSetTest extends Specification {
         rz.add(3, 'c')
 
         def encoded = rz.encode()
-        def rz2 = RedisZSet.decode(encoded)
+        def rz2 = RedisZSet.decode(encoded, false)
 
         then:
         rz2.size() == 3
@@ -64,5 +80,55 @@ class RedisZSetTest extends Specification {
         rz2.get('a').score() == 1
         rz2.get('b').score() == 2
         rz2.get('c').score() == 3
+    }
+
+    def 'decode crc32 not match'() {
+        given:
+        var rz = new RedisZSet()
+
+        when:
+        rz.add(1, 'a')
+        rz.add(2, 'b')
+        rz.add(3, 'c')
+
+        def encoded = rz.encode()
+        encoded[2] = Byte.MAX_VALUE
+
+        boolean exception = false
+        try {
+            def rz2 = RedisZSet.decode(encoded)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+    }
+
+    def 'max score member'() {
+        given:
+        var rz = new RedisZSet()
+
+        when:
+        rz.add(1, 'a')
+        rz.add(2, 'b')
+        rz.add(2, RedisZSet.MAX_MEMBER)
+        rz.add(3, 'c')
+        rz.add(3, RedisZSet.MAX_MEMBER)
+
+        then:
+        rz.pollLast().member() == RedisZSet.MAX_MEMBER
+    }
+
+    def 'encode size 0'() {
+        given:
+        def rz = new RedisZSet()
+
+        when:
+        def encoded = rz.encode()
+        def rz2 = RedisZSet.decode(encoded)
+
+        then:
+        rz2.size() == 0
     }
 }

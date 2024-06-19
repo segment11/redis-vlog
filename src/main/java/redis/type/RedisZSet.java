@@ -99,7 +99,7 @@ public class RedisZSet {
         return memberMap;
     }
 
-    private static final String MAX_MEMBER = "!z...";
+    static final String MAX_MEMBER = "!z...";
 
     public NavigableSet<ScoreValue> between(double min, boolean minInclusive, double max, boolean maxInclusive) {
         return set.subSet(new ScoreValue(min, ""), minInclusive,
@@ -159,7 +159,14 @@ public class RedisZSet {
             if (!overwrite) {
                 return false;
             }
-            svExist.score = score;
+
+            memberMap.remove(member);
+            set.remove(svExist);
+
+            var sv = new ScoreValue(score, member);
+            sv.isAlreadyWeighted = isAlreadyWeighted;
+            set.add(sv);
+            memberMap.put(member, sv);
             return true;
         } else {
             var sv = new ScoreValue(score, member);
@@ -208,12 +215,16 @@ public class RedisZSet {
     }
 
     public static RedisZSet decode(byte[] data) {
+        return decode(data, true);
+    }
+
+    public static RedisZSet decode(byte[] data, boolean doCheckCrc32) {
         var buffer = ByteBuffer.wrap(data);
         int size = buffer.getShort();
         int crc = buffer.getInt();
 
         // check crc
-        if (size > 0) {
+        if (size > 0 && doCheckCrc32) {
             int crcCompare = KeyHash.hash32Offset(data, HEADER_LENGTH, data.length - HEADER_LENGTH);
             if (crc != crcCompare) {
                 throw new IllegalStateException("Crc check failed");

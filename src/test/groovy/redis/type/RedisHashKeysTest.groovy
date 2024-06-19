@@ -61,4 +61,38 @@ class RedisHashKeysTest extends Specification {
         rhk2.contains('field2')
         rhk2.size() == 2
     }
+
+    def 'decode crc32 not match'() {
+        given:
+        def rhk = new RedisHashKeys()
+
+        when:
+        rhk.add('field1')
+        rhk.add('field2')
+
+        def encoded = rhk.encode()
+        encoded[3] = 0
+
+        boolean exception = false
+        try {
+            def rhk2 = RedisHashKeys.decode(encoded)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+    }
+
+    def 'encode size 0'() {
+        given:
+        def rhk = new RedisHashKeys()
+
+        when:
+        def encoded = rhk.encode()
+        def rhk2 = RedisHashKeys.decode(encoded)
+
+        then:
+        rhk2.size() == 0
+    }
 }

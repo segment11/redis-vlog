@@ -24,6 +24,7 @@ class RedisListTest extends Specification {
 
         then:
         rl.size() == 4
+        rl.getList().size() == 4
         rl.get(3) == 'd'.bytes
 
         when:
@@ -42,6 +43,7 @@ class RedisListTest extends Specification {
         rl.size() == 5
         rl.get(1) == 'f'.bytes
         rl.indexOf('f'.bytes) == 1
+        rl.indexOf('g'.bytes) == -1
 
         when:
         // f b a d
@@ -72,5 +74,40 @@ class RedisListTest extends Specification {
         rl2.get(0) == 'c'.bytes
         rl2.get(1) == 'b'.bytes
         rl2.get(2) == 'a'.bytes
+    }
+
+    def 'decode crc32 not match'() {
+        given:
+        def rl = new RedisList()
+
+        when:
+        rl.addFirst('a'.bytes)
+        rl.addFirst('b'.bytes)
+        rl.addFirst('c'.bytes)
+
+        def encoded = rl.encode()
+        encoded[3] = 0
+
+        boolean exception = false
+        try {
+            def rl2 = RedisList.decode(encoded)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+    }
+
+    def 'encode size 0'() {
+        given:
+        def rl = new RedisList()
+
+        when:
+        def encoded = rl.encode()
+        def rl2 = RedisList.decode(encoded)
+
+        then:
+        rl2.size() == 0
     }
 }

@@ -91,12 +91,16 @@ public class RedisList {
     }
 
     public static RedisList decode(byte[] data) {
+        return decode(data, true);
+    }
+
+    public static RedisList decode(byte[] data, boolean doCheckCrc32) {
         var buffer = ByteBuffer.wrap(data);
         int size = buffer.getShort();
         int crc = buffer.getInt();
 
         // check crc
-        if (size > 0) {
+        if (size > 0 && doCheckCrc32) {
             int crcCompare = KeyHash.hash32Offset(data, HEADER_LENGTH, data.length - HEADER_LENGTH);
             if (crc != crcCompare) {
                 throw new IllegalStateException("Crc check failed");
