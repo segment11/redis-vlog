@@ -33,7 +33,7 @@ class TaskRunnableTest extends Specification {
 
         when:
         Thread.start {
-            Thread.currentThread().sleep(1000 * 10)
+            Thread.currentThread().sleep(1000 * 2)
             taskRunnable.stop()
             eventloop.breakEventloop()
         }
