@@ -75,7 +75,7 @@ class RedisHHTest extends Specification {
 
         when:
         def encoded = rh.encode()
-        def rh2 = RedisHH.decode(encoded)
+        def rh2 = RedisHH.decode(encoded, false)
 
         then:
         rh2.size() == 0

@@ -69,7 +69,7 @@ class RedisZSetTest extends Specification {
         rz.add(3, 'c')
 
         def encoded = rz.encode()
-        def rz2 = RedisZSet.decode(encoded, false)
+        def rz2 = RedisZSet.decode(encoded)
 
         then:
         rz2.size() == 3
@@ -96,7 +96,7 @@ class RedisZSetTest extends Specification {
 
         boolean exception = false
         try {
-            def rz2 = RedisZSet.decode(encoded)
+            def rz2 = RedisZSet.decode(encoded, true)
         } catch (IllegalStateException e) {
             exception = true
         }
@@ -126,7 +126,7 @@ class RedisZSetTest extends Specification {
 
         when:
         def encoded = rz.encode()
-        def rz2 = RedisZSet.decode(encoded)
+        def rz2 = RedisZSet.decode(encoded, false)
 
         then:
         rz2.size() == 0

@@ -3,6 +3,8 @@ package redis.type
 import redis.BaseCommand
 import spock.lang.Specification
 
+import java.nio.ByteBuffer
+
 class RedisHashKeysTest extends Specification {
     private static byte slot(String key) {
         BaseCommand.slot(key.bytes, 128).slot()
@@ -90,9 +92,40 @@ class RedisHashKeysTest extends Specification {
 
         when:
         def encoded = rhk.encode()
-        def rhk2 = RedisHashKeys.decode(encoded)
+        def rhk2 = RedisHashKeys.decode(encoded, false)
 
         then:
         rhk2.size() == 0
+
+        when:
+        rhk.add('field1')
+        def encoded2 = rhk.encode()
+        def rhk3 = RedisHashKeys.decode(encoded2, false)
+
+        then:
+        rhk3.size() == 1
+    }
+
+    def 'decode illegal length'() {
+        given:
+        def rhk = new RedisHashKeys()
+
+        when:
+        rhk.add('field1')
+        rhk.add('field2')
+
+        def encoded = rhk.encode()
+        var buffer = ByteBuffer.wrap(encoded)
+        buffer.putShort(6, (short) 0)
+
+        boolean exception = false
+        try {
+            def rhk2 = RedisHashKeys.decode(encoded, false)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
     }
 }

@@ -105,9 +105,17 @@ class RedisListTest extends Specification {
 
         when:
         def encoded = rl.encode()
-        def rl2 = RedisList.decode(encoded)
+        def rl2 = RedisList.decode(encoded, false)
 
         then:
         rl2.size() == 0
+
+        when:
+        rl.addFirst('a'.bytes)
+        def encoded2 = rl.encode()
+        def rl3 = RedisList.decode(encoded2, false)
+
+        then:
+        rl3.size() == 1
     }
 }
