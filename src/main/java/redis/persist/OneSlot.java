@@ -463,18 +463,12 @@ public class OneSlot {
 
     private final TaskChain taskChain = new TaskChain();
 
-    public void doTask(int loopCount) {
-        for (var t : taskChain.list) {
-            if (loopCount % t.executeOnceAfterLoopCount() == 0) {
-                t.setLoopCount(loopCount);
+    public TaskChain getTaskChain() {
+        return taskChain;
+    }
 
-                try {
-                    t.run();
-                } catch (Exception e) {
-                    log.error("Task error, name: " + t.name(), e);
-                }
-            }
-        }
+    public void doTask(int loopCount) {
+        taskChain.doTask(loopCount);
     }
 
     private void initTasks() {
