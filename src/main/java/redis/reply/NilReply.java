@@ -6,7 +6,8 @@ public class NilReply implements Reply {
     public static final NilReply INSTANCE = new NilReply();
 
     private static final byte[] NIL = new BulkReply().buffer().asArray();
-    private static final byte[] NULL_BYTES = "null".getBytes();
+    // EOF ?
+    private static final byte[] NIL_BYTES = "".getBytes();
 
     @Override
     public ByteBuf buffer() {
@@ -15,6 +16,6 @@ public class NilReply implements Reply {
 
     @Override
     public ByteBuf bufferAsHttp() {
-        return ByteBuf.wrapForReading(NULL_BYTES);
+        return ByteBuf.wrapForReading(NIL_BYTES);
     }
 }

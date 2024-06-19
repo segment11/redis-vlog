@@ -41,7 +41,7 @@ public class IntegerReply implements Reply {
         this.integer = integer;
     }
 
-    private static ByteBuf bufferPreload(Long x) {
+    static ByteBuf bufferPreload(Long x) {
         if (x == null) {
             return NilReply.INSTANCE.buffer();
         }
