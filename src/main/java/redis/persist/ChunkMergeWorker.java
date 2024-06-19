@@ -37,9 +37,9 @@ public class ChunkMergeWorker {
     }
 
     // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
-    private int MERGED_SEGMENT_SIZE_THRESHOLD = 256;
+    int MERGED_SEGMENT_SIZE_THRESHOLD = 256;
     int MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = 8;
-    private int MERGED_CV_SIZE_THRESHOLD = 256 * 64;
+    int MERGED_CV_SIZE_THRESHOLD = 256 * 64;
 
     void resetThreshold(int walGroupNumber) {
         MERGED_SEGMENT_SIZE_THRESHOLD = Math.min(walGroupNumber, 256);
@@ -95,6 +95,7 @@ public class ChunkMergeWorker {
         ArrayList<Integer> segmentIndexList = new ArrayList<>();
 
         ArrayList<Wal.V> vList = new ArrayList<>();
+        // merged cv list size must be small
         for (var one : mergedCvList) {
             var cv = one.cv;
             var key = one.key;
