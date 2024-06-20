@@ -85,7 +85,7 @@ public class Wal {
             var expireAt = is.readLong();
             var keyLength = is.readShort();
 
-            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength < 0) {
+            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength <= 0) {
                 throw new IllegalStateException("Key length error, key length: " + keyLength);
             }
 

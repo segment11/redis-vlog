@@ -357,7 +357,7 @@ public class SegmentBatch {
                 break;
             }
 
-            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength < 0) {
+            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength <= 0) {
                 throw new IllegalStateException("Key length error, key length: " + keyLength);
             }
 

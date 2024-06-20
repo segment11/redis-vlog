@@ -177,7 +177,7 @@ public class KeyBucket {
             buffer.position(oneCellOffset(cellIndex));
 
             var keyLength = buffer.getShort();
-            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength < 0) {
+            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength <= 0) {
                 throw new IllegalStateException("Key length error, key length: " + keyLength);
             }
             var keyBytes = new byte[keyLength];
