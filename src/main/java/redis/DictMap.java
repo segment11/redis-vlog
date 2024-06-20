@@ -27,9 +27,7 @@ public class DictMap {
     private MasterUpdateCallback masterUpdateCallback;
 
     public void setMasterUpdateCallback(MasterUpdateCallback masterUpdateCallback) {
-        if (this.masterUpdateCallback == null) {
-            this.masterUpdateCallback = masterUpdateCallback;
-        }
+        this.masterUpdateCallback = masterUpdateCallback;
     }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -47,7 +45,7 @@ public class DictMap {
             try {
                 fos.write(dict.encode(keyPrefix));
             } catch (IOException e) {
-                log.error("Write dict to file error", e);
+                throw new RuntimeException("Write dict to file error", e);
             }
         }
 
@@ -86,7 +84,6 @@ public class DictMap {
             synchronized (fos) {
                 fos.close();
                 System.out.println("Close dict fos");
-                fos = null;
             }
         }
     }
@@ -101,7 +98,7 @@ public class DictMap {
                 fos.getChannel().truncate(0);
                 System.out.println("Truncate dict file");
             } catch (IOException e) {
-                log.error("Truncate dict file error", e);
+                throw new RuntimeException("Truncate dict file error", e);
             }
         }
     }

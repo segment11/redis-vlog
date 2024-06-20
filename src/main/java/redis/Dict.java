@@ -30,7 +30,7 @@ public class Dict implements Serializable {
         return "Dict{" +
                 "seq=" + seq +
                 ", createdTime=" + new Date(createdTime) +
-                ", dictBytes.length=" + dictBytes.length +
+                ", dictBytes.length=" + (dictBytes == null ? 0 : dictBytes.length) +
                 '}';
     }
 
@@ -98,7 +98,7 @@ public class Dict implements Serializable {
         var seq = is.readInt();
         var createdTime = is.readLong();
         var keyPrefixLength = is.readShort();
-        if (keyPrefixLength > CompressedValue.KEY_MAX_LENGTH || keyPrefixLength < 0) {
+        if (keyPrefixLength > CompressedValue.KEY_MAX_LENGTH || keyPrefixLength <= 0) {
             throw new IllegalStateException("Key prefix length error, key length: " + keyPrefixLength);
         }
 
