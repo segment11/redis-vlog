@@ -1,6 +1,5 @@
 package redis.mock;
 
-import io.netty.buffer.Unpooled;
 import redis.CompressedValue;
 import redis.persist.OneSlot;
 
@@ -21,7 +20,6 @@ public class InMemoryGetSet implements ByPassGetSet {
             return null;
         }
 
-        var encoded = cv.encode();
-        return new OneSlot.BufOrCompressedValue(Unpooled.wrappedBuffer(encoded), null);
+        return new OneSlot.BufOrCompressedValue(null, cv);
     }
 }
