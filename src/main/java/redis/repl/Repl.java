@@ -56,6 +56,10 @@ public class Repl {
         var slaveUuid = buf.readLong();
         var slot = buf.readByte();
 
+        if (slot < 0) {
+            throw new IllegalArgumentException("Repl slot should be positive");
+        }
+
         var replType = ReplType.fromCode(buf.readByte());
         if (replType == null) {
             return null;

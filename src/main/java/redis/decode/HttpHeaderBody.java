@@ -87,6 +87,10 @@ public class HttpHeaderBody {
     }
 
     public void feed(ByteBuf buf, int count, int offset) {
+        if (count > HEADER_BUFFER_LENGTH) {
+            throw new IllegalArgumentException("Http header too long");
+        }
+
         var bf = headerBuffer;
         while (count > 0) {
             bf[headerLength] = buf.getByte(offset);
@@ -95,30 +99,25 @@ public class HttpHeaderBody {
             offset++;
             count--;
 
-            if (headerLength >= HEADER_BUFFER_LENGTH) {
-                throw new IllegalStateException("header too long");
-            }
-
             if (bf[headerLength - 1] == n && bf[headerLength - 2] == r) {
                 if (action == null) {
                     action = new String(bf, startIndex, headerLength - startIndex - 2);
                     // parse action
                     var arr = action.split(" ");
-                    if (arr.length > 0) {
-                        requestType = arr[0];
+                    if (arr.length != 3) {
+                        isOk = false;
+                        return;
                     }
-                    if (arr.length > 1) {
-                        url = arr[1];
-                    }
-                    if (arr.length > 2) {
-                        httpVersion = arr[2];
-                    }
+
+                    requestType = arr[0];
+                    url = arr[1];
+                    httpVersion = arr[2];
                     startIndex = headerLength;
                 } else {
                     if (bf[headerLength - 3] == n && bf[headerLength - 4] == r) {
-                        if (lastHeaderName != null) {
-                            headers.put(lastHeaderName, new String(bf, startIndex, headerLength - startIndex - 2));
-                        }
+//                        if (lastHeaderName != null) {
+//                            headers.put(lastHeaderName, new String(bf, startIndex, headerLength - startIndex - 2));
+//                        }
 
                         var contentLength = contentLength();
                         var totalLength = headerLength + contentLength;

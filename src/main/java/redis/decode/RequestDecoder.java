@@ -37,62 +37,70 @@ public class RequestDecoder implements ByteBufsDecoder<ArrayList<Request>> {
         compositeByteBuf.readerIndex(0);
         compositeByteBuf.writerIndex(capacity).capacity(capacity);
 
-        // http or redis
-        // first 6 bytes
-        var first6 = new byte[6];
-        compositeByteBuf.readBytes(first6);
-        var isGet = Arrays.equals(first6, 0, 3, HttpHeaderBody.GET, 0, 3);
-        var isPost = Arrays.equals(first6, 0, 4, HttpHeaderBody.POST, 0, 4);
-        var isPut = Arrays.equals(first6, 0, 3, HttpHeaderBody.PUT, 0, 3);
-        var isDelete = Arrays.equals(first6, 0, 6, HttpHeaderBody.DELETE, 0, 6);
-        boolean isHttp = isGet || isPost || isPut || isDelete;
-
-        var isRepl = Arrays.equals(first6, 0, 6, PROTOCOL_KEYWORD_BYTES, 0, 6);
-
-        // set reader index back
-        compositeByteBuf.readerIndex(0);
-
+        // check first 6 bytes, http or repl at least 6 bytes
         byte[][] data;
-        if (isHttp) {
-            var h = new HttpHeaderBody();
-            h.feed(compositeByteBuf, compositeByteBuf.readableBytes(), 0);
-            if (!h.isOk) {
-                return null;
-            }
-
-            if (isGet || isDelete) {
-                // query parameters
-                var pos = h.url.indexOf("?");
-                if (pos == -1) {
-                    return null;
-                }
-
-                var arr = h.url.substring(pos + 1).split("&");
-                data = new byte[arr.length][];
-                for (int i = 0; i < arr.length; i++) {
-                    data[i] = arr[i].getBytes();
-                }
-            } else {
-                var body = h.body();
-                if (body == null) {
-                    return null;
-                }
-
-                var arr = new String(body).split(" ");
-                data = new byte[arr.length][];
-                for (int i = 0; i < arr.length; i++) {
-                    data[i] = arr[i].getBytes();
-                }
-            }
-        } else if (isRepl) {
-            data = Repl.decode(compositeByteBuf);
+        boolean isHttp = false;
+        boolean isRepl = false;
+        if (capacity < 6) {
+            data = resp.decode(compositeByteBuf);
             if (data == null) {
                 return null;
             }
         } else {
-            data = resp.decode(compositeByteBuf);
-            if (data == null) {
-                return null;
+            var first6 = new byte[6];
+            compositeByteBuf.readBytes(first6);
+            var isGet = Arrays.equals(first6, 0, 3, HttpHeaderBody.GET, 0, 3);
+            var isPost = Arrays.equals(first6, 0, 4, HttpHeaderBody.POST, 0, 4);
+            var isPut = Arrays.equals(first6, 0, 3, HttpHeaderBody.PUT, 0, 3);
+            var isDelete = Arrays.equals(first6, 0, 6, HttpHeaderBody.DELETE, 0, 6);
+            isHttp = isGet || isPost || isPut || isDelete;
+
+            isRepl = Arrays.equals(first6, 0, 6, PROTOCOL_KEYWORD_BYTES, 0, 6);
+
+            // set reader index back
+            compositeByteBuf.readerIndex(0);
+
+            if (isHttp) {
+                var h = new HttpHeaderBody();
+                h.feed(compositeByteBuf, compositeByteBuf.readableBytes(), 0);
+                if (!h.isOk) {
+                    return null;
+                }
+
+                if (isGet || isDelete) {
+                    // query parameters
+                    var pos = h.url.indexOf("?");
+                    if (pos == -1) {
+                        return null;
+                    }
+
+                    var arr = h.url.substring(pos + 1).split("&");
+                    data = new byte[arr.length][];
+                    for (int i = 0; i < arr.length; i++) {
+                        data[i] = arr[i].getBytes();
+                    }
+                } else {
+                    var body = h.body();
+                    if (body == null) {
+                        return null;
+                    }
+
+                    var arr = new String(body).split(" ");
+                    data = new byte[arr.length][];
+                    for (int i = 0; i < arr.length; i++) {
+                        data[i] = arr[i].getBytes();
+                    }
+                }
+            } else if (isRepl) {
+                data = Repl.decode(compositeByteBuf);
+                if (data == null) {
+                    return null;
+                }
+            } else {
+                data = resp.decode(compositeByteBuf);
+                if (data == null) {
+                    return null;
+                }
             }
         }
 

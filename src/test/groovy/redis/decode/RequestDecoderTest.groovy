@@ -10,7 +10,7 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class RequestDecoderTest extends Specification {
-    def "TryDecode"() {
+    def "test decode"() {
         given:
         def decoder = new RequestDecoder()
 
@@ -33,9 +33,48 @@ class RequestDecoderTest extends Specification {
         then:
         requestList.size() == 3
         requestList.every { !it.isHttp() && !it.isRepl() }
+
+        when:
+        def buf3 = ByteBuf.wrapForReading(
+                '*'.bytes
+        )
+
+        def bufs3 = new ByteBufs(1)
+        bufs3.add(buf3)
+
+        def requestList3 = decoder.tryDecode(bufs3)
+
+        then:
+        requestList3 == null
+
+        when:
+        buf3 = ByteBuf.wrapForReading(
+                '+0\r\n'.bytes
+        )
+
+        bufs3 = new ByteBufs(1)
+        bufs3.add(buf3)
+
+        requestList3 = decoder.tryDecode(bufs3)
+
+        then:
+        requestList3.size() == 1
+
+        when:
+        buf3 = ByteBuf.wrapForReading(
+                '*2\r\r\r\r\r\r'.bytes
+        )
+
+        bufs3 = new ByteBufs(1)
+        bufs3.add(buf3)
+
+        requestList3 = decoder.tryDecode(bufs3)
+
+        then:
+        requestList3 == null
     }
 
-    def "TryDecodeHttp"() {
+    def "test decode http"() {
         given:
         def decoder = new RequestDecoder()
 
@@ -57,9 +96,108 @@ class RequestDecoderTest extends Specification {
         requestList[0].data.length == 2
         requestList[0].data[0] == 'get'.bytes
         requestList[0].data[1] == 'mykey'.bytes
+
+        when:
+        buf = ByteBuf.wrapForReading(
+                "POST / HTTP/1.1\r\nContent-Length: 9\r\n\r\nget mykey".bytes
+        )
+
+        bufs = new ByteBufs(1)
+        bufs.add(buf)
+
+        requestList = decoder.tryDecode(bufs)
+
+        then:
+        requestList.size() == 1
+        requestList[0].isHttp()
+
+        requestList[0].data.length == 2
+        requestList[0].data[0] == 'get'.bytes
+        requestList[0].data[1] == 'mykey'.bytes
+
+        when:
+        buf = ByteBuf.wrapForReading(
+                "POST / HTTP/1.1\r\nContent-Length: 0\r\n\r\n".bytes
+        )
+
+        bufs = new ByteBufs(1)
+        bufs.add(buf)
+
+        requestList = decoder.tryDecode(bufs)
+
+        then:
+        requestList == null
+
+        when:
+        buf = ByteBuf.wrapForReading(
+                "PUT / HTTP/1.1\r\nContent-Length: 0\r\n\r\n".bytes
+        )
+
+        bufs = new ByteBufs(1)
+        bufs.add(buf)
+
+        requestList = decoder.tryDecode(bufs)
+
+        then:
+        requestList == null
+
+        when:
+        // http not ok
+        def buf2 = ByteBuf.wrapForReading(
+                "GET /?set&mykey&myvalue HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n".bytes
+        )
+
+        def bufs2 = new ByteBufs(1)
+        bufs2.add(buf2)
+
+        def requestList2 = decoder.tryDecode(bufs2)
+
+        then:
+        requestList2 == null
+
+        when:
+        // no params
+        def buf3 = ByteBuf.wrapForReading(
+                "GET /xxx HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n\r\n".bytes
+        )
+
+        def bufs3 = new ByteBufs(1)
+        bufs3.add(buf3)
+
+        def requestList3 = decoder.tryDecode(bufs3)
+
+        then:
+        requestList3 == null
+
+        when:
+        buf3 = ByteBuf.wrapForReading(
+                "DELETE /xxx HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n\r\n".bytes
+        )
+
+        bufs3 = new ByteBufs(1)
+        bufs3.add(buf3)
+
+        requestList3 = decoder.tryDecode(bufs3)
+
+        then:
+        requestList3 == null
+
+
+        when:
+        buf3 = ByteBuf.wrapForReading(new byte[1])
+
+        bufs3 = new ByteBufs(1)
+        bufs3.add(buf3)
+
+        buf3.head(1)
+
+        requestList3 = decoder.tryDecode(bufs3)
+
+        then:
+        requestList3 == null
     }
 
-    def "TryDecodeRepl"() {
+    def "test decode repl"() {
         given:
         def decoder = new RequestDecoder()
 
@@ -82,5 +220,35 @@ class RequestDecoderTest extends Specification {
         requestList[0].data[1][0] == 0
         requestList[0].data[2][0] == ReplType.ping.code
         requestList[0].data[3].length == ping.encodeLength()
+
+        when:
+        def buf2 = ByteBuf.wrapForReading(
+                "X-REPLx".bytes
+        )
+
+        def bufs2 = new ByteBufs(1)
+        bufs2.add(buf2)
+
+        def requestList2 = decoder.tryDecode(bufs2)
+
+        then:
+        requestList2 == null
+
+        when:
+        def bb = new byte[6 + 14 + 1]
+        def buffer = ByteBuffer.wrap(bb)
+        buffer.put('X-REPL'.bytes)
+        buffer.putLong(0L)
+        buffer.put((byte) -1)
+
+        buf2 = ByteBuf.wrapForReading(bb)
+
+        bufs2 = new ByteBufs(1)
+        bufs2.add(buf2)
+
+        requestList2 = decoder.tryDecode(bufs2)
+
+        then:
+        requestList2 == null
     }
 }
