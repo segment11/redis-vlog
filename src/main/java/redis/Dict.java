@@ -1,9 +1,15 @@
 package redis;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -12,8 +18,56 @@ public class Dict implements Serializable {
     private static final int BEGIN_SEQ = 100;
 
     public static final int SELF_ZSTD_DICT_SEQ = 1;
+    public static final int GLOBAL_ZSTD_DICT_SEQ = 10;
 
     public static final Dict SELF_ZSTD_DICT = new Dict();
+    public static final Dict GLOBAL_ZSTD_DICT = new Dict();
+
+    static final String GLOBAL_DICT_FILE_NAME = "dict-global-raw.dat";
+    // for latency
+    static final int GLOBAL_DICT_BYTES_MAX_LENGTH = 1024 * 16;
+
+    private static final Logger log = LoggerFactory.getLogger(Dict.class);
+
+    static {
+        SELF_ZSTD_DICT.seq = SELF_ZSTD_DICT_SEQ;
+        GLOBAL_ZSTD_DICT.seq = GLOBAL_ZSTD_DICT_SEQ;
+    }
+
+    public static void resetGlobalDictBytes(byte[] dictBytes, boolean isOverwrite) {
+        if (dictBytes.length > GLOBAL_DICT_BYTES_MAX_LENGTH) {
+            throw new IllegalStateException("Dict global dict bytes too long: " + dictBytes.length);
+        }
+
+        if (isOverwrite) {
+            GLOBAL_ZSTD_DICT.dictBytes = dictBytes;
+            log.warn("Dict global dict bytes overwritten, dict bytes length: {}", dictBytes.length);
+        } else {
+            if (GLOBAL_ZSTD_DICT.dictBytes != null) {
+                if (!Arrays.equals(GLOBAL_ZSTD_DICT.dictBytes, dictBytes)) {
+                    throw new IllegalStateException("Dict global dict bytes already set and not equal to new bytes");
+                }
+            } else {
+                GLOBAL_ZSTD_DICT.dictBytes = dictBytes;
+                log.warn("Dict global dict bytes set, dict bytes length: {}", dictBytes.length);
+            }
+        }
+    }
+
+    public static void resetGlobalDictBytesByFile(File targetFile, boolean isOverwrite) {
+        if (!targetFile.exists()) {
+            log.warn("Dict global dict file not exists: {}", targetFile.getAbsolutePath());
+            return;
+        }
+
+        byte[] dictBytes;
+        try {
+            dictBytes = Files.readAllBytes(targetFile.toPath());
+            resetGlobalDictBytes(dictBytes, isOverwrite);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     static AtomicInteger seqGenerator = new AtomicInteger(BEGIN_SEQ);
 
@@ -49,6 +103,10 @@ public class Dict implements Serializable {
 
     public byte[] getDictBytes() {
         return dictBytes;
+    }
+
+    public boolean hasDictBytes() {
+        return dictBytes != null;
     }
 
     // seq int + create time long + key prefix length short + key prefix + dict bytes length short + dict bytes

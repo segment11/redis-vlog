@@ -473,10 +473,17 @@ public class MultiWorkerServer extends Launcher {
                     ConfForSlot confForSlot(Config config) {
                         long estimateKeyNumber = config.get(ofLong(), "estimateKeyNumber", 1_000_000L);
                         int estimateOneValueLength = config.get(toInt, "estimateOneValueLength", 200);
-                        boolean isValueSetUseCompression = config.get(ofBoolean(), "isValueSetUseCompression", true);
                         var c = ConfForSlot.from(estimateKeyNumber);
                         c.estimateOneValueLength = estimateOneValueLength;
+
+                        boolean isValueSetUseCompression = config.get(ofBoolean(), "isValueSetUseCompression", true);
+                        boolean isOnDynTrainDictForCompression = config.get(ofBoolean(), "isOnDynTrainDictForCompression", true);
                         c.isValueSetUseCompression = isValueSetUseCompression;
+                        c.isOnDynTrainDictForCompression = isOnDynTrainDictForCompression;
+
+                        int toCompressMinDataLength = config.get(toInt, "toCompressMinDataLength", 64);
+                        DictMap.TO_COMPRESS_MIN_DATA_LENGTH = toCompressMinDataLength;
+
                         ConfForSlot.global = c;
 
                         c.netListenAddresses = config.get(ofString(), "net.listenAddresses");
@@ -605,7 +612,7 @@ public class MultiWorkerServer extends Launcher {
                         DictMap.getInstance().initDictMap(dirFile);
 
                         var configCompress = config.getChild("compress");
-                        TrainSampleJob.setDictPrefixKeyMaxLen(configCompress.get(toInt, "dictPrefixKeyMaxLen", 5));
+                        TrainSampleJob.setDictKeyPrefixEndIndex(configCompress.get(toInt, "dictKeyPrefixEndIndex", 5));
 
                         // init local persist
                         // already created when inject

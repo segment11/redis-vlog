@@ -16,6 +16,7 @@ public enum ConfForSlot {
     private static final int MAX_ESTIMATE_ONE_VALUE_LENGTH = 2000;
 
     public boolean isValueSetUseCompression = false;
+    public boolean isOnDynTrainDictForCompression = true;
 
     public String netListenAddresses;
 

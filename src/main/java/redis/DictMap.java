@@ -11,7 +11,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DictMap {
-    public static final int TO_COMPRESS_MIN_DATA_LENGTH = 64;
+    public static int TO_COMPRESS_MIN_DATA_LENGTH = 64;
     public static final String ANONYMOUS_DICT_KEY = "x-anonymous";
 
     // singleton
@@ -138,5 +138,7 @@ public class DictMap {
         log.info("Dict map init, map size: {}, seq map size: {}, n: {}, max seq: {}",
                 cacheDict.size(), cacheDictBySeq.size(), n, maxSeq);
         Dict.seqGenerator.set(maxSeq + 1);
+
+        Dict.resetGlobalDictBytesByFile(new File(dirFile, Dict.GLOBAL_DICT_FILE_NAME), false);
     }
 }

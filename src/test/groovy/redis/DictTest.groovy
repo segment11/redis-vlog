@@ -19,11 +19,77 @@ class DictTest extends Specification {
 
         expect:
         Dict.SELF_ZSTD_DICT.seq == Dict.SELF_ZSTD_DICT_SEQ
+        Dict.GLOBAL_ZSTD_DICT.seq == Dict.GLOBAL_ZSTD_DICT_SEQ
+        !Dict.GLOBAL_ZSTD_DICT.hasDictBytes()
         dict.equals(dict)
         dict == Dict.SELF_ZSTD_DICT
         !dict.equals(null)
         dict != new String('xxx')
         dict != dict2
+    }
+
+    def 'test global dict'() {
+        given:
+        def file = new File('dict-global-test.dat')
+        file.bytes = 'test'.bytes
+
+        Dict.resetGlobalDictBytesByFile(file, false)
+        Dict.resetGlobalDictBytesByFile(file, true)
+
+        expect:
+        Dict.GLOBAL_ZSTD_DICT.hasDictBytes()
+        Dict.GLOBAL_ZSTD_DICT.dictBytes == 'test'.bytes
+
+        when:
+        file.bytes = ('test' * 5000).bytes
+
+        boolean exception = false
+        try {
+            Dict.resetGlobalDictBytesByFile(file, false)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+
+        when:
+        Dict.resetGlobalDictBytes('test'.bytes, true)
+
+        then:
+        Dict.GLOBAL_ZSTD_DICT.dictBytes == 'test'.bytes
+
+        when:
+        exception = false
+
+        try {
+            Dict.resetGlobalDictBytes(('test' * 5000).bytes, true)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+
+        when:
+        // not change
+        Dict.resetGlobalDictBytes('test'.bytes, false)
+
+        then:
+        Dict.GLOBAL_ZSTD_DICT.dictBytes == 'test'.bytes
+
+        when:
+        exception = false
+
+        try {
+            Dict.resetGlobalDictBytes('test2'.bytes, false)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+        Dict.GLOBAL_ZSTD_DICT.dictBytes != 'test2'.bytes
     }
 
     def 'test decode'() {

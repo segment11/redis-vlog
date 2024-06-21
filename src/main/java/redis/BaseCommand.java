@@ -263,6 +263,11 @@ public abstract class BaseCommand {
             if (cv.isUseDict()) {
                 if (cv.dictSeqOrSpType == Dict.SELF_ZSTD_DICT_SEQ) {
                     dict = Dict.SELF_ZSTD_DICT;
+                } else if (cv.dictSeqOrSpType == Dict.GLOBAL_ZSTD_DICT_SEQ) {
+                    if (!Dict.GLOBAL_ZSTD_DICT.hasDictBytes()) {
+                        throw new DictMissingException();
+                    }
+                    dict = Dict.GLOBAL_ZSTD_DICT;
                 } else {
                     dict = dictMap.getDictBySeq(cv.dictSeqOrSpType);
                     if (dict == null) {
@@ -446,12 +451,17 @@ public abstract class BaseCommand {
 
         Dict dict = null;
         boolean isTypeString = CompressedValue.isTypeString(spType);
-        if (isTypeString && ConfForSlot.global.isValueSetUseCompression) {
-            var keyPrefix = TrainSampleJob.keyPrefix(key);
-            dict = dictMap.getDict(keyPrefix);
+        if (isTypeString && ConfForSlot.global.isValueSetUseCompression && valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH) {
+            // use global dict first
+            if (Dict.GLOBAL_ZSTD_DICT.hasDictBytes()) {
+                dict = Dict.GLOBAL_ZSTD_DICT;
+            } else {
+                var keyPrefix = TrainSampleJob.keyPrefix(key);
+                dict = dictMap.getDict(keyPrefix);
 
-            if (dict == null && valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH) {
-                dict = Dict.SELF_ZSTD_DICT;
+                if (dict == null) {
+                    dict = Dict.SELF_ZSTD_DICT;
+                }
             }
         }
 
@@ -491,15 +501,17 @@ public abstract class BaseCommand {
             compressStats.compressedTotalLength += cv.compressedLength;
             compressStats.compressedCostTimeTotalUs += costT;
 
-            if (dict != null && dict == Dict.SELF_ZSTD_DICT) {
-                // add train sample list
-                if (sampleToTrainList.size() < trainSampleListMaxSize) {
-                    var kv = new TrainSampleJob.TrainSampleKV(key, null, cv.seq, valueBytes);
-                    sampleToTrainList.add(kv);
-                } else {
-                    // no async train, latency sensitive
-                    trainSampleJob.resetSampleToTrainList(sampleToTrainList);
-                    handleTrainSampleResult(trainSampleJob.train());
+            if (ConfForSlot.global.isOnDynTrainDictForCompression) {
+                if (dict != null && dict == Dict.SELF_ZSTD_DICT) {
+                    // add train sample list
+                    if (sampleToTrainList.size() < trainSampleListMaxSize) {
+                        var kv = new TrainSampleJob.TrainSampleKV(key, null, cv.seq, valueBytes);
+                        sampleToTrainList.add(kv);
+                    } else {
+                        // no async train, latency sensitive
+                        trainSampleJob.resetSampleToTrainList(sampleToTrainList);
+                        handleTrainSampleResult(trainSampleJob.train());
+                    }
                 }
             }
         } else {
@@ -529,7 +541,7 @@ public abstract class BaseCommand {
                 }
             }
 
-            if (ConfForSlot.global.isValueSetUseCompression) {
+            if (ConfForSlot.global.isValueSetUseCompression && ConfForSlot.global.isOnDynTrainDictForCompression) {
                 // add train sample list
                 if (sampleToTrainList.size() < trainSampleListMaxSize) {
                     if (valueBytes.length >= DictMap.TO_COMPRESS_MIN_DATA_LENGTH) {
