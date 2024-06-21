@@ -1,6 +1,9 @@
 package redis;
 
 public class Utils {
+    private Utils() {
+    }
+
     public static String rightPad(String s, String pad, int len) {
         if (s.length() >= len) {
             return s;

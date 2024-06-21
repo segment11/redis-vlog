@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 public class TrainSampleJob {
     private final byte workerId;
 
-    private int trainCount = 0;
+    int trainCount = 0;
 
     public TrainSampleJob(byte workerId) {
         this.workerId = workerId;
@@ -43,10 +43,11 @@ public class TrainSampleJob {
         this.trainSampleMinBodyLength = trainSampleMinBodyLength;
     }
 
-    private static int dictPrefixKeyMaxLen = 5;
+    // exclusive, e.g. 5 means 'abcdef'.substring(0, 5) == 'abcde'
+    private static int dictKeyPrefixEndIndex = 5;
 
-    public static void setDictPrefixKeyMaxLen(int dictPrefixKeyMaxLen) {
-        TrainSampleJob.dictPrefixKeyMaxLen = dictPrefixKeyMaxLen;
+    public static void setDictKeyPrefixEndIndex(int dictKeyPrefixEndIndex) {
+        TrainSampleJob.dictKeyPrefixEndIndex = dictKeyPrefixEndIndex;
     }
 
     private static ArrayList<String> keyPrefixGroupList = new ArrayList<>();
@@ -70,14 +71,17 @@ public class TrainSampleJob {
             }
         }
 
+        // list is not empty, sampleBodyLength > 0
         var trainer = new ZstdDictTrainer(sampleBodyLength, dictSize);
         for (var one : trainSampleList) {
             var body = one.valueBytes();
             boolean isAddSampleOk = trainer.addSample(body);
-            if (!isAddSampleOk) {
-                log.warn("Train sample, w={}, train dict add sample fail, sample size: {}, add body size: {}",
-                        workerId, sampleBodyLength, body.length);
-            }
+            assert isAddSampleOk;
+//            boolean isAddSampleOk = trainer.addSample(body);
+//            if (!isAddSampleOk) {
+//                log.warn("Train sample, w={}, train dict add sample fail, sample size: {}, add body size: {}",
+//                        workerId, sampleBodyLength, body.length);
+//            }
         }
 
         byte[] dictBytes;
@@ -114,9 +118,10 @@ public class TrainSampleJob {
         } else {
             var index2 = key.lastIndexOf(':');
             if (index2 != -1) {
-                return key.substring(0, index2);
+                // include :
+                return key.substring(0, index2 + 1);
             } else {
-                return key.substring(0, Math.min(key.length(), dictPrefixKeyMaxLen));
+                return key.substring(0, Math.min(key.length(), dictKeyPrefixEndIndex));
             }
         }
     }
