@@ -39,6 +39,7 @@ public class LocalPersist {
     public void persistMergeSegmentsUndone() {
         for (var oneSlot : oneSlots) {
             oneSlot.persistMergingOrMergedSegmentsButNotPersisted();
+            // merged segments may do merge again, it is ok, only do once when server restart
             oneSlot.checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(true);
             oneSlot.getMergedSegmentIndexEndLastTime();
         }
