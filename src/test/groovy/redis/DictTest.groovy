@@ -63,6 +63,18 @@ class DictTest extends Specification {
         exception = false
 
         try {
+            Dict.resetGlobalDictBytes(new byte[0], true)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+
+        when:
+        exception = false
+
+        try {
             Dict.resetGlobalDictBytes(('test' * 5000).bytes, true)
         } catch (IllegalStateException e) {
             exception = true

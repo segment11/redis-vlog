@@ -35,7 +35,7 @@ public class Dict implements Serializable {
     }
 
     public static void resetGlobalDictBytes(byte[] dictBytes, boolean isOverwrite) {
-        if (dictBytes.length > GLOBAL_DICT_BYTES_MAX_LENGTH) {
+        if (dictBytes.length == 0 || dictBytes.length > GLOBAL_DICT_BYTES_MAX_LENGTH) {
             throw new IllegalStateException("Dict global dict bytes too long: " + dictBytes.length);
         }
 
