@@ -70,7 +70,7 @@ public class SocketInspector implements TcpSocket.Inspector {
     public void onDisconnect(TcpSocket socket) {
         var remoteAddress = socket.getRemoteAddress();
         log.info("On disconnect, remote address: {}", remoteAddress);
-        AuthHolder.flagBySocketAddress.remove(remoteAddress);
+        AfterAuthFlagHolder.remove(remoteAddress);
         socketMap.remove(remoteAddress);
 
         connectedCountGauge.dec();

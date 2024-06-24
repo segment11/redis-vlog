@@ -226,11 +226,11 @@ public class RequestHandler {
             if (!password.equals(new String(data[1]))) {
                 return ErrorReply.AUTH_FAILED;
             }
-            AuthHolder.flagBySocketAddress.put(remoteAddress, true);
+            AfterAuthFlagHolder.add(remoteAddress);
             return OKReply.INSTANCE;
         }
 
-        if (password != null && AuthHolder.flagBySocketAddress.get(remoteAddress) == null) {
+        if (password != null && !AfterAuthFlagHolder.contains(remoteAddress)) {
             return ErrorReply.NO_AUTH;
         }
 
