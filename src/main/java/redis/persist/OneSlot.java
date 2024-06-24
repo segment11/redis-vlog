@@ -745,7 +745,10 @@ public class OneSlot {
         if (isPersistLengthOverSegmentLength || key.startsWith("kerry-test-big-string-")) {
             var uuid = snowFlake.nextId();
             var bytes = cv.getCompressedData();
-            bigStringFiles.writeBigStringBytes(uuid, key, bytes);
+            var isWriteOk = bigStringFiles.writeBigStringBytes(uuid, key, bytes);
+            if (!isWriteOk) {
+                throw new RuntimeException("Write big string file error, uuid: " + uuid + ", key: " + key);
+            }
 
             if (masterUpdateCallback != null) {
                 masterUpdateCallback.onBigStringFileWrite(slot, uuid, bytes);

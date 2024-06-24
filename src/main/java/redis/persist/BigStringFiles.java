@@ -91,12 +91,14 @@ public class BigStringFiles {
         }
     }
 
-    void writeBigStringBytes(long uuid, String key, byte[] bytes) {
+    boolean writeBigStringBytes(long uuid, String key, byte[] bytes) {
         var file = new File(bigStringDir, String.valueOf(uuid));
         try {
             FileUtils.writeByteArrayToFile(file, bytes);
+            return true;
         } catch (IOException e) {
             log.error("Write big string file error, uuid: " + uuid + ", key: " + key, e);
+            return false;
         }
     }
 

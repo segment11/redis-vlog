@@ -3,6 +3,9 @@ package redis.persist;
 import java.util.ArrayList;
 
 public class LRUPrepareBytesStats {
+    private LRUPrepareBytesStats() {
+    }
+
     enum Type {
         fd_key_bucket, fd_chunk_data, big_string, kv_read_group_by_wal_group, kv_write_in_wal, chunk_segment_merged_cv_buffer
     }
