@@ -32,11 +32,11 @@ public class KeyBucket {
     // just make sure when refactoring
     private static final int INIT_BYTES_LENGTH = HEADER_LENGTH + INIT_CAPACITY * (ONE_CELL_META_LENGTH + ONE_CELL_LENGTH);
 
-    static {
-        if (INIT_BYTES_LENGTH > KEY_BUCKET_ONE_COST_SIZE) {
-            throw new IllegalStateException("INIT_BYTES_LENGTH > KEY_BUCKET_ONE_COST_SIZE");
-        }
-    }
+//    static {
+//        if (INIT_BYTES_LENGTH > KEY_BUCKET_ONE_COST_SIZE) {
+//            throw new IllegalStateException("INIT_BYTES_LENGTH > KEY_BUCKET_ONE_COST_SIZE");
+//        }
+//    }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -177,6 +177,7 @@ public class KeyBucket {
             buffer.position(oneCellOffset(cellIndex));
 
             var keyLength = buffer.getShort();
+            // data error, need recover
             if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength <= 0) {
                 throw new IllegalStateException("Key length error, key length: " + keyLength);
             }
@@ -184,6 +185,7 @@ public class KeyBucket {
             buffer.get(keyBytes);
 
             var valueLength = buffer.get();
+            // data error, need recover
             if (valueLength > CompressedValue.VALUE_MAX_LENGTH || valueLength < 0) {
                 throw new IllegalStateException("Value length error, value length: " + valueLength);
             }
@@ -249,7 +251,11 @@ public class KeyBucket {
         }
     }
 
-    private void clearOneExpired(int i) {
+    void clearOneExpired(int i) {
+        if (i >= capacity) {
+            throw new IllegalArgumentException("i >= capacity");
+        }
+
         int cellCount = 1;
         for (int cellIndex = i + 1; cellIndex < capacity; cellIndex++) {
             int metaIndex = metaIndex(cellIndex);
@@ -308,9 +314,13 @@ public class KeyBucket {
     }
 
     public DoPutResult put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, boolean doUpdateSeq) {
+        if (valueBytes.length > Byte.MAX_VALUE) {
+            throw new IllegalArgumentException("Value bytes too large, value length=" + valueBytes.length);
+        }
+
         int cellCount = KVMeta.calcCellCount((short) keyBytes.length, (byte) valueBytes.length);
         if (cellCount >= INIT_CAPACITY) {
-            throw new BucketFullException("Key with value bytes too large, key length=" + keyBytes.length
+            throw new IllegalArgumentException("Key with value bytes too large, key length=" + keyBytes.length
                     + ", value length=" + valueBytes.length);
         }
 
@@ -373,6 +383,7 @@ public class KeyBucket {
                 break;
             }
 
+            // never happen here, because expired or exists already clear cells
             buffer.putLong(buffer.position() - EXPIRE_AT_VALUE_LENGTH, NO_EXPIRE);
             buffer.putLong(buffer.position() - EXPIRE_AT_VALUE_LENGTH - HASH_VALUE_LENGTH, NO_KEY);
             beginResetOldCellIndex++;
@@ -385,17 +396,6 @@ public class KeyBucket {
         // number or short value or pvm, 1 byte is enough
         buffer.put((byte) valueBytes.length);
         buffer.put(valueBytes);
-    }
-
-    private KVMeta isCellUseTargetKey(byte[] keyBytes, long keyHash, int cellIndex) {
-        int metaIndex = metaIndex(cellIndex);
-        var cellHashValue = buffer.getLong(metaIndex);
-
-        if (cellHashValue != keyHash) {
-            return null;
-        }
-
-        return keyMatch(keyBytes, oneCellOffset(cellIndex));
     }
 
     private CanPutResult canPut(byte[] keyBytes, long keyHash, int cellIndex, int cellCount) {
@@ -422,6 +422,7 @@ public class KeyBucket {
             var matchMeta = keyMatch(keyBytes, oneCellOffset(cellIndex));
             if (matchMeta != null) {
                 // update
+                // never happen here, because exists already clear cells
                 var flag = isCellAvailableN(cellIndex + 1, cellCount - 1, true);
                 return new CanPutResult(flag, true);
             } else {
@@ -431,7 +432,7 @@ public class KeyBucket {
         }
     }
 
-    private boolean isCellAvailableN(int cellIndex, int cellCount, boolean isForUpdate) {
+    boolean isCellAvailableN(int cellIndex, int cellCount, boolean isForUpdate) {
         for (int i = 0; i < cellCount; i++) {
             int nextCellIndex = cellIndex + i;
             if (nextCellIndex >= capacity) {
@@ -540,6 +541,8 @@ public class KeyBucket {
                 }
 
                 isDeleted = true;
+                // need break?
+                break;
             } else {
                 // hash conflict, just continue
                 log.warn("Key hash conflict, key hash={}, target cell index={}, key={}, slot={}, bucket index={}",
@@ -567,5 +570,4 @@ public class KeyBucket {
 
         return new KVMeta(offset, (short) keyBytes.length, buffer.get(offset + Short.BYTES + keyBytes.length));
     }
-
 }
