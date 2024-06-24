@@ -15,7 +15,7 @@ public enum ConfForSlot {
     private static final int DEFAULT_ESTIMATE_ONE_VALUE_LENGTH = 200;
     private static final int MAX_ESTIMATE_ONE_VALUE_LENGTH = 2000;
 
-    public boolean isValueSetUseCompression = false;
+    public boolean isValueSetUseCompression = true;
     public boolean isOnDynTrainDictForCompression = true;
 
     public String netListenAddresses;
@@ -24,7 +24,7 @@ public enum ConfForSlot {
     public final ConfChunk confChunk;
     public final ConfWal confWal;
     public final ConfLru lruBigString = new ConfLru(1000);
-    public final ConfLru lruKeyAndCompressedValueEncoded = new ConfLru(1_00_000);
+    public final ConfLru lruKeyAndCompressedValueEncoded = new ConfLru(100_000);
 
     public boolean pureMemory = false;
     public short slotNumber = 1;
@@ -147,6 +147,22 @@ public enum ConfForSlot {
             return segmentNumberPerFd * fdPerChunk;
         }
 
+        private int segmentNumberPerFdOld;
+        private byte fdPerChunkOld;
+        private int segmentLengthOld;
+
+        void mark() {
+            this.segmentNumberPerFdOld = this.segmentNumberPerFd;
+            this.fdPerChunkOld = this.fdPerChunk;
+            this.segmentLengthOld = this.segmentLength;
+        }
+
+        void reset() {
+            this.segmentNumberPerFd = this.segmentNumberPerFdOld;
+            this.fdPerChunk = this.fdPerChunkOld;
+            this.segmentLength = this.segmentLengthOld;
+        }
+
         public void resetByOneValueLength(int estimateOneValueLength) {
             boolean isValueSetUseCompression1 = ConfForSlot.global.isValueSetUseCompression;
             // if not use compression, chunk files number need to be doubled
@@ -219,6 +235,22 @@ public enum ConfForSlot {
         // 200 make sure there is at least one batch 16KB
         public int valueSizeTrigger;
         public int shortValueSizeTrigger;
+
+        private int oneChargeBucketNumberOld;
+        private int valueSizeTriggerOld;
+        private int shortValueSizeTriggerOld;
+
+        void mark() {
+            this.oneChargeBucketNumberOld = this.oneChargeBucketNumber;
+            this.valueSizeTriggerOld = this.valueSizeTrigger;
+            this.shortValueSizeTriggerOld = this.shortValueSizeTrigger;
+        }
+
+        void reset() {
+            this.oneChargeBucketNumber = this.oneChargeBucketNumberOld;
+            this.valueSizeTrigger = this.valueSizeTriggerOld;
+            this.shortValueSizeTrigger = this.shortValueSizeTriggerOld;
+        }
 
         private void resetWalStaticValues(int oneGroupBufferSize) {
             if (Wal.ONE_GROUP_BUFFER_SIZE != oneGroupBufferSize) {
