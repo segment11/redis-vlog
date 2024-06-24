@@ -5,6 +5,9 @@ import net.jpountz.xxhash.XXHash64;
 import net.jpountz.xxhash.XXHashFactory;
 
 public class KeyHash {
+    private KeyHash() {
+    }
+
     private static final XXHash64 xxHash64Java = XXHashFactory.fastestJavaInstance().hash64();
     private static final XXHash32 xxHash32Java = XXHashFactory.fastestJavaInstance().hash32();
 
