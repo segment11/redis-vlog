@@ -32,9 +32,7 @@ public class CompressStats {
 
                 map.put("raw_total_length", new SimpleGauge.ValueWithLabelValues((double) rawTotalLength, labelValues));
                 map.put("compressed_total_length", new SimpleGauge.ValueWithLabelValues((double) compressedTotalLength, labelValues));
-                if (compressedTotalLength > 0) {
-                    map.put("compression_ratio", new SimpleGauge.ValueWithLabelValues((double) compressedTotalLength / rawTotalLength, labelValues));
-                }
+                map.put("compression_ratio", new SimpleGauge.ValueWithLabelValues((double) compressedTotalLength / rawTotalLength, labelValues));
             }
 
             if (decompressedCount > 0) {
@@ -48,7 +46,7 @@ public class CompressStats {
         });
     }
 
-    private final static SimpleGauge compressStatsGauge = new SimpleGauge("compress_stats", "compress stats",
+    final static SimpleGauge compressStatsGauge = new SimpleGauge("compress_stats", "compress stats",
             "name");
 
     static {
