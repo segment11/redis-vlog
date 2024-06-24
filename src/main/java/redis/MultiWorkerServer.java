@@ -450,9 +450,6 @@ public class MultiWorkerServer extends Launcher {
             }
             System.out.println("Multi slot request eventloop threads stopped");
 
-            // disconnect all clients
-            socketInspector.closeAll();
-
             // close local persist
             LocalPersist.getInstance().cleanUp();
             DictMap.getInstance().close();
