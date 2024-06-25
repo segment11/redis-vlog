@@ -163,17 +163,21 @@ public class KeyBucketsInOneWalGroup {
 
     boolean isSplit = false;
 
-    private final boolean[] isUpdatedBySplitIndex = new boolean[KeyLoader.MAX_SPLIT_NUMBER];
+    final boolean[] isUpdatedBySplitIndex = new boolean[KeyLoader.MAX_SPLIT_NUMBER];
 
-    private void putPvmListToTargetBucketAfterClearAllIfSplit(List<PersistValueMeta> needAddNewList,
-                                                              List<PersistValueMeta> needUpdateList,
-                                                              List<PersistValueMeta> needDeleteList, Integer bucketIndex) {
+    void putPvmListToTargetBucketAfterClearAllIfSplit(List<PersistValueMeta> needAddNewList,
+                                                      List<PersistValueMeta> needUpdateList,
+                                                      List<PersistValueMeta> needDeleteList, Integer bucketIndex) {
         int relativeBucketIndex = bucketIndex - beginBucketIndex;
         // if split, current split number is new split number
         var currentSplitNumber = splitNumberTmp[relativeBucketIndex];
 
         needAddNewList.addAll(needUpdateList);
         for (var pvm : needAddNewList) {
+            if (pvm.expireAt == CompressedValue.EXPIRE_NOW) {
+                continue;
+            }
+
             var splitIndex = KeyHash.splitIndex(pvm.keyHash, currentSplitNumber, bucketIndex);
 
             var list = listList.get(splitIndex);
@@ -239,7 +243,7 @@ public class KeyBucketsInOneWalGroup {
             if (listList.size() < newMaxSplitNumber) {
                 for (int i = listList.size(); i < newMaxSplitNumber; i++) {
                     listList.add(prepareListInitWithNull());
-                    assert listList.size() == i + 1;
+//                    assert listList.size() == i + 1;
                 }
             }
             splitNumberTmp[relativeBucketIndex] = (byte) newMaxSplitNumber;
@@ -383,13 +387,13 @@ public class KeyBucketsInOneWalGroup {
             needSplit = true;
             if (newKeyCountNeedThisBucket > canPutKeyCountThisBucket * KeyLoader.SPLIT_MULTI_STEP) {
                 splitMultiStep *= KeyLoader.SPLIT_MULTI_STEP;
-                log.warn("Bucket split once 4 times for slot: {}, bucket index: {}, once add key count: {}", slot, bucketIndex, newKeyCountNeedThisBucket);
+                log.warn("Bucket split once 2 times 1 -> 9 for slot: {}, bucket index: {}, once add key count: {}", slot, bucketIndex, newKeyCountNeedThisBucket);
             }
         } else if (newCellCostNeedThisBucket > canPutKeyCountThisBucket - tolerance) {
             needSplit = true;
             if (newCellCostNeedThisBucket > canPutKeyCountThisBucket * KeyLoader.SPLIT_MULTI_STEP) {
                 splitMultiStep *= KeyLoader.SPLIT_MULTI_STEP;
-                log.warn("Bucket split once 4 times for slot: {}, bucket index: {}, once add cell cost: {}", slot, bucketIndex, newCellCostNeedThisBucket);
+                log.warn("Bucket split once 2 times 1 -> 9 for slot: {}, bucket index: {}, once add cell cost: {}", slot, bucketIndex, newCellCostNeedThisBucket);
             }
         }
 
