@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static redis.persist.Chunk.*;
@@ -23,7 +22,7 @@ public class MetaChunkSegmentFlagSeq {
 
     private final byte slot;
     private final int maxSegmentNumber;
-    private final int allCapacity;
+    final int allCapacity;
     private RandomAccessFile raf;
 
     private static void fillSegmentFlagInit(byte[] innerBytes) {
@@ -35,7 +34,7 @@ public class MetaChunkSegmentFlagSeq {
         }
     }
 
-    private final byte[] inMemoryCachedBytes;
+    final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
     byte[] getInMemoryCachedBytes() {
@@ -166,9 +165,18 @@ public class MetaChunkSegmentFlagSeq {
     }
 
     int getMergedSegmentIndexEndLastTime(int currentSegmentIndex, int halfSegmentNumber) {
-        var tmpBytes = new byte[allCapacity];
-        fillSegmentFlagInit(tmpBytes);
-        var isAllFlagInit = Arrays.equals(inMemoryCachedBytes, tmpBytes);
+        // only execute once when server start, do not mind performance
+//        var tmpBytes = new byte[allCapacity];
+//        fillSegmentFlagInit(tmpBytes);
+//        var isAllFlagInit = Arrays.equals(inMemoryCachedBytes, tmpBytes);
+
+        boolean isAllFlagInit = true;
+        for (int i = 0; i < allCapacity; i += ONE_LENGTH) {
+            if (inMemoryCachedBytes[i] != SEGMENT_FLAG_INIT) {
+                isAllFlagInit = false;
+                break;
+            }
+        }
         if (isAllFlagInit) {
             return NO_NEED_MERGE_SEGMENT_INDEX;
         }
