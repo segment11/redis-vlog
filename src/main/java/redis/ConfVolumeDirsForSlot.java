@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 
 public class ConfVolumeDirsForSlot {
+    private ConfVolumeDirsForSlot() {
+    }
+
     private static Logger log = LoggerFactory.getLogger(ConfVolumeDirsForSlot.class);
 
     private static String[] volumeDirsBySlot;
@@ -39,7 +42,7 @@ public class ConfVolumeDirsForSlot {
                 }
                 var start = Integer.parseInt(range[0]);
                 var end = Integer.parseInt(range[1]);
-                if (start < 0 || end >= slotNumber) {
+                if (start > end || end >= slotNumber) {
                     throw new IllegalArgumentException("Invalid volumeDirsBySlot config: " + value);
                 }
                 for (int i = start; i <= end; i++) {

@@ -15,7 +15,7 @@ public class TaskRunnable implements Runnable {
         this.netWorkers = netWorkers;
     }
 
-    private final ArrayList<OneSlot> oneSlots = new ArrayList<>();
+    final ArrayList<OneSlot> oneSlots = new ArrayList<>();
 
     public void chargeOneSlots(OneSlot[] oneSlots) {
         for (var oneSlot : oneSlots) {

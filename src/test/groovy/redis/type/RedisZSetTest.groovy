@@ -69,10 +69,12 @@ class RedisZSetTest extends Specification {
         rz.add(3, 'c')
 
         def encoded = rz.encode()
-        def rz2 = RedisZSet.decode(encoded)
+        def rz2 = RedisZSet.decode(encoded, false)
+        def rz3 = RedisZSet.decode(encoded)
 
         then:
         rz2.size() == 3
+        rz3.size() == 3
         rz2.contains('a')
         rz2.contains('b')
         rz2.contains('c')

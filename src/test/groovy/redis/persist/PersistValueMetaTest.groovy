@@ -3,7 +3,21 @@ package redis.persist
 import spock.lang.Specification
 
 class PersistValueMetaTest extends Specification {
-    def "encode"() {
+    def 'test is pvm'() {
+        given:
+        def bytes = new byte[PersistValueMeta.ENCODED_LENGTH]
+
+        expect:
+        PersistValueMeta.isPvm(bytes)
+        !PersistValueMeta.isPvm(new byte[10])
+
+        when:
+        bytes[0] = -1
+        then:
+        !PersistValueMeta.isPvm(bytes)
+    }
+
+    def 'test encode'() {
         given:
         def one = new PersistValueMeta()
         one.slot = (byte) 0
@@ -12,11 +26,51 @@ class PersistValueMetaTest extends Specification {
         one.segmentIndex = 10
         one.segmentOffset = 10
 
+        println one.shortString()
+
         when:
         def encoded = one.encode()
 
         then:
         PersistValueMeta.isPvm(encoded)
         PersistValueMeta.decode(encoded).toString() == one.toString()
+    }
+
+    def 'test some branches'() {
+        given:
+        def one = new PersistValueMeta()
+        one.keyBytes = 'a'.bytes
+
+        when:
+        def cellCost = one.cellCostInKeyBucket()
+
+        then:
+        cellCost == 1
+
+        when:
+        one.extendBytes = new byte[Byte.MAX_VALUE + 1]
+        boolean exception = false
+
+        try {
+            cellCost = one.cellCostInKeyBucket()
+        } catch (IllegalArgumentException e) {
+            exception = true
+        }
+
+        then:
+        exception
+
+        when:
+        one.extendBytes = new byte[Byte.MAX_VALUE]
+        exception = false
+
+        try {
+            cellCost = one.cellCostInKeyBucket()
+        } catch (IllegalArgumentException e) {
+            exception = true
+        }
+
+        then:
+        !exception
     }
 }

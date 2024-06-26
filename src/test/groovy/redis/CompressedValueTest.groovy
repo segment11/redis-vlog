@@ -1,6 +1,6 @@
 package redis
 
-
+import io.activej.bytebuf.ByteBuf
 import io.netty.buffer.Unpooled
 import spock.lang.Specification
 
@@ -13,6 +13,10 @@ class CompressedValueTest extends Specification {
         def cv = new CompressedValue()
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_BYTE
         cv.compressedData = new byte[0]
+        println cv
+        println cv.getExpireAt()
+        println cv.compressedLength()
+        println cv.uncompressedLength()
 
         expect:
         CompressedValue.isTypeNumber(CompressedValue.SP_TYPE_NUM_BYTE)
@@ -20,19 +24,43 @@ class CompressedValueTest extends Specification {
         CompressedValue.isTypeNumber(CompressedValue.SP_TYPE_NUM_INT)
         CompressedValue.isTypeNumber(CompressedValue.SP_TYPE_NUM_LONG)
         CompressedValue.isTypeNumber(CompressedValue.SP_TYPE_NUM_DOUBLE)
+        !CompressedValue.isTypeNumber(CompressedValue.SP_TYPE_SHORT_STRING)
+        !CompressedValue.isTypeNumber(CompressedValue.NULL_DICT_SEQ)
+        !CompressedValue.isTypeString(CompressedValue.SP_TYPE_HASH)
 
         CompressedValue.preferCompress(CompressedValue.SP_TYPE_HH_COMPRESSED)
         CompressedValue.preferCompress(CompressedValue.SP_TYPE_HASH_COMPRESSED)
         CompressedValue.preferCompress(CompressedValue.SP_TYPE_LIST_COMPRESSED)
         CompressedValue.preferCompress(CompressedValue.SP_TYPE_SET_COMPRESSED)
         CompressedValue.preferCompress(CompressedValue.SP_TYPE_ZSET_COMPRESSED)
+        !CompressedValue.preferCompress(CompressedValue.SP_TYPE_HASH)
 
         CompressedValue.isTypeString(cv.dictSeqOrSpType)
         CompressedValue.isDeleted(new byte[]{CompressedValue.SP_FLAG_DELETE_TMP})
+        !CompressedValue.isDeleted(new byte[2])
+        !CompressedValue.isDeleted(new byte[]{0})
 
         cv.isTypeNumber()
         cv.isTypeString()
         cv.isShortString()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SHORT_STRING
+        then:
+        cv.isTypeString()
+        !cv.isTypeNumber()
+        !cv.isBigString()
+        !cv.isHash()
+        !cv.isList()
+        !cv.isSet()
+        !cv.isZSet()
+        !cv.isStream()
+        !cv.isUseDict()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.NULL_DICT_SEQ
+        then:
+        !cv.isTypeNumber()
 
         when:
         cv.compressedData = new byte[CompressedValue.SP_TYPE_SHORT_STRING_MIN_LEN]
@@ -45,6 +73,78 @@ class CompressedValueTest extends Specification {
 
         then:
         !cv.isShortString()
+
+        when:
+        cv.compressedData = null
+        then:
+        !cv.isShortString()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
+        then:
+        cv.isHash()
+        !cv.isTypeString()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH_COMPRESSED
+        then:
+        cv.isHash()
+        cv.isCompressed()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        then:
+        cv.isHash()
+        !cv.isCompressed()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HH_COMPRESSED
+        then:
+        cv.isHash()
+        cv.isCompressed()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST
+        then:
+        cv.isList()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST_COMPRESSED
+        then:
+        cv.isList()
+        cv.isCompressed()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+        then:
+        cv.isSet()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SET_COMPRESSED
+        then:
+        cv.isSet()
+        cv.isCompressed()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
+        then:
+        cv.isZSet()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET_COMPRESSED
+        then:
+        cv.isZSet()
+        cv.isCompressed()
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_STREAM
+        then:
+        cv.isStream()
+
+        when:
+        cv.dictSeqOrSpType = Dict.GLOBAL_ZSTD_DICT_SEQ
+        then:
+        cv.isCompressed()
     }
 
     def 'test expire'() {
@@ -52,6 +152,7 @@ class CompressedValueTest extends Specification {
         def cv = new CompressedValue()
 
         expect:
+        cv.noExpire()
         !cv.isExpired()
 
         when:
@@ -59,6 +160,13 @@ class CompressedValueTest extends Specification {
 
         then:
         cv.isExpired()
+        !cv.noExpire()
+
+        when:
+        cv.expireAt = System.currentTimeMillis() + 1000
+
+        then:
+        !cv.isExpired()
 
         when:
         cv.expireAt = CompressedValue.EXPIRE_NOW
@@ -77,9 +185,24 @@ class CompressedValueTest extends Specification {
         cv.compressedLength = 10
         cv.uncompressedLength = 10
 
+        def cv2 = new CompressedValue()
+        cv2.seq = 123L
+        cv2.seq = 123L
+        cv2.dictSeqOrSpType = 1
+        cv2.keyHash = 123L
+        cv2.compressedData = null
+        cv2.compressedLength = 0
+        cv2.uncompressedLength = 0
+
         when:
         def encoded = cv.encode()
+        def encoded2 = cv2.encode()
         def cvDecode = CompressedValue.decode(Unpooled.wrappedBuffer(encoded), null, 0L)
+
+        var buf = ByteBuf.wrapForWriting(new byte[cv.encodedLength()]);
+        var buf2 = ByteBuf.wrapForWriting(new byte[cv2.encodedLength()]);
+        cv.encodeTo(buf)
+        cv2.encodeTo(buf2)
 
         then:
         cvDecode.seq == cv.seq
@@ -88,6 +211,22 @@ class CompressedValueTest extends Specification {
         cvDecode.compressedLength == cv.compressedLength
         cvDecode.uncompressedLength == cv.uncompressedLength
         Arrays.equals(cvDecode.compressedData, cv.compressedData)
+
+        encoded.length == cv.encodedLength()
+        buf.tail() == cv.encodedLength()
+
+        encoded2.length == CompressedValue.VALUE_HEADER_LENGTH
+        buf2.tail() == CompressedValue.VALUE_HEADER_LENGTH
+
+        when:
+        cv2.compressedData = new byte[0]
+        encoded2 = cv2.encode()
+        buf2.tail(0)
+        cv2.encodeTo(buf2)
+
+        then:
+        encoded2.length == CompressedValue.VALUE_HEADER_LENGTH
+        buf2.tail() == CompressedValue.VALUE_HEADER_LENGTH
 
         when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_BYTE
@@ -103,6 +242,80 @@ class CompressedValueTest extends Specification {
         cvDecodeNumber.numberValue() == Byte.MAX_VALUE
 
         when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_SHORT
+        def shortBytes = new byte[2]
+        ByteBuffer.wrap(shortBytes).putShort(Short.MAX_VALUE)
+        cv.compressedData = shortBytes
+        encodedNumber = cv.encodeAsNumber()
+        cvDecodeNumber = CompressedValue.decode(Unpooled.wrappedBuffer(encodedNumber), null, 0L)
+
+        then:
+        encodedNumber.length == 11
+        cvDecodeNumber.numberValue() == Short.MAX_VALUE
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_INT
+        def intBytes = new byte[4]
+        ByteBuffer.wrap(intBytes).putInt(Integer.MAX_VALUE)
+        cv.compressedData = intBytes
+        encodedNumber = cv.encodeAsNumber()
+        cvDecodeNumber = CompressedValue.decode(Unpooled.wrappedBuffer(encodedNumber), null, 0L)
+
+        then:
+        encodedNumber.length == 13
+        cvDecodeNumber.numberValue() == Integer.MAX_VALUE
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_LONG
+        def longBytes = new byte[8]
+        ByteBuffer.wrap(longBytes).putLong(Long.MAX_VALUE)
+        cv.compressedData = longBytes
+        encodedNumber = cv.encodeAsNumber()
+        cvDecodeNumber = CompressedValue.decode(Unpooled.wrappedBuffer(encodedNumber), null, 0L)
+
+        then:
+        encodedNumber.length == 17
+        cvDecodeNumber.numberValue() == Long.MAX_VALUE
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_DOUBLE
+        def doubleBytes = new byte[8]
+        ByteBuffer.wrap(doubleBytes).putDouble(Double.MAX_VALUE)
+        cv.compressedData = doubleBytes
+        encodedNumber = cv.encodeAsNumber()
+        cvDecodeNumber = CompressedValue.decode(Unpooled.wrappedBuffer(encodedNumber), null, 0L)
+
+        then:
+        encodedNumber.length == 17
+        cvDecodeNumber.numberValue() == Double.MAX_VALUE
+
+        when:
+        boolean exception = false
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SHORT_STRING
+        cv.compressedData = new byte[10]
+
+        try {
+            cv.encodeAsNumber()
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+
+        when:
+        exception = false
+
+        try {
+            cv.numberValue()
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+
+        when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SHORT_STRING
         def encodedShortString = cv.encodeAsShortString()
         def encodedBufferShortString = ByteBuffer.wrap(encodedShortString)
@@ -112,6 +325,8 @@ class CompressedValueTest extends Specification {
         encodedShortString.length == 19
         encodedBufferShortString.getLong(1) == cv.seq
         encodedBufferShortString.slice(9, 10) == ByteBuffer.wrap(cv.compressedData)
+
+        CompressedValue.encodeAsShortString(1L, new byte[10]).length == 19
 
         when:
         cv.dictSeqOrSpType = 100

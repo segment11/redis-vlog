@@ -67,9 +67,9 @@ public class RedisZSet {
             if (member.equals(MAX_MEMBER)) {
                 return 1;
             }
-            if (o.member.equals(MAX_MEMBER)) {
-                return -1;
-            }
+//            if (o.member.equals(MAX_MEMBER)) {
+//                return -1;
+//            }
             return member.compareTo(o.member);
         }
 

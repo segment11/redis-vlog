@@ -18,7 +18,7 @@ public class SnowFlake {
     private final long datacenterId;
     private final long machineId;
     private long sequence = 0L;
-    private long lastStamp = -1L;
+    long lastStamp = -1L;
 
     public SnowFlake(long datacenterId, long machineId) {
         if (datacenterId > MAX_DATACENTER_NUM || datacenterId < 0) {

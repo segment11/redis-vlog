@@ -44,4 +44,32 @@ class TaskRunnableTest extends Specification {
         then:
         1 == 1
     }
+
+    def 'test some branches'() {
+        given:
+        final byte slot = 0
+        def oneSlot = new OneSlot(slot, Consts.slotDir, null, null)
+        oneSlot.taskChain.add(new TaskChainTest.Task1())
+        def oneSlot2 = new OneSlot((byte) 1, Consts.slotDir, null, null)
+        oneSlot2.taskChain.add(new TaskChainTest.Task1())
+
+
+        OneSlot[] oneSlots = new OneSlot[2]
+        oneSlots[0] = oneSlot
+        oneSlots[1] = oneSlot2
+
+        and:
+        def taskRunnable = new TaskRunnable((byte) 0, (byte) 2)
+        taskRunnable.chargeOneSlots(oneSlots)
+
+        expect:
+        taskRunnable.oneSlots.size() == 1
+
+        when:
+        taskRunnable.stop()
+        taskRunnable.run()
+
+        then:
+        1 == 1
+    }
 }

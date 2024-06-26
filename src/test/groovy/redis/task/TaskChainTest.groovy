@@ -37,11 +37,33 @@ class TaskChainTest extends Specification {
         }
     }
 
+    static class Task3 implements ITask {
+        @Override
+        String name() {
+            'task3'
+        }
+
+        @Override
+        void run() {
+            println 'task3, loop count: ' + loopCount
+        }
+
+        int loopCount
+
+        @Override
+        void setLoopCount(int loopCount) {
+            this.loopCount = loopCount
+        }
+    }
+
     def 'test all'() {
         given:
         def taskChain = new TaskChain()
         def task1 = new Task1()
         def task2 = new Task2()
+        def task3 = new Task3()
+
+        println task3.executeOnceAfterLoopCount()
 
         when:
         taskChain.add(task1)
