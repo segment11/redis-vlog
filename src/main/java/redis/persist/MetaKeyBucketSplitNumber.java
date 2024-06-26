@@ -15,7 +15,7 @@ public class MetaKeyBucketSplitNumber {
     private static final String META_KEY_BUCKET_SPLIT_NUMBER_FILE = "meta_key_bucket_split_number.dat";
 
     private final byte slot;
-    private final int allCapacity;
+    final int allCapacity;
     private final byte initialSplitNumber;
     private RandomAccessFile raf;
 

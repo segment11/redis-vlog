@@ -18,8 +18,6 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         allInMemoryCachedBytes.length == one.allCapacity
 
         when:
-        ConfForSlot.global.pureMemory = false
-
         def bytes0 = new byte[one.allCapacity]
         one.overwriteInMemoryCachedBytes(bytes0)
 
@@ -40,7 +38,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
 
         try {
             one.overwriteInMemoryCachedBytes(bytes0WrongSize)
-        } catch (e) {
+        } catch (IllegalArgumentException e) {
             exception = true
         }
 
@@ -56,11 +54,11 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
 
     def 'test read write seq'() {
         given:
+        ConfForSlot.global.pureMemory = false
+
         def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
         when:
-        ConfForSlot.global.pureMemory = false
-
         one.setSegmentMergeFlag(10, (byte) 1, 1L, 0)
         def segmentFlag = one.getSegmentMergeFlag(10)
 
@@ -72,17 +70,23 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         when:
         ConfForSlot.global.pureMemory = true
 
-        one.setSegmentMergeFlag(10, (byte) 1, 1L, 0)
-        segmentFlag = one.getSegmentMergeFlag(10)
+        def one2 = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+
+        one2.setSegmentMergeFlag(10, (byte) 1, 1L, 0)
+        def segmentFlag2 = one2.getSegmentMergeFlag(10)
 
         then:
-        segmentFlag.flag == 1
-        segmentFlag.segmentSeq == 1L
-        segmentFlag.walGroupIndex == 0
+        segmentFlag2.flag == 1
+        segmentFlag2.segmentSeq == 1L
+        segmentFlag2.walGroupIndex == 0
 
         cleanup:
+        ConfForSlot.global.pureMemory = false
         one.clear()
         one.cleanUp()
+        ConfForSlot.global.pureMemory = true
+        one2.clear()
+        one2.cleanUp()
         ConfForSlot.global.pureMemory = false
     }
 

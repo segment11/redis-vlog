@@ -18,11 +18,36 @@ public class StatKeyCountInBuckets {
 
     private final byte slot;
     private final int bucketsPerSlot;
-    private final int allCapacity;
+    final int allCapacity;
     private RandomAccessFile raf;
 
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
+
+    byte[] getInMemoryCachedBytes() {
+        var dst = new byte[inMemoryCachedBytes.length];
+        inMemoryCachedByteBuffer.position(0).get(dst);
+        return dst;
+    }
+
+    void overwriteInMemoryCachedBytes(byte[] bytes) {
+        if (bytes.length != inMemoryCachedBytes.length) {
+            throw new IllegalArgumentException("Repl stat key count in buckets, bytes length not match");
+        }
+
+        if (ConfForSlot.global.pureMemory) {
+            inMemoryCachedByteBuffer.position(0).put(bytes);
+            return;
+        }
+
+        try {
+            raf.seek(0);
+            raf.write(bytes);
+            inMemoryCachedByteBuffer.position(0).put(bytes);
+        } catch (IOException e) {
+            throw new RuntimeException("Repl stat key count in buckets, write file error", e);
+        }
+    }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
