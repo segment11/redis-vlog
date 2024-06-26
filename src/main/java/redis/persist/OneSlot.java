@@ -63,6 +63,34 @@ public class OneSlot {
         this.metaChunkSegmentIndex = new MetaChunkSegmentIndex(slot, slotDir);
     }
 
+    // for unit test, only for async run/call
+    OneSlot(byte slot, Eventloop eventloop) {
+        this.slot = slot;
+        this.slotStr = String.valueOf(slot);
+        this.slotDir = null;
+        this.slotNumber = 1;
+
+        this.keyLoader = null;
+        this.snowFlake = null;
+        this.persistConfig = null;
+        this.chunkSegmentLength = 4096;
+
+        this.bigStringFiles = null;
+        this.chunkMergeWorker = null;
+        this.dynConfig = null;
+        this.walGroupNumber = 1;
+        this.walArray = new Wal[0];
+        this.raf = null;
+        this.rafShortValue = null;
+        this.masterUpdateCallback = null;
+        this.masterUuid = 0L;
+
+        this.metaChunkSegmentFlagSeq = null;
+        this.metaChunkSegmentIndex = null;
+
+        this.netWorkerEventloop = eventloop;
+    }
+
     public OneSlot(byte slot, short slotNumber, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
         this.chunkSegmentLength = ConfForSlot.global.confChunk.segmentLength;
 

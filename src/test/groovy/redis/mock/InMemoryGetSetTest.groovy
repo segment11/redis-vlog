@@ -23,5 +23,11 @@ class InMemoryGetSetTest extends Specification {
         }
 
         inMemoryGetSet.getBuf(slot, 'key10'.bytes, 0, 10) == null
+
+        when:
+        inMemoryGetSet.remove(slot, 'key5')
+
+        then:
+        inMemoryGetSet.getBuf(slot, 'key5'.bytes, 0, 5) == null
     }
 }

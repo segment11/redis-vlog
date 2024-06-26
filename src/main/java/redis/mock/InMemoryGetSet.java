@@ -14,6 +14,11 @@ public class InMemoryGetSet implements ByPassGetSet {
     }
 
     @Override
+    public void remove(byte slot, String key) {
+        map.remove(key);
+    }
+
+    @Override
     public OneSlot.BufOrCompressedValue getBuf(byte slot, byte[] keyBytes, int bucketIndex, long keyHash) {
         var cv = map.get(new String(keyBytes));
         if (cv == null) {

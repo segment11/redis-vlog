@@ -2,6 +2,7 @@ package redis.persist;
 
 import com.kenai.jffi.PageManager;
 import io.activej.config.Config;
+import io.activej.eventloop.Eventloop;
 import jnr.ffi.LibraryLoader;
 import jnr.posix.LibC;
 import org.slf4j.Logger;
@@ -55,6 +56,12 @@ public class LocalPersist {
 
     public OneSlot oneSlot(byte slot) {
         return oneSlots[slot];
+    }
+
+    public void addOneSlotForTest(byte slot, Eventloop eventloop) {
+        var oneSlot = new OneSlot(slot, eventloop);
+        this.oneSlots = new OneSlot[slot + 1];
+        this.oneSlots[slot] = oneSlot;
     }
 
     public void initSlots(byte netWorkers, short slotNumber, SnowFlake[] snowFlakes, File persistDir, Config persistConfig) throws IOException {

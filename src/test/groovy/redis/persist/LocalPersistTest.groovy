@@ -33,4 +33,14 @@ class LocalPersistTest extends Specification {
         cleanup:
         localPersist.cleanUp()
     }
+
+    def 'test mock one slot'() {
+        given:
+        def localPersist = LocalPersist.instance
+
+        localPersist.addOneSlotForTest((byte) 0, null)
+
+        expect:
+        localPersist.oneSlots().length == 1
+    }
 }

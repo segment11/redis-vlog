@@ -22,8 +22,9 @@ import static redis.CompressedValue.NULL_DICT_SEQ;
 import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 public abstract class BaseCommand {
-    protected final String cmd;
-    protected final byte[][] data;
+    // need final, for unit test, can change
+    protected String cmd;
+    protected byte[][] data;
     protected final ITcpSocket socket;
 
     public BaseCommand(String cmd, byte[][] data, ITcpSocket socket) {
