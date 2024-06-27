@@ -690,12 +690,7 @@ public class OneSlot {
         return decompressedBytes;
     }
 
-    public boolean remove(int bucketIndex, String key, long keyHash, boolean isDelayUpdateKeyBucket) {
-        if (isDelayUpdateKeyBucket) {
-            removeDelay(key, bucketIndex, keyHash);
-            return true;
-        }
-
+    public boolean remove(String key, int bucketIndex, long keyHash) {
         var isRemovedFromWal = removeFromWal(bucketIndex, key, keyHash);
         if (isRemovedFromWal) {
             return true;

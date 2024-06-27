@@ -35,6 +35,10 @@ public class IntegerReply implements Reply {
 
     private static final byte MARKER = ':';
 
+    public long getInteger() {
+        return integer;
+    }
+
     private final long integer;
 
     public IntegerReply(long integer) {

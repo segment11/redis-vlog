@@ -566,6 +566,15 @@ public abstract class BaseCommand {
         }
     }
 
+    public boolean remove(byte slot, int bucketIndex, String key, long keyHash) {
+        if (byPassGetSet != null) {
+            return byPassGetSet.remove((byte) 0, key);
+        }
+
+        var oneSlot = localPersist.oneSlot(slot);
+        return oneSlot.remove(key, bucketIndex, keyHash);
+    }
+
     private void handleTrainSampleResult(TrainSampleJob.TrainSampleResult trainSampleResult) {
         if (trainSampleResult == null) {
             return;

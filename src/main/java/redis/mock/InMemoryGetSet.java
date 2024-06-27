@@ -14,8 +14,8 @@ public class InMemoryGetSet implements ByPassGetSet {
     }
 
     @Override
-    public void remove(byte slot, String key) {
-        map.remove(key);
+    public boolean remove(byte slot, String key) {
+        return map.remove(key) != null;
     }
 
     @Override

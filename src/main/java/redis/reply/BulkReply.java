@@ -3,6 +3,10 @@ package redis.reply;
 import io.activej.bytebuf.ByteBuf;
 
 public class BulkReply implements Reply {
+    public byte[] getRaw() {
+        return raw;
+    }
+
     private byte[] raw;
 
     public BulkReply() {

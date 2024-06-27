@@ -4,11 +4,15 @@ package redis.command;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
+import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 public class DGroup extends BaseCommand {
     public DGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -17,19 +21,25 @@ public class DGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+
+        if ("del".equals(cmd)) {
+            if (data.length < 2) {
+                return slotWithKeyHashList;
+            }
+
+            for (int i = 1; i < data.length; i++) {
+                var keyBytes = data[i];
+                slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+            }
+
+            return slotWithKeyHashList;
+        }
+
         slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
         return slotWithKeyHashList;
     }
 
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
-        if ("del".equals(cmd)) {
-            if (data.length != 2) {
-                return null;
-            }
-            var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
-        }
-
         if ("decr".equals(cmd) || "decrby".equals(cmd)) {
             if (data.length < 2) {
                 return null;
@@ -47,21 +57,7 @@ public class DGroup extends BaseCommand {
         }
 
         if ("dbsize".equals(cmd)) {
-            Promise<Long>[] promises = new Promise[slotNumber];
-            for (int i = 0; i < slotNumber; i++) {
-                var oneSlot = localPersist.oneSlot((byte) i);
-                promises[i] = oneSlot.asyncCall(oneSlot::getAllKeyCount);
-            }
-
-            var r = Promises.toArray(Long.class, promises).map(values -> {
-                long sum = 0;
-                for (long value : values) {
-                    sum += value;
-                }
-                return sum;
-            }).getResult();
-
-            return new IntegerReply(r);
+            return dbsize();
         }
 
         if ("decr".equals(cmd)) {
@@ -88,46 +84,117 @@ public class DGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    record SlotWithKeyHashWithKeyBytes(SlotWithKeyHash slotWithKeyHash, byte[] keyBytes) {
+    }
+
     Reply del() {
-        if (data.length == 2) {
-            // need not lock, because it is always the same worker thread
-            var keyBytes = data[1];
-            var key = new String(keyBytes);
+        if (!isCrossRequestWorker) {
+            int n = 0;
+            for (int i = 1; i < data.length; i++) {
+                var keyBytes = data[i];
+                if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+                    return ErrorReply.KEY_TOO_LONG;
+                }
+                var key = new String(keyBytes);
 
-            var slotWithKeyHash = slotPreferParsed(keyBytes);
-            var slot = slotWithKeyHash.slot();
-            var bucketIndex = slotWithKeyHash.bucketIndex();
-            var keyHash = slotWithKeyHash.keyHash();
+                var slotWithKeyHash = slotWithKeyHashListParsed.get(i - 1);
+                var slot = slotWithKeyHash.slot();
+                var bucketIndex = slotWithKeyHash.bucketIndex();
+                var keyHash = slotWithKeyHash.keyHash();
 
-            var oneSlot = localPersist.oneSlot(slot);
-
-            // remove delay, perf better
-            var isRemoved = oneSlot.remove(bucketIndex, key, keyHash, true);
-            return isRemoved ? IntegerReply.REPLY_1 : IntegerReply.REPLY_0;
+                // remove delay, perf better
+                var isRemoved = remove(slot, bucketIndex, key, keyHash);
+                if (isRemoved) {
+                    n++;
+                }
+            }
+            return new IntegerReply(n);
         }
 
-        int[] nArr = {0};
+        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 1);
         for (int i = 1; i < data.length; i++) {
-            var keyBytes = data[i];
-            if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-                return ErrorReply.KEY_TOO_LONG;
-            }
-            var key = new String(keyBytes);
+            list.add(new SlotWithKeyHashWithKeyBytes(slotWithKeyHashListParsed.get(i - 1), data[i]));
+        }
 
-            var slotWithKeyHash = slot(keyBytes);
-            var slot = slotWithKeyHash.slot();
-            var bucketIndex = slotWithKeyHash.bucketIndex();
-            var keyHash = slotWithKeyHash.keyHash();
+        ArrayList<Promise<ArrayList<Boolean>>> promises = new ArrayList<>();
+        // group by slot
+        var groupBySlot = list.stream().collect(Collectors.groupingBy(it -> it.slotWithKeyHash().slot()));
+        for (var entry : groupBySlot.entrySet()) {
+            var slot = entry.getKey();
+            var subList = entry.getValue();
 
             var oneSlot = localPersist.oneSlot(slot);
+            var p = oneSlot.asyncCall(() -> {
+                ArrayList<Boolean> valueList = new ArrayList<>();
+                for (var one : subList) {
+                    var key = new String(one.keyBytes());
+                    var bucketIndex = one.slotWithKeyHash().bucketIndex();
+                    var keyHash = one.slotWithKeyHash().keyHash();
 
-            // remove delay, perf better
-            var isRemoved = oneSlot.remove(bucketIndex, key, keyHash, true);
-            if (isRemoved) {
-                nArr[0]++;
-            }
+                    var isRemoved = remove(oneSlot.slot(), bucketIndex, key, keyHash);
+                    valueList.add(isRemoved);
+                }
+                return valueList;
+            });
+            promises.add(p);
         }
-        return new IntegerReply(nArr[0]);
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("del error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
+            }
+
+            int n = 0;
+            for (var p : promises) {
+                for (var b : p.getResult()) {
+                    if (b) {
+                        n++;
+                    }
+                }
+            }
+
+            finalPromise.set(new IntegerReply(n));
+        });
+
+        return asyncReply;
+    }
+
+    Reply dbsize() {
+        // skip
+        if (data.length == 2) {
+            return new IntegerReply(0);
+        }
+
+        Promise<Long>[] promises = new Promise[slotNumber];
+        for (int i = 0; i < slotNumber; i++) {
+            var oneSlot = localPersist.oneSlot((byte) i);
+            promises[i] = oneSlot.asyncCall(oneSlot::getAllKeyCount);
+        }
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("dbsize error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
+            }
+
+            long n = 0;
+            for (var p : promises) {
+                n += p.getResult();
+            }
+
+            finalPromise.set(new IntegerReply(n));
+        });
+
+        return asyncReply;
     }
 
     Reply decrBy(int by, double byFloat) {
@@ -171,10 +238,13 @@ public class DGroup extends BaseCommand {
         }
 
         if (isByFloat) {
-            double newValue = doubleValue - byFloat;
-            setNumber(keyBytes, newValue, slotWithKeyHash);
+            // scale 2, todo
+            var newValue = BigDecimal.valueOf(doubleValue).setScale(2, RoundingMode.UP)
+                    .subtract(BigDecimal.valueOf(byFloat).setScale(2, RoundingMode.UP));
+
+            setNumber(keyBytes, newValue.doubleValue(), slotWithKeyHash);
             // double use bulk reply
-            return new BulkReply(String.valueOf(newValue).getBytes());
+            return new BulkReply(newValue.toPlainString().getBytes());
         } else {
             long newValue = longValue - by;
             setNumber(keyBytes, newValue, slotWithKeyHash);

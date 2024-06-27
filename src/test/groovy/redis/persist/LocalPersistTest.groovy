@@ -5,6 +5,15 @@ import redis.SnowFlake
 import spock.lang.Specification
 
 class LocalPersistTest extends Specification {
+    static void prepareLocalPersist(byte netWorkers = 1, short slotNumber = 1) {
+        def localPersist = LocalPersist.instance
+
+        SnowFlake[] snowFlakes = new SnowFlake[1]
+        snowFlakes[0] = new SnowFlake(1, 1)
+        localPersist.initSlots(netWorkers, slotNumber, snowFlakes, Consts.persistDir, Config.create())
+        localPersist.debugMode()
+    }
+
     def 'test all'() {
         given:
         def localPersist = LocalPersist.instance

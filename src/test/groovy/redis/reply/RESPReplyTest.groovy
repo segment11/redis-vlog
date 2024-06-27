@@ -27,6 +27,7 @@ class RESPReplyTest extends Specification {
     def 'test others'() {
         expect:
         IntegerReply.bufferPreload(null).asArray() == "\$-1\r\n".bytes
+        new IntegerReply(100).integer == 100
         new IntegerReply(100).buffer().asArray() == ":100\r\n".bytes
         new IntegerReply(100).bufferAsHttp().asArray() == "100".bytes
         new ErrorReply('error').buffer().asArray() == "-ERR error\r\n".bytes
@@ -40,6 +41,7 @@ class RESPReplyTest extends Specification {
         BulkReply.numToBytes(257, false) == "257".bytes
         BulkReply.numToBytes(-1, false) == "-1".bytes
 
+        new BulkReply('bulk'.bytes).raw == 'bulk'.bytes
         new BulkReply('bulk'.bytes).buffer().asArray() == "\$4\r\nbulk\r\n".bytes
         new BulkReply('bulk'.bytes).bufferAsHttp().asArray() == "bulk".bytes
 
