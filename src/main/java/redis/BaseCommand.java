@@ -477,7 +477,11 @@ public abstract class BaseCommand {
                 costT = 1;
             }
             cv.seq = snowFlake.nextId();
-            cv.dictSeqOrSpType = dict != null ? dict.seq : spType;
+            if (cv.isIgnoreCompression(valueBytes)) {
+                cv.dictSeqOrSpType = NULL_DICT_SEQ;
+            } else {
+                cv.dictSeqOrSpType = dict != null ? dict.seq : spType;
+            }
             cv.keyHash = slotWithKeyHash.keyHash;
             cv.expireAt = expireAt;
 

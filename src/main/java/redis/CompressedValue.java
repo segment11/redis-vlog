@@ -249,6 +249,11 @@ public class CompressedValue {
         return dictSeqOrSpType > NULL_DICT_SEQ;
     }
 
+    public boolean isIgnoreCompression(byte[] data) {
+        // length equals, maybe compressed, todo, check compressed data first n bytes
+        return this.compressedData.length == data.length;
+    }
+
     public byte[] decompress(Dict dict) {
         var dst = new byte[uncompressedLength];
         if (dict == null || dict == Dict.SELF_ZSTD_DICT) {
@@ -269,6 +274,13 @@ public class CompressedValue {
             compressedSize = (int) Zstd.compress(dst, data, level);
         } else {
             compressedSize = (int) Zstd.compressUsingDict(dst, 0, data, 0, data.length, dict.dictBytes, level);
+        }
+
+        if (compressedSize > data.length) {
+            // need not compress
+            cv.compressedData = data;
+            cv.compressedLength = data.length;
+            return cv;
         }
 
         // if waste too much space, copy to another

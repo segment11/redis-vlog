@@ -1,5 +1,6 @@
 package redis
 
+import com.github.luben.zstd.Zstd
 import io.activej.bytebuf.ByteBuf
 import io.netty.buffer.Unpooled
 import spock.lang.Specification
@@ -179,7 +180,7 @@ class CompressedValueTest extends Specification {
         given:
         def cv = new CompressedValue()
         cv.seq = 123L
-        cv.dictSeqOrSpType = 1
+        cv.dictSeqOrSpType = CompressedValue.NULL_DICT_SEQ
         cv.keyHash = 123L
         cv.compressedData = new byte[10]
         cv.compressedLength = 10
@@ -188,7 +189,7 @@ class CompressedValueTest extends Specification {
         def cv2 = new CompressedValue()
         cv2.seq = 123L
         cv2.seq = 123L
-        cv2.dictSeqOrSpType = 1
+        cv2.dictSeqOrSpType = CompressedValue.NULL_DICT_SEQ
         cv2.keyHash = 123L
         cv2.compressedData = null
         cv2.compressedLength = 0
@@ -339,5 +340,122 @@ class CompressedValueTest extends Specification {
         cvDecodeBigStringMeta.isBigString()
         bufferBigStringMeta.getLong() == 890L
         bufferBigStringMeta.getInt() == 100
+    }
+
+    def 'test encode corner case'() {
+        given:
+        def keyBytes = 'abc'.bytes
+
+        def cv = new CompressedValue()
+        cv.seq = 123L
+        cv.dictSeqOrSpType = CompressedValue.NULL_DICT_SEQ
+        cv.keyHash = KeyHash.hash(keyBytes)
+        cv.compressedData = new byte[10]
+        cv.compressedLength = 10
+        cv.uncompressedLength = 10
+
+        when:
+        def encoded = cv.encode()
+        def cvDecode = CompressedValue.decode(Unpooled.wrappedBuffer(encoded), keyBytes, cv.keyHash)
+
+        then:
+        cvDecode.seq == cv.seq
+
+        when:
+        boolean exception = false
+        def keyBytesNotMatch = 'abcd'.bytes
+        try {
+            def cvDecode2 = CompressedValue.decode(Unpooled.wrappedBuffer(encoded), keyBytesNotMatch, 0L)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+
+        when:
+        cv.compressedLength = 0
+        cv.uncompressedLength = 0
+        cv.compressedData = null
+
+        encoded = cv.encode()
+        cvDecode = CompressedValue.decode(Unpooled.wrappedBuffer(encoded), keyBytes, cv.keyHash)
+
+        then:
+        cvDecode.seq == cv.seq
+
+        when:
+        exception = false
+        try {
+            def cvDecode2 = CompressedValue.decode(Unpooled.wrappedBuffer(encoded), keyBytesNotMatch, 0L)
+        } catch (IllegalStateException e) {
+            exception = true
+        }
+
+        then:
+        exception
+    }
+
+    def 'test compress'() {
+        given:
+        def rawBytes = ('111112222233333' * 10).bytes
+
+        when:
+        def cv1 = CompressedValue.compress(rawBytes, null, Zstd.defaultCompressionLevel())
+        def cv2 = CompressedValue.compress(rawBytes, Dict.SELF_ZSTD_DICT, Zstd.defaultCompressionLevel())
+
+        then:
+        cv1.compressedLength < rawBytes.length
+        cv2.compressedLength < rawBytes.length
+        !cv1.isIgnoreCompression(rawBytes)
+
+        when:
+        def rawBytesDecompressed2 = cv1.decompress(null)
+
+        then:
+        rawBytes == rawBytesDecompressed2
+
+        when:
+        def rawBytesDecompressed3 = cv1.decompress(Dict.SELF_ZSTD_DICT)
+
+        then:
+        rawBytes == rawBytesDecompressed3
+
+        when:
+        def rawBytes2 = '1234'.bytes
+
+        // will not compress
+        def cv3 = CompressedValue.compress(rawBytes2, null, Zstd.defaultCompressionLevel())
+
+        then:
+        cv3.isIgnoreCompression(rawBytes2)
+
+        when:
+        def snowFlake = new SnowFlake(1, 1)
+
+        def job = new TrainSampleJob((byte) 0)
+        job.dictSize = 512
+        job.trainSampleMinBodyLength = 1024
+
+        TrainSampleJob.keyPrefixGroupList = ['key:']
+        List<TrainSampleJob.TrainSampleKV> sampleToTrainList = []
+        11.times {
+            sampleToTrainList << new TrainSampleJob.TrainSampleKV("key:$it", null, snowFlake.nextId(), rawBytes)
+        }
+
+        job.resetSampleToTrainList(sampleToTrainList)
+        def result = job.train()
+        def dict = result.cacheDict.get('key:')
+
+        def cv4 = CompressedValue.compress(rawBytes, dict, Zstd.defaultCompressionLevel())
+
+        then:
+        cv4.compressedLength < rawBytes.length
+
+        when:
+        var rawBytesDecompressed = cv4.decompress(dict)
+
+        then:
+        rawBytes == rawBytesDecompressed
     }
 }
