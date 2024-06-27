@@ -232,6 +232,7 @@ class DGroupTest extends Specification {
         }.result
 
         cleanup:
+        eventloop.breakEventloop()
         LocalPersist.instance.cleanUp()
     }
 
