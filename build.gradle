@@ -82,6 +82,8 @@ dependencies {
 
 test {
     useJUnitPlatform()
+
+    maxHeapSize = '4G'
 }
 
 jacoco {
