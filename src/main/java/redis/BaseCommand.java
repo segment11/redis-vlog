@@ -575,6 +575,16 @@ public abstract class BaseCommand {
         return oneSlot.remove(key, bucketIndex, keyHash);
     }
 
+    public boolean exists(byte slot, int bucketIndex, String key, long keyHash) {
+        if (byPassGetSet != null) {
+            var bufOrCompressedValue = byPassGetSet.getBuf(slot, key.getBytes(), bucketIndex, keyHash);
+            return bufOrCompressedValue != null;
+        }
+
+        var oneSlot = localPersist.oneSlot(slot);
+        return oneSlot.exists(key, bucketIndex, keyHash);
+    }
+
     private void handleTrainSampleResult(TrainSampleJob.TrainSampleResult trainSampleResult) {
         if (trainSampleResult == null) {
             return;

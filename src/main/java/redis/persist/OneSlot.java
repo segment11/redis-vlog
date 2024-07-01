@@ -604,12 +604,12 @@ public class OneSlot {
         }
         kvLRUMissTotal++;
 
-        var valueBytesWithExpireAt = keyLoader.getValueByKey(bucketIndex, keyBytes, keyHash);
-        if (valueBytesWithExpireAt == null) {
+        var valueBytesWithExpireAtAndSeq = keyLoader.getValueByKey(bucketIndex, keyBytes, keyHash);
+        if (valueBytesWithExpireAtAndSeq == null) {
             return null;
         }
 
-        var valueBytes = valueBytesWithExpireAt.valueBytes();
+        var valueBytes = valueBytesWithExpireAtAndSeq.valueBytes();
         if (!PersistValueMeta.isPvm(valueBytes)) {
             // short value, just return, CompressedValue can decode
             lru.put(key, valueBytes);
@@ -727,6 +727,24 @@ public class OneSlot {
             removeDelay(key, bucketIndex, keyHash);
         }
         return isRemoved;
+    }
+
+    public boolean exists(String key, int bucketIndex, long keyHash) {
+        var cvEncodedFromWal = getFromWal(key, bucketIndex);
+        if (cvEncodedFromWal != null) {
+            // write batch kv is the newest
+            if (CompressedValue.isDeleted(cvEncodedFromWal)) {
+                return false;
+            }
+            return true;
+        }
+
+        var valueBytesWithExpireAtAndSeq = keyLoader.getValueByKey(bucketIndex, key.getBytes(), keyHash);
+        if (valueBytesWithExpireAtAndSeq == null || valueBytesWithExpireAtAndSeq.isExpired()) {
+            return false;
+        }
+
+        return true;
     }
 
     long threadIdProtectedWhenPut = -1;

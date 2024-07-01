@@ -137,8 +137,18 @@ class DGroupTest extends Specification {
         dGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
 
         when:
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data, dGroup.slotNumber)
+        byte[][] dataWrongSize = new byte[1][]
+        dGroup.data = dataWrongSize
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', dataWrongSize, dGroup.slotNumber)
         def r = dGroup.del()
+
+        then:
+        r == ErrorReply.FORMAT
+
+        when:
+        dGroup.data = data
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data, dGroup.slotNumber)
+        r = dGroup.del()
 
         then:
         r == ErrorReply.KEY_TOO_LONG

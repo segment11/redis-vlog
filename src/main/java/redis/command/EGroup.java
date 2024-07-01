@@ -2,11 +2,15 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.promise.Promise;
+import io.activej.promise.Promises;
+import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
 
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 import static redis.CompressedValue.NO_EXPIRE;
 
@@ -17,6 +21,20 @@ public class EGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+
+        if ("exists".equals(cmd)) {
+            if (data.length < 2) {
+                return slotWithKeyHashList;
+            }
+
+            for (int i = 1; i < data.length; i++) {
+                var keyBytes = data[i];
+                slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+            }
+
+            return slotWithKeyHashList;
+        }
+
         slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
         return slotWithKeyHashList;
     }
@@ -65,21 +83,80 @@ public class EGroup extends BaseCommand {
             return ErrorReply.FORMAT;
         }
 
-        // group by bucket index better, refer to mget, todo
+        if (!isCrossRequestWorker) {
+            int n = 0;
+            for (int i = 1; i < data.length; i++) {
+                var keyBytes = data[i];
+                if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+                    return ErrorReply.KEY_TOO_LONG;
+                }
+                var key = new String(keyBytes);
 
-        int n = 0;
-        for (int i = 1; i < data.length; i++) {
-            var keyBytes = data[i];
-            if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-                return ErrorReply.KEY_TOO_LONG;
-            }
+                var slotWithKeyHash = slotWithKeyHashListParsed.get(i - 1);
+                var slot = slotWithKeyHash.slot();
+                var bucketIndex = slotWithKeyHash.bucketIndex();
+                var keyHash = slotWithKeyHash.keyHash();
 
-            var cv = getCv(keyBytes);
-            if (cv != null) {
-                n++;
+                // remove delay, perf better
+                var isExists = exists(slot, bucketIndex, key, keyHash);
+                if (isExists) {
+                    n++;
+                }
             }
+            return new IntegerReply(n);
         }
-        return new IntegerReply(n);
+
+        ArrayList<DGroup.SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 1);
+        for (int i = 1; i < data.length; i++) {
+            list.add(new DGroup.SlotWithKeyHashWithKeyBytes(slotWithKeyHashListParsed.get(i - 1), data[i]));
+        }
+
+        ArrayList<Promise<ArrayList<Boolean>>> promises = new ArrayList<>();
+        // group by slot
+        var groupBySlot = list.stream().collect(Collectors.groupingBy(it -> it.slotWithKeyHash().slot()));
+        for (var entry : groupBySlot.entrySet()) {
+            var slot = entry.getKey();
+            var subList = entry.getValue();
+
+            var oneSlot = localPersist.oneSlot(slot);
+            var p = oneSlot.asyncCall(() -> {
+                ArrayList<Boolean> valueList = new ArrayList<>();
+                for (var one : subList) {
+                    var key = new String(one.keyBytes());
+                    var bucketIndex = one.slotWithKeyHash().bucketIndex();
+                    var keyHash = one.slotWithKeyHash().keyHash();
+
+                    var isExists = exists(oneSlot.slot(), bucketIndex, key, keyHash);
+                    valueList.add(isExists);
+                }
+                return valueList;
+            });
+            promises.add(p);
+        }
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("exists error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
+            }
+
+            int n = 0;
+            for (var p : promises) {
+                for (var b : p.getResult()) {
+                    if (b) {
+                        n++;
+                    }
+                }
+            }
+
+            finalPromise.set(new IntegerReply(n));
+        });
+
+        return asyncReply;
     }
 
     Reply expire(boolean isAt, boolean isMilliseconds) {
@@ -131,10 +208,10 @@ public class EGroup extends BaseCommand {
         if (isXx && expireAtExist == NO_EXPIRE) {
             return IntegerReply.REPLY_0;
         }
-        if (isGt && expireAtExist != NO_EXPIRE && expireAtExist <= expireAt) {
+        if (isGt && expireAtExist != NO_EXPIRE && expireAtExist >= expireAt) {
             return IntegerReply.REPLY_0;
         }
-        if (isLt && expireAtExist != NO_EXPIRE && expireAtExist >= expireAt) {
+        if (isLt && expireAtExist != NO_EXPIRE && expireAtExist <= expireAt) {
             return IntegerReply.REPLY_0;
         }
 

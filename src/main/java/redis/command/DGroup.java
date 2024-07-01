@@ -88,6 +88,10 @@ public class DGroup extends BaseCommand {
     }
 
     Reply del() {
+        if (data.length < 2) {
+            return ErrorReply.FORMAT;
+        }
+
         if (!isCrossRequestWorker) {
             int n = 0;
             for (int i = 1; i < data.length; i++) {
