@@ -196,6 +196,7 @@ public class EGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotPreferParsed(keyBytes);
+        // if nx xx gt lt, need not read cv, just read expire at from key bucket, todo
         var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return IntegerReply.REPLY_0;

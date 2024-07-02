@@ -69,15 +69,14 @@ public class GGroup extends BaseCommand {
 
         var valueBytes = get(keyBytes, slotWithKeyHash);
         if (valueBytes != null) {
-            var oneSlot = localPersist.oneSlot(slot);
-            oneSlot.removeDelay(key, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+            removeDelay(slot, slotWithKeyHash.bucketIndex(), key, slotWithKeyHash.keyHash());
             return new BulkReply(valueBytes);
         } else {
             return NilReply.INSTANCE;
         }
     }
 
-    private Reply getex() {
+    Reply getex() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
         }
@@ -91,47 +90,44 @@ public class GGroup extends BaseCommand {
         long px = -1;
         long exAt = -1;
         long pxAt = -1;
-        boolean isPersist;
+        boolean isPersist = false;
 
-        if (data.length > 2) {
+        if (data.length == 2) {
+            // do nothing
+        } else if (data.length == 3) {
+            isPersist = "persist".equalsIgnoreCase(new String(data[2]));
+            if (!isPersist) {
+                return ErrorReply.SYNTAX;
+            }
+        } else if (data.length == 4) {
             var arg = new String(data[2]);
-            if ("persist".equalsIgnoreCase(arg)) {
-                isPersist = true;
+            var arg2 = new String(data[3]);
+            long x;
+            try {
+                x = Long.parseLong(arg2);
+            } catch (NumberFormatException e) {
+                return ErrorReply.NOT_INTEGER;
+            }
+            if (x < 0) {
+                return ErrorReply.INVALID_INTEGER;
+            }
+
+            if ("ex".equalsIgnoreCase(arg)) {
+                ex = x;
+            } else if ("px".equalsIgnoreCase(arg)) {
+                px = x;
+            } else if ("exat".equalsIgnoreCase(arg)) {
+                exAt = x;
+            } else if ("pxat".equalsIgnoreCase(arg)) {
+                pxAt = x;
             } else {
-                isPersist = false;
-                if (data.length != 4) {
-                    return ErrorReply.FORMAT;
-                }
-
-                var arg2 = new String(data[3]);
-                long x;
-                try {
-                    x = Long.parseLong(arg2);
-                } catch (NumberFormatException e) {
-                    return ErrorReply.NOT_INTEGER;
-                }
-                if (x < 0) {
-                    return ErrorReply.INVALID_INTEGER;
-                }
-
-                if ("ex".equalsIgnoreCase(arg)) {
-                    ex = x;
-                } else if ("px".equalsIgnoreCase(arg)) {
-                    px = x;
-                } else if ("exat".equalsIgnoreCase(arg)) {
-                    exAt = x;
-                } else if ("pxat".equalsIgnoreCase(arg)) {
-                    pxAt = x;
-                } else {
-                    return ErrorReply.SYNTAX;
-                }
+                return ErrorReply.SYNTAX;
             }
         } else {
-            isPersist = false;
+            return ErrorReply.FORMAT;
         }
 
         var slotWithKeyHash = slotPreferParsed(keyBytes);
-
         var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return NilReply.INSTANCE;
@@ -140,6 +136,7 @@ public class GGroup extends BaseCommand {
         var valueBytes = getValueBytesByCv(cv);
 
         long expireAt = cv.getExpireAt();
+        long expireAtOld = expireAt;
         if (isPersist) {
             expireAt = NO_EXPIRE;
         } else if (ex > -1) {
@@ -151,9 +148,11 @@ public class GGroup extends BaseCommand {
         } else if (pxAt > -1) {
             expireAt = pxAt;
         }
-        cv.setExpireAt(expireAt);
 
-        setCv(keyBytes, cv, slotWithKeyHash);
+        if (expireAt != expireAtOld) {
+            cv.setExpireAt(expireAt);
+            setCv(keyBytes, cv, slotWithKeyHash);
+        }
         return new BulkReply(valueBytes);
     }
 
@@ -212,7 +211,7 @@ public class GGroup extends BaseCommand {
         return new BulkReply(subBytes);
     }
 
-    private Reply getset() {
+    Reply getset() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
         }
@@ -222,6 +221,7 @@ public class GGroup extends BaseCommand {
 
         var slotWithKeyHash = slotPreferParsed(keyBytes);
 
+        // not only for type string, other types will be overwritten
         var valueBytesExist = get(keyBytes, slotWithKeyHash);
         if (valueBytesExist == null) {
             return NilReply.INSTANCE;
