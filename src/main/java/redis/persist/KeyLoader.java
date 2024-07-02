@@ -127,7 +127,7 @@ public class KeyLoader {
         return statKeyCountInBuckets.getKeyCount();
     }
 
-    private void updateKeyCountBatchCached(int[] keyCountTmp, int beginBucketIndex) {
+    void updateKeyCountBatchCached(int[] keyCountTmp, int beginBucketIndex) {
         if (beginBucketIndex < 0 || beginBucketIndex + keyCountTmp.length > bucketsPerSlot) {
             throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
         }
@@ -211,6 +211,12 @@ public class KeyLoader {
         // left length may be 0
         var leftLength = contentBytes.length - position;
 
+        if (fdReadWriteArray.length <= splitIndex) {
+            var oldFdReadWriteArray = fdReadWriteArray;
+            fdReadWriteArray = new FdReadWrite[splitIndex + 1];
+            System.arraycopy(oldFdReadWriteArray, 0, fdReadWriteArray, 0, oldFdReadWriteArray.length);
+        }
+
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
             initFds((byte) (splitIndex + 1));
@@ -238,7 +244,7 @@ public class KeyLoader {
                 slot, splitIndex, beginBucketIndex);
     }
 
-    private boolean isBytesValidAsKeyBucket(byte[] bytes) {
+    boolean isBytesValidAsKeyBucket(byte[] bytes) {
         if (bytes == null) {
             return false;
         }
@@ -324,10 +330,10 @@ public class KeyLoader {
     private void updateKeyBucketInnerForTest(int bucketIndex, KeyBucket keyBucket, boolean isRefreshLRUCache) {
         var bytes = keyBucket.encode(true);
         var splitIndex = keyBucket.splitIndex;
-        if (bytes.length > KEY_BUCKET_ONE_COST_SIZE) {
-            throw new IllegalStateException("Key bucket bytes size too large, slot: " + slot +
-                    ", bucket index: " + bucketIndex + ", split index: " + splitIndex + ", size: " + bytes.length);
-        }
+//        if (bytes.length > KEY_BUCKET_ONE_COST_SIZE) {
+//            throw new IllegalStateException("Key bucket bytes size too large, slot: " + slot +
+//                    ", bucket index: " + bucketIndex + ", split index: " + splitIndex + ", size: " + bytes.length);
+//        }
 
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
@@ -374,12 +380,17 @@ public class KeyLoader {
         }
     }
 
-    // need thread safe or just for test
     void writeSharedBytesList(byte[][] sharedBytesListBySplitIndex, int beginBucketIndex) {
         for (int splitIndex = 0; splitIndex < sharedBytesListBySplitIndex.length; splitIndex++) {
             var sharedBytes = sharedBytesListBySplitIndex[splitIndex];
             if (sharedBytes == null) {
                 continue;
+            }
+
+            if (fdReadWriteArray.length <= splitIndex) {
+                var oldFdReadWriteArray = fdReadWriteArray;
+                fdReadWriteArray = new FdReadWrite[splitIndex + 1];
+                System.arraycopy(oldFdReadWriteArray, 0, fdReadWriteArray, 0, oldFdReadWriteArray.length);
             }
 
             var fdReadWrite = fdReadWriteArray[splitIndex];
@@ -414,22 +425,13 @@ public class KeyLoader {
         metaKeyBucketSplitNumber.clear();
         statKeyCountInBuckets.clear();
 
-        boolean[] ftruncateFlags = new boolean[MAX_SPLIT_NUMBER];
-
-        for (int i = 0; i < bucketsPerSlot; i++) {
-            for (int splitIndex = 0; splitIndex < MAX_SPLIT_NUMBER; splitIndex++) {
-                var fdReadWrite = fdReadWriteArray[splitIndex];
-                if (fdReadWrite == null) {
-                    continue;
-                }
-
-                if (ftruncateFlags[splitIndex]) {
-                    continue;
-                }
-
-                fdReadWrite.truncate();
-                ftruncateFlags[splitIndex] = true;
+        for (int splitIndex = 0; splitIndex < MAX_SPLIT_NUMBER; splitIndex++) {
+            var fdReadWrite = fdReadWriteArray[splitIndex];
+            if (fdReadWrite == null) {
+                continue;
             }
+
+            fdReadWrite.truncate();
         }
     }
 
