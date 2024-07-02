@@ -158,7 +158,7 @@ public class FdReadWrite {
 
     static final int MERGE_READ_ONCE_SEGMENT_COUNT = 10;
 
-    private byte[][] allBytesByOneInnerIndex;
+    byte[][] allBytesByOneInnerIndex;
 
     public boolean isTargetSegmentIndexNullInMemory(int oneInnerIndex) {
         return allBytesByOneInnerIndex[oneInnerIndex] == null;
@@ -555,16 +555,17 @@ public class FdReadWrite {
 
     public int writeOneInnerBatchToMemory(int beginBucketIndex, byte[] bytes, int position) {
         var isSmallerThanOneInner = bytes.length < oneInnerLength;
-        if (!isSmallerThanOneInner && bytes.length % oneInnerLength != 0) {
+        if (!isSmallerThanOneInner && (bytes.length - position) % oneInnerLength != 0) {
             throw new IllegalArgumentException("Bytes length must be multiple of one inner length");
         }
 
         if (isSmallerThanOneInner) {
+            // position is 0
             allBytesByOneInnerIndex[beginBucketIndex] = bytes;
             return bytes.length;
         }
 
-        var oneInnerCount = bytes.length / oneInnerLength;
+        var oneInnerCount = (bytes.length - position) / oneInnerLength;
         var offset = position;
         for (int i = 0; i < oneInnerCount; i++) {
             var bytesOneSegment = new byte[oneInnerLength];
