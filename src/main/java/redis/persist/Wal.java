@@ -250,7 +250,9 @@ public class Wal {
         truncateWal(false);
         truncateWal(true);
 
-        log.info("Clear wal, slot: {}, group index: {}", slot, groupIndex);
+        if (groupIndex % 100 == 0) {
+            log.info("Clear wal, slot: {}, group index: {}", slot, groupIndex);
+        }
     }
 
     long clearShortValuesCount = 0;

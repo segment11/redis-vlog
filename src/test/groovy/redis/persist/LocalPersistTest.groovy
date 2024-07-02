@@ -28,10 +28,7 @@ class LocalPersistTest extends Specification {
         localPersist.oneSlots() == null
 
         when:
-        SnowFlake[] snowFlakes = new SnowFlake[1]
-        snowFlakes[0] = new SnowFlake(1, 1)
-        localPersist.initSlots((byte) 1, (short) 1, snowFlakes, Consts.persistDir, Config.create())
-        localPersist.debugMode()
+        prepareLocalPersist()
         localPersist.fixSlotThreadId((byte) 0, 0L)
         localPersist.persistMergeSegmentsUndone()
 

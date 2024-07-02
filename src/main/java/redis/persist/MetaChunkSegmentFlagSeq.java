@@ -282,6 +282,7 @@ public class MetaChunkSegmentFlagSeq {
     void clear() {
         if (ConfForSlot.global.pureMemory) {
             fillSegmentFlagInit(inMemoryCachedBytes);
+            System.out.println("Meta chunk segment flag seq clear done, set init flags.");
             return;
         }
 
@@ -291,6 +292,7 @@ public class MetaChunkSegmentFlagSeq {
             raf.seek(0);
             raf.write(tmpBytes);
             inMemoryCachedByteBuffer.position(0).put(tmpBytes);
+            System.out.println("Meta chunk segment flag seq clear done, set init flags.");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

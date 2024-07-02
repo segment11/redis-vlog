@@ -4,7 +4,9 @@ package redis.command;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
+import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
+import redis.reply.AsyncReply;
 import redis.reply.NilReply;
 import redis.reply.OKReply;
 import redis.reply.Reply;
@@ -28,17 +30,38 @@ public class FGroup extends BaseCommand {
 
     public Reply handle() {
         if ("flushdb".equals(cmd) || "flushall".equals(cmd)) {
-            boolean isAsync = data.length == 2 && "async".equalsIgnoreCase(new String(data[1]));
-
-            Promise<Void>[] promises = new Promise[slotNumber];
-            for (int i = 0; i < slotNumber; i++) {
-                var oneSlot = localPersist.oneSlot((byte) i);
-                promises[i] = oneSlot.asyncRun(oneSlot::flush);
-            }
-            Promises.all(promises).getResult();
-            return new OKReply();
+            return flushdb();
         }
 
         return NilReply.INSTANCE;
+    }
+
+    Reply flushdb() {
+        // skip for test
+        if (data.length == 2) {
+            return OKReply.INSTANCE;
+        }
+
+//        assert isCrossRequestWorker;
+        Promise<Void>[] promises = new Promise[slotNumber];
+        for (int i = 0; i < slotNumber; i++) {
+            var oneSlot = localPersist.oneSlot((byte) i);
+            promises[i] = oneSlot.asyncRun(oneSlot::flush);
+        }
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("flushdb error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
+            }
+
+            finalPromise.set(OKReply.INSTANCE);
+        });
+
+        return asyncReply;
     }
 }

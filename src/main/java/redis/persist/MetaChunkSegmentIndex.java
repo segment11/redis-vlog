@@ -95,6 +95,7 @@ public class MetaChunkSegmentIndex {
 
     void clear() {
         set(0);
+        System.out.println("Meta chunk segment index clear done, set 0 from the beginning.");
     }
 
     void cleanUp() {
