@@ -21,15 +21,6 @@ public class IGroup extends BaseCommand {
     }
 
     public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
-        if ("del".equals(cmd)) {
-            // only consider one key, multi key slot is different
-            if (data.length != 2) {
-                return null;
-            }
-            var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
-        }
-
         if ("incr".equals(cmd) || "incrby".equals(cmd) || "incrbyfloat".equals(cmd)) {
             if (data.length < 2) {
                 return null;
@@ -57,15 +48,16 @@ public class IGroup extends BaseCommand {
                 return ErrorReply.FORMAT;
             }
 
+            int by;
             try {
-                int by = Integer.parseInt(new String(data[2]));
-
-                var dGroup = new DGroup(cmd, data, socket);
-                dGroup.from(this);
-                return dGroup.decrBy(-by, 0);
+                by = Integer.parseInt(new String(data[2]));
             } catch (NumberFormatException e) {
                 return ErrorReply.NOT_INTEGER;
             }
+
+            var dGroup = new DGroup(cmd, data, socket);
+            dGroup.from(this);
+            return dGroup.decrBy(-by, 0);
         }
 
         if ("incrbyfloat".equals(cmd)) {
