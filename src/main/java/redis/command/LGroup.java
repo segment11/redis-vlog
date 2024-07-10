@@ -1,22 +1,16 @@
 
 package redis.command;
 
-import com.moilioncircle.redis.replicator.RedisReplicator;
-import com.moilioncircle.redis.replicator.rdb.iterable.ValueIterableRdbVisitor;
 import io.activej.net.socket.tcp.ITcpSocket;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
 import redis.type.RedisList;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.LinkedList;
 
 import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
@@ -113,13 +107,13 @@ public class LGroup extends BaseCommand {
             return ltrim();
         }
 
-        if ("load-rdb".equals(cmd)) {
-            try {
-                return loadRdb();
-            } catch (Exception e) {
-                return new ErrorReply(e.getMessage());
-            }
-        }
+//        if ("load-rdb".equals(cmd)) {
+//            try {
+//                return loadRdb();
+//            } catch (Exception e) {
+//                return new ErrorReply(e.getMessage());
+//            }
+//        }
 
         return NilReply.INSTANCE;
     }
@@ -410,7 +404,7 @@ public class LGroup extends BaseCommand {
         return new MultiBulkReply(arr);
     }
 
-    private Reply lpos() {
+    Reply lpos() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
         }
@@ -433,7 +427,7 @@ public class LGroup extends BaseCommand {
             switch (arg) {
                 case "rank" -> {
                     if (i + 1 >= data.length) {
-                        return ErrorReply.FORMAT;
+                        return ErrorReply.SYNTAX;
                     }
                     try {
                         rank = Integer.parseInt(new String(data[i + 1]));
@@ -443,7 +437,7 @@ public class LGroup extends BaseCommand {
                 }
                 case "count" -> {
                     if (i + 1 >= data.length) {
-                        return ErrorReply.FORMAT;
+                        return ErrorReply.SYNTAX;
                     }
                     try {
                         count = Integer.parseInt(new String(data[i + 1]));
@@ -456,7 +450,7 @@ public class LGroup extends BaseCommand {
                 }
                 case "maxlen" -> {
                     if (i + 1 >= data.length) {
-                        return ErrorReply.FORMAT;
+                        return ErrorReply.SYNTAX;
                     }
                     try {
                         maxlen = Integer.parseInt(new String(data[i + 1]));
@@ -482,7 +476,7 @@ public class LGroup extends BaseCommand {
         var encodedBytes = getValueBytesByCv(cv);
         var rl = RedisList.decode(encodedBytes);
 
-        LinkedList<byte[]> list = rl.getList();
+        var list = rl.getList();
 
         Iterator<byte[]> it;
         boolean isReverse = false;
@@ -506,8 +500,10 @@ public class LGroup extends BaseCommand {
             if (Arrays.equals(e, valueBytes)) {
                 if (rank <= 1) {
                     posList.add(i);
-                    if (count != 0 && count <= posList.size()) {
-                        break;
+                    if (count != 0) {
+                        if (count <= posList.size()) {
+                            break;
+                        }
                     }
                 }
                 rank--;
@@ -564,7 +560,7 @@ public class LGroup extends BaseCommand {
         return addToList(keyBytes, valueBytesArr, addFirst, false, false, null, needKeyExist);
     }
 
-    private Reply lrange() {
+    Reply lrange() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -627,7 +623,7 @@ public class LGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
-    private Reply lrem() {
+    Reply lrem() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -663,7 +659,7 @@ public class LGroup extends BaseCommand {
         var encodedBytesExist = getValueBytesByCv(cv);
         var rl = RedisList.decode(encodedBytesExist);
 
-        LinkedList<byte[]> list = rl.getList();
+        var list = rl.getList();
         var it = count < 0 ? list.descendingIterator() : list.iterator();
 
         int absCount = count < 0 ? -count : count;
@@ -674,21 +670,25 @@ public class LGroup extends BaseCommand {
             if (Arrays.equals(e, valueBytes)) {
                 it.remove();
                 removed++;
-                if (absCount != 0 && removed >= absCount) {
-                    break;
+                if (count != 0) {
+                    if (removed >= absCount) {
+                        break;
+                    }
                 }
             }
         }
 
-        var encodedBytes = rl.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
+        if (removed > 0) {
+            var encodedBytes = rl.encode();
+            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+            var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
 
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        }
         return new IntegerReply(removed);
     }
 
-    private Reply lset() {
+    Reply lset() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -737,17 +737,20 @@ public class LGroup extends BaseCommand {
             return ErrorReply.INDEX_OUT_OF_RANGE;
         }
 
+        var valueBytesOld = rl.get(index);
         rl.setAt(index, valueBytes);
 
-        var encodedBytes = rl.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
+        if (!Arrays.equals(valueBytesOld, valueBytes)) {
+            var encodedBytes = rl.encode();
+            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+            var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
 
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        }
         return OKReply.INSTANCE;
     }
 
-    private Reply ltrim() {
+    Reply ltrim() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -804,8 +807,9 @@ public class LGroup extends BaseCommand {
         }
 
         if (start > size || start > stop) {
-            var oneSlot = localPersist.oneSlot(slot);
-            oneSlot.removeDelay(key, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
+            var bucketIndex = slotWithKeyHash.bucketIndex();
+            var keyHash = slotWithKeyHash.keyHash();
+            removeDelay(slot, bucketIndex, key, keyHash);
             return OKReply.INSTANCE;
         }
 
@@ -815,7 +819,10 @@ public class LGroup extends BaseCommand {
         int i = 0;
         while (it.hasNext()) {
             it.next();
-            if (i < start || i > stop) {
+            if (i < start) {
+                it.remove();
+            }
+            if (i > stop) {
                 it.remove();
             }
             i++;
@@ -829,41 +836,41 @@ public class LGroup extends BaseCommand {
         return OKReply.INSTANCE;
     }
 
-    private Reply loadRdb() throws URISyntaxException, IOException {
-        if (data.length != 2 && data.length != 3) {
-            return ErrorReply.FORMAT;
-        }
-
-        var filePathBytes = data[1];
-        var filePath = new String(filePathBytes);
-        if (!filePath.startsWith("/") || !filePath.endsWith(".rdb")) {
-            return ErrorReply.INVALID_FILE;
-        }
-
-        var file = new File(filePath);
-        if (!file.exists()) {
-            return ErrorReply.NO_SUCH_FILE;
-        }
-
-        boolean onlyAnalysis = false;
-        if (data.length == 3) {
-            onlyAnalysis = "analysis".equals(new String(data[2]).toLowerCase());
-        }
-
-        var r = new RedisReplicator("redis://" + filePath);
-        r.setRdbVisitor(new ValueIterableRdbVisitor(r));
-
-        var eventListener = new MyRDBVisitorEventListener(this, onlyAnalysis);
-        r.addEventListener(eventListener);
-        r.open();
-
-        if (onlyAnalysis) {
-            int n = 10;
-            for (int i = 0; i < n; i++) {
-                eventListener.radixTree.sumIncrFromRoot(new int[i]);
-            }
-        }
-
-        return new IntegerReply(eventListener.keyCount);
-    }
+//    Reply loadRdb() throws URISyntaxException, IOException {
+//        if (data.length != 2 && data.length != 3) {
+//            return ErrorReply.FORMAT;
+//        }
+//
+//        var filePathBytes = data[1];
+//        var filePath = new String(filePathBytes);
+//        if (!filePath.startsWith("/") || !filePath.endsWith(".rdb")) {
+//            return ErrorReply.INVALID_FILE;
+//        }
+//
+//        var file = new File(filePath);
+//        if (!file.exists()) {
+//            return ErrorReply.NO_SUCH_FILE;
+//        }
+//
+//        boolean onlyAnalysis = false;
+//        if (data.length == 3) {
+//            onlyAnalysis = "analysis".equals(new String(data[2]).toLowerCase());
+//        }
+//
+//        var r = new RedisReplicator("redis://" + filePath);
+//        r.setRdbVisitor(new ValueIterableRdbVisitor(r));
+//
+//        var eventListener = new MyRDBVisitorEventListener(this, onlyAnalysis);
+//        r.addEventListener(eventListener);
+//        r.open();
+//
+//        if (onlyAnalysis) {
+//            int n = 10;
+//            for (int i = 0; i < n; i++) {
+//                eventListener.radixTree.sumIncrFromRoot(new int[i]);
+//            }
+//        }
+//
+//        return new IntegerReply(eventListener.keyCount);
+//    }
 }
