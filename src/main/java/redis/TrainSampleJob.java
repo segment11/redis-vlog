@@ -20,7 +20,7 @@ public class TrainSampleJob {
 
     private final Logger log = org.slf4j.LoggerFactory.getLogger(TrainSampleJob.class);
 
-    private static final int MIN_TRAIN_SAMPLE_SIZE = 10;
+    public static final int MIN_TRAIN_SAMPLE_SIZE = 10;
 
     private final HashMap<String, Dict> cacheDict = new HashMap<>();
     private List<TrainSampleKV> sampleToTrainListCopy = new ArrayList<>();

@@ -1,14 +1,11 @@
 
 package redis.command;
 
-import io.activej.bytebuf.ByteBuf;
 import io.activej.net.socket.tcp.ITcpSocket;
 import redis.BaseCommand;
 import redis.CompressedValue;
-import redis.DictMap;
 import redis.TrainSampleJob;
 import redis.reply.*;
-import redis.type.RedisHH;
 import redis.type.RedisHashKeys;
 
 import java.nio.ByteBuffer;
@@ -18,8 +15,7 @@ import java.util.List;
 import java.util.Random;
 
 import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
-import static redis.type.RedisHH.PREFER_COMPRESS_FIELD_VALUE_LENGTH;
-import static redis.type.RedisHH.PREFER_LESS_THAN_VALUE_LENGTH;
+import static redis.TrainSampleJob.MIN_TRAIN_SAMPLE_SIZE;
 
 public class HGroup extends BaseCommand {
     public HGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -112,7 +108,7 @@ public class HGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    private Reply hdel() {
+    Reply hdel() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
         }
@@ -138,8 +134,6 @@ public class HGroup extends BaseCommand {
         var slotWithKeyHashForKeys = slot(keysKeyBytes);
         var slot = slotWithKeyHashForKeys.slot();
 
-        var oneSlot = localPersist.oneSlot(slot);
-
         var keysValueBytes = get(keysKeyBytes, slotWithKeyHashForKeys);
         if (keysValueBytes == null) {
             return IntegerReply.REPLY_0;
@@ -153,7 +147,9 @@ public class HGroup extends BaseCommand {
 
                 var fieldKey = RedisHashKeys.fieldKey(key, field);
                 var slotWithKeyHashThisField = slot(fieldKey.getBytes());
-                oneSlot.removeDelay(fieldKey, slotWithKeyHashThisField.bucketIndex(), slotWithKeyHashThisField.keyHash());
+                var bucketIndex = slotWithKeyHashThisField.bucketIndex();
+                var keyHash = slotWithKeyHashThisField.keyHash();
+                removeDelay(slot, bucketIndex, fieldKey, keyHash);
             }
         }
 
@@ -165,7 +161,7 @@ public class HGroup extends BaseCommand {
         return new IntegerReply(removed);
     }
 
-    private Reply hexists() {
+    Reply hexists() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
         }
@@ -181,7 +177,8 @@ public class HGroup extends BaseCommand {
         }
 
         var key = new String(keyBytes);
-        var fieldKey = RedisHashKeys.fieldKey(key, new String(fieldBytes));
+        var field = new String(fieldBytes);
+        var fieldKey = RedisHashKeys.fieldKey(key, field);
         var fieldCv = getCv(fieldKey.getBytes());
         return fieldCv != null ? IntegerReply.REPLY_1 : IntegerReply.REPLY_0;
 
@@ -198,7 +195,7 @@ public class HGroup extends BaseCommand {
 //        return rhk.contains(new String(fieldBytes)) ? IntegerReply.REPLY_1 : IntegerReply.REPLY_0;
     }
 
-    private Reply hget(boolean onlyReturnLength) {
+    Reply hget(boolean onlyReturnLength) {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
         }
@@ -214,7 +211,8 @@ public class HGroup extends BaseCommand {
         }
 
         var key = new String(keyBytes);
-        var fieldKey = RedisHashKeys.fieldKey(key, new String(fieldBytes));
+        var field = new String(fieldBytes);
+        var fieldKey = RedisHashKeys.fieldKey(key, field);
         var fieldCv = getCv(fieldKey.getBytes());
 
         if (fieldCv == null) {
@@ -225,7 +223,7 @@ public class HGroup extends BaseCommand {
         return onlyReturnLength ? new IntegerReply(fieldValueBytes.length) : new BulkReply(fieldValueBytes);
     }
 
-    private Reply hgetall() {
+    Reply hgetall() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
         }
@@ -261,7 +259,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
-    private Reply hincrby(boolean isFloat) {
+    Reply hincrby(boolean isFloat) {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -294,7 +292,8 @@ public class HGroup extends BaseCommand {
         }
 
         var key = new String(keyBytes);
-        var fieldKey = RedisHashKeys.fieldKey(key, new String(fieldBytes));
+        var field = new String(fieldBytes);
+        var fieldKey = RedisHashKeys.fieldKey(key, field);
 
         byte[][] dd = {null, fieldKey.getBytes()};
         var dGroup = new DGroup(cmd, dd, socket);
@@ -307,7 +306,7 @@ public class HGroup extends BaseCommand {
         }
     }
 
-    private Reply hkeys(boolean onlyReturnSize) {
+    Reply hkeys(boolean onlyReturnSize) {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
         }
@@ -346,7 +345,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
-    private Reply hmget() {
+    Reply hmget() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
         }
@@ -378,42 +377,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
-    private Reply hvals() {
-        if (data.length != 2) {
-            return ErrorReply.FORMAT;
-        }
-
-        var keyBytes = data[1];
-        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-            return ErrorReply.KEY_TOO_LONG;
-        }
-
-        var key = new String(keyBytes);
-        var keysKey = RedisHashKeys.keysKey(key);
-        var keysKeyBytes = keysKey.getBytes();
-
-        var keysValueBytes = get(keysKeyBytes);
-        if (keysValueBytes == null) {
-            return MultiBulkReply.EMPTY;
-        }
-
-        var rhk = RedisHashKeys.decode(keysValueBytes);
-        var set = rhk.getSet();
-        if (set.isEmpty()) {
-            return MultiBulkReply.EMPTY;
-        }
-
-        var replies = new Reply[set.size()];
-        int i = 0;
-        for (var field : set) {
-            var fieldKey = RedisHashKeys.fieldKey(key, field);
-            var fieldValueBytes = get(fieldKey.getBytes());
-            replies[i++] = fieldValueBytes == null ? NilReply.INSTANCE : new BulkReply(fieldValueBytes);
-        }
-        return new MultiBulkReply(replies);
-    }
-
-    private Reply hmset() {
+    Reply hmset() {
         if (data.length < 4 || data.length % 2 != 0) {
             return ErrorReply.FORMAT;
         }
@@ -423,8 +387,7 @@ public class HGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var dictMap = DictMap.getInstance();
-        int maxValueLength = 0;
+//        var dictMap = DictMap.getInstance();
         LinkedHashMap<String, byte[]> fieldValues = new LinkedHashMap<>();
         for (int i = 2; i < data.length; i += 2) {
             var fieldBytes = data[i];
@@ -437,99 +400,69 @@ public class HGroup extends BaseCommand {
             }
 
             // compress field value bytes
-            if (fieldValueBytes.length >= PREFER_COMPRESS_FIELD_VALUE_LENGTH) {
-                final String keyPrefixGiven = new String(fieldBytes);
-
-                var dict = dictMap.getDict(keyPrefixGiven);
-                var beginT = System.nanoTime();
-                var fieldCv = CompressedValue.compress(fieldValueBytes, dict, compressLevel);
-                var costT = (System.nanoTime() - beginT) / 1000;
-                if (costT == 0) {
-                    costT = 1;
-                }
-
-                int compressedLength = fieldCv.getCompressedLength();
-
-                // stats
-                compressStats.compressedCount++;
-                compressStats.compressedTotalLength += compressedLength;
-                compressStats.compressedCostTimeTotalUs += costT;
-
-                int encodedCvLength = RedisHH.PREFER_COMPRESS_FIELD_MAGIC_PREFIX.length + CompressedValue.VALUE_HEADER_LENGTH + compressedLength;
-                if (encodedCvLength < fieldValueBytes.length) {
-                    fieldCv.setSeq(snowFlake.nextId());
-                    fieldCv.setDictSeqOrSpType(dict != null ? dict.getSeq() : CompressedValue.NULL_DICT_SEQ);
-                    fieldCv.setKeyHash(fieldCv.getSeq());
-
-                    if (dict == null) {
-                        var kv = new TrainSampleJob.TrainSampleKV(keyPrefixGiven, keyPrefixGiven, fieldCv.getSeq(), fieldValueBytes);
-                        sampleToTrainList.add(kv);
-                    }
-
-                    var fieldEncodeBytes = new byte[encodedCvLength];
-                    var buf = ByteBuf.wrapForWriting(fieldEncodeBytes);
-                    buf.put(RedisHH.PREFER_COMPRESS_FIELD_MAGIC_PREFIX);
-                    fieldCv.encodeTo(buf);
-
-                    // replace use compressed bytes
-                    fieldValueBytes = fieldEncodeBytes;
-                }
-            }
-
-            if (fieldValueBytes.length > maxValueLength) {
-                maxValueLength = fieldValueBytes.length;
-            }
+//            if (fieldValueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH) {
+//                final String keyPrefixGiven = new String(fieldBytes);
+//
+//                var dict = dictMap.getDict(keyPrefixGiven);
+//                var beginT = System.nanoTime();
+//                var fieldCv = CompressedValue.compress(fieldValueBytes, dict, compressLevel);
+//                var costT = (System.nanoTime() - beginT) / 1000;
+//                if (costT == 0) {
+//                    costT = 1;
+//                }
+//
+//                int compressedLength = fieldCv.getCompressedLength();
+//
+//                // stats
+//                compressStats.compressedCount++;
+//                compressStats.compressedTotalLength += compressedLength;
+//                compressStats.compressedCostTimeTotalUs += costT;
+//
+//                int encodedCvLength = RedisHH.PREFER_COMPRESS_FIELD_MAGIC_PREFIX.length + CompressedValue.VALUE_HEADER_LENGTH + compressedLength;
+//                // if compress ratio less than 0.8, use compressed bytes
+//                final double preferCompressRatio = 0.8;
+//                if (encodedCvLength < (fieldValueBytes.length * preferCompressRatio)) {
+//                    fieldCv.setSeq(snowFlake.nextId());
+//                    fieldCv.setDictSeqOrSpType(dict != null ? dict.getSeq() : CompressedValue.NULL_DICT_SEQ);
+//                    fieldCv.setKeyHash(fieldCv.getSeq());
+//
+//                    if (dict == null) {
+//                        var kv = new TrainSampleJob.TrainSampleKV(keyPrefixGiven, keyPrefixGiven, fieldCv.getSeq(), fieldValueBytes);
+//                        sampleToTrainList.add(kv);
+//                    }
+//
+//                    var fieldEncodeBytes = new byte[encodedCvLength];
+//                    var buf = ByteBuf.wrapForWriting(fieldEncodeBytes);
+//                    buf.put(RedisHH.PREFER_COMPRESS_FIELD_MAGIC_PREFIX);
+//                    fieldCv.encodeTo(buf);
+//
+//                    // replace use compressed bytes
+//                    fieldValueBytes = fieldEncodeBytes;
+//                }
+//            }
 
             fieldValues.put(new String(fieldBytes), fieldValueBytes);
         }
 
         var key = new String(keyBytes);
-        if (maxValueLength <= PREFER_LESS_THAN_VALUE_LENGTH) {
-            // use RedisHH type to store all in one
-            var slotWithKeyHash = slot(keyBytes);
-            var valueBytes = get(keyBytes, slotWithKeyHash);
-            var rhh = valueBytes == null ? new RedisHH() : RedisHH.decode(valueBytes);
-            rhh.putAll(fieldValues);
-
-            var encodedBytes = rhh.encode();
-            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-            var spType = needCompress ? CompressedValue.SP_TYPE_HH_COMPRESSED : CompressedValue.SP_TYPE_HH;
-
-            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
-            return OKReply.INSTANCE;
-        }
-
         var keysKey = RedisHashKeys.keysKey(key);
         var keysKeyBytes = keysKey.getBytes();
-
         var slotWithKeyHashForKeys = slot(keysKeyBytes);
 
         var keysValueBytes = get(keysKeyBytes, slotWithKeyHashForKeys);
         var rhk = keysValueBytes == null ? new RedisHashKeys() : RedisHashKeys.decode(keysValueBytes);
 
-        int size = rhk.size();
-        if (size >= RedisHashKeys.HASH_MAX_SIZE) {
-            return ErrorReply.HASH_SIZE_TO_LONG;
-        }
-
-        // for debug
-//      int overwrite = 0;
-        for (
-                var entry : fieldValues.entrySet()) {
-            var field = entry.getKey();
-            var fieldValueBytes = entry.getValue();
-
-            var fieldKey = RedisHashKeys.fieldKey(key, field);
-            set(fieldKey.getBytes(), fieldValueBytes);
-
-            boolean isNewAdded = rhk.add(field);
-            if (isNewAdded && (size + 1) == RedisHashKeys.HASH_MAX_SIZE) {
+        for (var entry : fieldValues.entrySet()) {
+            if (rhk.size() >= RedisHashKeys.HASH_MAX_SIZE) {
                 return ErrorReply.HASH_SIZE_TO_LONG;
             }
 
-//            if (!isNewAdded) {
-//                overwrite++;
-//            }
+            var field = entry.getKey();
+            var fieldKey = RedisHashKeys.fieldKey(key, field);
+            var fieldValueBytes = entry.getValue();
+            set(fieldKey.getBytes(), fieldValueBytes);
+
+            rhk.add(field);
         }
 
         var encodedBytes = rhk.encode();
@@ -540,7 +473,7 @@ public class HGroup extends BaseCommand {
         return OKReply.INSTANCE;
     }
 
-    private Reply hrandfield() {
+    Reply hrandfield() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
         }
@@ -604,7 +537,7 @@ public class HGroup extends BaseCommand {
             }
         }
 
-        var replies = new Reply[withValues ? count * 2 : count];
+        var replies = new Reply[withValues ? absCount * 2 : absCount];
         int i = 0;
         int j = 0;
         for (var field : set) {
@@ -621,7 +554,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
-    private Reply hsetnx() {
+    Reply hsetnx() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -641,7 +574,8 @@ public class HGroup extends BaseCommand {
         }
 
         var key = new String(keyBytes);
-        var fieldKey = RedisHashKeys.fieldKey(key, new String(fieldBytes));
+        var field = new String(fieldBytes);
+        var fieldKey = RedisHashKeys.fieldKey(key, field);
         var fieldKeyBytes = fieldKey.getBytes();
 
         var slotWithKeyHashThisField = slot(fieldKeyBytes);
@@ -655,9 +589,48 @@ public class HGroup extends BaseCommand {
         return IntegerReply.REPLY_1;
     }
 
-    private Reply h_field_dict_train() {
-        if (data.length < 3) {
+    Reply hvals() {
+        if (data.length != 2) {
             return ErrorReply.FORMAT;
+        }
+
+        var keyBytes = data[1];
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
+        var key = new String(keyBytes);
+        var keysKey = RedisHashKeys.keysKey(key);
+        var keysKeyBytes = keysKey.getBytes();
+
+        var keysValueBytes = get(keysKeyBytes);
+        if (keysValueBytes == null) {
+            return MultiBulkReply.EMPTY;
+        }
+
+        var rhk = RedisHashKeys.decode(keysValueBytes);
+        var set = rhk.getSet();
+        if (set.isEmpty()) {
+            return MultiBulkReply.EMPTY;
+        }
+
+        var replies = new Reply[set.size()];
+        int i = 0;
+        for (var field : set) {
+            var fieldKey = RedisHashKeys.fieldKey(key, field);
+            var fieldValueBytes = get(fieldKey.getBytes());
+            replies[i++] = fieldValueBytes == null ? NilReply.INSTANCE : new BulkReply(fieldValueBytes);
+        }
+        return new MultiBulkReply(replies);
+    }
+
+    Reply h_field_dict_train() {
+        if (data.length < 2) {
+            return ErrorReply.FORMAT;
+        }
+
+        if (data.length <= 2 + MIN_TRAIN_SAMPLE_SIZE) {
+            return new ErrorReply("Train sample size too small");
         }
 
         var keyPrefixGiven = new String(data[1]);
@@ -670,6 +643,10 @@ public class HGroup extends BaseCommand {
         var trainSampleJob = new TrainSampleJob(workerId);
         trainSampleJob.resetSampleToTrainList(sampleToTrainList);
         var trainSampleResult = trainSampleJob.train();
+
+//        if (trainSampleResult == null) {
+//            return new ErrorReply("Train sample fail");
+//        }
 
         var trainSampleCacheDict = trainSampleResult.cacheDict();
         for (var entry : trainSampleCacheDict.entrySet()) {

@@ -111,6 +111,10 @@ public abstract class BaseCommand {
 
         this.slotWithKeyHashListParsed = other.slotWithKeyHashListParsed;
         this.isCrossRequestWorker = other.isCrossRequestWorker;
+
+        if (other.byPassGetSet != null) {
+            this.byPassGetSet = other.byPassGetSet;
+        }
     }
 
     public BaseCommand init(RequestHandler requestHandler, Request request) {

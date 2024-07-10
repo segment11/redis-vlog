@@ -210,6 +210,10 @@ public class CompressedValue {
         return compressedData;
     }
 
+    public void setCompressedData(byte[] compressedData) {
+        this.compressedData = compressedData;
+    }
+
     public boolean isExpired() {
         return expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis();
     }

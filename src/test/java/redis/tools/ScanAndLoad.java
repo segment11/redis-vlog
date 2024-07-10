@@ -4,11 +4,12 @@ import redis.clients.jedis.DefaultJedisClientConfig;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.commands.ProtocolCommand;
 import redis.clients.jedis.params.ScanParams;
-import redis.type.RedisHH;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+
+import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 public class ScanAndLoad {
     public static void main(String[] args) {
@@ -65,7 +66,7 @@ public class ScanAndLoad {
                         for (var entry : hashValue.entrySet()) {
                             var field = entry.getKey();
                             var value = entry.getValue();
-                            if (value.length() >= RedisHH.PREFER_COMPRESS_FIELD_VALUE_LENGTH) {
+                            if (value.length() >= TO_COMPRESS_MIN_DATA_LENGTH) {
                                 var fieldList = fieldListByField.get(field);
                                 if (fieldList == null) {
                                     fieldList = new ArrayList<>();

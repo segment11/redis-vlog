@@ -8,10 +8,6 @@ import java.util.HashMap;
 
 // key / value save together
 public class RedisHH {
-    public static final short PREFER_LESS_THAN_VALUE_LENGTH = 4096;
-
-    public static final int PREFER_COMPRESS_FIELD_VALUE_LENGTH = 64;
-
     public static final byte[] PREFER_COMPRESS_FIELD_MAGIC_PREFIX = "r?h!h".getBytes();
 
     // hash size short + crc int
