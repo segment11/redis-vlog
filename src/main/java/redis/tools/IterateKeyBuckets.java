@@ -50,7 +50,7 @@ public class IterateKeyBuckets {
                         var pvm = PersistValueMeta.decode(valueBytes);
                         System.out.println("key: " + key + ", pvm: " + pvm.shortString());
                     } else {
-                        var cv = CompressedValue.decode(Unpooled.wrappedBuffer(valueBytes), null, 0, false);
+                        var cv = CompressedValue.decode(Unpooled.wrappedBuffer(valueBytes), null, 0);
                         System.out.println("key: " + key + ", value: " + cv);
                     }
                 });
