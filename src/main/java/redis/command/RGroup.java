@@ -1,6 +1,7 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.promise.SettablePromise;
 import io.netty.buffer.Unpooled;
 import redis.BaseCommand;
 import redis.CompressedValue;
@@ -10,6 +11,7 @@ import redis.type.RedisHashKeys;
 import redis.type.RedisList;
 
 import java.util.ArrayList;
+import java.util.function.Consumer;
 
 import static redis.CompressedValue.NO_EXPIRE;
 import static redis.CompressedValue.NULL_DICT_SEQ;
@@ -174,7 +176,7 @@ public class RGroup extends BaseCommand {
         if (!replace) {
             var cv = getCv(keyBytes, slotWithKeyHash);
             if (cv != null) {
-                return new ErrorReply("Target key name is busy.");
+                return new ErrorReply("Target key name is busy");
             }
         }
 
@@ -242,27 +244,8 @@ public class RGroup extends BaseCommand {
         }
     }
 
-    byte[] move(byte[] srcKeyBytes, byte[] dstKeyBytes, boolean srcLeft, boolean dstLeft) {
-        var srcSlotWithKeyHash = slot(srcKeyBytes);
-        var dstSlotWithKeyHash = slotPreferParsed(dstKeyBytes);
-
-        var cv = getCv(srcKeyBytes, srcSlotWithKeyHash);
-        if (cv == null) {
-            return null;
-        }
-        if (!cv.isList()) {
-            return null;
-        }
-
-        var encodedBytesExist = getValueBytesByCv(cv);
-        var rl = RedisList.decode(encodedBytesExist);
-
-        var size = rl.size();
-        if (size == 0) {
-            return null;
-        }
-
-        var e = srcLeft ? rl.removeFirst() : rl.removeLast();
+    void moveDstCallback(byte[] dstKeyBytes, SlotWithKeyHash dstSlotWithKeyHash, boolean dstLeft, byte[] memberValueBytes,
+                         Consumer<Reply> consumer) {
         var cvDst = getCv(dstKeyBytes, dstSlotWithKeyHash);
 
         RedisList rlDst;
@@ -270,7 +253,8 @@ public class RGroup extends BaseCommand {
             rlDst = new RedisList();
         } else {
             if (!cvDst.isList()) {
-                return null;
+                consumer.accept(ErrorReply.WRONG_TYPE);
+                return;
             }
 
             var encodedBytesDst = getValueBytesByCv(cvDst);
@@ -278,9 +262,9 @@ public class RGroup extends BaseCommand {
         }
 
         if (dstLeft) {
-            rlDst.addFirst(e);
+            rlDst.addFirst(memberValueBytes);
         } else {
-            rlDst.addLast(e);
+            rlDst.addLast(memberValueBytes);
         }
 
         var encodedBytesDst = rlDst.encode();
@@ -289,12 +273,50 @@ public class RGroup extends BaseCommand {
 
         set(dstKeyBytes, encodedBytesDst, dstSlotWithKeyHash, spTypeDst);
 
-        var encodedBytes = rl.encode();
+        consumer.accept(new BulkReply(memberValueBytes));
+    }
+
+    Reply move(byte[] srcKeyBytes, SlotWithKeyHash srcSlotWithKeyHash, byte[] dstKeyBytes, SlotWithKeyHash dstSlotWithKeyHash,
+               boolean srcLeft, boolean dstLeft) {
+        var cvSrc = getCv(srcKeyBytes, srcSlotWithKeyHash);
+        if (cvSrc == null) {
+            return NilReply.INSTANCE;
+        }
+        if (!cvSrc.isList()) {
+            return ErrorReply.WRONG_TYPE;
+        }
+
+        var valueBytesSrc = getValueBytesByCv(cvSrc);
+        var rlSrc = RedisList.decode(valueBytesSrc);
+
+        var size = rlSrc.size();
+        if (size == 0) {
+            return NilReply.INSTANCE;
+        }
+
+        var memberValueBytes = srcLeft ? rlSrc.removeFirst() : rlSrc.removeLast();
+
+        var encodedBytes = rlSrc.encode();
         var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
         var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
 
         set(srcKeyBytes, encodedBytes, srcSlotWithKeyHash, spType);
-        return e;
+
+        if (!isCrossRequestWorker) {
+            final Reply[] finalReplyArray = {null};
+            moveDstCallback(dstKeyBytes, dstSlotWithKeyHash, dstLeft, memberValueBytes, reply -> finalReplyArray[0] = reply);
+            return finalReplyArray[0];
+        }
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        var oneSlotDst = localPersist.oneSlot(dstSlotWithKeyHash.slot());
+        oneSlotDst.asyncRun(() -> {
+            moveDstCallback(dstKeyBytes, dstSlotWithKeyHash, dstLeft, memberValueBytes, reply -> finalPromise.set(reply));
+        });
+
+        return asyncReply;
     }
 
     private Reply rpoplpush() {
@@ -312,10 +334,9 @@ public class RGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var valueBytes = move(srcKeyBytes, dstKeyBytes, false, true);
-        if (valueBytes == null) {
-            return NilReply.INSTANCE;
-        }
-        return new BulkReply(valueBytes);
+        var srcSlotWithKeyHash = slotPreferParsed(srcKeyBytes);
+        var dstSlotWithKeyHash = slotPreferParsed(dstKeyBytes, 1);
+
+        return move(srcKeyBytes, srcSlotWithKeyHash, dstKeyBytes, dstSlotWithKeyHash, false, true);
     }
 }

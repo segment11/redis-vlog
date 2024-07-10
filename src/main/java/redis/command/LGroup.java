@@ -27,6 +27,23 @@ public class LGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+
+        if ("lmove".equals(cmd)) {
+            if (data.length != 5) {
+                return slotWithKeyHashList;
+            }
+
+            var srcKeyBytes = data[1];
+            var dstKeyBytes = data[2];
+
+            var s1 = slot(srcKeyBytes, slotNumber);
+            var s2 = slot(dstKeyBytes, slotNumber);
+
+            slotWithKeyHashList.add(s1);
+            slotWithKeyHashList.add(s2);
+            return slotWithKeyHashList;
+        }
+
         slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
         return slotWithKeyHashList;
     }
@@ -42,14 +59,6 @@ public class LGroup extends BaseCommand {
             }
             var keyBytes = data[1];
             return slot(keyBytes, slotNumber);
-        }
-
-        if ("lmove".equals(cmd)) {
-            if (data.length != 5) {
-                return null;
-            }
-            var dstKeyBytes = data[2];
-            return slot(dstKeyBytes, slotNumber);
         }
 
         return null;
@@ -115,7 +124,7 @@ public class LGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    private Reply lindex() {
+    Reply lindex() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
         }
@@ -223,7 +232,7 @@ public class LGroup extends BaseCommand {
         return new IntegerReply(rl.size());
     }
 
-    private Reply linsert() {
+    Reply linsert() {
         if (data.length != 5) {
             return ErrorReply.FORMAT;
         }
@@ -255,7 +264,7 @@ public class LGroup extends BaseCommand {
         return addToList(keyBytes, valueBytesArr, false, true, isBefore, pivotBytes, false);
     }
 
-    private Reply llen() {
+    Reply llen() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
         }
@@ -287,7 +296,7 @@ public class LGroup extends BaseCommand {
         return new IntegerReply(size);
     }
 
-    private Reply lmove() {
+    Reply lmove() {
         if (data.length != 5) {
             return ErrorReply.FORMAT;
         }
@@ -319,14 +328,13 @@ public class LGroup extends BaseCommand {
             return ErrorReply.SYNTAX;
         }
 
+        var srcSlotWithKeyHash = slotPreferParsed(srcKeyBytes);
+        var dstSlotWithKeyHash = slotPreferParsed(dstKeyBytes, 1);
+
         var rGroup = new RGroup(cmd, data, socket);
         rGroup.from(this);
 
-        var valueBytes = rGroup.move(srcKeyBytes, dstKeyBytes, isSrcLeft, isDstLeft);
-        if (valueBytes == null) {
-            return NilReply.INSTANCE;
-        }
-        return new BulkReply(valueBytes);
+        return rGroup.move(srcKeyBytes, srcSlotWithKeyHash, dstKeyBytes, dstSlotWithKeyHash, isSrcLeft, isDstLeft);
     }
 
     Reply lpop(boolean popFirst) {
@@ -348,7 +356,7 @@ public class LGroup extends BaseCommand {
             } catch (NumberFormatException e) {
                 return ErrorReply.NOT_INTEGER;
             }
-            if (count < 0) {
+            if (count <= 0) {
                 return ErrorReply.INVALID_INTEGER;
             }
         }
@@ -363,13 +371,21 @@ public class LGroup extends BaseCommand {
             return ErrorReply.WRONG_TYPE;
         }
 
-        ArrayList<Reply> replies = new ArrayList<>();
-
         var encodedBytesExist = getValueBytesByCv(cv);
         var rl = RedisList.decode(encodedBytesExist);
 
-        int min = Math.min(count, rl.size());
+        ArrayList<Reply> replies = new ArrayList<>();
+
+        boolean isUpdated = false;
+
+        int min = Math.min(count, Math.max(1, rl.size()));
         for (int i = 0; i < min; i++) {
+            if (rl.size() == 0) {
+                replies.add(NilReply.INSTANCE);
+                continue;
+            }
+
+            isUpdated = true;
             if (popFirst) {
                 replies.add(new BulkReply(rl.removeFirst()));
             } else {
@@ -377,14 +393,12 @@ public class LGroup extends BaseCommand {
             }
         }
 
-        var encodedBytes = rl.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
+        if (isUpdated) {
+            var encodedBytes = rl.encode();
+            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+            var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
 
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
-
-        if (replies.isEmpty()) {
-            return NilReply.INSTANCE;
+            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
         }
 
         if (count == 1) {

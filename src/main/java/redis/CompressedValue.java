@@ -91,6 +91,11 @@ public class CompressedValue {
 
     long keyHash;
     int uncompressedLength;
+
+    public void setUncompressedLength(int uncompressedLength) {
+        this.uncompressedLength = uncompressedLength;
+    }
+
     int compressedLength;
 
     public int getCompressedLength() {
