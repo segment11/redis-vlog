@@ -24,6 +24,10 @@ public class MultiBulkReply implements Reply {
 
     private final Reply[] replies;
 
+    public Reply[] getReplies() {
+        return replies;
+    }
+
     public MultiBulkReply(Reply[] replies) {
         this.replies = replies;
     }
