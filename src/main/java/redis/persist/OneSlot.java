@@ -326,10 +326,29 @@ public class OneSlot {
     private RequestHandler requestHandler;
 
     public Promise<Void> asyncRun(RunnableEx runnableEx) {
+        var threadId = Thread.currentThread().getId();
+        if (threadId == threadIdProtectedWhenPut) {
+            try {
+                runnableEx.run();
+                return Promise.complete();
+            } catch (Exception e) {
+                return Promise.ofException(e);
+            }
+        }
+
         return Promise.ofFuture(netWorkerEventloop.submit(runnableEx));
     }
 
     public <T> Promise<T> asyncCall(SupplierEx<T> supplierEx) {
+        var threadId = Thread.currentThread().getId();
+        if (threadId == threadIdProtectedWhenPut) {
+            try {
+                return Promise.of(supplierEx.get());
+            } catch (Exception e) {
+                return Promise.ofException(e);
+            }
+        }
+
         return Promise.ofFuture(netWorkerEventloop.submit(AsyncComputation.of(supplierEx)));
     }
 
