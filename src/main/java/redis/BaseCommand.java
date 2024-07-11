@@ -54,6 +54,10 @@ public abstract class BaseCommand {
     protected ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed;
     protected boolean isCrossRequestWorker;
 
+    public void setCrossRequestWorker(boolean crossRequestWorker) {
+        isCrossRequestWorker = crossRequestWorker;
+    }
+
     public static AGroup mockAGroup(byte workerId, byte netWorkers, short slotNumber) {
         return mockAGroup(workerId, netWorkers, slotNumber, new CompressStats("mock"),
                 Zstd.defaultCompressionLevel(), 100, new SnowFlake(1, 1),

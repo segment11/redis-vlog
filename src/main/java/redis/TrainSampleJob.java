@@ -53,7 +53,7 @@ public class TrainSampleJob {
     private static ArrayList<String> keyPrefixGroupList = new ArrayList<>();
 
     // overwrite or add all
-    public static void setKeyPrefixGroupList(ArrayList<String> keyPrefixGroupList) {
+    public synchronized static void setKeyPrefixGroupList(ArrayList<String> keyPrefixGroupList) {
         TrainSampleJob.keyPrefixGroupList = keyPrefixGroupList;
     }
 

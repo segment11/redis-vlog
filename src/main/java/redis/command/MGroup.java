@@ -21,12 +21,13 @@ public class MGroup extends BaseCommand {
     }
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+
         if ("mget".equals(cmd)) {
             if (data.length < 2) {
-                return null;
+                return slotWithKeyHashList;
             }
 
-            ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
             for (int i = 1; i < data.length; i++) {
                 var keyBytes = data[i];
                 var slotWithKeyHash = slot(keyBytes, slotNumber);
@@ -37,10 +38,9 @@ public class MGroup extends BaseCommand {
 
         if ("mset".equals(cmd)) {
             if (data.length < 3 || data.length % 2 == 0) {
-                return null;
+                return slotWithKeyHashList;
             }
 
-            ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
             for (int i = 1; i < data.length; i += 2) {
                 var keyBytes = data[i];
                 var slotWithKeyHash = slot(keyBytes, slotNumber);
@@ -49,7 +49,41 @@ public class MGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-        return null;
+        if ("manage".equals(cmd)) {
+            if (data.length < 2) {
+                return slotWithKeyHashList;
+            }
+
+            var subCmd = new String(data[1]);
+            if (subCmd.equals("view-persist-key-count") || subCmd.equals("view-slot-bucket-keys")) {
+                if (data.length != 4) {
+                    return slotWithKeyHashList;
+                }
+
+                var slotBytes = data[2];
+                byte slot;
+                try {
+                    slot = Byte.parseByte(new String(slotBytes));
+                } catch (NumberFormatException e) {
+                    return slotWithKeyHashList;
+                }
+
+                slotWithKeyHashList.add(new SlotWithKeyHash(slot, 0, 0L));
+                return slotWithKeyHashList;
+            }
+
+            if (subCmd.equals("output-dict-bytes")) {
+                if (data.length != 4) {
+                    return slotWithKeyHashList;
+                }
+
+                var keyBytes = data[3];
+                slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+                return slotWithKeyHashList;
+            }
+        }
+
+        return slotWithKeyHashList;
     }
 
     public Reply handle() {
@@ -77,7 +111,7 @@ public class MGroup extends BaseCommand {
     record ValueBytesAndIndex(byte[] valueBytes, int index) {
     }
 
-    private Reply mget() {
+    Reply mget() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
         }
@@ -86,7 +120,7 @@ public class MGroup extends BaseCommand {
             var replies = new Reply[data.length - 1];
             for (int i = 1; i < data.length; i++) {
                 var keyBytes = data[i];
-                var valueBytes = get(keyBytes);
+                var valueBytes = get(keyBytes, slotPreferParsed(keyBytes, i - 1));
                 if (valueBytes == null) {
                     replies[i - 1] = NilReply.INSTANCE;
                 } else {
@@ -152,26 +186,26 @@ public class MGroup extends BaseCommand {
         return asyncReply;
     }
 
-    private Reply mset() {
+    Reply mset() {
         if (data.length < 3 || data.length % 2 == 0) {
             return ErrorReply.FORMAT;
         }
 
         if (!isCrossRequestWorker) {
-            for (int i = 1; i < data.length; i += 2) {
+            for (int i = 1, j = 0; i < data.length; i += 2, j++) {
                 var keyBytes = data[i];
                 var valueBytes = data[i + 1];
-                var slotWithKeyHash = slotWithKeyHashListParsed.get(i);
+                var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
                 set(keyBytes, valueBytes, slotWithKeyHash);
             }
             return OKReply.INSTANCE;
         }
 
         ArrayList<KeyValueBytesAndSlotWithKeyHash> list = new ArrayList<>();
-        for (int i = 1; i < data.length; i += 2) {
+        for (int i = 1, j = 0; i < data.length; i += 2, j++) {
             var keyBytes = data[i];
             var valueBytes = data[i + 1];
-            var slotWithKeyHash = slotWithKeyHashListParsed.get(i - 1);
+            var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
             list.add(new KeyValueBytesAndSlotWithKeyHash(keyBytes, valueBytes, slotWithKeyHash));
         }
 
@@ -211,7 +245,7 @@ public class MGroup extends BaseCommand {
             return ErrorReply.FORMAT;
         }
 
-        String subCmd = new String(data[1]);
+        var subCmd = new String(data[1]);
 
         if (subCmd.equals("debug")) {
             if (data.length != 4) {
@@ -282,47 +316,6 @@ public class MGroup extends BaseCommand {
             return new IntegerReply(keyCount);
         }
 
-        if (subCmd.equals("output-dict-bytes")) {
-            if (data.length != 4) {
-                return ErrorReply.FORMAT;
-            }
-
-            var dictSeqBytes = data[2];
-            var keyBytes = data[3];
-            var key = new String(keyBytes);
-            int dictSeq;
-
-            try {
-                dictSeq = Integer.parseInt(new String(dictSeqBytes));
-            } catch (NumberFormatException e) {
-                return ErrorReply.SYNTAX;
-            }
-
-            var dict = dictMap.getDictBySeq(dictSeq);
-            var file = new File("/home/kerry/redis-d200-dict.txt");
-            try {
-                FileUtils.writeByteArrayToFile(file, dict.getDictBytes());
-                log.info("Output dict bytes to file: {}", file.getAbsolutePath());
-            } catch (IOException e) {
-                return new ErrorReply(e.getMessage());
-            }
-
-            var valueBytes = get(keyBytes);
-            if (valueBytes == null) {
-                return NilReply.INSTANCE;
-            }
-
-            var file2 = new File("/home/kerry/redis-d200-value.txt");
-            try {
-                FileUtils.writeByteArrayToFile(file2, valueBytes);
-                log.info("Output value bytes to file: {}", file2.getAbsolutePath());
-            } catch (IOException e) {
-                return new ErrorReply(e.getMessage());
-            }
-
-            return OKReply.INSTANCE;
-        }
-
         if (subCmd.equals("view-slot-bucket-keys")) {
             if (data.length != 4) {
                 return ErrorReply.FORMAT;
@@ -347,6 +340,51 @@ public class MGroup extends BaseCommand {
             return new BulkReply(str.getBytes());
         }
 
+        if (subCmd.equals("output-dict-bytes")) {
+            if (data.length != 4) {
+                return ErrorReply.FORMAT;
+            }
+
+            var dictSeqBytes = data[2];
+            int dictSeq;
+
+            try {
+                dictSeq = Integer.parseInt(new String(dictSeqBytes));
+            } catch (NumberFormatException e) {
+                return ErrorReply.SYNTAX;
+            }
+
+            var dict = dictMap.getDictBySeq(dictSeq);
+            if (dict == null) {
+                return new ErrorReply("Dict not found, dict seq: " + dictSeq);
+            }
+
+            var userHome = System.getProperty("user.home");
+            var file = new File(new File(userHome), "redis-d200-dict.txt");
+            try {
+                FileUtils.writeByteArrayToFile(file, dict.getDictBytes());
+                log.info("Output dict bytes to file: {}", file.getAbsolutePath());
+            } catch (IOException e) {
+                return new ErrorReply(e.getMessage());
+            }
+
+            var keyBytes = data[3];
+            var valueBytes = get(keyBytes, slotPreferParsed(keyBytes));
+            if (valueBytes == null) {
+                return NilReply.INSTANCE;
+            }
+
+            var file2 = new File(new File(userHome), "redis-d200-value.txt");
+            try {
+                FileUtils.writeByteArrayToFile(file2, valueBytes);
+                log.info("Output value bytes to file: {}", file2.getAbsolutePath());
+            } catch (IOException e) {
+                return new ErrorReply(e.getMessage());
+            }
+
+            return OKReply.INSTANCE;
+        }
+
         if (subCmd.equals("get-slot-with-key-hash")) {
             if (data.length != 3) {
                 return ErrorReply.FORMAT;
@@ -367,20 +405,29 @@ public class MGroup extends BaseCommand {
 
             var configKey = new String(configKeyBytes);
 
+            ArrayList<Promise<Void>> promises = new ArrayList<>();
             var oneSlots = localPersist.oneSlots();
             for (var oneSlot : oneSlots) {
-                // todo
-//                var f = oneSlot.threadSafeHandle(() -> oneSlot.updateDynConfig(configKey, configValueBytes));
-//                try {
-//                    var r = f.get();
-//                    if (!r) {
-//                        return new ErrorReply("update dyn config failed, slot: " + oneSlot.slot());
-//                    }
-//                } catch (Exception e) {
-//                    return new ErrorReply("update dyn config failed, slot: " + oneSlot.slot() + ", message: " + e.getMessage());
-//                }
+                var p = oneSlot.asyncRun(() -> {
+                    oneSlot.updateDynConfig(configKey, configValueBytes);
+                });
+                promises.add(p);
             }
-            return OKReply.INSTANCE;
+
+            SettablePromise<Reply> finalPromise = new SettablePromise<>();
+            var asyncReply = new AsyncReply(finalPromise);
+
+            Promises.all(promises).whenComplete((r, e) -> {
+                if (e != null) {
+                    log.error("manage dyn-config set error: {}", e.getMessage());
+                    finalPromise.setException(e);
+                    return;
+                }
+
+                finalPromise.set(OKReply.INSTANCE);
+            });
+
+            return asyncReply;
         }
 
         return NilReply.INSTANCE;
