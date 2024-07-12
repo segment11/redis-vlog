@@ -598,6 +598,39 @@ public class OneSlot {
         });
     }
 
+    public Long getExpireAt(byte[] keyBytes, int bucketIndex, long keyHash) {
+        var key = new String(keyBytes);
+        var cvEncodedFromWal = getFromWal(key, bucketIndex);
+        if (cvEncodedFromWal != null) {
+            // write batch kv is the newest
+            if (CompressedValue.isDeleted(cvEncodedFromWal)) {
+                return null;
+            }
+            var cv = CompressedValue.decode(Unpooled.wrappedBuffer(cvEncodedFromWal), keyBytes, keyHash);
+            return cv.getExpireAt();
+        }
+
+        // from lru cache
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
+        var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
+        var cvEncodedBytesFromLRU = lru.get(key);
+        if (cvEncodedBytesFromLRU != null) {
+            kvLRUHitTotal++;
+            kvLRUCvEncodedLengthTotal += cvEncodedBytesFromLRU.length;
+
+            var cv = CompressedValue.decode(Unpooled.wrappedBuffer(cvEncodedBytesFromLRU), keyBytes, keyHash);
+            return cv.getExpireAt();
+        }
+        kvLRUMissTotal++;
+
+        var valueBytesWithExpireAtAndSeq = keyLoader.getValueByKey(bucketIndex, keyBytes, keyHash);
+        if (valueBytesWithExpireAtAndSeq == null) {
+            return null;
+        }
+
+        return valueBytesWithExpireAtAndSeq.expireAt();
+    }
+
     public record BufOrCompressedValue(ByteBuf buf, CompressedValue cv) {
     }
 

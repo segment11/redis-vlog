@@ -217,6 +217,22 @@ public abstract class BaseCommand {
         this.byPassGetSet = byPassGetSet;
     }
 
+    public Long getExpireAt(byte[] keyBytes, SlotWithKeyHash slotWithKeyHashReuse) {
+        if (byPassGetSet != null) {
+            var cv = getCv(keyBytes, slotWithKeyHashReuse);
+            if (cv == null) {
+                return null;
+            }
+            return cv.expireAt;
+        } else {
+            var slotWithKeyHash = slotWithKeyHashReuse != null ? slotWithKeyHashReuse : slot(keyBytes);
+            var slot = slotWithKeyHash.slot();
+
+            var oneSlot = localPersist.oneSlot(slot);
+            return oneSlot.getExpireAt(keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
+        }
+    }
+
     public CompressedValue getCv(byte[] keyBytes) {
         return getCv(keyBytes, null);
     }

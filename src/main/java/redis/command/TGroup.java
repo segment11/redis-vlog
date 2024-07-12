@@ -2,10 +2,8 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
-import io.activej.promise.Promise;
-import io.activej.promise.Promises;
-import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
+import redis.CompressedValue;
 import redis.reply.*;
 import redis.type.RedisHashKeys;
 
@@ -26,39 +24,19 @@ public class TGroup extends BaseCommand {
     }
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
-        if ("test-cross-worker".equals(cmd)) {
-            if (data.length != 2) {
-                return null;
-            }
+        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
 
-            ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        if ("type".equals(cmd) || "ttl".equals(cmd)) {
+            if (data.length != 2) {
+                return slotWithKeyHashList;
+            }
 
             var keyBytes = data[1];
-            var key = new String(keyBytes);
-            var array = key.split(",");
-            for (int i = 0; i < array.length; i++) {
-                var keyBytes1 = array[i].getBytes();
-                slotWithKeyHashList.add(slot(keyBytes1, slotNumber));
-            }
-
+            slotWithKeyHashList.add(slot(keyBytes, slotNumber));
             return slotWithKeyHashList;
         }
 
-        ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
         return slotWithKeyHashList;
-    }
-
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
-        if ("type".equals(cmd) || "ttl".equals(cmd)) {
-            if (data.length != 2) {
-                return null;
-            }
-            var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
-        }
-
-        return null;
     }
 
     public Reply handle() {
@@ -70,19 +48,19 @@ public class TGroup extends BaseCommand {
             return ttl(false);
         }
 
-        if ("test-cross-worker".equals(cmd)) {
-            return testCrossWorker();
-        }
-
         return NilReply.INSTANCE;
     }
 
-    private Reply type() {
+    Reply type() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
         }
 
         var keyBytes = data[1];
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
         // need not decompress at all, todo: optimize
         var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
         if (cv == null) {
@@ -120,49 +98,19 @@ public class TGroup extends BaseCommand {
         }
 
         var keyBytes = data[1];
-        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
-        if (cv == null) {
-            return new IntegerReply(-2);
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
         }
 
-        var expireAt = cv.getExpireAt();
+        var expireAt = getExpireAt(keyBytes, slotPreferParsed(keyBytes));
+        if (expireAt == null) {
+            return new IntegerReply(-2);
+        }
         if (expireAt == NO_EXPIRE) {
             return new IntegerReply(-1);
         }
 
         var ttlMilliseconds = expireAt - System.currentTimeMillis();
         return new IntegerReply(isMilliseconds ? ttlMilliseconds : ttlMilliseconds / 1000);
-    }
-
-    private Reply testCrossWorker() {
-        if (data.length != 2) {
-            return ErrorReply.FORMAT;
-        }
-
-        var keyBytes = data[1];
-        var key = new String(keyBytes);
-        var array = key.split(",");
-
-        ArrayList<Promise<Void>> promises = new ArrayList<>();
-
-        for (int i = 0; i < array.length; i++) {
-            log.info("test cross worker, delay: {} ms", i * 1);
-            promises.add(Promises.delay(i * 1));
-        }
-
-        SettablePromise<Reply> finalPromise = new SettablePromise<>();
-        var asyncReply = new AsyncReply(finalPromise);
-
-        Promises.all(promises).whenComplete((r, e) -> {
-            if (e != null) {
-                log.error("mset error: {}", e.getMessage());
-                finalPromise.setException(e);
-                return;
-            }
-
-            finalPromise.set(OKReply.INSTANCE);
-        });
-
-        return asyncReply;
     }
 }
