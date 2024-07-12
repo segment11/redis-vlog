@@ -24,20 +24,51 @@ public class RGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
-        return slotWithKeyHashList;
-    }
 
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
-        if ("rpoplpush".equals(cmd) || "rename".equals(cmd)) {
+        if ("rename".equals(cmd) || "rpoplpush".equals(cmd)) {
             if (data.length != 3) {
-                return null;
+                return slotWithKeyHashList;
             }
+
+            var srcKeyBytes = data[1];
             var dstKeyBytes = data[2];
-            return slot(dstKeyBytes, slotNumber);
+
+            slotWithKeyHashList.add(slot(srcKeyBytes, slotNumber));
+            slotWithKeyHashList.add(slot(dstKeyBytes, slotNumber));
+            return slotWithKeyHashList;
         }
 
-        return null;
+        if ("restore".equals(cmd)) {
+            if (data.length < 4) {
+                return slotWithKeyHashList;
+            }
+
+            var keyBytes = data[1];
+            slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+            return slotWithKeyHashList;
+        }
+
+        if ("rpop".equals(cmd)) {
+            if (data.length != 2 && data.length != 3) {
+                return slotWithKeyHashList;
+            }
+
+            var keyBytes = data[1];
+            slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+            return slotWithKeyHashList;
+        }
+
+        if ("rpush".equals(cmd) || "rpushx".equals(cmd)) {
+            if (data.length < 3) {
+                return slotWithKeyHashList;
+            }
+
+            var keyBytes = data[1];
+            slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+            return slotWithKeyHashList;
+        }
+
+        return slotWithKeyHashList;
     }
 
     public Reply handle() {
@@ -74,7 +105,7 @@ public class RGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    private Reply rename() {
+    Reply rename() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
         }
@@ -82,29 +113,39 @@ public class RGroup extends BaseCommand {
         var srcKeyBytes = data[1];
         var dstKeyBytes = data[2];
 
-        var slotWithKeyHash = slot(srcKeyBytes);
-        var srcCv = getCv(srcKeyBytes, slotWithKeyHash);
+        if (srcKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+        if (dstKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+
+        var srcSlotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var srcCv = getCv(srcKeyBytes, srcSlotWithKeyHash);
         if (srcCv == null) {
             return ErrorReply.NO_SUCH_KEY;
         }
 
-        // key hash will be overwritten by setCv
-        var dstSlotWithKeyHash = slot(dstKeyBytes);
-        var dstSlot = dstSlotWithKeyHash.slot();
-
-        setCv(dstKeyBytes, srcCv, dstSlotWithKeyHash);
-//        var oneSlot = localPersist.oneSlot(dstSlot);
-//        var dstBucketIndex = oneSlot.bucketIndex(dstSlotWithKeyHash.keyHash());
-//        keyLoader.bucketLock(dstSlot, dstBucketIndex, () -> setCv(dstKeyBytes, srcCv, dstSlotWithKeyHash));
-
         var srcKey = new String(srcKeyBytes);
-        var srcSlot = slotWithKeyHash.slot();
+        removeDelay(srcSlotWithKeyHash.slot(), srcSlotWithKeyHash.bucketIndex(), srcKey, srcSlotWithKeyHash.keyHash());
 
-        var oneSlotSrc = localPersist.oneSlot(srcSlot);
-        oneSlotSrc.removeDelay(srcKey, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
-//        var srcBucketIndex = oneSlotSrc.bucketIndex(slotWithKeyHash.keyHash());
-//        keyLoader.bucketLock(srcSlot, srcBucketIndex, () -> oneSlotSrc.removeDelay(srcKey, slotWithKeyHash.keyHash()));
-        return OKReply.INSTANCE;
+        var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
+        if (!isCrossRequestWorker) {
+            setCv(dstKeyBytes, srcCv, dstSlotWithKeyHash);
+            return OKReply.INSTANCE;
+        }
+
+        var oneSlotDst = localPersist.oneSlot(dstSlotWithKeyHash.slot());
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        oneSlotDst.asyncRun(() -> {
+            setCv(dstKeyBytes, srcCv, dstSlotWithKeyHash);
+            finalPromise.set(OKReply.INSTANCE);
+        });
+
+        return asyncReply;
     }
 
     final static String REPLACE = "replace";
@@ -112,7 +153,11 @@ public class RGroup extends BaseCommand {
     final static String IDLETIME = "idletime";
     final static String FREQ = "freq";
 
-    private Reply restore() {
+    Reply restore() {
+        if (data.length < 4) {
+            return ErrorReply.FORMAT;
+        }
+
         // refer kvrocks: cmd_server.cc redis::CommandRestore
         var keyBytes = data[1];
         var ttlBytes = data[2];
@@ -170,7 +215,7 @@ public class RGroup extends BaseCommand {
             }
         }
 
-        var slotWithKeyHash = slot(keyBytes);
+        var slotWithKeyHash = slotPreferParsed(keyBytes);
         // check if key exists
         replace = true;
         if (!replace) {
@@ -312,14 +357,12 @@ public class RGroup extends BaseCommand {
         var asyncReply = new AsyncReply(finalPromise);
 
         var oneSlotDst = localPersist.oneSlot(dstSlotWithKeyHash.slot());
-        oneSlotDst.asyncRun(() -> {
-            moveDstCallback(dstKeyBytes, dstSlotWithKeyHash, dstLeft, memberValueBytes, reply -> finalPromise.set(reply));
-        });
+        oneSlotDst.asyncRun(() -> moveDstCallback(dstKeyBytes, dstSlotWithKeyHash, dstLeft, memberValueBytes, reply -> finalPromise.set(reply)));
 
         return asyncReply;
     }
 
-    private Reply rpoplpush() {
+    Reply rpoplpush() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
         }
@@ -334,8 +377,8 @@ public class RGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var srcSlotWithKeyHash = slotPreferParsed(srcKeyBytes);
-        var dstSlotWithKeyHash = slotPreferParsed(dstKeyBytes, 1);
+        var srcSlotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
 
         return move(srcKeyBytes, srcSlotWithKeyHash, dstKeyBytes, dstSlotWithKeyHash, false, true);
     }
