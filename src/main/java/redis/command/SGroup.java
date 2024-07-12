@@ -295,7 +295,6 @@ public class SGroup extends BaseCommand {
     }
 
     Reply set(byte[][] dd) {
-        // add rate limit by request workers/merge workers, todo
         if (dd.length < 3) {
             return ErrorReply.FORMAT;
         }
@@ -374,7 +373,8 @@ public class SGroup extends BaseCommand {
                 px = value;
             } else if (isExAt) {
                 exAt = value;
-            } else if (isPxAt) {
+            } else {
+//            } else if (isPxAt) {
                 pxAt = value;
             }
 
@@ -408,9 +408,11 @@ public class SGroup extends BaseCommand {
             }
 
             // check if not string type
-            if (isOldExist && isReturnExist && !cv.isTypeString()) {
-                log.debug("Key {} is not string type", new String(keyBytes));
-                return NilReply.INSTANCE;
+            if (isOldExist && isReturnExist) {
+                if (!cv.isTypeString()) {
+                    log.debug("Key {} is not string type", new String(keyBytes));
+                    return ErrorReply.NOT_STRING;
+                }
             }
 
             // keep ttl
@@ -427,9 +429,6 @@ public class SGroup extends BaseCommand {
             if (cv == null) {
                 return NilReply.INSTANCE;
             } else {
-                if (!cv.isTypeString()) {
-                    return ErrorReply.NOT_STRING;
-                }
                 return new BulkReply(getValueBytesByCv(cv));
             }
         }
@@ -437,7 +436,7 @@ public class SGroup extends BaseCommand {
         return OKReply.INSTANCE;
     }
 
-    private Reply setrange() {
+    Reply setrange() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -445,6 +444,13 @@ public class SGroup extends BaseCommand {
         var keyBytes = data[1];
         var offsetBytes = data[2];
         var valueBytes = data[3];
+
+        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+            return ErrorReply.KEY_TOO_LONG;
+        }
+        if (valueBytes.length > CompressedValue.VALUE_MAX_LENGTH) {
+            return ErrorReply.VALUE_TOO_LONG;
+        }
 
         int offset;
         try {
@@ -454,10 +460,6 @@ public class SGroup extends BaseCommand {
         }
         if (offset < 0) {
             return ErrorReply.INVALID_INTEGER;
-        }
-
-        if (valueBytes.length > CompressedValue.VALUE_MAX_LENGTH) {
-            return ErrorReply.VALUE_TOO_LONG;
         }
 
         var slotWithKeyHash = slotPreferParsed(keyBytes);
@@ -492,7 +494,7 @@ public class SGroup extends BaseCommand {
         return new IntegerReply(lengthResult);
     }
 
-    private Reply strlen() {
+    Reply strlen() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
         }
@@ -505,7 +507,7 @@ public class SGroup extends BaseCommand {
         return new IntegerReply(cv.uncompressedLength());
     }
 
-    private Reply select() {
+    Reply select() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
         }
@@ -516,12 +518,15 @@ public class SGroup extends BaseCommand {
         } catch (NumberFormatException e) {
             return ErrorReply.NOT_INTEGER;
         }
+        if (index < 0 || index >= 16) {
+            return ErrorReply.INVALID_INTEGER;
+        }
 
         log.warn("Select db index: {}, not support", index);
         return ErrorReply.NOT_SUPPORT;
     }
 
-    private Reply sadd() {
+    Reply sadd() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
         }
@@ -542,20 +547,18 @@ public class SGroup extends BaseCommand {
 
         // use RedisHashKeys to store set
         var slotWithKeyHash = slotPreferParsed(keyBytes);
-
         var setCv = getCv(keyBytes, slotWithKeyHash);
-        var setValueBytes = setCv != null && setCv.isSet() ? getValueBytesByCv(setCv) : null;
-        var rhk = setValueBytes == null ? new RedisHashKeys() : RedisHashKeys.decode(setValueBytes);
-        var size = rhk.size();
-
-        if (size >= RedisHashKeys.HASH_MAX_SIZE) {
-            return ErrorReply.SET_SIZE_TO_LONG;
+        if (setCv != null && !setCv.isSet()) {
+            return ErrorReply.WRONG_TYPE;
         }
+
+        var setValueBytes = setCv != null ? getValueBytesByCv(setCv) : null;
+        var rhk = setValueBytes == null ? new RedisHashKeys() : RedisHashKeys.decode(setValueBytes);
 
         int added = 0;
         for (var memberBytes : memberBytesArr) {
             boolean isNewAdded = rhk.add(new String(memberBytes));
-            if (isNewAdded && (size + 1) == RedisHashKeys.HASH_MAX_SIZE) {
+            if (rhk.size() > RedisHashKeys.HASH_MAX_SIZE) {
                 return ErrorReply.SET_SIZE_TO_LONG;
             }
             if (isNewAdded) {
@@ -571,7 +574,7 @@ public class SGroup extends BaseCommand {
         return new IntegerReply(added);
     }
 
-    private Reply scard() {
+    Reply scard() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
         }
@@ -581,7 +584,8 @@ public class SGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var setCv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var setCv = getCv(keyBytes, slotWithKeyHash);
         if (setCv == null) {
             return IntegerReply.REPLY_0;
         }
