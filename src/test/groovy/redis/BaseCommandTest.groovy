@@ -58,19 +58,19 @@ class BaseCommandTest extends Specification {
 
     def 'test all'() {
         given:
-        byte[][] data = new byte[2][0]
-        data[0] = 'get'.bytes
-        data[1] = 'key'.bytes
-        def c = new SubCommand('get', data, null)
+        def data2 = new byte[2][0]
+        data2[0] = 'get'.bytes
+        data2[1] = 'key'.bytes
+        def c = new SubCommand('get', data2, null)
 
         expect:
         c.cmd == 'get'
-        c.data == data
+        c.data == data2
         c.socket == null
 
         when:
         def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, null, Config.create())
-        c.init(requestHandler, new Request(data, false, false))
+        c.init(requestHandler, new Request(data2, false, false))
 
         // overwrite
         c.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
