@@ -930,6 +930,8 @@ public class OneSlot {
         }
         this.metaChunkSegmentFlagSeq.clear();
         this.metaChunkSegmentIndex.clear();
+
+        this.chunk.segmentIndex = 0;
     }
 
     public void initFds(LibC libC, byte netWorkers) throws IOException {
