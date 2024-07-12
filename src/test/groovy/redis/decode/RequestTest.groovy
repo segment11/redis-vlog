@@ -6,12 +6,12 @@ import spock.lang.Specification
 class RequestTest extends Specification {
     def 'test all'() {
         given:
-        byte[][] data = new byte[3][]
-        data[0] = 'SET'.bytes
-        data[1] = 'key'.bytes
-        data[2] = 'value'.bytes
+        def data3 = new byte[3][]
+        data3[0] = 'SET'.bytes
+        data3[1] = 'key'.bytes
+        data3[2] = 'value'.bytes
 
-        def request = new Request(data, false, false)
+        def request = new Request(data3, false, false)
         request.slotNumber = 1
 
         expect:
@@ -40,7 +40,7 @@ class RequestTest extends Specification {
         request.singleSlot == Request.SLOT_CAN_HANDLE_BY_ANY_WORKER
 
         when:
-        byte[][] dataRepl = new byte[3][]
+        def dataRepl = new byte[3][]
         dataRepl[0] = new byte[8]
         dataRepl[1] = new byte[1]
         dataRepl[1][0] = (byte) 0
@@ -52,12 +52,11 @@ class RequestTest extends Specification {
         requestRepl.singleSlot == 0
 
         when:
-        byte[][] data2 = new byte[3][]
-        data2[0] = 'MGET'.bytes
-        data2[1] = 'key1'.bytes
-        data2[2] = 'key2'.bytes
+        data3[0] = 'MGET'.bytes
+        data3[1] = 'key1'.bytes
+        data3[2] = 'key2'.bytes
 
-        def request2 = new Request(data, true, false)
+        def request2 = new Request(data3, true, false)
         request2.slotNumber = 2
 
         request2.slotWithKeyHashList = [
@@ -73,18 +72,18 @@ class RequestTest extends Specification {
         request2.singleSlot == request2.slotWithKeyHashList[0].slot
 
         when:
-        def data3 = new byte[1][]
-        data3[0] = 'dbsize'.bytes
+        def data1 = new byte[1][]
+        data1[0] = 'dbsize'.bytes
 
-        def request3 = new Request(data3, false, false)
+        def request3 = new Request(data1, false, false)
         request3.checkCmdIfCrossRequestWorker()
 
         then:
         request3.isCrossRequestWorker()
 
         when:
-        data3[0] = 'xxxx'.bytes
-        def request33 = new Request(data3, false, false)
+        data1[0] = 'xxxx'.bytes
+        def request33 = new Request(data1, false, false)
         request33.checkCmdIfCrossRequestWorker()
 
         then:
@@ -92,10 +91,9 @@ class RequestTest extends Specification {
 
         when:
         Request.crossRequestWorkerCmdList << 'xxxx'
-        def data4 = new byte[1][]
-        data4[0] = 'xxxx'.bytes
+        data1[0] = 'xxxx'.bytes
 
-        def request4 = new Request(data4, false, false)
+        def request4 = new Request(data1, false, false)
         request4.checkCmdIfCrossRequestWorker()
 
         then:
