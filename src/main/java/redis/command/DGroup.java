@@ -26,12 +26,11 @@ public class DGroup extends BaseCommand {
             if (data.length < 2) {
                 return slotWithKeyHashList;
             }
-
             for (int i = 1; i < data.length; i++) {
                 var keyBytes = data[i];
-                slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+                var slotWithKeyHash = slot(keyBytes, slotNumber);
+                slotWithKeyHashList.add(slotWithKeyHash);
             }
-
             return slotWithKeyHashList;
         }
 

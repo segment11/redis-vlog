@@ -59,7 +59,6 @@ public class MGroup extends BaseCommand {
                 if (data.length != 4) {
                     return slotWithKeyHashList;
                 }
-
                 var slotBytes = data[2];
                 byte slot;
                 try {
@@ -76,9 +75,9 @@ public class MGroup extends BaseCommand {
                 if (data.length != 4) {
                     return slotWithKeyHashList;
                 }
-
                 var keyBytes = data[3];
-                slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+                var slotWithKeyHash = slot(keyBytes, slotNumber);
+                slotWithKeyHashList.add(slotWithKeyHash);
                 return slotWithKeyHashList;
             }
         }

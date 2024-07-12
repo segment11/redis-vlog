@@ -30,9 +30,9 @@ public class TGroup extends BaseCommand {
             if (data.length != 2) {
                 return slotWithKeyHashList;
             }
-
             var keyBytes = data[1];
-            slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
             return slotWithKeyHashList;
         }
 
