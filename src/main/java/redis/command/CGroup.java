@@ -33,12 +33,7 @@ public class CGroup extends BaseCommand {
 //            // all slots
 //        }
 
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
         return slotWithKeyHashList;
-    }
-
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
-        return null;
     }
 
     public Reply handle() {

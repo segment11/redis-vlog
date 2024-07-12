@@ -22,11 +22,7 @@ public class ZGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
-        return slotWithKeyHashList;
-    }
 
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("zadd".equals(cmd) || "zcard".equals(cmd) || "zcount".equals(cmd)
                 || "zdiffstore".equals(cmd)
                 || "zincrby".equals(cmd)
@@ -40,21 +36,25 @@ public class ZGroup extends BaseCommand {
                 || "zrevrange".equals(cmd) || "zrevrangebylex".equals(cmd) || "zrevrangebyscore".equals(cmd) || "zrevrank".equals(cmd)
                 || "zscore".equals(cmd) || "zunion".equals(cmd) || "zunionstore".equals(cmd)) {
             if (data.length < 2) {
-                return null;
+                return slotWithKeyHashList;
             }
             var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
         }
 
         if ("zdiff".equals(cmd) || "zintercard".equals(cmd)) {
             if (data.length < 3) {
-                return null;
+                return slotWithKeyHashList;
             }
             var keyBytes = data[2];
-            return slot(keyBytes, slotNumber);
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
         }
 
-        return null;
+        return slotWithKeyHashList;
     }
 
     public Reply handle() {

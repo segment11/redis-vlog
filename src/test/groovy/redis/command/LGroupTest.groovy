@@ -20,40 +20,40 @@ class LGroupTest extends Specification {
 
         when:
         def sLindexList = LGroup.parseSlots('lindex', data2, slotNumber)
-        def sLinsert = LGroup.parseSlot('linsert', data2, slotNumber)
-        def sLlen = LGroup.parseSlot('llen', data2, slotNumber)
-        def sLpop = LGroup.parseSlot('lpop', data2, slotNumber)
-        def sLpos = LGroup.parseSlot('lpos', data2, slotNumber)
-        def sLpush = LGroup.parseSlot('lpush', data2, slotNumber)
-        def sLpushx = LGroup.parseSlot('lpushx', data2, slotNumber)
-        def sLrange = LGroup.parseSlot('lrange', data2, slotNumber)
-        def sLrem = LGroup.parseSlot('lrem', data2, slotNumber)
-        def sLset = LGroup.parseSlot('lset', data2, slotNumber)
-        def sLtrim = LGroup.parseSlot('ltrim', data2, slotNumber)
+        def sLinsertList = LGroup.parseSlots('linsert', data2, slotNumber)
+        def sLlenList = LGroup.parseSlots('llen', data2, slotNumber)
+        def sLpopList = LGroup.parseSlots('lpop', data2, slotNumber)
+        def sLposList = LGroup.parseSlots('lpos', data2, slotNumber)
+        def sLpushList = LGroup.parseSlots('lpush', data2, slotNumber)
+        def sLpushxList = LGroup.parseSlots('lpushx', data2, slotNumber)
+        def sLrangeList = LGroup.parseSlots('lrange', data2, slotNumber)
+        def sLremList = LGroup.parseSlots('lrem', data2, slotNumber)
+        def sLsetList = LGroup.parseSlots('lset', data2, slotNumber)
+        def sLtrimList = LGroup.parseSlots('ltrim', data2, slotNumber)
 
-        def s = LGroup.parseSlot('lxxx', data2, slotNumber)
+        def sList = LGroup.parseSlots('lxxx', data2, slotNumber)
 
         then:
         sLindexList.size() == 1
-        sLinsert != null
-        sLlen != null
-        sLpop != null
-        sLpos != null
-        sLpush != null
-        sLpushx != null
-        sLrange != null
-        sLrem != null
-        sLset != null
-        sLtrim != null
-        s == null
+        sLinsertList.size() == 1
+        sLlenList.size() == 1
+        sLpopList.size() == 1
+        sLposList.size() == 1
+        sLpushList.size() == 1
+        sLpushxList.size() == 1
+        sLrangeList.size() == 1
+        sLremList.size() == 1
+        sLsetList.size() == 1
+        sLtrimList.size() == 1
+        sList.size() == 0
 
         when:
         def data1 = new byte[1][]
 
-        sLinsert = LGroup.parseSlot('linsert', data1, slotNumber)
+        sLinsertList = LGroup.parseSlots('linsert', data1, slotNumber)
 
         then:
-        sLinsert == null
+        sLinsertList.size() == 0
 
         when:
         def data5 = new byte[5][]

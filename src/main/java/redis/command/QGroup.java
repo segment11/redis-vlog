@@ -15,14 +15,9 @@ public class QGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
         return slotWithKeyHashList;
     }
 
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
-        return null;
-    }
-    
     public Reply handle() {
         return NilReply.INSTANCE;
     }

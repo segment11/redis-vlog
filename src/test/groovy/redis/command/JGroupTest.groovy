@@ -15,11 +15,9 @@ class JGroupTest extends Specification {
 
         when:
         def sList = JGroup.parseSlots('jx', data2, slotNumber)
-        def sX = JGroup.parseSlot('jx', data2, slotNumber)
 
         then:
-        sList.size() == 1
-        sX == null
+        sList.size() == 0
     }
 
     def 'test handle'() {

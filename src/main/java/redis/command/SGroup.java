@@ -26,18 +26,16 @@ public class SGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
-        return slotWithKeyHashList;
-    }
 
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("set".equals(cmd) || "setex".equals(cmd) || "setrange".equals(cmd) ||
                 "setnx".equals(cmd) || "strlen".equals(cmd) || "substr".equals(cmd)) {
             if (data.length < 2) {
-                return null;
+                return slotWithKeyHashList;
             }
             var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
         }
 
         // set group, todo: check
@@ -47,29 +45,39 @@ public class SGroup extends BaseCommand {
                 "spop".equals(cmd) || "srandmember".equals(cmd) || "srem".equals(cmd) ||
                 "sunion".equals(cmd) || "sunionstore".equals(cmd)) {
             if (data.length < 2) {
-                return null;
+                return slotWithKeyHashList;
             }
             var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
         }
 
         if ("sintercard".equals(cmd)) {
             if (data.length < 3) {
-                return null;
+                return slotWithKeyHashList;
             }
             var keyBytes = data[2];
-            return slot(keyBytes, slotNumber);
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
         }
 
         if ("smove".equals(cmd)) {
             if (data.length != 4) {
-                return null;
+                return slotWithKeyHashList;
             }
+            var srcKeyBytes = data[2];
             var dstKeyBytes = data[2];
-            return slot(dstKeyBytes, slotNumber);
+
+            var s1 = slot(srcKeyBytes, slotNumber);
+            var s2 = slot(dstKeyBytes, slotNumber);
+            slotWithKeyHashList.add(s1);
+            slotWithKeyHashList.add(s2);
+            return slotWithKeyHashList;
         }
 
-        return null;
+        return slotWithKeyHashList;
     }
 
     public Reply handle() {

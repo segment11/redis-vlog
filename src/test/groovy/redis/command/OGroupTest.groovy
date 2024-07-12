@@ -15,11 +15,9 @@ class OGroupTest extends Specification {
 
         when:
         def sList = OGroup.parseSlots('ox', data2, slotNumber)
-        def sX = OGroup.parseSlot('ox', data2, slotNumber)
 
         then:
-        sList.size() == 1
-        sX == null
+        sList.size() == 0
     }
 
     def 'test handle'() {

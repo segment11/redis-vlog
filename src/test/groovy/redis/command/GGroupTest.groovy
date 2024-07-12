@@ -20,28 +20,27 @@ class GGroupTest extends Specification {
 
         when:
         def sGetList = GGroup.parseSlots('get', data2, slotNumber)
-        def sGetDel = GGroup.parseSlot('getdel', data2, slotNumber)
-        def sGetEx = GGroup.parseSlot('getex', data2, slotNumber)
-        def sGetRange = GGroup.parseSlot('getrange', data2, slotNumber)
-        def sGetSet = GGroup.parseSlot('getset', data2, slotNumber)
-        def s = GGroup.parseSlot('gxxx', data2, slotNumber)
+        def sGetDelList = GGroup.parseSlots('getdel', data2, slotNumber)
+        def sGetExList = GGroup.parseSlots('getex', data2, slotNumber)
+        def sGetRangeList = GGroup.parseSlots('getrange', data2, slotNumber)
+        def sGetSetList = GGroup.parseSlots('getset', data2, slotNumber)
+        def sList = GGroup.parseSlots('gxxx', data2, slotNumber)
 
         then:
         sGetList.size() == 1
-        sGetList[0] != null
-        sGetDel != null
-        sGetEx != null
-        sGetRange != null
-        sGetSet != null
-        s == null
+        sGetDelList.size() == 1
+        sGetExList.size() == 1
+        sGetRangeList.size() == 1
+        sGetSetList.size() == 1
+        sList.size() == 0
 
         when:
         def data1 = new byte[1][]
 
-        sGetDel = GGroup.parseSlot('getdel', data1, slotNumber)
+        sGetList = GGroup.parseSlots('get', data1, slotNumber)
 
         then:
-        sGetDel == null
+        sGetList.size() == 0
     }
 
     def 'test handle'() {

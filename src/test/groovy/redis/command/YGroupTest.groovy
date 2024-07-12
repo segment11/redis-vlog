@@ -15,11 +15,9 @@ class YGroupTest extends Specification {
 
         when:
         def sList = YGroup.parseSlots('yx', data2, slotNumber)
-        def sX = YGroup.parseSlot('yx', data2, slotNumber)
 
         then:
-        sList.size() == 1
-        sX == null
+        sList.size() == 0
     }
 
     def 'test handle'() {

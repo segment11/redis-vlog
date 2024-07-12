@@ -15,11 +15,9 @@ class NGroupTest extends Specification {
 
         when:
         def sList = NGroup.parseSlots('nx', data2, slotNumber)
-        def sX = NGroup.parseSlot('nx', data2, slotNumber)
 
         then:
-        sList.size() == 1
-        sX == null
+        sList.size() == 0
     }
 
     def 'test handle'() {

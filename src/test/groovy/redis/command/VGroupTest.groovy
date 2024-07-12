@@ -15,11 +15,9 @@ class VGroupTest extends Specification {
 
         when:
         def sList = VGroup.parseSlots('vx', data2, slotNumber)
-        def sX = VGroup.parseSlot('vx', data2, slotNumber)
 
         then:
-        sList.size() == 1
-        sX == null
+        sList.size() == 0
     }
 
     def 'test handle'() {

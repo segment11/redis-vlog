@@ -15,16 +15,7 @@ public class BGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
         return slotWithKeyHashList;
-    }
-
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
-        if ("bgsave".equals(cmd)) {
-            return null;
-        }
-
-        return null;
     }
 
     public Reply handle() {

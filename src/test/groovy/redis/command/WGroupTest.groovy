@@ -15,11 +15,9 @@ class WGroupTest extends Specification {
 
         when:
         def sList = WGroup.parseSlots('wx', data2, slotNumber)
-        def sX = WGroup.parseSlot('wx', data2, slotNumber)
 
         then:
-        sList.size() == 1
-        sX == null
+        sList.size() == 0
     }
 
     def 'test handle'() {

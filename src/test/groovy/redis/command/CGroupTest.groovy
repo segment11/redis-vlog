@@ -23,25 +23,20 @@ class CGroupTest extends Specification {
         data3[2] = 'b'.bytes
 
         when:
-        def slotWithKeyHash = CGroup.parseSlot('copy', data3, slotNumber)
-        def slotWithKeyHashListCopy = CGroup.parseSlots('copy', data3, slotNumber)
-        def slotWithKeyHashListConfig = CGroup.parseSlots('config', data3, slotNumber)
+        def sCopyList = CGroup.parseSlots('copy', data3, slotNumber)
+        def sConfigList = CGroup.parseSlots('config', data3, slotNumber)
 
         then:
-        slotWithKeyHash == null
-        slotWithKeyHashListConfig[0] == null
-
-        slotWithKeyHashListCopy.size() == 2
-        slotWithKeyHashListCopy[0] != null
-        slotWithKeyHashListCopy[1] != null
+        sCopyList.size() == 2
+        sConfigList.size() == 0
 
         when:
         def data2 = new byte[2][]
 
-        slotWithKeyHashListCopy = CGroup.parseSlots('copy', data2, slotNumber)
+        sCopyList = CGroup.parseSlots('copy', data2, slotNumber)
 
         then:
-        slotWithKeyHashListCopy.size() == 0
+        sCopyList.size() == 0
     }
 
     def 'test handle'() {

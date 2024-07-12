@@ -23,59 +23,59 @@ class PGroupTest extends Specification {
 
         when:
         def sPexpireList = PGroup.parseSlots('pexpire', data4, slotNumber)
-        def sPexpireat = PGroup.parseSlot('pexpireat', data4, slotNumber)
-        def sPexpiretime = PGroup.parseSlot('pexpiretime', data2, slotNumber)
-        def sPttl = PGroup.parseSlot('pttl', data2, slotNumber)
-        def sPsetex = PGroup.parseSlot('psetex', data4, slotNumber)
+        def sPexpireatList = PGroup.parseSlots('pexpireat', data4, slotNumber)
+        def sPexpiretimeList = PGroup.parseSlots('pexpiretime', data2, slotNumber)
+        def sPttlList = PGroup.parseSlots('pttl', data2, slotNumber)
+        def sPsetexList = PGroup.parseSlots('psetex', data4, slotNumber)
 
-        def s = PGroup.parseSlot('pxxx', data2, slotNumber)
+        def sList = PGroup.parseSlots('pxxx', data2, slotNumber)
 
         then:
         sPexpireList.size() == 1
-        sPexpireat != null
-        sPexpiretime != null
-        sPttl != null
-        sPsetex != null
-        s == null
+        sPexpireatList.size() == 1
+        sPexpiretimeList.size() == 1
+        sPttlList.size() == 1
+        sPsetexList.size() == 1
+        sList.size() == 0
 
         when:
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
-        sPexpireat = PGroup.parseSlot('pexpireat', data3, slotNumber)
+        sPexpireatList = PGroup.parseSlots('pexpireat', data3, slotNumber)
 
         then:
-        sPexpireat != null
+        sPexpireatList.size() == 1
 
         when:
         // wrong size
         sPexpireList = PGroup.parseSlots('pexpire', data2, slotNumber)
 
         then:
-        sPexpireList[0] == null
+        sPexpireList.size() == 0
 
         when:
-        sPexpireat = PGroup.parseSlot('pexpireat', data2, slotNumber)
+        sPexpireatList = PGroup.parseSlots('pexpireat', data2, slotNumber)
 
         then:
-        sPexpireat == null
+        sPexpireatList.size() == 0
 
         when:
-        sPexpiretime = PGroup.parseSlot('pexpiretime', data4, slotNumber)
+        sPexpiretimeList = PGroup.parseSlots('pexpiretime', data4, slotNumber)
 
         then:
-        sPexpiretime == null
+        sPexpiretimeList.size() == 0
 
         when:
-        sPttl = PGroup.parseSlot('pttl', data4, slotNumber)
+        sPttlList = PGroup.parseSlots('pttl', data4, slotNumber)
 
         then:
-        sPttl == null
+        sPttlList.size() == 0
 
         when:
-        sPsetex = PGroup.parseSlot('psetex', data2, slotNumber)
+        sPsetexList = PGroup.parseSlots('psetex', data2, slotNumber)
 
         then:
-        sPsetex == null
+        sPsetexList.size() == 0
     }
 
     def 'test handle'() {

@@ -29,12 +29,13 @@ public class RGroup extends BaseCommand {
             if (data.length != 3) {
                 return slotWithKeyHashList;
             }
-
             var srcKeyBytes = data[1];
             var dstKeyBytes = data[2];
 
-            slotWithKeyHashList.add(slot(srcKeyBytes, slotNumber));
-            slotWithKeyHashList.add(slot(dstKeyBytes, slotNumber));
+            var s1 = slot(srcKeyBytes, slotNumber);
+            var s2 = slot(dstKeyBytes, slotNumber);
+            slotWithKeyHashList.add(s1);
+            slotWithKeyHashList.add(s2);
             return slotWithKeyHashList;
         }
 
@@ -42,9 +43,9 @@ public class RGroup extends BaseCommand {
             if (data.length < 4) {
                 return slotWithKeyHashList;
             }
-
             var keyBytes = data[1];
-            slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
             return slotWithKeyHashList;
         }
 
@@ -52,9 +53,9 @@ public class RGroup extends BaseCommand {
             if (data.length != 2 && data.length != 3) {
                 return slotWithKeyHashList;
             }
-
             var keyBytes = data[1];
-            slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
             return slotWithKeyHashList;
         }
 
@@ -62,9 +63,9 @@ public class RGroup extends BaseCommand {
             if (data.length < 3) {
                 return slotWithKeyHashList;
             }
-
             var keyBytes = data[1];
-            slotWithKeyHashList.add(slot(keyBytes, slotNumber));
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
             return slotWithKeyHashList;
         }
 

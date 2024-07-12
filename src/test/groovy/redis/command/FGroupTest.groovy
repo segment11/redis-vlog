@@ -3,7 +3,6 @@ package redis.command
 import io.activej.eventloop.Eventloop
 import redis.BaseCommand
 import redis.persist.LocalPersist
-import redis.persist.LocalPersistTest
 import redis.reply.AsyncReply
 import redis.reply.NilReply
 import redis.reply.OKReply
@@ -22,14 +21,9 @@ class FGroupTest extends Specification {
 
         when:
         def sFlushDbList = FGroup.parseSlots('flushdb', data2, slotNumber)
-        def sFlushAll = FGroup.parseSlot('flushall', data2, slotNumber)
-        def s = FGroup.parseSlot('fxxx', data2, slotNumber)
 
         then:
-        sFlushDbList.size() == 1
-        sFlushDbList[0] == null
-        sFlushAll == null
-        s == null
+        sFlushDbList.size() == 0
     }
 
     def 'test handle'() {
@@ -69,9 +63,6 @@ class FGroupTest extends Specification {
 
         def fGroup = new FGroup('flushdb', data1, null)
         fGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
-
-        and:
-        LocalPersistTest.prepareLocalPersist()
 
         and:
         var eventloop = Eventloop.builder()

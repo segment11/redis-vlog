@@ -17,25 +17,23 @@ class AGroupTest extends Specification {
         data3[1] = 'a'.bytes
 
         when:
-        def slotWithKeyHash = AGroup.parseSlot('append', data3, slotNumber)
-        def slotWithKeyHashList = AGroup.parseSlots('append', data3, slotNumber)
+        def sAppendList = AGroup.parseSlots('append', data3, slotNumber)
 
         then:
-        slotWithKeyHash.slot() == 63
-        slotWithKeyHashList.size() == 1
+        sAppendList.size() == 1
 
         when:
-        slotWithKeyHash = AGroup.parseSlot('appendx', data3, slotNumber)
+        sAppendList = AGroup.parseSlots('axxx', data3, slotNumber)
 
         then:
-        slotWithKeyHash == null
+        sAppendList.size() == 0
 
         when:
-        def data2 = new byte[2][]
-        slotWithKeyHash = AGroup.parseSlot('append', data2, slotNumber)
+        def data1 = new byte[1][]
+        sAppendList = AGroup.parseSlots('append', data1, slotNumber)
 
         then:
-        slotWithKeyHash == null
+        sAppendList.size() == 0
     }
 
     def 'test handle'() {

@@ -20,21 +20,19 @@ public class GGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
-        return slotWithKeyHashList;
-    }
 
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("get".equals(cmd) || "getdel".equals(cmd) || "getex".equals(cmd)
                 || "getrange".equals(cmd) || "getset".equals(cmd)) {
             if (data.length < 2) {
-                return null;
+                return slotWithKeyHashList;
             }
             var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
         }
 
-        return null;
+        return slotWithKeyHashList;
     }
 
     public Reply handle() {

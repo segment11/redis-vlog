@@ -35,20 +35,17 @@ public class DGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
-        return slotWithKeyHashList;
-    }
-
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("decr".equals(cmd) || "decrby".equals(cmd)) {
             if (data.length < 2) {
-                return null;
+                return slotWithKeyHashList;
             }
             var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
         }
 
-        return null;
+        return slotWithKeyHashList;
     }
 
     public Reply handle() {

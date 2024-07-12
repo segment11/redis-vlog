@@ -15,11 +15,9 @@ class UGroupTest extends Specification {
 
         when:
         def sList = UGroup.parseSlots('ux', data2, slotNumber)
-        def sX = UGroup.parseSlot('ux', data2, slotNumber)
 
         then:
-        sList.size() == 1
-        sX == null
+        sList.size() == 0
     }
 
     def 'test handle'() {

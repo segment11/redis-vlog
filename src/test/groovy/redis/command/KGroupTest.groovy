@@ -15,11 +15,9 @@ class KGroupTest extends Specification {
 
         when:
         def sList = KGroup.parseSlots('kx', data2, slotNumber)
-        def sX = KGroup.parseSlot('kx', data2, slotNumber)
 
         then:
-        sList.size() == 1
-        sX == null
+        sList.size() == 0
     }
 
     def 'test handle'() {

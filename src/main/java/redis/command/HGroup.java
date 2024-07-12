@@ -24,24 +24,22 @@ public class HGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
-        return slotWithKeyHashList;
-    }
 
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("hdel".equals(cmd) || "hexists".equals(cmd) || "hget".equals(cmd) || "hgetall".equals(cmd) ||
                 "hincrby".equals(cmd) || "hincrbyfloat".equals(cmd) || "hkeys".equals(cmd) || "hlen".equals(cmd) ||
                 "hmget".equals(cmd) || "hmset".equals(cmd) || "hrandfield".equals(cmd) ||
                 "hset".equals(cmd) || "hsetnx".equals(cmd) ||
                 "hstrlen".equals(cmd) || "hvals".equals(cmd)) {
             if (data.length < 2) {
-                return null;
+                return slotWithKeyHashList;
             }
             var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
         }
 
-        return null;
+        return slotWithKeyHashList;
     }
 
     public Reply handle() {

@@ -18,23 +18,23 @@ class IGroupTest extends Specification {
 
         when:
         def sIncrList = IGroup.parseSlots('incr', data2, slotNumber)
-        def sIncrby = IGroup.parseSlot('incrby', data2, slotNumber)
-        def sIncrbyfloat = IGroup.parseSlot('incrbyfloat', data2, slotNumber)
-        def s = IGroup.parseSlot('ixxx', data2, slotNumber)
+        def sIncrbyList = IGroup.parseSlots('incrby', data2, slotNumber)
+        def sIncrbyfloatList = IGroup.parseSlots('incrbyfloat', data2, slotNumber)
+        def sList = IGroup.parseSlots('ixxx', data2, slotNumber)
 
         then:
         sIncrList.size() == 1
-        sIncrby != null
-        sIncrbyfloat != null
-        s == null
+        sIncrbyList.size() == 1
+        sIncrbyfloatList.size() == 1
+        sList.size() == 0
 
         when:
         def data1 = new byte[1][]
 
-        sIncrby = IGroup.parseSlot('incrby', data1, slotNumber)
+        sIncrbyList = IGroup.parseSlots('incrby', data1, slotNumber)
 
         then:
-        sIncrby == null
+        sIncrbyList.size() == 0
     }
 
     def 'test handle'() {

@@ -35,24 +35,21 @@ public class LGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-        slotWithKeyHashList.add(parseSlot(cmd, data, slotNumber));
-        return slotWithKeyHashList;
-    }
-
-    public static SlotWithKeyHash parseSlot(String cmd, byte[][] data, int slotNumber) {
         if ("lindex".equals(cmd) || "linsert".equals(cmd)
                 || "llen".equals(cmd) || "lpop".equals(cmd) || "lpos".equals(cmd)
                 || "lpush".equals(cmd) || "lpushx".equals(cmd)
                 || "lrange".equals(cmd) || "lrem".equals(cmd)
                 || "lset".equals(cmd) || "ltrim".equals(cmd)) {
             if (data.length < 2) {
-                return null;
+                return slotWithKeyHashList;
             }
             var keyBytes = data[1];
-            return slot(keyBytes, slotNumber);
+            var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
         }
 
-        return null;
+        return slotWithKeyHashList;
     }
 
     public Reply handle() {

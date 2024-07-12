@@ -21,49 +21,49 @@ class HGroupTest extends Specification {
 
         when:
         def sHdelList = HGroup.parseSlots('hdel', data2, slotNumber)
-        def sHexists = HGroup.parseSlot('hexists', data2, slotNumber)
-        def sHget = HGroup.parseSlot('hget', data2, slotNumber)
-        def sHgetall = HGroup.parseSlot('hgetall', data2, slotNumber)
-        def sHincrby = HGroup.parseSlot('hincrby', data2, slotNumber)
-        def sHincrbyfloat = HGroup.parseSlot('hincrbyfloat', data2, slotNumber)
-        def sHkeys = HGroup.parseSlot('hkeys', data2, slotNumber)
-        def sHlen = HGroup.parseSlot('hlen', data2, slotNumber)
-        def sHmget = HGroup.parseSlot('hmget', data2, slotNumber)
-        def sHmset = HGroup.parseSlot('hmset', data2, slotNumber)
-        def sHrandfield = HGroup.parseSlot('hrandfield', data2, slotNumber)
-        def sHset = HGroup.parseSlot('hset', data2, slotNumber)
-        def sHsetnx = HGroup.parseSlot('hsetnx', data2, slotNumber)
-        def sHstrlen = HGroup.parseSlot('hstrlen', data2, slotNumber)
-        def sHvals = HGroup.parseSlot('hvals', data2, slotNumber)
-        def sHFieldDictTrain = HGroup.parseSlot('h_field_dict_train', data2, slotNumber)
-        def s = HGroup.parseSlot('hxxx', data2, slotNumber)
+        def sHexistsList = HGroup.parseSlots('hexists', data2, slotNumber)
+        def sHgetList = HGroup.parseSlots('hget', data2, slotNumber)
+        def sHgetallList = HGroup.parseSlots('hgetall', data2, slotNumber)
+        def sHincrbyList = HGroup.parseSlots('hincrby', data2, slotNumber)
+        def sHincrbyfloatList = HGroup.parseSlots('hincrbyfloat', data2, slotNumber)
+        def sHkeysList = HGroup.parseSlots('hkeys', data2, slotNumber)
+        def sHlenList = HGroup.parseSlots('hlen', data2, slotNumber)
+        def sHmgetList = HGroup.parseSlots('hmget', data2, slotNumber)
+        def sHmsetList = HGroup.parseSlots('hmset', data2, slotNumber)
+        def sHrandfieldList = HGroup.parseSlots('hrandfield', data2, slotNumber)
+        def sHsetList = HGroup.parseSlots('hset', data2, slotNumber)
+        def sHsetnxList = HGroup.parseSlots('hsetnx', data2, slotNumber)
+        def sHstrlenList = HGroup.parseSlots('hstrlen', data2, slotNumber)
+        def sHvalsList = HGroup.parseSlots('hvals', data2, slotNumber)
+        def sHFieldDictTrainList = HGroup.parseSlots('h_field_dict_train', data2, slotNumber)
+        def sList = HGroup.parseSlots('hxxx', data2, slotNumber)
 
         then:
         sHdelList.size() == 1
-        sHexists != null
-        sHget != null
-        sHgetall != null
-        sHincrby != null
-        sHincrbyfloat != null
-        sHkeys != null
-        sHlen != null
-        sHmget != null
-        sHmset != null
-        sHrandfield != null
-        sHset != null
-        sHsetnx != null
-        sHstrlen != null
-        sHvals != null
-        sHFieldDictTrain == null
-        s == null
+        sHexistsList.size() == 1
+        sHgetList.size() == 1
+        sHgetallList.size() == 1
+        sHincrbyList.size() == 1
+        sHincrbyfloatList.size() == 1
+        sHkeysList.size() == 1
+        sHlenList.size() == 1
+        sHmgetList.size() == 1
+        sHmsetList.size() == 1
+        sHrandfieldList.size() == 1
+        sHsetList.size() == 1
+        sHsetnxList.size() == 1
+        sHstrlenList.size() == 1
+        sHvalsList.size() == 1
+        sHFieldDictTrainList.size() == 0
+        sList.size() == 0
 
         when:
         def data1 = new byte[1][]
 
-        sHget = HGroup.parseSlot('hget', data1, slotNumber)
+        sHgetList = HGroup.parseSlots('hget', data1, slotNumber)
 
         then:
-        sHget == null
+        sHgetList.size() == 0
     }
 
     def 'test handle'() {

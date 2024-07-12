@@ -23,38 +23,36 @@ class DGroupTest extends Specification {
         data2[1] = 'a'.bytes
 
         when:
-        def sDecr = DGroup.parseSlot('decr', data2, slotNumber)
-        def sDecrBy = DGroup.parseSlot('decrby', data2, slotNumber)
-        def sListDel = DGroup.parseSlots('del', data2, slotNumber)
-        def sListDecr = DGroup.parseSlots('decr', data2, slotNumber)
-        def s = DGroup.parseSlot('dxxx', data2, slotNumber)
+        def sDecrList = DGroup.parseSlots('decr', data2, slotNumber)
+        def sDecrByList = DGroup.parseSlots('decrby', data2, slotNumber)
+        def sDelList = DGroup.parseSlots('del', data2, slotNumber)
+        def sList = DGroup.parseSlots('dxxx', data2, slotNumber)
 
         then:
-        sDecr != null
-        sDecrBy != null
-        sListDel.size() == 1
-        sListDecr.size() == 1
-        s == null
+        sDecrList.size() == 1
+        sDecrByList.size() == 1
+        sDelList.size() == 1
+        sList.size() == 0
 
         when:
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = 'b'.bytes
 
-        sListDel = DGroup.parseSlots('del', data3, slotNumber)
+        sDelList = DGroup.parseSlots('del', data3, slotNumber)
 
         then:
-        sListDel.size() == 2
+        sDelList.size() == 2
 
         when:
         def data1 = new byte[1][]
 
-        sListDel = DGroup.parseSlots('del', data1, slotNumber)
-        sDecrBy = DGroup.parseSlot('decrby', data1, slotNumber)
+        sDecrList = DGroup.parseSlots('decr', data1, slotNumber)
+        sDelList = DGroup.parseSlots('del', data1, slotNumber)
 
         then:
-        sListDel.size() == 0
-        sDecrBy == null
+        sDecrList.size() == 0
+        sDelList.size() == 0
     }
 
     def 'test handle'() {
@@ -216,10 +214,7 @@ class DGroupTest extends Specification {
         def dGroup = new DGroup('dbsize', data1, null)
         dGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
 
-        and:
-        LocalPersistTest.prepareLocalPersist()
-
-        and:
+        when:
         var eventloop = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
@@ -232,7 +227,6 @@ class DGroupTest extends Specification {
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
-        when:
         def r = dGroup.dbsize()
 
         then:

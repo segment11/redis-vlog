@@ -25,17 +25,17 @@ class EGroupTest extends Specification {
 
         when:
         def sExistsList = EGroup.parseSlots('exists', data2, slotNumber)
-        def sExpire = EGroup.parseSlot('expire', data2, slotNumber)
-        def sExpireAt = EGroup.parseSlot('expireat', data2, slotNumber)
-        def sExpireTime = EGroup.parseSlot('expiretime', data2, slotNumber)
-        def s = EGroup.parseSlot('exxx', data2, slotNumber)
+        def sExpireList = EGroup.parseSlots('expire', data2, slotNumber)
+        def sExpireAtList = EGroup.parseSlots('expireat', data2, slotNumber)
+        def sExpireTimeList = EGroup.parseSlots('expiretime', data2, slotNumber)
+        def sList = EGroup.parseSlots('exxx', data2, slotNumber)
 
         then:
         sExistsList.size() == 1
-        sExpire != null
-        sExpireAt != null
-        sExpireTime != null
-        s == null
+        sExpireList.size() == 1
+        sExpireAtList.size() == 1
+        sExpireTimeList.size() == 1
+        sList.size() == 0
 
         when:
         def data3 = new byte[3][]
@@ -51,11 +51,11 @@ class EGroupTest extends Specification {
         def data1 = new byte[1][]
 
         sExistsList = EGroup.parseSlots('exists', data1, slotNumber)
-        sExpire = EGroup.parseSlot('expire', data1, slotNumber)
+        sExpireList = EGroup.parseSlots('expire', data1, slotNumber)
 
         then:
         sExistsList.size() == 0
-        sExpire == null
+        sExpireList.size() == 0
     }
 
     def 'test handle'() {
