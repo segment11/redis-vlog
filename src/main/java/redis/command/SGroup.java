@@ -722,19 +722,19 @@ public class SGroup extends BaseCommand {
             }
         }
 
-        var slotWithKeyHashForDst = slotPreferParsed(dstKeyBytes);
-        var slot = slotWithKeyHashForDst.slot();
+        var dstSlotWithKeyHash = slotPreferParsed(dstKeyBytes);
+        var dstSlot = dstSlotWithKeyHash.slot();
 
-        var oneSlot = localPersist.oneSlot(slot);
+        var dstOneSlot = localPersist.oneSlot(dstSlot);
         if (set.isEmpty()) {
             // remove dst key
-            oneSlot.removeDelay(new String(dstKeyBytes), slotWithKeyHashForDst.bucketIndex(), slotWithKeyHashForDst.keyHash());
+            dstOneSlot.removeDelay(new String(dstKeyBytes), dstSlotWithKeyHash.bucketIndex(), dstSlotWithKeyHash.keyHash());
         } else {
             var encodedBytes = rhk.encode();
             var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
             var spType = needCompress ? CompressedValue.SP_TYPE_SET_COMPRESSED : CompressedValue.SP_TYPE_SET;
 
-            set(dstKeyBytes, encodedBytes, slotWithKeyHashForDst, spType);
+            set(dstKeyBytes, encodedBytes, dstSlotWithKeyHash, spType);
         }
 
         return new IntegerReply(set.size());
@@ -917,13 +917,13 @@ public class SGroup extends BaseCommand {
             return ErrorReply.SET_MEMBER_LENGTH_TO_LONG;
         }
 
-        var slotWithKeyHashForSrc = slot(srcKeyBytes);
-        var slotSrc = slotWithKeyHashForSrc.slot();
-        var oneSlotSrc = localPersist.oneSlot(slotSrc);
+        var srcSlotWithKeyHash = slot(srcKeyBytes);
+        var srcSlot = srcSlotWithKeyHash.slot();
+        var srcOneSlot = localPersist.oneSlot(srcSlot);
 
         var slotWithKeyHashForDst = slot(dstKeyBytes);
 
-        var srcRhk = getByKeyBytes(srcKeyBytes, slotWithKeyHashForSrc);
+        var srcRhk = getByKeyBytes(srcKeyBytes, srcSlotWithKeyHash);
         if (srcRhk == null) {
             return IntegerReply.REPLY_0;
         }
@@ -936,13 +936,13 @@ public class SGroup extends BaseCommand {
 
         if (srcRhk.size() == 0) {
             // remove key
-            oneSlotSrc.removeDelay(new String(srcKeyBytes), slotWithKeyHashForSrc.bucketIndex(), slotWithKeyHashForSrc.keyHash());
+            srcOneSlot.removeDelay(new String(srcKeyBytes), srcSlotWithKeyHash.bucketIndex(), srcSlotWithKeyHash.keyHash());
         } else {
             var encodedBytes = srcRhk.encode();
             var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
             var spType = needCompress ? CompressedValue.SP_TYPE_SET_COMPRESSED : CompressedValue.SP_TYPE_SET;
 
-            set(srcKeyBytes, encodedBytes, slotWithKeyHashForSrc, spType);
+            set(srcKeyBytes, encodedBytes, srcSlotWithKeyHash, spType);
         }
 
         var dstRhk = getByKeyBytes(dstKeyBytes, slotWithKeyHashForDst);

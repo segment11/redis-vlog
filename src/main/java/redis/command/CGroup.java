@@ -104,7 +104,8 @@ public class CGroup extends BaseCommand {
         var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
         if (isCrossRequestWorker) {
             // current net worker is src key slot's net worker
-            var dstOneSlot = localPersist.oneSlot(dstSlotWithKeyHash.slot());
+            var dstSlot = dstSlotWithKeyHash.slot();
+            var dstOneSlot = localPersist.oneSlot(dstSlot);
 
             SettablePromise<Reply> finalPromise = new SettablePromise<>();
             var asyncReply = new AsyncReply(finalPromise);

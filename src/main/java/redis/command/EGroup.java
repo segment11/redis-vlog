@@ -85,14 +85,14 @@ public class EGroup extends BaseCommand {
 
         if (!isCrossRequestWorker) {
             int n = 0;
-            for (int i = 1; i < data.length; i++) {
+            for (int i = 1, j = 0; i < data.length; i++, j++) {
                 var keyBytes = data[i];
                 if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
                     return ErrorReply.KEY_TOO_LONG;
                 }
                 var key = new String(keyBytes);
 
-                var slotWithKeyHash = slotWithKeyHashListParsed.get(i - 1);
+                var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
                 var slot = slotWithKeyHash.slot();
                 var bucketIndex = slotWithKeyHash.bucketIndex();
                 var keyHash = slotWithKeyHash.keyHash();
@@ -107,8 +107,9 @@ public class EGroup extends BaseCommand {
         }
 
         ArrayList<DGroup.SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 1);
-        for (int i = 1; i < data.length; i++) {
-            list.add(new DGroup.SlotWithKeyHashWithKeyBytes(slotWithKeyHashListParsed.get(i - 1), data[i]));
+        for (int i = 1, j = 0; i < data.length; i++, j++) {
+            var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
+            list.add(new DGroup.SlotWithKeyHashWithKeyBytes(slotWithKeyHash, data[i]));
         }
 
         ArrayList<Promise<ArrayList<Boolean>>> promises = new ArrayList<>();

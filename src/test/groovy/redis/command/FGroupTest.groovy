@@ -84,20 +84,18 @@ class FGroupTest extends Specification {
             eventloop.run()
         }
 
-        LocalPersist.instance.oneSlot(slot).netWorkerEventloop = eventloop
+        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
         when:
         def r = fGroup.flushdb()
 
         then:
         r instanceof AsyncReply
-        // do not get result
-//        ((AsyncReply) r).settablePromise.whenResult { result ->
-//            result == OKReply.INSTANCE
-//        }.result
+        ((AsyncReply) r).settablePromise.whenResult { result ->
+            result == OKReply.INSTANCE
+        }.result
 
         cleanup:
         eventloop.breakEventloop()
-        LocalPersist.instance.cleanUp()
     }
 }

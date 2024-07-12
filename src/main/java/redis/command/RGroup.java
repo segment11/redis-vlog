@@ -135,12 +135,13 @@ public class RGroup extends BaseCommand {
             return OKReply.INSTANCE;
         }
 
-        var oneSlotDst = localPersist.oneSlot(dstSlotWithKeyHash.slot());
+        var dstSlot = dstSlotWithKeyHash.slot();
+        var dstOneSlot = localPersist.oneSlot(dstSlot);
 
         SettablePromise<Reply> finalPromise = new SettablePromise<>();
         var asyncReply = new AsyncReply(finalPromise);
 
-        oneSlotDst.asyncRun(() -> {
+        dstOneSlot.asyncRun(() -> {
             setCv(dstKeyBytes, srcCv, dstSlotWithKeyHash);
             finalPromise.set(OKReply.INSTANCE);
         });
@@ -356,8 +357,9 @@ public class RGroup extends BaseCommand {
         SettablePromise<Reply> finalPromise = new SettablePromise<>();
         var asyncReply = new AsyncReply(finalPromise);
 
-        var oneSlotDst = localPersist.oneSlot(dstSlotWithKeyHash.slot());
-        oneSlotDst.asyncRun(() -> moveDstCallback(dstKeyBytes, dstSlotWithKeyHash, dstLeft, memberValueBytes, reply -> finalPromise.set(reply)));
+        var dstSlot = dstSlotWithKeyHash.slot();
+        var dstOneSlot = localPersist.oneSlot(dstSlot);
+        dstOneSlot.asyncRun(() -> moveDstCallback(dstKeyBytes, dstSlotWithKeyHash, dstLeft, memberValueBytes, reply -> finalPromise.set(reply)));
 
         return asyncReply;
     }

@@ -118,23 +118,24 @@ public class MGroup extends BaseCommand {
 
         if (!isCrossRequestWorker) {
             var replies = new Reply[data.length - 1];
-            for (int i = 1; i < data.length; i++) {
+            for (int i = 1, j = 0; i < data.length; i++, j++) {
                 var keyBytes = data[i];
-                var valueBytes = get(keyBytes, slotPreferParsed(keyBytes, i - 1));
+                var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
+                var valueBytes = get(keyBytes, slotWithKeyHash);
                 if (valueBytes == null) {
-                    replies[i - 1] = NilReply.INSTANCE;
+                    replies[j] = NilReply.INSTANCE;
                 } else {
-                    replies[i - 1] = new BulkReply(valueBytes);
+                    replies[j] = new BulkReply(valueBytes);
                 }
             }
             return new MultiBulkReply(replies);
         }
 
         ArrayList<KeyBytesAndSlotWithKeyHash> list = new ArrayList<>();
-        for (int i = 1; i < data.length; i++) {
+        for (int i = 1, j = 0; i < data.length; i++, j++) {
             var keyBytes = data[i];
-            var slotWithKeyHash = slotWithKeyHashListParsed.get(i - 1);
-            list.add(new KeyBytesAndSlotWithKeyHash(keyBytes, i - 1, slotWithKeyHash));
+            var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
+            list.add(new KeyBytesAndSlotWithKeyHash(keyBytes, j, slotWithKeyHash));
         }
 
         ArrayList<Promise<ArrayList<ValueBytesAndIndex>>> promises = new ArrayList<>();

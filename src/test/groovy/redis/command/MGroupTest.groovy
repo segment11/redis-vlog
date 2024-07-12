@@ -246,7 +246,7 @@ class MGroupTest extends Specification {
 
         when:
         def valA = mGroup.get('a'.bytes, mGroup.slotWithKeyHashListParsed[0])
-        def valB = mGroup.get('b'.bytes, mGroup.slotWithKeyHashListParsed[0])
+        def valB = mGroup.get('b'.bytes, mGroup.slotWithKeyHashListParsed[1])
 
         then:
         valA == '1'.bytes
@@ -279,7 +279,7 @@ class MGroupTest extends Specification {
 
         when:
         valA = mGroup.get('a'.bytes, mGroup.slotWithKeyHashListParsed[0])
-        valB = mGroup.get('b'.bytes, mGroup.slotWithKeyHashListParsed[0])
+        valB = mGroup.get('b'.bytes, mGroup.slotWithKeyHashListParsed[1])
 
         then:
         valA == '11'.bytes

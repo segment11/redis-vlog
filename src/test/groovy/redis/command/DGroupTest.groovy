@@ -108,7 +108,7 @@ class DGroupTest extends Specification {
         data3[2] = '1'.bytes
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data3, dGroup.slotNumber)
 
-        dGroup.setNumber('n'.bytes, 0, dGroup.slotWithKeyHashListParsed[0])
+        dGroup.setNumber('n'.bytes, 0, dGroup.slotWithKeyHashListParsed.getFirst())
         r = dGroup.handle()
 
         then:
@@ -230,7 +230,7 @@ class DGroupTest extends Specification {
             eventloop.run()
         }
 
-        LocalPersist.instance.oneSlot(slot).netWorkerEventloop = eventloop
+        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
         when:
         def r = dGroup.dbsize()
@@ -243,7 +243,6 @@ class DGroupTest extends Specification {
 
         cleanup:
         eventloop.breakEventloop()
-        LocalPersist.instance.cleanUp()
     }
 
     def 'test decr by'() {

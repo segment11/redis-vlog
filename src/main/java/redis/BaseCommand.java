@@ -195,18 +195,18 @@ public abstract class BaseCommand {
         return new SlotWithKeyHash((byte) slot, (int) bucketIndex, keyHash);
     }
 
-    public SlotWithKeyHash slot(byte[] keyBytes) {
+    protected SlotWithKeyHash slot(byte[] keyBytes) {
         return slot(keyBytes, slotNumber);
     }
 
-    public SlotWithKeyHash slotPreferParsed(byte[] keyBytes, int index) {
+    protected SlotWithKeyHash slotPreferParsed(byte[] keyBytes, int index) {
         if (slotWithKeyHashListParsed != null && index < slotWithKeyHashListParsed.size()) {
             return slotWithKeyHashListParsed.get(index);
         }
         return slot(keyBytes, slotNumber);
     }
 
-    public SlotWithKeyHash slotPreferParsed(byte[] keyBytes) {
+    protected SlotWithKeyHash slotPreferParsed(byte[] keyBytes) {
         return slotPreferParsed(keyBytes, 0);
     }
 
