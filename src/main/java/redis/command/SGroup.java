@@ -1,10 +1,10 @@
 
 package redis.command;
 
-import io.activej.common.function.SupplierEx;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
+import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.clients.jedis.Jedis;
@@ -28,7 +28,10 @@ public class SGroup extends BaseCommand {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
 
         if ("set".equals(cmd) || "setex".equals(cmd) || "setrange".equals(cmd) ||
-                "setnx".equals(cmd) || "strlen".equals(cmd) || "substr".equals(cmd)) {
+                "setnx".equals(cmd) || "strlen".equals(cmd) || "substr".equals(cmd) ||
+                "sadd".equals(cmd) || "scard".equals(cmd) ||
+                "sismember".equals(cmd) || "smembers".equals(cmd) || "smismember".equals(cmd) ||
+                "spop".equals(cmd) || "srandmember".equals(cmd) || "srem".equals(cmd)) {
             if (data.length < 2) {
                 return slotWithKeyHashList;
             }
@@ -38,18 +41,16 @@ public class SGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-        // set group, todo: check
-        if ("sadd".equals(cmd) || "scard".equals(cmd) ||
-                "sdiff".equals(cmd) || "sdiffstore".equals(cmd) || "sinterstore".equals(cmd) ||
-                "sismember".equals(cmd) || "smembers".equals(cmd) || "smismember".equals(cmd) ||
-                "spop".equals(cmd) || "srandmember".equals(cmd) || "srem".equals(cmd) ||
-                "sunion".equals(cmd) || "sunionstore".equals(cmd)) {
+        if ("sdiff".equals(cmd) || "sinter".equals(cmd) || "sunion".equals(cmd) ||
+                "sdiffstore".equals(cmd) || "sinterstore".equals(cmd) || "sunionstore".equals(cmd)) {
             if (data.length < 2) {
                 return slotWithKeyHashList;
             }
-            var keyBytes = data[1];
-            var slotWithKeyHash = slot(keyBytes, slotNumber);
-            slotWithKeyHashList.add(slotWithKeyHash);
+            for (int i = 1; i < data.length; i++) {
+                var keyBytes = data[i];
+                var slotWithKeyHash = slot(keyBytes, slotNumber);
+                slotWithKeyHashList.add(slotWithKeyHash);
+            }
             return slotWithKeyHashList;
         }
 
@@ -57,9 +58,11 @@ public class SGroup extends BaseCommand {
             if (data.length < 3) {
                 return slotWithKeyHashList;
             }
-            var keyBytes = data[2];
-            var slotWithKeyHash = slot(keyBytes, slotNumber);
-            slotWithKeyHashList.add(slotWithKeyHash);
+            for (int i = 2; i < data.length; i++) {
+                var keyBytes = data[i];
+                var slotWithKeyHash = slot(keyBytes, slotNumber);
+                slotWithKeyHashList.add(slotWithKeyHash);
+            }
             return slotWithKeyHashList;
         }
 
@@ -67,7 +70,7 @@ public class SGroup extends BaseCommand {
             if (data.length != 4) {
                 return slotWithKeyHashList;
             }
-            var srcKeyBytes = data[2];
+            var srcKeyBytes = data[1];
             var dstKeyBytes = data[2];
 
             var s1 = slot(srcKeyBytes, slotNumber);
@@ -192,8 +195,7 @@ public class SGroup extends BaseCommand {
         }
 
         if ("slaveof".equals(cmd)) {
-            // todo
-//            return slaveof();
+            return slaveof();
         }
 
         return NilReply.INSTANCE;
@@ -208,9 +210,9 @@ public class SGroup extends BaseCommand {
     private static final Pattern IPv4_PATTERN = Pattern.compile(IPV4_REGEX);
 
     // execute in a net thread
-    private Promise<Reply> slaveof() {
+    private Reply slaveof() {
         if (data.length != 3) {
-            return Promise.of(ErrorReply.FORMAT);
+            return ErrorReply.FORMAT;
         }
 
         var hostBytes = data[1];
@@ -218,46 +220,44 @@ public class SGroup extends BaseCommand {
 
         var isNoOne = "no".equalsIgnoreCase(new String(hostBytes));
         if (isNoOne) {
-            Promise<Boolean>[] promises = new Promise[slotNumber];
+            Promise<Void>[] promises = new Promise[slotNumber];
             for (int i = 0; i < slotNumber; i++) {
                 var oneSlot = localPersist.oneSlot((byte) i);
-                promises[i] = oneSlot.asyncCall(SupplierEx.of(() -> {
-                    try {
-                        oneSlot.removeReplPairAsSlave();
-                        return true;
-                    } catch (Exception e) {
-                        log.error("Remove repl pair as slave failed, slot: " + oneSlot.slot(), e);
-                        return false;
-                    }
-                }));
+                promises[i] = oneSlot.asyncRun(() -> oneSlot.removeReplPairAsSlave());
             }
 
-            return Promises.toArray(Boolean.class, promises).map(results -> {
-                for (var result : results) {
-                    if (!result) {
-                        return new ErrorReply("remove repl pair as slave failed");
-                    }
+            SettablePromise<Reply> finalPromise = new SettablePromise<>();
+            var asyncReply = new AsyncReply(finalPromise);
+
+            Promises.all(promises).whenComplete((r, e) -> {
+                if (e != null) {
+                    log.error("slaveof error: {}", e.getMessage());
+                    finalPromise.setException(e);
+                    return;
                 }
-                return OKReply.INSTANCE;
+
+                finalPromise.set(OKReply.INSTANCE);
             });
+
+            return asyncReply;
         }
 
         var host = new String(hostBytes);
         // host valid check
         var matcher = IPv4_PATTERN.matcher(host);
         if (!matcher.matches()) {
-            return Promise.of(ErrorReply.SYNTAX);
+            return ErrorReply.SYNTAX;
         }
 
         int port;
         try {
             port = Integer.parseInt(new String(portBytes));
         } catch (NumberFormatException e) {
-            return Promise.of(ErrorReply.NOT_INTEGER);
+            return ErrorReply.NOT_INTEGER;
         }
         // port range check
         if (port < 0 || port > 65535) {
-            return Promise.of(new ErrorReply("invalid port"));
+            return new ErrorReply("invalid port");
         }
 
         // connect check
@@ -267,33 +267,31 @@ public class SGroup extends BaseCommand {
             var pong = jedis.ping();
             log.info("Slave of {}:{} pong: {}", host, port, pong);
         } catch (Exception e) {
-            return Promise.of(new ErrorReply("connect failed"));
+            return new ErrorReply("connect failed");
         } finally {
             jedis.close();
         }
 
-        Promise<Boolean>[] promises = new Promise[slotNumber];
+        Promise<Void>[] promises = new Promise[slotNumber];
         for (int i = 0; i < slotNumber; i++) {
             var oneSlot = localPersist.oneSlot((byte) i);
-            promises[i] = oneSlot.asyncCall(SupplierEx.of(() -> {
-                try {
-                    oneSlot.createReplPairAsSlave(host, port);
-                    return true;
-                } catch (Exception e) {
-                    log.error("Create repl pair as slave failed, slot: " + oneSlot.slot(), e);
-                    return false;
-                }
-            }));
+            promises[i] = oneSlot.asyncRun(() -> oneSlot.createReplPairAsSlave(host, port));
         }
 
-        return Promises.toArray(Boolean.class, promises).map(results -> {
-            for (var result : results) {
-                if (!result) {
-                    return new ErrorReply("remove repl pair as slave failed");
-                }
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("slaveof error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
             }
-            return OKReply.INSTANCE;
+
+            finalPromise.set(OKReply.INSTANCE);
         });
+
+        return asyncReply;
     }
 
     Reply set(byte[][] dd) {
@@ -512,13 +510,15 @@ public class SGroup extends BaseCommand {
             return ErrorReply.FORMAT;
         }
 
+        int index;
         try {
-//            int index = Integer.parseInt(new String(data[1]));
-            // todo
-            return OKReply.INSTANCE;
+            index = Integer.parseInt(new String(data[1]));
         } catch (NumberFormatException e) {
             return ErrorReply.NOT_INTEGER;
         }
+
+        log.warn("Select db index: {}, not support", index);
+        return ErrorReply.NOT_SUPPORT;
     }
 
     private Reply sadd() {
@@ -911,11 +911,11 @@ public class SGroup extends BaseCommand {
         }
 
         var srcKeyBytes = data[1];
+        var dstKeyBytes = data[2];
+
         if (srcKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
             return ErrorReply.KEY_TOO_LONG;
         }
-
-        var dstKeyBytes = data[2];
         if (dstKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
             return ErrorReply.KEY_TOO_LONG;
         }
