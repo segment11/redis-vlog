@@ -465,6 +465,9 @@ public class OneSlot {
     }
 
     public long getAllKeyCount() {
+        if (keyLoader == null) {
+            return 0;
+        }
         return keyLoader.getKeyCount() + getWalKeyCount();
     }
 
