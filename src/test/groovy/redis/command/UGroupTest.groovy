@@ -7,15 +7,15 @@ import spock.lang.Specification
 class UGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[2][]
+        def data2 = new byte[2][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
+        data2[1] = 'a'.bytes
 
         when:
-        def sList = UGroup.parseSlots('ux', data, slotNumber)
-        def sX = UGroup.parseSlot('ux', data, slotNumber)
+        def sList = UGroup.parseSlots('ux', data2, slotNumber)
+        def sX = UGroup.parseSlot('ux', data2, slotNumber)
 
         then:
         sList.size() == 1
@@ -24,9 +24,9 @@ class UGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def uGroup = new UGroup('incr', data, null)
+        def uGroup = new UGroup('incr', data1, null)
         uGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:

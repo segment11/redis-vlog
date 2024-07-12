@@ -13,19 +13,19 @@ import java.time.Duration
 class MGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[5][]
+        def data5 = new byte[5][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
-        data[2] = '0'.bytes
-        data[3] = '0'.bytes
-        data[4] = '0'.bytes
+        data5[1] = 'a'.bytes
+        data5[2] = '0'.bytes
+        data5[3] = '0'.bytes
+        data5[4] = '0'.bytes
 
         when:
-        def sMgetList = MGroup.parseSlots('mget', data, slotNumber)
-        def sMsetList = MGroup.parseSlots('mset', data, slotNumber)
-        def s = MGroup.parseSlots('mxxx', data, slotNumber)
+        def sMgetList = MGroup.parseSlots('mget', data5, slotNumber)
+        def sMsetList = MGroup.parseSlots('mset', data5, slotNumber)
+        def s = MGroup.parseSlots('mxxx', data5, slotNumber)
 
         then:
         sMgetList.size() == 4
@@ -91,7 +91,6 @@ class MGroupTest extends Specification {
         sList.size() == 0
 
         when:
-        def data5 = new byte[5][]
         data5[1] = 'view-persist-key-count'
 
         sList = MGroup.parseSlots('manage', data5, slotNumber)
@@ -123,9 +122,9 @@ class MGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def mGroup = new MGroup('mget', data, null)
+        def mGroup = new MGroup('mget', data1, null)
         mGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
@@ -160,18 +159,18 @@ class MGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'b'.bytes
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'b'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def mGroup = new MGroup('mget', data, null)
+        def mGroup = new MGroup('mget', data3, null)
         mGroup.byPassGetSet = inMemoryGetSet
         mGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        mGroup.slotWithKeyHashListParsed = MGroup.parseSlots('mget', data, mGroup.slotNumber)
+        mGroup.slotWithKeyHashListParsed = MGroup.parseSlots('mget', data3, mGroup.slotNumber)
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.remove(slot, 'b')
         def reply = mGroup.mget()
@@ -224,20 +223,20 @@ class MGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[5][]
-        data[1] = 'a'.bytes
-        data[2] = '1'.bytes
-        data[3] = 'b'.bytes
-        data[4] = '2'.bytes
+        def data5 = new byte[5][]
+        data5[1] = 'a'.bytes
+        data5[2] = '1'.bytes
+        data5[3] = 'b'.bytes
+        data5[4] = '2'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def mGroup = new MGroup('mset', data, null)
+        def mGroup = new MGroup('mset', data5, null)
         mGroup.byPassGetSet = inMemoryGetSet
         mGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        mGroup.slotWithKeyHashListParsed = MGroup.parseSlots('mset', data, mGroup.slotNumber)
+        mGroup.slotWithKeyHashListParsed = MGroup.parseSlots('mset', data5, mGroup.slotNumber)
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.remove(slot, 'b')
         def reply = mGroup.mset()
@@ -254,8 +253,8 @@ class MGroupTest extends Specification {
         valB == '2'.bytes
 
         when:
-        data[2] = '11'.bytes
-        data[4] = '22'.bytes
+        data5[2] = '11'.bytes
+        data5[4] = '22'.bytes
 
         var eventloop = Eventloop.builder()
                 .withCurrentThread()

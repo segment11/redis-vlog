@@ -16,18 +16,18 @@ import java.time.Duration
 class DGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[2][]
+        def data2 = new byte[2][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
+        data2[1] = 'a'.bytes
 
         when:
-        def sDecr = DGroup.parseSlot('decr', data, slotNumber)
-        def sDecrBy = DGroup.parseSlot('decrby', data, slotNumber)
-        def sListDel = DGroup.parseSlots('del', data, slotNumber)
-        def sListDecr = DGroup.parseSlots('decr', data, slotNumber)
-        def s = DGroup.parseSlot('dxxx', data, slotNumber)
+        def sDecr = DGroup.parseSlot('decr', data2, slotNumber)
+        def sDecrBy = DGroup.parseSlot('decrby', data2, slotNumber)
+        def sListDel = DGroup.parseSlots('del', data2, slotNumber)
+        def sListDecr = DGroup.parseSlots('decr', data2, slotNumber)
+        def s = DGroup.parseSlot('dxxx', data2, slotNumber)
 
         then:
         sDecr != null
@@ -37,20 +37,20 @@ class DGroupTest extends Specification {
         s == null
 
         when:
-        data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'b'.bytes
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'b'.bytes
 
-        sListDel = DGroup.parseSlots('del', data, slotNumber)
+        sListDel = DGroup.parseSlots('del', data3, slotNumber)
 
         then:
         sListDel.size() == 2
 
         when:
-        data = new byte[1][]
+        def data1 = new byte[1][]
 
-        sListDel = DGroup.parseSlots('del', data, slotNumber)
-        sDecrBy = DGroup.parseSlot('decrby', data, slotNumber)
+        sListDel = DGroup.parseSlots('del', data1, slotNumber)
+        sDecrBy = DGroup.parseSlot('decrby', data1, slotNumber)
 
         then:
         sListDel.size() == 0
@@ -59,22 +59,22 @@ class DGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[2][]
-        data[1] = 'a'.bytes
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def dGroup = new DGroup('del', data, null)
+        def dGroup = new DGroup('del', data2, null)
         dGroup.byPassGetSet = inMemoryGetSet
         dGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data, dGroup.slotNumber)
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data2, dGroup.slotNumber)
 
         when:
         dGroup.handle()
         dGroup.cmd = 'dbsize'
         dGroup.handle()
-        dGroup.data = data
+        dGroup.data = data2
         dGroup.cmd = 'decr'
         dGroup.handle()
         dGroup.cmd = 'decrby'
@@ -92,10 +92,10 @@ class DGroupTest extends Specification {
         r == ErrorReply.FORMAT
 
         when:
-        data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'b'.bytes
-        dGroup.data = data
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'b'.bytes
+        dGroup.data = data3
         dGroup.cmd = 'decrby'
         r = dGroup.handle()
 
@@ -104,9 +104,9 @@ class DGroupTest extends Specification {
 
         when:
         // decrby
-        data[1] = 'n'.bytes
-        data[2] = '1'.bytes
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data, dGroup.slotNumber)
+        data3[1] = 'n'.bytes
+        data3[2] = '1'.bytes
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data3, dGroup.slotNumber)
 
         dGroup.setNumber('n'.bytes, 0, dGroup.slotWithKeyHashListParsed[0])
         r = dGroup.handle()
@@ -127,27 +127,27 @@ class DGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[2][]
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        def data2 = new byte[2][]
+        data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def dGroup = new DGroup('del', data, null)
+        def dGroup = new DGroup('del', data2, null)
         dGroup.byPassGetSet = inMemoryGetSet
         dGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
 
         when:
-        byte[][] dataWrongSize = new byte[1][]
-        dGroup.data = dataWrongSize
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', dataWrongSize, dGroup.slotNumber)
+        def data1 = new byte[1][]
+        dGroup.data = data1
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data1, dGroup.slotNumber)
         def r = dGroup.del()
 
         then:
         r == ErrorReply.FORMAT
 
         when:
-        dGroup.data = data
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data, dGroup.slotNumber)
+        dGroup.data = data2
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data2, dGroup.slotNumber)
         r = dGroup.del()
 
         then:
@@ -157,8 +157,8 @@ class DGroupTest extends Specification {
         def cv = Mock.prepareCompressedValueList(1)[0]
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        data[1] = 'a'.bytes
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data, dGroup.slotNumber)
+        data2[1] = 'a'.bytes
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data2, dGroup.slotNumber)
         r = dGroup.handle()
 
         then:
@@ -187,11 +187,11 @@ class DGroupTest extends Specification {
 
         dGroup.isCrossRequestWorker = true
 
-        data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'b'.bytes
-        dGroup.data = data
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data, dGroup.slotNumber)
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'b'.bytes
+        dGroup.data = data3
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data3, dGroup.slotNumber)
 
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.put(slot, 'b', 0, cv)
@@ -211,9 +211,9 @@ class DGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def dGroup = new DGroup('dbsize', data, null)
+        def dGroup = new DGroup('dbsize', data1, null)
         dGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
 
         and:
@@ -250,17 +250,17 @@ class DGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[2][]
-        data[1] = 'a'.bytes
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def dGroup = new DGroup('decrby', data, null)
+        def dGroup = new DGroup('decrby', data2, null)
         dGroup.byPassGetSet = inMemoryGetSet
         dGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
 
         when:
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data, dGroup.slotNumber)
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data2, dGroup.slotNumber)
 
         def cv = new CompressedValue()
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_BYTE
@@ -276,8 +276,8 @@ class DGroupTest extends Specification {
         ((IntegerReply) r).integer == -1
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data, dGroup.slotNumber)
+        data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data2, dGroup.slotNumber)
 
         r = dGroup.decrBy(1, 0)
 
@@ -285,8 +285,8 @@ class DGroupTest extends Specification {
         r == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[1] = 'a'.bytes
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data, dGroup.slotNumber)
+        data2[1] = 'a'.bytes
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data2, dGroup.slotNumber)
         inMemoryGetSet.remove(slot, 'a')
 
         r = dGroup.decrBy(1, 0)

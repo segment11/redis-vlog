@@ -7,15 +7,15 @@ import spock.lang.Specification
 class OGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[2][]
+        def data2 = new byte[2][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
+        data2[1] = 'a'.bytes
 
         when:
-        def sList = OGroup.parseSlots('ox', data, slotNumber)
-        def sX = OGroup.parseSlot('ox', data, slotNumber)
+        def sList = OGroup.parseSlots('ox', data2, slotNumber)
+        def sX = OGroup.parseSlot('ox', data2, slotNumber)
 
         then:
         sList.size() == 1
@@ -24,9 +24,9 @@ class OGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def oGroup = new OGroup('incr', data, null)
+        def oGroup = new OGroup('incr', data1, null)
         oGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:

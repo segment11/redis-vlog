@@ -11,24 +11,24 @@ import spock.lang.Specification
 class PGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[2][]
+        def data2 = new byte[2][]
         int slotNumber = 128
 
-        byte[][] data4 = new byte[4][]
+        def data4 = new byte[4][]
 
         and:
-        data[1] = 'a'.bytes
+        data2[1] = 'a'.bytes
 
         data4[1] = 'a'.bytes
 
         when:
         def sPexpireList = PGroup.parseSlots('pexpire', data4, slotNumber)
         def sPexpireat = PGroup.parseSlot('pexpireat', data4, slotNumber)
-        def sPexpiretime = PGroup.parseSlot('pexpiretime', data, slotNumber)
-        def sPttl = PGroup.parseSlot('pttl', data, slotNumber)
+        def sPexpiretime = PGroup.parseSlot('pexpiretime', data2, slotNumber)
+        def sPttl = PGroup.parseSlot('pttl', data2, slotNumber)
         def sPsetex = PGroup.parseSlot('psetex', data4, slotNumber)
 
-        def s = PGroup.parseSlot('pxxx', data, slotNumber)
+        def s = PGroup.parseSlot('pxxx', data2, slotNumber)
 
         then:
         sPexpireList.size() == 1
@@ -48,13 +48,13 @@ class PGroupTest extends Specification {
 
         when:
         // wrong size
-        sPexpireList = PGroup.parseSlots('pexpire', data, slotNumber)
+        sPexpireList = PGroup.parseSlots('pexpire', data2, slotNumber)
 
         then:
         sPexpireList[0] == null
 
         when:
-        sPexpireat = PGroup.parseSlot('pexpireat', data, slotNumber)
+        sPexpireat = PGroup.parseSlot('pexpireat', data2, slotNumber)
 
         then:
         sPexpireat == null
@@ -72,7 +72,7 @@ class PGroupTest extends Specification {
         sPttl == null
 
         when:
-        sPsetex = PGroup.parseSlot('psetex', data, slotNumber)
+        sPsetex = PGroup.parseSlot('psetex', data2, slotNumber)
 
         then:
         sPsetex == null
@@ -82,18 +82,18 @@ class PGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = '60000'.bytes
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = '60000'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def pGroup = new PGroup('pexpire', data, null)
+        def pGroup = new PGroup('pexpire', data3, null)
         pGroup.byPassGetSet = inMemoryGetSet
         pGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        pGroup.slotWithKeyHashListParsed = PGroup.parseSlots('pexpire', data, pGroup.slotNumber)
+        pGroup.slotWithKeyHashListParsed = PGroup.parseSlots('pexpire', data3, pGroup.slotNumber)
         inMemoryGetSet.remove(slot, 'a')
         def reply = pGroup.handle()
 

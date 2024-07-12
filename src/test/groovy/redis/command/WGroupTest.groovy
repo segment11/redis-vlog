@@ -7,15 +7,15 @@ import spock.lang.Specification
 class WGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[2][]
+        def data2 = new byte[2][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
+        data2[1] = 'a'.bytes
 
         when:
-        def sList = WGroup.parseSlots('wx', data, slotNumber)
-        def sX = WGroup.parseSlot('wx', data, slotNumber)
+        def sList = WGroup.parseSlots('wx', data2, slotNumber)
+        def sX = WGroup.parseSlot('wx', data2, slotNumber)
 
         then:
         sList.size() == 1
@@ -24,9 +24,9 @@ class WGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def wGroup = new WGroup('incr', data, null)
+        def wGroup = new WGroup('incr', data1, null)
         wGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:

@@ -12,19 +12,19 @@ import spock.lang.Specification
 class GGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[2][]
+        def data2 = new byte[2][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
+        data2[1] = 'a'.bytes
 
         when:
-        def sGetList = GGroup.parseSlots('get', data, slotNumber)
-        def sGetDel = GGroup.parseSlot('getdel', data, slotNumber)
-        def sGetEx = GGroup.parseSlot('getex', data, slotNumber)
-        def sGetRange = GGroup.parseSlot('getrange', data, slotNumber)
-        def sGetSet = GGroup.parseSlot('getset', data, slotNumber)
-        def s = GGroup.parseSlot('gxxx', data, slotNumber)
+        def sGetList = GGroup.parseSlots('get', data2, slotNumber)
+        def sGetDel = GGroup.parseSlot('getdel', data2, slotNumber)
+        def sGetEx = GGroup.parseSlot('getex', data2, slotNumber)
+        def sGetRange = GGroup.parseSlot('getrange', data2, slotNumber)
+        def sGetSet = GGroup.parseSlot('getset', data2, slotNumber)
+        def s = GGroup.parseSlot('gxxx', data2, slotNumber)
 
         then:
         sGetList.size() == 1
@@ -36,9 +36,9 @@ class GGroupTest extends Specification {
         s == null
 
         when:
-        data = new byte[1][]
+        def data1 = new byte[1][]
 
-        sGetDel = GGroup.parseSlot('getdel', data, slotNumber)
+        sGetDel = GGroup.parseSlot('getdel', data1, slotNumber)
 
         then:
         sGetDel == null
@@ -46,9 +46,9 @@ class GGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def gGroup = new GGroup('getdel', data, null)
+        def gGroup = new GGroup('getdel', data1, null)
         gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
@@ -90,17 +90,17 @@ class GGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[2][]
-        data[1] = 'a'.bytes
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def gGroup = new GGroup('getdel', data, null)
+        def gGroup = new GGroup('getdel', data2, null)
         gGroup.byPassGetSet = inMemoryGetSet
         gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getdel', data, gGroup.slotNumber)
+        gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getdel', data2, gGroup.slotNumber)
         def reply = gGroup.handle()
 
         then:
@@ -121,17 +121,17 @@ class GGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[2][]
-        data[1] = 'a'.bytes
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def gGroup = new GGroup('getex', data, null)
+        def gGroup = new GGroup('getex', data2, null)
         gGroup.byPassGetSet = inMemoryGetSet
         gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getex', data, gGroup.slotNumber)
+        gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getex', data2, gGroup.slotNumber)
         def reply = gGroup.getex()
 
         then:
@@ -148,18 +148,18 @@ class GGroupTest extends Specification {
         ((BulkReply) reply).raw == cv.compressedData
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = gGroup.getex()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'persist'.bytes
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'persist'.bytes
 
-        gGroup.data = data
+        gGroup.data = data3
 
         cv.expireAt = System.currentTimeMillis() + 1000 * 60
         inMemoryGetSet.put(slot, 'a', 0, cv)
@@ -172,7 +172,7 @@ class GGroupTest extends Specification {
         bufOrCv.cv.expireAt == CompressedValue.NO_EXPIRE
 
         when:
-        data[2] = 'persist_'.bytes
+        data3[2] = 'persist_'.bytes
 
         reply = gGroup.getex()
 
@@ -180,12 +180,12 @@ class GGroupTest extends Specification {
         reply == ErrorReply.SYNTAX
 
         when:
-        data = new byte[4][]
-        data[1] = 'a'.bytes
-        data[2] = 'ex'.bytes
-        data[3] = '60'.bytes
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'ex'.bytes
+        data4[3] = '60'.bytes
 
-        gGroup.data = data
+        gGroup.data = data4
 
         reply = gGroup.getex()
 
@@ -195,7 +195,7 @@ class GGroupTest extends Specification {
         bufOrCv.cv.expireAt > System.currentTimeMillis()
 
         when:
-        data[3] = 'a'.bytes
+        data4[3] = 'a'.bytes
 
         reply = gGroup.getex()
 
@@ -203,7 +203,7 @@ class GGroupTest extends Specification {
         reply == ErrorReply.NOT_INTEGER
 
         when:
-        data[3] = '-1'.bytes
+        data4[3] = '-1'.bytes
 
         reply = gGroup.getex()
 
@@ -211,8 +211,8 @@ class GGroupTest extends Specification {
         reply == ErrorReply.INVALID_INTEGER
 
         when:
-        data[2] = 'px'.bytes
-        data[3] = '60000'.bytes
+        data4[2] = 'px'.bytes
+        data4[3] = '60000'.bytes
 
         reply = gGroup.getex()
 
@@ -222,19 +222,19 @@ class GGroupTest extends Specification {
         bufOrCv.cv.expireAt > System.currentTimeMillis()
 
         when:
-        data[2] = 'pxat'.bytes
-        data[3] = (System.currentTimeMillis() + 1000 * 60).toString().bytes
+        data4[2] = 'pxat'.bytes
+        data4[3] = (System.currentTimeMillis() + 1000 * 60).toString().bytes
 
         reply = gGroup.getex()
 
         bufOrCv = inMemoryGetSet.getBuf(slot, 'a'.bytes, 0, cv.keyHash)
 
         then:
-        bufOrCv.cv.expireAt.toString().bytes == data[3]
+        bufOrCv.cv.expireAt.toString().bytes == data4[3]
 
         when:
-        data[2] = 'exat'.bytes
-        data[3] = ((System.currentTimeMillis() / 1000).intValue() + 60).toString().bytes
+        data4[2] = 'exat'.bytes
+        data4[3] = ((System.currentTimeMillis() / 1000).intValue() + 60).toString().bytes
 
         reply = gGroup.getex()
 
@@ -244,7 +244,7 @@ class GGroupTest extends Specification {
         bufOrCv.cv.expireAt > System.currentTimeMillis()
 
         when:
-        data[2] = 'xx'.bytes
+        data4[2] = 'xx'.bytes
 
         reply = gGroup.getex()
 
@@ -252,13 +252,13 @@ class GGroupTest extends Specification {
         reply == ErrorReply.SYNTAX
 
         when:
-        data = new byte[5][]
-        data[1] = 'a'.bytes
-        data[2] = 'ex'.bytes
-        data[3] = '60'.bytes
-        data[4] = 'xx'.bytes
+        def data5 = new byte[5][]
+        data5[1] = 'a'.bytes
+        data5[2] = 'ex'.bytes
+        data5[3] = '60'.bytes
+        data5[4] = 'xx'.bytes
 
-        gGroup.data = data
+        gGroup.data = data5
 
         reply = gGroup.getex()
 
@@ -270,19 +270,19 @@ class GGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[4][]
-        data[1] = 'a'.bytes
-        data[2] = '0'.bytes
-        data[3] = '1'.bytes
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = '0'.bytes
+        data4[3] = '1'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def gGroup = new GGroup('getrange', data, null)
+        def gGroup = new GGroup('getrange', data4, null)
         gGroup.byPassGetSet = inMemoryGetSet
         gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getrange', data, gGroup.slotNumber)
+        gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getrange', data4, gGroup.slotNumber)
         def reply = gGroup.getrange()
 
         then:
@@ -303,14 +303,14 @@ class GGroupTest extends Specification {
         ((BulkReply) reply).raw == 'ab'.bytes
 
         when:
-        data[3] = 'a'.bytes
+        data4[3] = 'a'.bytes
         reply = gGroup.getrange()
 
         then:
         reply == ErrorReply.NOT_INTEGER
 
         when:
-        data[3] = '-1'.bytes
+        data4[3] = '-1'.bytes
         reply = gGroup.getrange()
 
         then:
@@ -319,7 +319,7 @@ class GGroupTest extends Specification {
 
         when:
         // empty bytes
-        data[3] = '-4'.bytes
+        data4[3] = '-4'.bytes
         reply = gGroup.getrange()
 
         then:
@@ -327,7 +327,7 @@ class GGroupTest extends Specification {
         ((BulkReply) reply).raw.length == 0
 
         when:
-        data[3] = '3'.bytes
+        data4[3] = '3'.bytes
         reply = gGroup.getrange()
 
         then:
@@ -335,8 +335,8 @@ class GGroupTest extends Specification {
         ((BulkReply) reply).raw == 'abc'.bytes
 
         when:
-        data[2] = '2'.bytes
-        data[3] = '1'.bytes
+        data4[2] = '2'.bytes
+        data4[3] = '1'.bytes
         reply = gGroup.getrange()
 
         then:
@@ -344,8 +344,8 @@ class GGroupTest extends Specification {
         ((BulkReply) reply).raw.length == 0
 
         when:
-        data[2] = '3'.bytes
-        data[3] = '-1'.bytes
+        data4[2] = '3'.bytes
+        data4[3] = '-1'.bytes
         reply = gGroup.getrange()
 
         then:
@@ -353,8 +353,8 @@ class GGroupTest extends Specification {
         ((BulkReply) reply).raw.length == 0
 
         when:
-        data[2] = '-2'.bytes
-        data[3] = '2'.bytes
+        data4[2] = '-2'.bytes
+        data4[3] = '2'.bytes
         reply = gGroup.getrange()
 
         then:
@@ -362,7 +362,7 @@ class GGroupTest extends Specification {
         ((BulkReply) reply).raw == 'bc'.bytes
 
         when:
-        data[2] = '-4'.bytes
+        data4[2] = '-4'.bytes
         reply = gGroup.getrange()
 
         then:
@@ -374,18 +374,18 @@ class GGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'value'.bytes
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'value'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def gGroup = new GGroup('getset', data, null)
+        def gGroup = new GGroup('getset', data3, null)
         gGroup.byPassGetSet = inMemoryGetSet
         gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getset', data, gGroup.slotNumber)
+        gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getset', data3, gGroup.slotNumber)
         def reply = gGroup.getset()
 
         then:

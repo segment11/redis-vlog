@@ -10,17 +10,17 @@ import spock.lang.Specification
 class IGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[2][]
+        def data2 = new byte[2][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
+        data2[1] = 'a'.bytes
 
         when:
-        def sIncrList = IGroup.parseSlots('incr', data, slotNumber)
-        def sIncrby = IGroup.parseSlot('incrby', data, slotNumber)
-        def sIncrbyfloat = IGroup.parseSlot('incrbyfloat', data, slotNumber)
-        def s = IGroup.parseSlot('ixxx', data, slotNumber)
+        def sIncrList = IGroup.parseSlots('incr', data2, slotNumber)
+        def sIncrby = IGroup.parseSlot('incrby', data2, slotNumber)
+        def sIncrbyfloat = IGroup.parseSlot('incrbyfloat', data2, slotNumber)
+        def s = IGroup.parseSlot('ixxx', data2, slotNumber)
 
         then:
         sIncrList.size() == 1
@@ -29,9 +29,9 @@ class IGroupTest extends Specification {
         s == null
 
         when:
-        data = new byte[1][]
+        def data1 = new byte[1][]
 
-        sIncrby = IGroup.parseSlot('incrby', data, slotNumber)
+        sIncrby = IGroup.parseSlot('incrby', data1, slotNumber)
 
         then:
         sIncrby == null
@@ -39,9 +39,9 @@ class IGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def iGroup = new IGroup('incr', data, null)
+        def iGroup = new IGroup('incr', data1, null)
         iGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
@@ -76,17 +76,17 @@ class IGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[2][]
-        data[1] = 'a'.bytes
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def iGroup = new IGroup('incr', data, null)
+        def iGroup = new IGroup('incr', data2, null)
         iGroup.byPassGetSet = inMemoryGetSet
         iGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        iGroup.slotWithKeyHashListParsed = IGroup.parseSlots('incr', data, iGroup.slotNumber)
+        iGroup.slotWithKeyHashListParsed = IGroup.parseSlots('incr', data2, iGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = iGroup.handle()
 

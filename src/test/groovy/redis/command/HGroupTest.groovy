@@ -13,30 +13,30 @@ import spock.lang.Specification
 class HGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[2][]
+        def data2 = new byte[2][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
+        data2[1] = 'a'.bytes
 
         when:
-        def sHdelList = HGroup.parseSlots('hdel', data, slotNumber)
-        def sHexists = HGroup.parseSlot('hexists', data, slotNumber)
-        def sHget = HGroup.parseSlot('hget', data, slotNumber)
-        def sHgetall = HGroup.parseSlot('hgetall', data, slotNumber)
-        def sHincrby = HGroup.parseSlot('hincrby', data, slotNumber)
-        def sHincrbyfloat = HGroup.parseSlot('hincrbyfloat', data, slotNumber)
-        def sHkeys = HGroup.parseSlot('hkeys', data, slotNumber)
-        def sHlen = HGroup.parseSlot('hlen', data, slotNumber)
-        def sHmget = HGroup.parseSlot('hmget', data, slotNumber)
-        def sHmset = HGroup.parseSlot('hmset', data, slotNumber)
-        def sHrandfield = HGroup.parseSlot('hrandfield', data, slotNumber)
-        def sHset = HGroup.parseSlot('hset', data, slotNumber)
-        def sHsetnx = HGroup.parseSlot('hsetnx', data, slotNumber)
-        def sHstrlen = HGroup.parseSlot('hstrlen', data, slotNumber)
-        def sHvals = HGroup.parseSlot('hvals', data, slotNumber)
-        def sHFieldDictTrain = HGroup.parseSlot('h_field_dict_train', data, slotNumber)
-        def s = HGroup.parseSlot('hxxx', data, slotNumber)
+        def sHdelList = HGroup.parseSlots('hdel', data2, slotNumber)
+        def sHexists = HGroup.parseSlot('hexists', data2, slotNumber)
+        def sHget = HGroup.parseSlot('hget', data2, slotNumber)
+        def sHgetall = HGroup.parseSlot('hgetall', data2, slotNumber)
+        def sHincrby = HGroup.parseSlot('hincrby', data2, slotNumber)
+        def sHincrbyfloat = HGroup.parseSlot('hincrbyfloat', data2, slotNumber)
+        def sHkeys = HGroup.parseSlot('hkeys', data2, slotNumber)
+        def sHlen = HGroup.parseSlot('hlen', data2, slotNumber)
+        def sHmget = HGroup.parseSlot('hmget', data2, slotNumber)
+        def sHmset = HGroup.parseSlot('hmset', data2, slotNumber)
+        def sHrandfield = HGroup.parseSlot('hrandfield', data2, slotNumber)
+        def sHset = HGroup.parseSlot('hset', data2, slotNumber)
+        def sHsetnx = HGroup.parseSlot('hsetnx', data2, slotNumber)
+        def sHstrlen = HGroup.parseSlot('hstrlen', data2, slotNumber)
+        def sHvals = HGroup.parseSlot('hvals', data2, slotNumber)
+        def sHFieldDictTrain = HGroup.parseSlot('h_field_dict_train', data2, slotNumber)
+        def s = HGroup.parseSlot('hxxx', data2, slotNumber)
 
         then:
         sHdelList.size() == 1
@@ -58,9 +58,9 @@ class HGroupTest extends Specification {
         s == null
 
         when:
-        data = new byte[1][]
+        def data1 = new byte[1][]
 
-        sHget = HGroup.parseSlot('hget', data, slotNumber)
+        sHget = HGroup.parseSlot('hget', data1, slotNumber)
 
         then:
         sHget == null
@@ -68,9 +68,9 @@ class HGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def hGroup = new HGroup('hdel', data, null)
+        def hGroup = new HGroup('hdel', data1, null)
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
@@ -143,7 +143,7 @@ class HGroupTest extends Specification {
         reply == ErrorReply.FORMAT
 
         when:
-        byte[][] data5 = new byte[5][]
+        def data5 = new byte[5][]
         hGroup.data = data5
         reply = hGroup.handle()
 
@@ -151,7 +151,7 @@ class HGroupTest extends Specification {
         reply == ErrorReply.FORMAT
 
         when:
-        hGroup.data = data
+        hGroup.data = data1
         hGroup.cmd = 'hrandfield'
         reply = hGroup.handle()
 
@@ -205,18 +205,18 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'field'.bytes
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'field'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hdel', data, null)
+        def hGroup = new HGroup('hdel', data3, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hdel', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hdel', data3, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hdel()
 
@@ -261,15 +261,15 @@ class HGroupTest extends Specification {
         ((IntegerReply) reply).integer == 0
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hdel()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[1] = 'a'.bytes
-        data[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data3[1] = 'a'.bytes
+        data3[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hdel()
 
         then:
@@ -280,18 +280,18 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'field'.bytes
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'field'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hexists', data, null)
+        def hGroup = new HGroup('hexists', data3, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hexists', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hexists', data3, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.fieldKey('a', 'field'))
         def reply = hGroup.hexists()
 
@@ -308,15 +308,15 @@ class HGroupTest extends Specification {
         reply == IntegerReply.REPLY_1
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hexists()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[1] = 'a'.bytes
-        data[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data3[1] = 'a'.bytes
+        data3[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hexists()
 
         then:
@@ -327,18 +327,18 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'field'.bytes
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'field'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hget', data, null)
+        def hGroup = new HGroup('hget', data3, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hget', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hget', data3, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.fieldKey('a', 'field'))
         def reply = hGroup.hget(true)
 
@@ -369,15 +369,15 @@ class HGroupTest extends Specification {
         ((BulkReply) reply).raw == cvField.compressedData
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hget(true)
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[1] = 'a'.bytes
-        data[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data3[1] = 'a'.bytes
+        data3[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hget(true)
 
         then:
@@ -388,17 +388,17 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[2][]
-        data[1] = 'a'.bytes
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hgetall', data, null)
+        def hGroup = new HGroup('hgetall', data2, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hgetall', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hgetall', data2, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hgetall()
 
@@ -451,7 +451,7 @@ class HGroupTest extends Specification {
         reply == MultiBulkReply.EMPTY
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hgetall()
 
         then:
@@ -462,19 +462,19 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[4][]
-        data[1] = 'a'.bytes
-        data[2] = 'field'.bytes
-        data[3] = '1'.bytes
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'field'.bytes
+        data4[3] = '1'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hincrby', data, null)
+        def hGroup = new HGroup('hincrby', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hincrby', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hincrby', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.fieldKey('a', 'field'))
         def reply = hGroup.hincrby(false)
 
@@ -488,7 +488,7 @@ class HGroupTest extends Specification {
         reply == ErrorReply.NOT_FLOAT
 
         when:
-        data[3] = 'a'.bytes
+        data4[3] = 'a'.bytes
         reply = hGroup.hincrby(false)
 
         then:
@@ -501,15 +501,15 @@ class HGroupTest extends Specification {
         reply == ErrorReply.NOT_FLOAT
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hincrby(false)
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[1] = 'a'.bytes
-        data[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data4[1] = 'a'.bytes
+        data4[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hincrby(false)
 
         then:
@@ -520,17 +520,17 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[2][]
-        data[1] = 'a'.bytes
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hkeys', data, null)
+        def hGroup = new HGroup('hkeys', data2, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hkeys', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hkeys', data2, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hkeys(false)
 
@@ -579,7 +579,7 @@ class HGroupTest extends Specification {
         reply == MultiBulkReply.EMPTY
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hkeys(false)
 
         then:
@@ -590,19 +590,19 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[4][]
-        data[1] = 'a'.bytes
-        data[2] = 'field'.bytes
-        data[3] = 'field1'.bytes
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'field'.bytes
+        data4[3] = 'field1'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hmget', data, null)
+        def hGroup = new HGroup('hmget', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hmget', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hmget', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hmget()
 
@@ -630,15 +630,15 @@ class HGroupTest extends Specification {
         ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == cvField1.compressedData
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hmget()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[1] = 'a'.bytes
-        data[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data4[1] = 'a'.bytes
+        data4[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hmget()
 
         then:
@@ -649,19 +649,19 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[4][]
-        data[1] = 'a'.bytes
-        data[2] = 'field'.bytes
-        data[3] = 'value'.bytes
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'field'.bytes
+        data4[3] = 'value'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hmset', data, null)
+        def hGroup = new HGroup('hmset', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hmset', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hmset', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hmset()
 
@@ -721,7 +721,6 @@ class HGroupTest extends Specification {
 
         // get and compare
         when:
-        def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = 'field'.bytes
         data4[3] = 'field0'.bytes
@@ -739,25 +738,25 @@ class HGroupTest extends Specification {
         ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == 'value0'.bytes
 
         when:
-        hGroup.data = data
+        hGroup.data = data4
         hGroup.cmd = 'hmset'
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hmset()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[1] = 'a'.bytes
-        data[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data4[1] = 'a'.bytes
+        data4[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hmset()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[2] = 'field'.bytes
-        data[3] = new byte[CompressedValue.VALUE_MAX_LENGTH + 1]
+        data4[2] = 'field'.bytes
+        data4[3] = new byte[CompressedValue.VALUE_MAX_LENGTH + 1]
         reply = hGroup.hmset()
 
         then:
@@ -768,19 +767,19 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[4][]
-        data[1] = 'a'.bytes
-        data[2] = '1'.bytes
-        data[3] = '1'.bytes
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = '1'.bytes
+        data4[3] = '1'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hrandfield', data, null)
+        def hGroup = new HGroup('hrandfield', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hrandfield', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hrandfield', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hrandfield()
 
@@ -788,7 +787,7 @@ class HGroupTest extends Specification {
         reply == NilReply.INSTANCE
 
         when:
-        data[3] = 'withvalues'.bytes
+        data4[3] = 'withvalues'.bytes
         reply = hGroup.hrandfield()
 
         then:
@@ -803,14 +802,14 @@ class HGroupTest extends Specification {
 
         inMemoryGetSet.put(slot, RedisHashKeys.keysKey('a'), 0, cvKeys)
 
-        data[3] = '1'.bytes
+        data4[3] = '1'.bytes
         reply = hGroup.hrandfield()
 
         then:
         reply == NilReply.INSTANCE
 
         when:
-        data[3] = 'withvalues'.bytes
+        data4[3] = 'withvalues'.bytes
         reply = hGroup.hrandfield()
 
         then:
@@ -824,7 +823,7 @@ class HGroupTest extends Specification {
 
         inMemoryGetSet.put(slot, RedisHashKeys.keysKey('a'), 0, cvKeys)
 
-        data[3] = '1'.bytes
+        data4[3] = '1'.bytes
         reply = hGroup.hrandfield()
 
         then:
@@ -833,7 +832,7 @@ class HGroupTest extends Specification {
 
         when:
         // > rhk size
-        data[3] = (rhk.size() + 1).toString().bytes
+        data4[3] = (rhk.size() + 1).toString().bytes
         reply = hGroup.hrandfield()
 
         then:
@@ -841,8 +840,8 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies.length == rhk.size()
 
         when:
-        data[2] = '1'.bytes
-        data[3] = 'withvalues'.bytes
+        data4[2] = '1'.bytes
+        data4[3] = 'withvalues'.bytes
         reply = hGroup.hrandfield()
 
         then:
@@ -866,7 +865,7 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[1] instanceof BulkReply
 
         when:
-        data[2] = '-1'.bytes
+        data4[2] = '-1'.bytes
 
         reply = hGroup.hrandfield()
 
@@ -877,8 +876,8 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[1] instanceof BulkReply
 
         when:
-        data[2] = '5'.bytes
-        data[3] = '5'.bytes
+        data4[2] = '5'.bytes
+        data4[3] = '5'.bytes
 
         reply = hGroup.hrandfield()
 
@@ -887,8 +886,8 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies.length == 5
 
         when:
-        data[2] = '-5'.bytes
-        data[3] = '-5'.bytes
+        data4[2] = '-5'.bytes
+        data4[3] = '-5'.bytes
 
         reply = hGroup.hrandfield()
 
@@ -897,15 +896,15 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies.length == 5
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hrandfield()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[1] = 'a'.bytes
-        data[2] = 'a'.bytes
+        data4[1] = 'a'.bytes
+        data4[2] = 'a'.bytes
         reply = hGroup.hrandfield()
 
         then:
@@ -916,19 +915,19 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[4][]
-        data[1] = 'a'.bytes
-        data[2] = 'field'.bytes
-        data[3] = 'value'.bytes
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'field'.bytes
+        data4[3] = 'value'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hsetnx', data, null)
+        def hGroup = new HGroup('hsetnx', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hsetnx', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hsetnx', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hsetnx()
 
@@ -942,23 +941,23 @@ class HGroupTest extends Specification {
         reply == IntegerReply.REPLY_0
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hsetnx()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[1] = 'a'.bytes
-        data[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data4[1] = 'a'.bytes
+        data4[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hsetnx()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        data[2] = 'field'.bytes
-        data[3] = new byte[CompressedValue.VALUE_MAX_LENGTH + 1]
+        data4[2] = 'field'.bytes
+        data4[3] = new byte[CompressedValue.VALUE_MAX_LENGTH + 1]
         reply = hGroup.hsetnx()
 
         then:
@@ -969,17 +968,17 @@ class HGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[2][]
-        data[1] = 'a'.bytes
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def hGroup = new HGroup('hvals', data, null)
+        def hGroup = new HGroup('hvals', data2, null)
         hGroup.byPassGetSet = inMemoryGetSet
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hvals', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hvals', data2, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hvals()
 
@@ -1026,7 +1025,7 @@ class HGroupTest extends Specification {
         ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == cvField.compressedData
 
         when:
-        data[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hvals()
 
         then:
@@ -1042,17 +1041,17 @@ class HGroupTest extends Specification {
         dictMap.initDictMap(dirFile)
 
         and:
-        byte[][] data = new byte[13][]
-        data[1] = 'key:'.bytes
+        def data13 = new byte[13][]
+        data13[1] = 'key:'.bytes
         11.times {
-            data[it + 2] = ('aaaaabbbbbccccc' * 5).bytes
+            data13[it + 2] = ('aaaaabbbbbccccc' * 5).bytes
         }
 
-        def hGroup = new HGroup('h_field_dict_train', data, null)
+        def hGroup = new HGroup('h_field_dict_train', data13, null)
         hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('h_field_dict_train', data, hGroup.slotNumber)
+        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('h_field_dict_train', data13, hGroup.slotNumber)
         def reply = hGroup.h_field_dict_train()
 
         then:

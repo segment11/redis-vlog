@@ -7,15 +7,15 @@ import spock.lang.Specification
 class NGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[2][]
+        def data2 = new byte[2][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
+        data2[1] = 'a'.bytes
 
         when:
-        def sList = NGroup.parseSlots('nx', data, slotNumber)
-        def sX = NGroup.parseSlot('nx', data, slotNumber)
+        def sList = NGroup.parseSlots('nx', data2, slotNumber)
+        def sX = NGroup.parseSlot('nx', data2, slotNumber)
 
         then:
         sList.size() == 1
@@ -24,9 +24,9 @@ class NGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def nGroup = new NGroup('incr', data, null)
+        def nGroup = new NGroup('incr', data1, null)
         nGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:

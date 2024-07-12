@@ -15,17 +15,17 @@ import java.time.Duration
 class CGroupTest extends Specification {
     def 'test parse slot'() {
         given:
-        byte[][] data = new byte[3][]
+        def data3 = new byte[3][]
         int slotNumber = 128
 
         and:
-        data[1] = 'a'.bytes
-        data[2] = 'b'.bytes
+        data3[1] = 'a'.bytes
+        data3[2] = 'b'.bytes
 
         when:
-        def slotWithKeyHash = CGroup.parseSlot('copy', data, slotNumber)
-        def slotWithKeyHashListCopy = CGroup.parseSlots('copy', data, slotNumber)
-        def slotWithKeyHashListConfig = CGroup.parseSlots('config', data, slotNumber)
+        def slotWithKeyHash = CGroup.parseSlot('copy', data3, slotNumber)
+        def slotWithKeyHashListCopy = CGroup.parseSlots('copy', data3, slotNumber)
+        def slotWithKeyHashListConfig = CGroup.parseSlots('config', data3, slotNumber)
 
         then:
         slotWithKeyHash == null
@@ -36,9 +36,9 @@ class CGroupTest extends Specification {
         slotWithKeyHashListCopy[1] != null
 
         when:
-        data = new byte[2][]
+        def data2 = new byte[2][]
 
-        slotWithKeyHashListCopy = CGroup.parseSlots('copy', data, slotNumber)
+        slotWithKeyHashListCopy = CGroup.parseSlots('copy', data2, slotNumber)
 
         then:
         slotWithKeyHashListCopy.size() == 0
@@ -46,9 +46,9 @@ class CGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
-        def cGroup = new CGroup('client', data, null)
+        def cGroup = new CGroup('client', data1, null)
         cGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
@@ -71,12 +71,12 @@ class CGroupTest extends Specification {
 
     def 'test client'() {
         given:
-        byte[][] data = new byte[1][]
+        def data1 = new byte[1][]
 
         def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
                 new InetSocketAddress('localhost', 46379), null)
 
-        def cGroup = new CGroup('client', data, socket)
+        def cGroup = new CGroup('client', data1, socket)
         cGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
@@ -86,9 +86,9 @@ class CGroupTest extends Specification {
         reply == ErrorReply.FORMAT
 
         when:
-        data = new byte[2][]
-        data[1] = 'id'.bytes
-        cGroup.data = data
+        def data2 = new byte[2][]
+        data2[1] = 'id'.bytes
+        cGroup.data = data2
 
         reply = cGroup.handle()
 
@@ -96,7 +96,7 @@ class CGroupTest extends Specification {
         reply instanceof IntegerReply
 
         when:
-        data[1] = 'setinfo'.bytes
+        data2[1] = 'setinfo'.bytes
 
         reply = cGroup.handle()
 
@@ -104,7 +104,7 @@ class CGroupTest extends Specification {
         reply == OKReply.INSTANCE
 
         when:
-        data[1] = 'zzz'.bytes
+        data2[1] = 'zzz'.bytes
 
         reply = cGroup.handle()
 
@@ -116,18 +116,18 @@ class CGroupTest extends Specification {
         given:
         final byte slot = 0
 
-        byte[][] data = new byte[3][]
-        data[1] = 'a'.bytes
-        data[2] = 'b'.bytes
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'b'.bytes
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def cGroup = new CGroup('copy', data, null)
+        def cGroup = new CGroup('copy', data3, null)
         cGroup.byPassGetSet = inMemoryGetSet
         cGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
 
         when:
-        cGroup.slotWithKeyHashListParsed = CGroup.parseSlots('copy', data, cGroup.slotNumber)
+        cGroup.slotWithKeyHashListParsed = CGroup.parseSlots('copy', data3, cGroup.slotNumber)
         def reply = cGroup.copy()
 
         then:
@@ -143,11 +143,11 @@ class CGroupTest extends Specification {
         reply == IntegerReply.REPLY_1
 
         when:
-        data = new byte[4][]
-        data[1] = 'a'.bytes
-        data[2] = 'b'.bytes
-        data[3] = 'replace_'.bytes
-        cGroup.data = data
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'b'.bytes
+        data4[3] = 'replace_'.bytes
+        cGroup.data = data4
 
         reply = cGroup.copy()
 
@@ -155,7 +155,7 @@ class CGroupTest extends Specification {
         reply == IntegerReply.REPLY_0
 
         when:
-        data[3] = 'replace'.bytes
+        data4[3] = 'replace'.bytes
 
         reply = cGroup.copy()
 
@@ -197,7 +197,7 @@ class CGroupTest extends Specification {
         }.result
 
         when:
-        data[3] = 'replace_'.bytes
+        data4[3] = 'replace_'.bytes
 
         reply = cGroup.copy()
 
