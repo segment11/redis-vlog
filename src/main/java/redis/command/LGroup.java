@@ -30,11 +30,8 @@ public class LGroup extends BaseCommand {
             var srcKeyBytes = data[1];
             var dstKeyBytes = data[2];
 
-            var s1 = slot(srcKeyBytes, slotNumber);
-            var s2 = slot(dstKeyBytes, slotNumber);
-
-            slotWithKeyHashList.add(s1);
-            slotWithKeyHashList.add(s2);
+            slotWithKeyHashList.add(slot(srcKeyBytes, slotNumber));
+            slotWithKeyHashList.add(slot(dstKeyBytes, slotNumber));
             return slotWithKeyHashList;
         }
 
