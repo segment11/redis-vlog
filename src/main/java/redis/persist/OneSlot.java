@@ -923,15 +923,24 @@ public class OneSlot {
             wal.clear();
         }
 
-        try {
-            this.keyLoader.flush();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        if (this.keyLoader != null) {
+            try {
+                this.keyLoader.flush();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
-        this.metaChunkSegmentFlagSeq.clear();
-        this.metaChunkSegmentIndex.clear();
 
-        this.chunk.segmentIndex = 0;
+        if (this.metaChunkSegmentFlagSeq != null) {
+            this.metaChunkSegmentFlagSeq.clear();
+        }
+        if (this.metaChunkSegmentIndex != null) {
+            this.metaChunkSegmentIndex.clear();
+        }
+
+        if (this.chunk != null) {
+            this.chunk.segmentIndex = 0;
+        }
     }
 
     public void initFds(LibC libC, byte netWorkers) throws IOException {
