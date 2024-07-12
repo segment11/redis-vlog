@@ -396,16 +396,20 @@ public abstract class BaseCommand {
                 var dstKey = new String(keyBytes);
                 var slot = slotWithKeyHash.slot();
 
-                var oneSlot = localPersist.oneSlot(slot);
-                try {
-                    oneSlot.put(dstKey, slotWithKeyHash.bucketIndex, cv);
-                } catch (SegmentOverflowException e) {
-                    log.error("Set error, key: {}, message: {}", dstKey, e.getMessage());
-                    throw e;
-                } catch (Exception e) {
-                    var message = e.getMessage();
-                    log.error("Set error, key: {}, message: {}", dstKey, message);
-                    throw e;
+                if (byPassGetSet != null) {
+                    byPassGetSet.put(slot, dstKey, slotWithKeyHash.bucketIndex, cv);
+                } else {
+                    var oneSlot = localPersist.oneSlot(slot);
+                    try {
+                        oneSlot.put(dstKey, slotWithKeyHash.bucketIndex, cv);
+                    } catch (SegmentOverflowException e) {
+                        log.error("Set error, key: {}, message: {}", dstKey, e.getMessage());
+                        throw e;
+                    } catch (Exception e) {
+                        var message = e.getMessage();
+                        log.error("Set error, key: {}, message: {}", dstKey, message);
+                        throw e;
+                    }
                 }
             } else {
                 set(keyBytes, cv.getCompressedData(), slotWithKeyHash, 0, cv.getExpireAt());
