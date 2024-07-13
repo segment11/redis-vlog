@@ -5,9 +5,9 @@ import io.activej.net.socket.tcp.ITcpSocket;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
+import redis.type.RedisHashKeys;
 import redis.type.RedisZSet;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
@@ -473,11 +473,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var setValueBytes = getValueBytesByCv(setCv);
-        if (setValueBytes == null) {
-            return IntegerReply.REPLY_0;
-        }
-
-        int size = ByteBuffer.wrap(setValueBytes).getShort();
+        var size = RedisHashKeys.setSize(setValueBytes);
         return new IntegerReply(size);
     }
 

@@ -1,13 +1,17 @@
 package redis.command
 
 import com.github.luben.zstd.Zstd
+import io.activej.eventloop.Eventloop
 import redis.BaseCommand
 import redis.CompressedValue
 import redis.mock.InMemoryGetSet
+import redis.persist.LocalPersist
 import redis.persist.Mock
 import redis.reply.*
 import redis.type.RedisHashKeys
 import spock.lang.Specification
+
+import java.time.Duration
 
 class SGroupTest extends Specification {
     def 'test parse slot'() {
@@ -123,7 +127,6 @@ sunionstore
 sintercard
 smove
 select
-slaveof
 '''.readLines().collect { it.trim() }.findAll { it }.collect {
             sGroup.cmd = it
             sGroup.handle()
@@ -358,6 +361,66 @@ slaveof
 
         then:
         reply == ErrorReply.VALUE_TOO_LONG
+    }
+
+    def 'test setex'() {
+        given:
+        final byte slot = 0
+
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = '10'.bytes
+        data4[3] = 'value'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('setex', data4, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('setex', data4, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = sGroup.handle()
+
+        then:
+        reply == OKReply.INSTANCE
+    }
+
+    def 'test setnx'() {
+        given:
+        final byte slot = 0
+
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'value'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('setnx', data3, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('setnx', data3, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = sGroup.handle()
+
+        then:
+        reply == IntegerReply.REPLY_1
+
+        when:
+        reply = sGroup.handle()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.handle()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
     }
 
     def 'test setrange'() {
@@ -625,5 +688,1166 @@ slaveof
 
         then:
         reply == ErrorReply.SET_MEMBER_LENGTH_TO_LONG
+    }
+
+    def 'test scard'() {
+        given:
+        final byte slot = 0
+
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('scard', data2, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('scard', data2, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = sGroup.scard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cv = Mock.prepareCompressedValueList(1)[0]
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = sGroup.scard()
+
+        then:
+        reply == ErrorReply.WRONG_TYPE
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhk = new RedisHashKeys()
+        rhk.add('1')
+        cv.compressedData = rhk.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = sGroup.scard()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.scard()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+    }
+
+    def 'test sdiff'() {
+        given:
+        final byte slot = 0
+
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'b'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('sdiff', data3, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('sdiff', data3, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        inMemoryGetSet.remove(slot, 'b')
+        def reply = sGroup.sdiff(false, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(2)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sdiff(false, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkA = new RedisHashKeys()
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sdiff(false, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        reply = sGroup.sdiff(true, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = sGroup.sdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        // empty set
+        rhkA.remove('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sdiff(false, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = sGroup.sdiff(true, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = sGroup.sdiff(false, true)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        rhkA.add('1')
+        rhkA.add('2')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+
+        def cvB = cvList[1]
+        cvB.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkB = new RedisHashKeys()
+        cvB.compressedData = rhkB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = sGroup.sdiff(false, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+
+        when:
+        reply = sGroup.sdiff(true, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = sGroup.sdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+
+        when:
+        rhkB.add('1')
+        cvB.compressedData = rhkB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = sGroup.sdiff(false, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+        ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == '2'.bytes
+
+        when:
+        reply = sGroup.sdiff(true, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+        ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == '1'.bytes
+
+        when:
+        rhkB.remove('1')
+        rhkB.add('3')
+        cvB.compressedData = rhkB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = sGroup.sdiff(true, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        var eventloop = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        eventloop.keepAlive(true)
+
+        Thread.start {
+            eventloop.run()
+        }
+
+        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+
+        sGroup.isCrossRequestWorker = true
+        reply = sGroup.sdiff(true, false)
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == MultiBulkReply.EMPTY
+        }.result
+
+//        when:
+//        reply = sGroup.sdiff(false, true)
+//
+//        then:
+//        reply instanceof AsyncReply
+//        ((AsyncReply) reply).settablePromise.whenResult { result ->
+//            (result instanceof MultiBulkReply) && ((MultiBulkReply) result).replies.length == 3
+//        }.result
+
+        when:
+        data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.sdiff(false, false)
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+
+        cleanup:
+        eventloop.breakEventloop()
+    }
+
+    def 'test sdiffstore'() {
+        given:
+        final byte slot = 0
+
+        def data4 = new byte[4][]
+        data4[1] = 'dst'.bytes
+        data4[2] = 'a'.bytes
+        data4[3] = 'b'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('sdiffstore', data4, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('sdiffstore', data4, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'dst')
+        inMemoryGetSet.remove(slot, 'a')
+        inMemoryGetSet.remove(slot, 'b')
+        def reply = sGroup.sdiffstore(false, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(2)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sdiffstore(false, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkA = new RedisHashKeys()
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sdiffstore(false, false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        reply = sGroup.sdiffstore(true, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        reply = sGroup.sdiffstore(false, true)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        // empty set
+        rhkA.remove('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sdiffstore(false, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        reply = sGroup.sdiffstore(true, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        reply = sGroup.sdiffstore(false, true)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        rhkA.add('1')
+        rhkA.add('2')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+
+        def cvB = cvList[1]
+        cvB.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkB = new RedisHashKeys()
+        cvB.compressedData = rhkB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = sGroup.sdiffstore(false, false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        reply = sGroup.sdiffstore(true, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        reply = sGroup.sdiffstore(false, true)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        rhkB.add('1')
+        cvB.compressedData = rhkB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = sGroup.sdiffstore(false, false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+        RedisHashKeys.decode(inMemoryGetSet.getBuf(slot, 'dst'.bytes, 0, 0L).cv.compressedData).contains('2')
+
+        when:
+        reply = sGroup.sdiffstore(true, false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+        RedisHashKeys.decode(inMemoryGetSet.getBuf(slot, 'dst'.bytes, 0, 0L).cv.compressedData).contains('1')
+
+        when:
+        rhkB.remove('1')
+        rhkB.add('3')
+        cvB.compressedData = rhkB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = sGroup.sdiffstore(true, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+//        when:
+//        var eventloop = Eventloop.builder()
+//                .withCurrentThread()
+//                .withIdleInterval(Duration.ofMillis(100))
+//                .build()
+//        eventloop.keepAlive(true)
+//
+//        Thread.start {
+//            eventloop.run()
+//        }
+//
+//        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+//
+//        sGroup.isCrossRequestWorker = true
+//        reply = sGroup.sdiffstore(true, false)
+//
+//        then:
+//        reply instanceof AsyncReply
+//        ((AsyncReply) reply).settablePromise.whenResult { result ->
+//            result == IntegerReply.REPLY_0
+//        }.result
+
+//        when:
+//        reply = sGroup.sdiffstore(false, true)
+//
+//        then:
+//        reply instanceof AsyncReply
+//        ((AsyncReply) reply).settablePromise.whenResult { result ->
+//            (result instanceof IntegerReply) && ((IntegerReply) result).integer == 3
+//        }.result
+
+        when:
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.sdiffstore(false, false)
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+
+        when:
+        data4[1] = 'dst'.bytes
+        data4[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.sdiffstore(false, false)
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+
+//        cleanup:
+//        eventloop.breakEventloop()
+    }
+
+    def 'test sintercard'() {
+        given:
+        final byte slot = 0
+
+        def data6 = new byte[6][]
+        data6[1] = '2'.bytes
+        data6[2] = 'a'.bytes
+        data6[3] = 'b'.bytes
+        data6[4] = 'limit'.bytes
+        data6[5] = '0'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('sintercard', data6, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('sintercard', data6, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        inMemoryGetSet.remove(slot, 'b')
+        def reply = sGroup.sintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(2)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkA = new RedisHashKeys()
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cvB = cvList[1]
+        cvB.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkB = new RedisHashKeys()
+        cvB.compressedData = rhkB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = sGroup.sintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        rhkB.add('1')
+        cvB.compressedData = rhkB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = sGroup.sintercard()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        data6[5] = '1'.bytes
+        reply = sGroup.sintercard()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        data6[5] = '2'.bytes
+        reply = sGroup.sintercard()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+//        when:
+//        var eventloop = Eventloop.builder()
+//                .withCurrentThread()
+//                .withIdleInterval(Duration.ofMillis(100))
+//                .build()
+//        eventloop.keepAlive(true)
+//
+//        Thread.start {
+//            eventloop.run()
+//        }
+//
+//        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+//
+//        sGroup.isCrossRequestWorker = true
+//        reply = sGroup.sintercard()
+//
+//        then:
+//        reply instanceof AsyncReply
+//        ((AsyncReply) reply).settablePromise.whenResult { result ->
+//            (result instanceof IntegerReply) && ((IntegerReply) result).integer == 1
+//        }.result
+
+//        when:
+//        rhkB.remove('1')
+//        cvB.compressedData = rhkB.encode()
+//
+//        inMemoryGetSet.put(slot, 'b', 0, cvB)
+//        reply = sGroup.sintercard()
+//
+//        then:
+//        reply instanceof AsyncReply
+//        ((AsyncReply) reply).settablePromise.whenResult { result ->
+//            result == IntegerReply.REPLY_0
+//        }.result
+
+//        when:
+//        inMemoryGetSet.remove(slot, 'b')
+//        reply = sGroup.sintercard()
+//
+//        then:
+//        reply instanceof AsyncReply
+//        ((AsyncReply) reply).settablePromise.whenResult { result ->
+//            result == IntegerReply.REPLY_0
+//        }.result
+
+        when:
+        data6[3] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.sintercard()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+
+        when:
+        data6[1] = 'a'.bytes
+        reply = sGroup.sintercard()
+
+        then:
+        reply == ErrorReply.NOT_INTEGER
+
+        when:
+        data6[1] = '1'.bytes
+        reply = sGroup.sintercard()
+
+        then:
+        reply == ErrorReply.INVALID_INTEGER
+
+        when:
+        data6[1] = '2'.bytes
+        data6[2] = 'a'.bytes
+        data6[3] = 'b'.bytes
+        data6[4] = 'limit'.bytes
+        data6[5] = 'a'.bytes
+        reply = sGroup.sintercard()
+
+        then:
+        reply == ErrorReply.NOT_INTEGER
+
+        when:
+        data6[4] = 'limitx'.bytes
+        reply = sGroup.sintercard()
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        def data5 = new byte[5][]
+        data5[1] = '2'.bytes
+        data5[2] = 'a'.bytes
+        data5[3] = 'b'.bytes
+        data5[4] = 'limit'.bytes
+
+        sGroup.data = data5
+        reply = sGroup.sintercard()
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data5[1] = '3'.bytes
+        data5[2] = 'a'.bytes
+        data5[3] = 'b'.bytes
+        data5[4] = 'c'.bytes
+
+        inMemoryGetSet.remove(slot, 'a')
+        reply = sGroup.sintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+//        cleanup:
+//        eventloop.breakEventloop()
+    }
+
+    def 'test sismember'() {
+        given:
+        final byte slot = 0
+
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = '1'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('sismember', data3, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('sismember', data3, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = sGroup.sismember()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(1)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkA = new RedisHashKeys()
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sismember()
+
+        then:
+        reply == IntegerReply.REPLY_1
+
+        when:
+        rhkA.remove('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sismember()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data3[2] = new byte[RedisHashKeys.SET_MEMBER_MAX_LENGTH + 1]
+        reply = sGroup.sismember()
+
+        then:
+        reply == ErrorReply.SET_MEMBER_LENGTH_TO_LONG
+
+        when:
+        data3[2] = '1'.bytes
+        data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.sismember()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+    }
+
+    def 'test smembers'() {
+        given:
+        final byte slot = 0
+
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('smembers', data2, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('smembers', data2, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = sGroup.smembers()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(1)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkA = new RedisHashKeys()
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.smembers()
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        rhkA.remove('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.smembers()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.smembers()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+    }
+
+    def 'test smismember'() {
+        given:
+        final byte slot = 0
+
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = '1'.bytes
+        data4[3] = '2'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('smismember', data4, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('smismember', data4, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = sGroup.smismember()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(1)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkA = new RedisHashKeys()
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.smismember()
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+        ((MultiBulkReply) reply).replies[0] == IntegerReply.REPLY_1
+        ((MultiBulkReply) reply).replies[1] == IntegerReply.REPLY_0
+
+        when:
+        rhkA.remove('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.smismember()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        data4[2] = new byte[RedisHashKeys.SET_MEMBER_MAX_LENGTH + 1]
+        reply = sGroup.smismember()
+
+        then:
+        reply == ErrorReply.SET_MEMBER_LENGTH_TO_LONG
+
+        when:
+        data4[2] = '1'.bytes
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.smismember()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+    }
+
+    def 'test smove'() {
+        given:
+        final byte slot = 0
+
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'b'.bytes
+        data4[3] = '1'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('smove', data4, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('smove', data4, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        inMemoryGetSet.remove(slot, 'b')
+        def reply = sGroup.smove()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(2)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkA = new RedisHashKeys()
+        rhkA.add('11')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.smove()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        rhkA.remove('11')
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.smove()
+
+        then:
+        reply == IntegerReply.REPLY_1
+
+        when:
+        rhkA.add('2')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.smove()
+
+        then:
+        reply == IntegerReply.REPLY_1
+
+        when:
+        var eventloop = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        eventloop.keepAlive(true)
+
+        Thread.start {
+            eventloop.run()
+        }
+
+        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+
+        sGroup.isCrossRequestWorker = true
+
+        rhkA.remove('2')
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        inMemoryGetSet.remove(slot, 'b')
+
+        reply = sGroup.smove()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == IntegerReply.REPLY_1
+        }.result
+
+        when:
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.smove()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == IntegerReply.REPLY_1
+        }.result
+
+        when:
+        data4[3] = new byte[RedisHashKeys.SET_MEMBER_MAX_LENGTH + 1]
+        reply = sGroup.smove()
+
+        then:
+        reply == ErrorReply.SET_MEMBER_LENGTH_TO_LONG
+
+        when:
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.smove()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+
+        when:
+        data4[1] = 'a'.bytes
+        data4[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.smove()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+
+        cleanup:
+        eventloop.breakEventloop()
+    }
+
+    def 'test srandmember'() {
+        given:
+        final byte slot = 0
+
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = '1'.bytes
+
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('srandmember', data3, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('srandmember', data3, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = sGroup.srandmember(false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        sGroup.data = data2
+        reply = sGroup.srandmember(false)
+
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(1)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkA = new RedisHashKeys()
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        sGroup.data = data3
+        reply = sGroup.srandmember(false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        sGroup.data = data2
+        reply = sGroup.srandmember(false)
+
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        10.times {
+            rhkA.add(it.toString())
+        }
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        sGroup.data = data3
+        reply = sGroup.srandmember(false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        sGroup.data = data2
+        reply = sGroup.srandmember(false)
+
+        then:
+        reply instanceof BulkReply
+        new String(((BulkReply) reply).raw) as int < 10
+
+        when:
+        data3[2] = '11'.bytes
+        sGroup.data = data3
+        reply = sGroup.srandmember(false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 10
+
+        when:
+        data3[2] = '-5'.bytes
+        reply = sGroup.srandmember(false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 5
+
+        when:
+        data3[2] = '5'.bytes
+        reply = sGroup.srandmember(true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 5
+
+        when:
+        // pop all
+        reply = sGroup.srandmember(true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 5
+
+        when:
+        data3[2] = 'a'.bytes
+        sGroup.data = data3
+        reply = sGroup.srandmember(false)
+
+        then:
+        reply == ErrorReply.NOT_INTEGER
+
+        when:
+        data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.srandmember(false)
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+    }
+
+    def 'test srem'() {
+        given:
+        final byte slot = 0
+
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = '1'.bytes
+        data4[3] = '2'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def sGroup = new SGroup('srem', data4, null)
+        sGroup.byPassGetSet = inMemoryGetSet
+        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('srem', data4, sGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = sGroup.srem()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(1)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
+
+        def rhkA = new RedisHashKeys()
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.srem()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        rhkA.add('1')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.srem()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        rhkA.add('1')
+        rhkA.add('2')
+        rhkA.add('3')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.srem()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        data4[3] = new byte[RedisHashKeys.SET_MEMBER_MAX_LENGTH + 1]
+        reply = sGroup.srem()
+
+        then:
+        reply == ErrorReply.SET_MEMBER_LENGTH_TO_LONG
+
+        when:
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = sGroup.srem()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
     }
 }

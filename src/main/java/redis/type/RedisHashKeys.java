@@ -78,6 +78,11 @@ public class RedisHashKeys {
         return buffer.array();
     }
 
+    public static short setSize(byte[] data) {
+        var buffer = ByteBuffer.wrap(data);
+        return buffer.getShort();
+    }
+
     public static RedisHashKeys decode(byte[] data) {
         return decode(data, true);
     }
