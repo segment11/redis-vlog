@@ -103,10 +103,10 @@ public class EGroup extends BaseCommand {
             return new IntegerReply(n);
         }
 
-        ArrayList<DGroup.SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 1);
+        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 1);
         for (int i = 1, j = 0; i < data.length; i++, j++) {
             var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
-            list.add(new DGroup.SlotWithKeyHashWithKeyBytes(slotWithKeyHash, data[i]));
+            list.add(new SlotWithKeyHashWithKeyBytes(slotWithKeyHash, data[i]));
         }
 
         ArrayList<Promise<ArrayList<Boolean>>> promises = new ArrayList<>();

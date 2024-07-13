@@ -74,6 +74,9 @@ public abstract class BaseCommand {
 //        }
 //    }
 
+    public record SlotWithKeyHashWithKeyBytes(SlotWithKeyHash slotWithKeyHash, byte[] keyBytes) {
+    }
+
     // need final, for unit test, can change
     protected String cmd;
     protected byte[][] data;

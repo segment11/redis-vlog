@@ -80,9 +80,6 @@ public class DGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    record SlotWithKeyHashWithKeyBytes(SlotWithKeyHash slotWithKeyHash, byte[] keyBytes) {
-    }
-
     Reply del() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
