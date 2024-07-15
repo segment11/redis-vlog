@@ -2,10 +2,12 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.promise.Promise;
+import io.activej.promise.Promises;
+import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
-import redis.type.RedisHashKeys;
 import redis.type.RedisZSet;
 
 import java.util.ArrayList;
@@ -43,10 +45,11 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zdiff".equals(cmd) || "zinter".equals(cmd) || "zunion".equals(cmd)) {
-            if (data.length < 2) {
+            if (data.length < 4) {
                 return slotWithKeyHashList;
             }
-            for (int i = 1; i < data.length; i++) {
+            // include withscores never used
+            for (int i = 2; i < data.length; i++) {
                 var keyBytes = data[i];
                 var slotWithKeyHash = slot(keyBytes, slotNumber);
                 slotWithKeyHashList.add(slotWithKeyHash);
@@ -63,6 +66,7 @@ public class ZGroup extends BaseCommand {
             var dstSlotWithKeyHash = slot(dstKeyBytes, slotNumber);
             slotWithKeyHashList.add(dstSlotWithKeyHash);
 
+            // include withscores never used
             for (int i = 3; i < data.length; i++) {
                 var keyBytes = data[i];
                 var slotWithKeyHash = slot(keyBytes, slotNumber);
@@ -118,7 +122,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zdiff".equals(cmd)) {
-            return zdiff();
+            return zdiff(false, false);
         }
 
         if ("zdiffstore".equals(cmd)) {
@@ -347,6 +351,33 @@ public class ZGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    private RedisZSet getByKeyBytes(byte[] keyBytes) {
+        return getByKeyBytes(keyBytes, null);
+    }
+
+    private RedisZSet getByKeyBytes(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
+        var zsetCv = getCv(keyBytes, slotWithKeyHash);
+        if (zsetCv == null) {
+            return null;
+        }
+        if (!zsetCv.isZSet()) {
+            var key = new String(keyBytes);
+            log.warn("Key {} is not sorted set type", key);
+            throw new IllegalStateException("Key is not sorted set type: " + key);
+        }
+
+        var zsetValueBytes = getValueBytesByCv(zsetCv);
+        return RedisZSet.decode(zsetValueBytes);
+    }
+
+    private void setByKeyBytes(RedisZSet rz, byte[] dstKeyBytes, SlotWithKeyHash dstSlotWithKeyHash) {
+        var encodedBytes = rz.encode();
+        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+        var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
+
+        set(dstKeyBytes, encodedBytes, dstSlotWithKeyHash, spType);
+    }
+
     private record Member(double score, String e) {
         @Override
         public String toString() {
@@ -357,7 +388,7 @@ public class ZGroup extends BaseCommand {
         }
     }
 
-    private Reply zadd() {
+    Reply zadd() {
         if (data.length < 4) {
             return ErrorReply.FORMAT;
         }
@@ -373,7 +404,7 @@ public class ZGroup extends BaseCommand {
         boolean isXx = false;
         boolean isGt = false;
         boolean isLt = false;
-        boolean isCh = false;
+        boolean isIncludeCh = false;
         boolean isIncr = false;
 
         for (int i = 2; i < data.length; i++) {
@@ -392,7 +423,7 @@ public class ZGroup extends BaseCommand {
                 isLt = true;
                 scoreBeginIndex++;
             } else if ("ch".equals(tmp)) {
-                isCh = true;
+                isIncludeCh = true;
                 scoreBeginIndex++;
             } else if ("incr".equals(tmp)) {
                 isIncr = true;
@@ -409,7 +440,8 @@ public class ZGroup extends BaseCommand {
             }
         }
 
-        if (data.length < scoreBeginIndex + 2) {
+        var leftLength = data.length - scoreBeginIndex;
+        if (leftLength <= 0 || leftLength % 2 != 0) {
             return ErrorReply.SYNTAX;
         }
 
@@ -433,14 +465,10 @@ public class ZGroup extends BaseCommand {
         }
 
         // use RedisZSet to store zset
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-
-        var setValueBytes = get(keyBytes, slotWithKeyHash);
-        var rz = setValueBytes == null ? new RedisZSet() : RedisZSet.decode(setValueBytes);
-        var size = rz.size();
-
-        if (size >= RedisZSet.ZSET_MAX_SIZE) {
-            return ErrorReply.ZSET_SIZE_TO_LONG;
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        if (rz == null) {
+            rz = new RedisZSet();
         }
 
         int added = 0;
@@ -459,46 +487,55 @@ public class ZGroup extends BaseCommand {
             }
 
             var svExist = rz.get(member.e);
-            if (isGt) {
-                // gt
-                if (svExist != null && svExist.score() <= member.score) {
-                    continue;
-                }
-            } else if (isLt) {
-                // lt
-                if (svExist != null && svExist.score() >= member.score) {
-                    continue;
+            boolean isNew = svExist == null;
+            if (!isNew) {
+                if (isGt) {
+                    // gt
+                    if (svExist.score() <= member.score) {
+                        continue;
+                    }
+                } else if (isLt) {
+                    // lt
+                    if (svExist.score() >= member.score) {
+                        continue;
+                    }
                 }
             }
 
             var newScore = member.score;
             if (isIncr) {
                 // incr
-                if (svExist != null) {
+                if (!isNew) {
                     newScore += svExist.score();
                 }
             }
 
-            boolean isNewAdded = rz.add(newScore, member.e);
-            if (isNewAdded && (size + 1) == RedisZSet.ZSET_MAX_SIZE) {
+            if (!isNew) {
+                if (newScore == svExist.score()) {
+                    continue;
+                }
+            }
+
+            if (isNew && rz.size() >= RedisZSet.ZSET_MAX_SIZE) {
                 return ErrorReply.ZSET_SIZE_TO_LONG;
             }
-            if (isNewAdded) {
+
+            rz.add(newScore, member.e);
+            if (isNew) {
                 added++;
             } else {
                 changed++;
             }
         }
 
-        var encodedBytes = rz.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
-
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
-        return new IntegerReply(isCh ? changed : added);
+        var handled = added + changed;
+        if (handled > 0) {
+            setByKeyBytes(rz, keyBytes, slotWithKeyHash);
+        }
+        return new IntegerReply(isIncludeCh ? changed + added : added);
     }
 
-    private Reply zcard() {
+    Reply zcard() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
         }
@@ -508,17 +545,18 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var setCv = getCv(keyBytes, slotPreferParsed(keyBytes));
-        if (setCv == null) {
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var zsetCv = getCv(keyBytes, slotWithKeyHash);
+        if (zsetCv == null) {
             return IntegerReply.REPLY_0;
         }
 
-        if (!setCv.isZSet()) {
+        if (!zsetCv.isZSet()) {
             return ErrorReply.WRONG_TYPE;
         }
 
-        var setValueBytes = getValueBytesByCv(setCv);
-        var size = RedisHashKeys.setSize(setValueBytes);
+        var setValueBytes = getValueBytesByCv(zsetCv);
+        var size = RedisZSet.zsetSize(setValueBytes);
         return new IntegerReply(size);
     }
 
@@ -526,28 +564,7 @@ public class ZGroup extends BaseCommand {
 
     private final static String negInf = "-inf";
 
-    private RedisZSet getByKeyBytes(byte[] keyBytes) {
-        return getByKeyBytes(keyBytes, null);
-    }
-
-    private RedisZSet getByKeyBytes(byte[] keyBytes, SlotWithKeyHash slotWithKeyHashReuse) {
-        var setCv = getCv(keyBytes, slotWithKeyHashReuse);
-        if (setCv == null) {
-            return null;
-        }
-        if (!setCv.isZSet()) {
-            // throw exception ?
-            return null;
-        }
-
-        var setValueBytes = getValueBytesByCv(setCv);
-        if (setValueBytes == null) {
-            return null;
-        }
-        return RedisZSet.decode(setValueBytes);
-    }
-
-    private Reply zcount(boolean byLex) {
+    Reply zcount(boolean byLex) {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -632,7 +649,8 @@ public class ZGroup extends BaseCommand {
             }
         }
 
-        var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rz == null) {
             return IntegerReply.REPLY_0;
         }
@@ -641,7 +659,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if (!byLex) {
-            var subSet = rz.between(min, minInclusive, max, maxInclusive);
+            var subSet = rz.between(min, false, max, false);
             // remove min and max if not inclusive
             var itTmp = subSet.iterator();
             while (itTmp.hasNext()) {
@@ -656,12 +674,48 @@ public class ZGroup extends BaseCommand {
 
             return new IntegerReply(subSet.size());
         } else {
-            int count = rz.betweenByMember(minLex, minInclusive, maxLex, maxInclusive).size();
-            return new IntegerReply(count);
+            var n = rz.betweenByMember(minLex, minInclusive, maxLex, maxInclusive).size();
+            return new IntegerReply(n);
         }
     }
 
-    private Reply zdiff() {
+    private void operateZset(RedisZSet zset, ArrayList<RedisZSet> otherRzList, boolean isInter, boolean isUnion) {
+        for (var otherRz : otherRzList) {
+            if (otherRz != null) {
+                var otherSet = otherRz.getSet();
+                if (isInter) {
+                    if (otherSet.isEmpty()) {
+                        zset.clear();
+                        break;
+                    }
+                    for (var otherSv : otherSet) {
+                        if (!zset.contains(otherSv.member())) {
+                            zset.remove(otherSv.member());
+                        }
+                    }
+                } else if (isUnion) {
+                    // todo
+                } else {
+                    // diff
+                    for (var otherSv : otherSet) {
+                        if (zset.contains(otherSv.member())) {
+                            zset.remove(otherSv.member());
+                        }
+                    }
+                }
+                if (zset.isEmpty()) {
+                    break;
+                }
+            } else {
+                if (isInter) {
+                    zset.clear();
+                    break;
+                }
+            }
+        }
+    }
+
+    Reply zdiff(boolean isInter, boolean isUnion) {
         if (data.length < 4) {
             return ErrorReply.FORMAT;
         }
@@ -685,58 +739,103 @@ public class ZGroup extends BaseCommand {
 
         boolean withScores = "withscores".equalsIgnoreCase(new String(data[data.length - 1]));
 
-        var keyBytes = data[2];
-        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-            return ErrorReply.KEY_TOO_LONG;
-        }
-
-        var otherKeyBytesArr = new byte[numKeys - 1][];
-        for (int i = 0; i < numKeys - 1; i++) {
-            var otherKeyBytes = data[3 + i];
-            if (otherKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 1);
+        for (int i = 2, j = 0; i < data.length; i++, j++) {
+            var keyBytes = data[i];
+            if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
                 return ErrorReply.KEY_TOO_LONG;
             }
-            otherKeyBytesArr[i] = otherKeyBytes;
+
+            var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
+            list.add(new SlotWithKeyHashWithKeyBytes(slotWithKeyHash, data[i]));
         }
 
-        var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
+        var first = list.getFirst();
+        var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
         if (rz == null) {
             return MultiBulkReply.EMPTY;
         }
-        if (rz.isEmpty()) {
-            return MultiBulkReply.EMPTY;
-        }
-
-        for (var otherKeyBytes : otherKeyBytesArr) {
-            var otherRz = getByKeyBytes(otherKeyBytes);
-            if (otherRz != null) {
-                for (var otherE : otherRz.getSet()) {
-                    if (rz.contains(otherE.member())) {
-                        rz.remove(otherE.member());
-                    }
-                }
-                if (rz.isEmpty()) {
-                    break;
-                }
+        if (rz.size() == 0) {
+            if (isInter) {
+                return MultiBulkReply.EMPTY;
+            }
+            if (!isUnion) {
+                return MultiBulkReply.EMPTY;
             }
         }
 
-        if (rz.isEmpty()) {
-            return MultiBulkReply.EMPTY;
+        if (!isCrossRequestWorker) {
+            ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
+            for (int i = 1; i < list.size(); i++) {
+                var other = list.get(i);
+                var otherRz = getByKeyBytes(other.keyBytes(), other.slotWithKeyHash());
+                otherRzList.add(otherRz);
+            }
+            operateZset(rz, otherRzList, isInter, isUnion);
+
+            if (rz.isEmpty()) {
+                return MultiBulkReply.EMPTY;
+            }
+
+            var replies = new Reply[rz.size() * (withScores ? 2 : 1)];
+            int i = 0;
+            for (var sv : rz.getSet()) {
+                replies[i++] = new BulkReply(sv.member().getBytes());
+                if (withScores) {
+                    replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
+                }
+            }
+            return new MultiBulkReply(replies);
         }
 
-        var replyArr = new Reply[rz.size() * (withScores ? 2 : 1)];
-        int i = 0;
-        for (var sv : rz.getSet()) {
-            replyArr[i++] = new BulkReply(sv.member().getBytes());
-            if (withScores) {
-                replyArr[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
-            }
+        ArrayList<Promise<RedisZSet>> promises = new ArrayList<>(list.size() - 1);
+        for (int i = 1; i < list.size(); i++) {
+            var other = list.get(i);
+            var otherSlotWithKeyHash = other.slotWithKeyHash();
+            var otherKeyBytes = other.keyBytes();
+
+            var oneSlot = localPersist.oneSlot(otherSlotWithKeyHash.slot());
+            var p = oneSlot.asyncCall(() -> getByKeyBytes(otherKeyBytes, otherSlotWithKeyHash));
+            promises.add(p);
         }
-        return new MultiBulkReply(replyArr);
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        // need not wait all, can optimize
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("zdiff error: {}, isInter: {}, isUnion: {}", e.getMessage(), isInter, isUnion);
+                finalPromise.setException(e);
+                return;
+            }
+
+            ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
+            for (var promise : promises) {
+                otherRzList.add(promise.getResult());
+            }
+            operateZset(rz, otherRzList, isInter, isUnion);
+
+            if (rz.isEmpty()) {
+                finalPromise.set(MultiBulkReply.EMPTY);
+                return;
+            }
+
+            var replies = new Reply[rz.size() * (withScores ? 2 : 1)];
+            int i = 0;
+            for (var sv : rz.getSet()) {
+                replies[i++] = new BulkReply(sv.member().getBytes());
+                if (withScores) {
+                    replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
+                }
+            }
+            finalPromise.set(new MultiBulkReply(replies));
+        });
+
+        return asyncReply;
     }
 
-    public Reply zdiffstore() {
+    Reply zdiffstore() {
         if (data.length < 5) {
             return ErrorReply.FORMAT;
         }
@@ -745,6 +844,7 @@ public class ZGroup extends BaseCommand {
         if (dstKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
             return ErrorReply.KEY_TOO_LONG;
         }
+        var dstSlotWithKeyHash = slotPreferParsed(dstKeyBytes);
 
         var numKeysBytes = data[2];
         int numKeys;
@@ -762,48 +862,102 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.SYNTAX;
         }
 
-        var keyBytes = data[3];
-        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-            return ErrorReply.KEY_TOO_LONG;
-        }
-
-        var otherKeyBytesArr = new byte[numKeys - 1][];
-        for (int i = 0; i < numKeys - 1; i++) {
-            var otherKeyBytes = data[4 + i];
-            if (otherKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 2);
+        // begin from 3
+        for (int i = 3, j = 1; i < data.length; i++, j++) {
+            var keyBytes = data[i];
+            if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
                 return ErrorReply.KEY_TOO_LONG;
             }
-            otherKeyBytesArr[i] = otherKeyBytes;
+
+            var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
+            list.add(new SlotWithKeyHashWithKeyBytes(slotWithKeyHash, data[i]));
         }
 
-        // in slot lock?
-        var rz = getByKeyBytes(keyBytes);
-        if (rz == null) {
-            return IntegerReply.REPLY_0;
-        }
-        if (rz.isEmpty()) {
-            return IntegerReply.REPLY_0;
-        }
-
-        for (var otherKeyBytes : otherKeyBytesArr) {
-            var otherRz = getByKeyBytes(otherKeyBytes);
-            if (otherRz != null) {
-                for (var otherE : otherRz.getSet()) {
-                    if (rz.contains(otherE.member())) {
-                        rz.remove(otherE.member());
-                    }
-                }
-                if (rz.isEmpty()) {
-                    break;
-                }
+        if (!isCrossRequestWorker) {
+            // first key may be in other thread eventloop
+            var first = list.getFirst();
+            var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
+            if (rz == null) {
+                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                return IntegerReply.REPLY_0;
             }
+            if (rz.size() == 0) {
+                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                return IntegerReply.REPLY_0;
+            }
+
+            ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
+            for (int i = 1; i < list.size(); i++) {
+                var other = list.get(i);
+                var otherRz = getByKeyBytes(other.keyBytes(), other.slotWithKeyHash());
+                otherRzList.add(otherRz);
+            }
+            operateZset(rz, otherRzList, false, false);
+
+            if (rz.isEmpty()) {
+                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                return IntegerReply.REPLY_0;
+            }
+
+            setByKeyBytes(rz, dstKeyBytes, dstSlotWithKeyHash);
+            return new IntegerReply(rz.size());
         }
 
-        storeRedisZSet(rz, dstKeyBytes);
-        return new IntegerReply(rz.size());
+        ArrayList<Promise<RedisZSet>> promises = new ArrayList<>(list.size());
+        for (int i = 0; i < list.size(); i++) {
+            var other = list.get(i);
+            var otherSlotWithKeyHash = other.slotWithKeyHash();
+            var otherKeyBytes = other.keyBytes();
+
+            var oneSlot = localPersist.oneSlot(otherSlotWithKeyHash.slot());
+            var p = oneSlot.asyncCall(() -> getByKeyBytes(otherKeyBytes, otherSlotWithKeyHash));
+            promises.add(p);
+        }
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        // need not wait all, can optimize
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("zdiffstore error: {}, isInter: {}, isUnion: {}", e.getMessage(), false, false);
+                finalPromise.setException(e);
+                return;
+            }
+
+            var rz = promises.getFirst().getResult();
+            if (rz == null) {
+                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                finalPromise.set(IntegerReply.REPLY_0);
+                return;
+            }
+            if (rz.size() == 0) {
+                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                finalPromise.set(IntegerReply.REPLY_0);
+                return;
+            }
+
+            ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
+            for (var promise : promises) {
+                otherRzList.add(promise.getResult());
+            }
+            operateZset(rz, otherRzList, false, false);
+
+            if (rz.isEmpty()) {
+                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                finalPromise.set(IntegerReply.REPLY_0);
+                return;
+            }
+
+            setByKeyBytes(rz, dstKeyBytes, dstSlotWithKeyHash);
+            finalPromise.set(new IntegerReply(rz.size()));
+        });
+
+        return asyncReply;
     }
 
-    private Reply zincrby() {
+    Reply zincrby() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -826,8 +980,7 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.ZSET_MEMBER_LENGTH_TO_LONG;
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rz == null) {
             rz = new RedisZSet();
@@ -845,15 +998,11 @@ public class ZGroup extends BaseCommand {
 
         rz.add(score, member);
 
-        var encodedBytes = rz.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
-
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        setByKeyBytes(rz, keyBytes, slotWithKeyHash);
         return new BulkReply(String.valueOf(score).getBytes());
     }
 
-    private Reply zinter(byte[][] dd, boolean doStore, byte[] dstKeyBytes, boolean isUnion) {
+    Reply zinter(byte[][] dd, boolean doStore, byte[] dstKeyBytes, boolean isUnion) {
         if (dd.length < 4) {
             return ErrorReply.FORMAT;
         }
@@ -1681,8 +1830,7 @@ public class ZGroup extends BaseCommand {
             }
             return new MultiBulkReply(replies);
         } else {
-            var subSet = rz.between(min, minInclusive, max, maxInclusive);
-
+            var subSet = rz.between(min, false, max, false);
             // remove min and max if not inclusive
             var itTmp = subSet.iterator();
             while (itTmp.hasNext()) {

@@ -28,6 +28,7 @@ class RedisZSetTest extends Specification {
 
         rz.between(1, true, 2, true).collect { it.member() }.join(',') == 'a,b'
         rz.betweenByMember('a', true, 'b', true).collect { it.value.score() }.join(',') == '1.0,1.8'
+        rz.between(0.9, true, 1.8, true).collect { it.member() }.join(',') == 'a,b'
 
         when:
         def isDeletedA = rz.remove('a')
@@ -57,6 +58,12 @@ class RedisZSetTest extends Specification {
 
         rz.pollFirst() == null
         rz.pollLast() == null
+
+        when:
+        rz.clear()
+
+        then:
+        rz.size() == 0
     }
 
     def 'encode'() {
@@ -75,6 +82,7 @@ class RedisZSetTest extends Specification {
         then:
         rz2.size() == 3
         rz3.size() == 3
+        RedisZSet.zsetSize(encoded) == 3
         rz2.contains('a')
         rz2.contains('b')
         rz2.contains('c')
@@ -114,12 +122,12 @@ class RedisZSetTest extends Specification {
         when:
         rz.add(1, 'a')
         rz.add(2, 'b')
-        rz.add(2, RedisZSet.MAX_MEMBER)
+        rz.add(2, 'zz')
         rz.add(3, 'c')
-        rz.add(3, RedisZSet.MAX_MEMBER)
+        rz.add(3, 'zz')
 
         then:
-        rz.pollLast().member() == RedisZSet.MAX_MEMBER
+        rz.pollLast().member() == 'zz'
     }
 
     def 'encode size 0'() {

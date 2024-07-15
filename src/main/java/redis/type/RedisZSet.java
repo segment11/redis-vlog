@@ -64,12 +64,9 @@ public class RedisZSet {
                 return compScore;
             }
 
-            if (member.equals(MAX_MEMBER)) {
-                return 1;
+            if (member.length() == 0) {
+                return -1;
             }
-//            if (o.member.equals(MAX_MEMBER)) {
-//                return -1;
-//            }
             return member.compareTo(o.member);
         }
 
@@ -99,11 +96,17 @@ public class RedisZSet {
         return memberMap;
     }
 
-    static final String MAX_MEMBER = "!z...";
+    private static final double addFixed = 0.0000000000001;
 
-    public NavigableSet<ScoreValue> between(double min, boolean minInclusive, double max, boolean maxInclusive) {
-        return set.subSet(new ScoreValue(min, ""), minInclusive,
-                new ScoreValue(max, MAX_MEMBER), maxInclusive);
+    public NavigableSet<ScoreValue> between(double min, boolean fromInclusive, double max, boolean toInclusive) {
+        if (min != Double.NEGATIVE_INFINITY) {
+            min -= addFixed;
+        }
+        if (max != Double.POSITIVE_INFINITY) {
+            max += addFixed;
+        }
+
+        return set.subSet(new ScoreValue(min, ""), false, new ScoreValue(max, ""), false);
     }
 
     public ConcurrentNavigableMap<String, ScoreValue> betweenByMember(String min, boolean minInclusive, String max, boolean maxInclusive) {
@@ -129,6 +132,11 @@ public class RedisZSet {
         }
         memberMap.remove(member);
         return set.remove(sv);
+    }
+
+    public void clear() {
+        set.clear();
+        memberMap.clear();
     }
 
     public ScoreValue pollFirst() {
@@ -212,6 +220,11 @@ public class RedisZSet {
         }
 
         return buffer.array();
+    }
+
+    public static short zsetSize(byte[] data) {
+        var buffer = ByteBuffer.wrap(data);
+        return buffer.getShort();
     }
 
     public static RedisZSet decode(byte[] data) {
