@@ -86,10 +86,11 @@ public class Request {
         if (slotWithKeyHashList == null) {
             return SLOT_CAN_HANDLE_BY_ANY_WORKER;
         }
-        var first = slotWithKeyHashList.getFirst();
-        if (first == null) {
+        if (slotWithKeyHashList.size() == 0) {
             return SLOT_CAN_HANDLE_BY_ANY_WORKER;
         }
+
+        var first = slotWithKeyHashList.getFirst();
         return first.slot();
     }
 
