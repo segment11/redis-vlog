@@ -100,7 +100,7 @@ class GGroupTest extends Specification {
 
         when:
         gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getdel', data2, gGroup.slotNumber)
-        def reply = gGroup.handle()
+        def reply = gGroup.getdel()
 
         then:
         reply == NilReply.INSTANCE
@@ -109,7 +109,7 @@ class GGroupTest extends Specification {
         def cv = Mock.prepareCompressedValueList(1)[0]
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        reply = gGroup.handle()
+        reply = gGroup.getdel()
 
         then:
         reply instanceof BulkReply

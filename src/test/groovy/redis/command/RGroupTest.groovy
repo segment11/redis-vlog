@@ -168,7 +168,7 @@ class RGroupTest extends Specification {
 
         when:
         data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
-        reply = rGroup.handle()
+        reply = rGroup.rename()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
@@ -176,7 +176,7 @@ class RGroupTest extends Specification {
         when:
         data3[1] = 'a'.bytes
         data3[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
-        reply = rGroup.handle()
+        reply = rGroup.rename()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG

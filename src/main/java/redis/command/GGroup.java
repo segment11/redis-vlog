@@ -55,7 +55,7 @@ public class GGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    private Reply getdel() {
+    Reply getdel() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
         }

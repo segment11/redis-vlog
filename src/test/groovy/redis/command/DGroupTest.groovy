@@ -172,14 +172,14 @@ class DGroupTest extends Specification {
 
         data2[1] = 'a'.bytes
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data2, dGroup.slotNumber)
-        reply = dGroup.handle()
+        reply = dGroup.del()
 
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 1
 
         when:
-        reply = dGroup.handle()
+        reply = dGroup.del()
 
         then:
         reply instanceof IntegerReply
