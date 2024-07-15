@@ -173,7 +173,7 @@ public class OneSlot {
         }
 
         int initMemoryMB = (int) (initMemoryN / 1024 / 1024);
-        log.info("Wal cache init: {}MB, slot: {}", initMemoryMB, slot);
+        log.info("Static memory init, type: {}, MB: {}, slot: {}", StaticMemoryPrepareBytesStats.Type.wal_cache_init, initMemoryMB, slot);
         StaticMemoryPrepareBytesStats.add(StaticMemoryPrepareBytesStats.Type.wal_cache_init, initMemoryMB, false);
 
         // cache lru
@@ -1555,8 +1555,10 @@ public class OneSlot {
                 map.put("lru_prepare_mb_all", new SimpleGauge.ValueWithLabelValues(
                         (double) LRUPrepareBytesStats.sum(), labelValues));
 
-                map.put("static_memory_prepare_mb_wal_cache_one_slot", new SimpleGauge.ValueWithLabelValues(
+                map.put("static_memory_prepare_mb_wal_cache_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.wal_cache), labelValues));
+                map.put("static_memory_prepare_mb_meta_chunk_segment_flag_seq_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq), labelValues));
             }
 
             var hitMissTotal = kvLRUHitTotal + kvLRUMissTotal;

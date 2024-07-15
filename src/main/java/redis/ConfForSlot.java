@@ -1,5 +1,7 @@
 package redis;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import redis.persist.Chunk;
 import redis.persist.KeyBucket;
 import redis.persist.Wal;
@@ -9,6 +11,8 @@ import static redis.persist.LocalPersist.PAGE_SIZE;
 public enum ConfForSlot {
     debugMode(100_000), c1m(1_000_000L),
     c10m(10_000_000L), c100m(100_000_000L);
+
+    public static Logger log = LoggerFactory.getLogger(ConfForSlot.class);
 
     public long estimateKeyNumber;
     public int estimateOneValueLength = DEFAULT_ESTIMATE_ONE_VALUE_LENGTH;
@@ -259,10 +263,11 @@ public enum ConfForSlot {
                 Wal.GROUP_COUNT_IN_M4 = 4 * 1024 * 1024 / Wal.ONE_GROUP_BUFFER_SIZE;
 
                 int groupNumber = Wal.calcWalGroupNumber();
-                var sum = oneGroupBufferSize * groupNumber / 1024;
+                var sum = oneGroupBufferSize * groupNumber / 1024 / 1024;
                 // wal init m4
                 sum += 4;
 
+                log.info("Static memory init, type: {}, MB: {}, all slots", StaticMemoryPrepareBytesStats.Type.wal_cache, sum);
                 StaticMemoryPrepareBytesStats.add(StaticMemoryPrepareBytesStats.Type.wal_cache, sum, false);
             }
             Wal.doLogAfterInit();
