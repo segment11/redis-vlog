@@ -140,7 +140,7 @@ class EGroupTest extends Specification {
 
         data2[1] = 'a'.bytes
         eGroup.slotWithKeyHashListParsed = EGroup.parseSlots('exists', data2, eGroup.slotNumber)
-        r = eGroup.handle()
+        r = eGroup.exists()
 
         then:
         r instanceof IntegerReply
@@ -148,15 +148,14 @@ class EGroupTest extends Specification {
 
         when:
         inMemoryGetSet.remove(slot, 'a')
-        r = eGroup.handle()
+        r = eGroup.exists()
 
         then:
         r instanceof IntegerReply
         ((IntegerReply) r).integer == 0
 
         when:
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -167,8 +166,12 @@ class EGroupTest extends Specification {
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
-        eGroup.isCrossRequestWorker = true
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
 
+        eGroup.isCrossRequestWorker = true
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = 'b'.bytes
@@ -177,7 +180,9 @@ class EGroupTest extends Specification {
 
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.put(slot, 'b', 0, cv)
-        r = eGroup.handle()
+
+        r = eGroup.exists()
+        eventloopCurrent.run()
 
         then:
         r instanceof AsyncReply

@@ -892,8 +892,7 @@ select
         reply == MultiBulkReply.EMPTY
 
         when:
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -904,8 +903,14 @@ select
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
         sGroup.isCrossRequestWorker = true
         reply = sGroup.sdiff(true, false)
+        eventloopCurrent.run()
 
         then:
         reply instanceof AsyncReply
@@ -913,14 +918,15 @@ select
             result == MultiBulkReply.EMPTY
         }.result
 
-//        when:
-//        reply = sGroup.sdiff(false, true)
-//
-//        then:
-//        reply instanceof AsyncReply
-//        ((AsyncReply) reply).settablePromise.whenResult { result ->
-//            (result instanceof MultiBulkReply) && ((MultiBulkReply) result).replies.length == 3
-//        }.result
+        when:
+        reply = sGroup.sdiff(false, true)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            (result instanceof MultiBulkReply) && ((MultiBulkReply) result).replies.length == 3
+        }.result
 
         when:
         data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -1083,36 +1089,88 @@ select
         then:
         reply == IntegerReply.REPLY_0
 
-//        when:
-//        var eventloop = Eventloop.builder()
-//                .withCurrentThread()
-//                .withIdleInterval(Duration.ofMillis(100))
-//                .build()
-//        eventloop.keepAlive(true)
-//
-//        Thread.start {
-//            eventloop.run()
-//        }
-//
-//        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
-//
-//        sGroup.isCrossRequestWorker = true
-//        reply = sGroup.sdiffstore(true, false)
-//
-//        then:
-//        reply instanceof AsyncReply
-//        ((AsyncReply) reply).settablePromise.whenResult { result ->
-//            result == IntegerReply.REPLY_0
-//        }.result
+        when:
+        def eventloop = Eventloop.builder()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        eventloop.keepAlive(true)
 
-//        when:
-//        reply = sGroup.sdiffstore(false, true)
-//
-//        then:
-//        reply instanceof AsyncReply
-//        ((AsyncReply) reply).settablePromise.whenResult { result ->
-//            (result instanceof IntegerReply) && ((IntegerReply) result).integer == 3
-//        }.result
+        Thread.start {
+            eventloop.run()
+        }
+
+        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
+        sGroup.isCrossRequestWorker = true
+        reply = sGroup.sdiffstore(true, false)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == IntegerReply.REPLY_0
+        }.result
+
+        when:
+        reply = sGroup.sdiffstore(false, true)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            (result instanceof IntegerReply) && ((IntegerReply) result).integer == 3
+        }.result
+
+        when:
+        rhkA.remove('1')
+        rhkA.remove('2')
+        cvA.compressedData = rhkA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = sGroup.sdiffstore(false, false)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            reply == IntegerReply.REPLY_0
+        }.result
+
+        when:
+        reply = sGroup.sdiffstore(true, false)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            reply == IntegerReply.REPLY_0
+        }.result
+
+        when:
+        reply = sGroup.sdiffstore(false, true)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            (result instanceof IntegerReply) && ((IntegerReply) result).integer == 3
+        }.result
+
+        when:
+        inMemoryGetSet.remove(slot, 'a')
+        reply = sGroup.sdiffstore(false, false)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            reply == IntegerReply.REPLY_0
+        }.result
 
         when:
         data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -1129,8 +1187,8 @@ select
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
-//        cleanup:
-//        eventloop.breakEventloop()
+        cleanup:
+        eventloop.breakEventloop()
     }
 
     def 'test sintercard'() {
@@ -1223,50 +1281,79 @@ select
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 1
 
-//        when:
-//        var eventloop = Eventloop.builder()
-//                .withCurrentThread()
-//                .withIdleInterval(Duration.ofMillis(100))
-//                .build()
-//        eventloop.keepAlive(true)
-//
-//        Thread.start {
-//            eventloop.run()
-//        }
-//
-//        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
-//
-//        sGroup.isCrossRequestWorker = true
-//        reply = sGroup.sintercard()
-//
-//        then:
-//        reply instanceof AsyncReply
-//        ((AsyncReply) reply).settablePromise.whenResult { result ->
-//            (result instanceof IntegerReply) && ((IntegerReply) result).integer == 1
-//        }.result
+        when:
+        def eventloop = Eventloop.builder()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        eventloop.keepAlive(true)
 
-//        when:
-//        rhkB.remove('1')
-//        cvB.compressedData = rhkB.encode()
-//
-//        inMemoryGetSet.put(slot, 'b', 0, cvB)
-//        reply = sGroup.sintercard()
-//
-//        then:
-//        reply instanceof AsyncReply
-//        ((AsyncReply) reply).settablePromise.whenResult { result ->
-//            result == IntegerReply.REPLY_0
-//        }.result
+        Thread.start {
+            eventloop.run()
+        }
 
-//        when:
-//        inMemoryGetSet.remove(slot, 'b')
-//        reply = sGroup.sintercard()
-//
-//        then:
-//        reply instanceof AsyncReply
-//        ((AsyncReply) reply).settablePromise.whenResult { result ->
-//            result == IntegerReply.REPLY_0
-//        }.result
+        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
+        sGroup.isCrossRequestWorker = true
+        reply = sGroup.sintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            (result instanceof IntegerReply) && ((IntegerReply) result).integer == 1
+        }.result
+
+        when:
+        data6[5] = '1'.bytes
+        reply = sGroup.sintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            (result instanceof IntegerReply) && ((IntegerReply) result).integer == 1
+        }.result
+
+        when:
+        data6[5] = '0'.bytes
+        reply = sGroup.sintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            (result instanceof IntegerReply) && ((IntegerReply) result).integer == 1
+        }.result
+
+        when:
+        rhkB.remove('1')
+        cvB.compressedData = rhkB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = sGroup.sintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == IntegerReply.REPLY_0
+        }.result
+
+        when:
+        inMemoryGetSet.remove(slot, 'b')
+        reply = sGroup.sintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == IntegerReply.REPLY_0
+        }.result
 
         when:
         data6[3] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -1332,8 +1419,8 @@ select
         then:
         reply == IntegerReply.REPLY_0
 
-//        cleanup:
-//        eventloop.breakEventloop()
+        cleanup:
+        eventloop.breakEventloop()
     }
 
     def 'test sismember'() {
@@ -1582,8 +1669,7 @@ select
         reply == IntegerReply.REPLY_1
 
         when:
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -1593,6 +1679,11 @@ select
         }
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
 
         sGroup.isCrossRequestWorker = true
 
@@ -1604,6 +1695,7 @@ select
         inMemoryGetSet.remove(slot, 'b')
 
         reply = sGroup.smove()
+        eventloopCurrent.run()
 
         then:
         reply instanceof AsyncReply
@@ -1617,6 +1709,7 @@ select
 
         inMemoryGetSet.put(slot, 'a', 0, cvA)
         reply = sGroup.smove()
+        eventloopCurrent.run()
 
         then:
         reply instanceof AsyncReply

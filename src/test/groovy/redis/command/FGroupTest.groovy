@@ -65,8 +65,7 @@ class FGroupTest extends Specification {
         fGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         and:
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -77,8 +76,14 @@ class FGroupTest extends Specification {
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
         when:
         def r = fGroup.flushdb()
+        eventloopCurrent.run()
 
         then:
         r instanceof AsyncReply

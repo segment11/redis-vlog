@@ -158,8 +158,7 @@ class CGroupTest extends Specification {
         reply == IntegerReply.REPLY_1
 
         when:
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -170,9 +169,15 @@ class CGroupTest extends Specification {
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
         cGroup.isCrossRequestWorker = true
 
         reply = cGroup.copy()
+        eventloopCurrent.run()
 
         then:
         reply instanceof AsyncReply

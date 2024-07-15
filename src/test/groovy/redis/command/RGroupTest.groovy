@@ -139,8 +139,7 @@ class RGroupTest extends Specification {
         reply == OKReply.INSTANCE
 
         when:
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -151,10 +150,15 @@ class RGroupTest extends Specification {
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
-        rGroup.isCrossRequestWorker = true
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
 
+        rGroup.isCrossRequestWorker = true
         inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = rGroup.handle()
+        reply = rGroup.rename()
+        eventloopCurrent.run()
 
         then:
         reply instanceof AsyncReply
@@ -258,7 +262,6 @@ class RGroupTest extends Specification {
 
         when:
         var eventloop = Eventloop.builder()
-                .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -269,9 +272,14 @@ class RGroupTest extends Specification {
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
-        rGroup.isCrossRequestWorker = true
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
 
+        rGroup.isCrossRequestWorker = true
         reply = rGroup.rpoplpush()
+        eventloopCurrent.run()
 
         then:
         reply instanceof AsyncReply

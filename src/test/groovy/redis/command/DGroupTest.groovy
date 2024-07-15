@@ -171,8 +171,7 @@ class DGroupTest extends Specification {
         ((IntegerReply) r).integer == 0
 
         when:
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -182,6 +181,11 @@ class DGroupTest extends Specification {
         }
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
 
         dGroup.isCrossRequestWorker = true
 
@@ -193,7 +197,8 @@ class DGroupTest extends Specification {
 
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.put(slot, 'b', 0, cv)
-        r = dGroup.handle()
+        r = dGroup.del()
+        eventloopCurrent.run()
 
         then:
         r instanceof AsyncReply
@@ -215,8 +220,7 @@ class DGroupTest extends Specification {
         dGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
 
         when:
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -227,7 +231,13 @@ class DGroupTest extends Specification {
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
         def r = dGroup.dbsize()
+        eventloopCurrent.run()
 
         then:
         r instanceof AsyncReply

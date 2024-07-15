@@ -194,8 +194,7 @@ class MGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[1] == NilReply.INSTANCE
 
         when:
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -206,8 +205,14 @@ class MGroupTest extends Specification {
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
         mGroup.isCrossRequestWorker = true
         reply = mGroup.mget()
+        eventloopCurrent.run()
 
         then:
         reply instanceof AsyncReply
@@ -256,8 +261,7 @@ class MGroupTest extends Specification {
         data5[2] = '11'.bytes
         data5[4] = '22'.bytes
 
-        var eventloop = Eventloop.builder()
-                .withCurrentThread()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
@@ -268,8 +272,14 @@ class MGroupTest extends Specification {
 
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
 
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
         mGroup.isCrossRequestWorker = true
         reply = mGroup.mset()
+        eventloopCurrent.run()
 
         then:
         reply instanceof AsyncReply
@@ -284,6 +294,14 @@ class MGroupTest extends Specification {
         then:
         valA == '11'.bytes
         valB == '22'.bytes
+
+        when:
+        def data4 = new byte[4][]
+        mGroup.data = data4
+        reply = mGroup.mset()
+
+        then:
+        reply == ErrorReply.FORMAT
 
         cleanup:
         eventloop.breakEventloop()

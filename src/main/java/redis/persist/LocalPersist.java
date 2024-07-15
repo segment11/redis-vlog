@@ -59,6 +59,11 @@ public class LocalPersist {
     }
 
     public void addOneSlotForTest(byte slot, Eventloop eventloop) {
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         var oneSlot = new OneSlot(slot, eventloop);
         oneSlot.threadIdProtectedForSafe = eventloop.getEventloopThread().threadId();
         this.oneSlots = new OneSlot[slot + 1];
