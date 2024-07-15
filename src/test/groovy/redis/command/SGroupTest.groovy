@@ -14,30 +14,8 @@ import spock.lang.Specification
 import java.time.Duration
 
 class SGroupTest extends Specification {
-    def 'test parse slot'() {
-        given:
-        def data4 = new byte[4][]
-        int slotNumber = 128
-
-        and:
-        data4[1] = 'a'.bytes
-        data4[2] = 'b'.bytes
-        data4[3] = 'c'.bytes
-
-        when:
-        def sSetList = SGroup.parseSlots('set', data4, slotNumber)
-        def sSintercardList = SGroup.parseSlots('sintercard', data4, slotNumber)
-        def sSmoveList = SGroup.parseSlots('smove', data4, slotNumber)
-        def sList = SGroup.parseSlots('sxxx', data4, slotNumber)
-
-        then:
-        sSetList.size() == 1
-        sSintercardList.size() == 2
-        sSmoveList.size() == 2
-        sList.size() == 0
-
-        when:
-        def sListList = '''
+    def singleKeyCmdList1 = '''
+set
 setex
 setnx
 setrange
@@ -51,23 +29,68 @@ smismember
 spop
 srandmember
 srem
-'''.readLines().collect { it.trim() }.findAll { it }.collect {
-            SGroup.parseSlots(it, data4, slotNumber)
-        }
+'''.readLines().collect { it.trim() }.findAll { it }
 
-        then:
-        sListList.size() == 13
-        sListList.every { it.size() == 1 }
-
-        when:
-        def sListList2 = '''
+    def multiKeyCmdList2 = '''
 sdiff
 sdiffstore
 sinter
 sinterstore
 sunion
 sunionstore
-'''.readLines().collect { it.trim() }.findAll { it }.collect {
+'''.readLines().collect { it.trim() }.findAll { it }
+
+    def 'test parse slot'() {
+        given:
+        def data4 = new byte[4][]
+        def data1 = new byte[1][]
+        int slotNumber = 128
+
+        and:
+        data4[1] = 'a'.bytes
+        data4[2] = 'b'.bytes
+        data4[3] = 'c'.bytes
+
+        when:
+        def sSintercardList = SGroup.parseSlots('sintercard', data4, slotNumber)
+        def sSmoveList = SGroup.parseSlots('smove', data4, slotNumber)
+        def sList = SGroup.parseSlots('sxxx', data4, slotNumber)
+
+        then:
+        sSintercardList.size() == 2
+        sSmoveList.size() == 2
+        sList.size() == 0
+
+        when:
+        def sDiffList = SGroup.parseSlots('sdiff', data1, slotNumber)
+        sSintercardList = SGroup.parseSlots('sintercard', data1, slotNumber)
+        sSmoveList = SGroup.parseSlots('smove', data1, slotNumber)
+
+        then:
+        sDiffList.size() == 0
+        sSintercardList.size() == 0
+        sSmoveList.size() == 0
+
+        when:
+        def sListList1 = singleKeyCmdList1.collect {
+            SGroup.parseSlots(it, data4, slotNumber)
+        }
+
+        then:
+        sListList1.size() == 14
+        sListList1.every { it.size() == 1 }
+
+        when:
+        def sListList11 = singleKeyCmdList1.collect {
+            SGroup.parseSlots(it, data1, slotNumber)
+        }
+
+        then:
+        sListList11.size() == 14
+        sListList11.every { it.size() == 0 }
+
+        when:
+        def sListList2 = multiKeyCmdList2.collect {
             SGroup.parseSlots(it, data4, slotNumber)
         }
 
@@ -76,18 +99,13 @@ sunionstore
         sListList2.every { it.size() > 1 }
 
         when:
-        def data1 = new byte[1][]
-
-        sSetList = SGroup.parseSlots('set', data1, slotNumber)
-        def sDiffList = SGroup.parseSlots('sdiff', data1, slotNumber)
-        sSintercardList = SGroup.parseSlots('sintercard', data1, slotNumber)
-        sSmoveList = SGroup.parseSlots('smove', data1, slotNumber)
+        def sListList22 = multiKeyCmdList2.collect {
+            SGroup.parseSlots(it, data1, slotNumber)
+        }
 
         then:
-        sSetList.size() == 0
-        sDiffList.size() == 0
-        sSintercardList.size() == 0
-        sSmoveList.size() == 0
+        sListList22.size() == 6
+        sListList22.every { it.size() == 0 }
     }
 
     def 'test handle'() {
@@ -97,47 +115,23 @@ sunionstore
         def sGroup = new SGroup('set', data1, null)
         sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
-        when:
-        def reply = sGroup.handle()
-
-        then:
-        reply == ErrorReply.FORMAT
+        def allCmdList = singleKeyCmdList1 + multiKeyCmdList2 + ['sintercard', 'smove', 'select']
 
         when:
-        def replyList = '''
-setex
-setnx
-setrange
-strlen
-substr
-sadd
-scard
-sismember
-smembers
-smismember
-spop
-srandmember
-srem
-sdiff
-sdiffstore
-sinter
-sinterstore
-sunion
-sunionstore
-sintercard
-smove
-select
-'''.readLines().collect { it.trim() }.findAll { it }.collect {
+        sGroup.data = data1
+        def sAllList = allCmdList.collect {
             sGroup.cmd = it
             sGroup.handle()
         }
 
         then:
-        replyList.every { it == ErrorReply.FORMAT }
+        sAllList.every {
+            it == ErrorReply.FORMAT
+        }
 
         when:
         sGroup.cmd = 'save'
-        reply = sGroup.handle()
+        def reply = sGroup.handle()
 
         then:
         reply == OKReply.INSTANCE

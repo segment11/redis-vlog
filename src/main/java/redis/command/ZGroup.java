@@ -24,17 +24,15 @@ public class ZGroup extends BaseCommand {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
 
         if ("zadd".equals(cmd) || "zcard".equals(cmd) || "zcount".equals(cmd)
-                || "zdiffstore".equals(cmd)
                 || "zincrby".equals(cmd)
-                || "zinter".equals(cmd) || "zinterstore".equals(cmd)
                 || "zlexcount".equals(cmd) || "zmscore".equals(cmd)
                 || "zpopmax".equals(cmd) || "zpopmin".equals(cmd)
                 || "zrandmember".equals(cmd)
                 || "zrange".equals(cmd) || "zrangebylex".equals(cmd) || "zrangebyscore".equals(cmd)
-                || "zrangestore".equals(cmd) || "zrank".equals(cmd)
+                || "zrank".equals(cmd)
                 || "zrem".equals(cmd) || "zremrangebylex".equals(cmd) || "zremrangebyrank".equals(cmd) || "zremrangebyscore".equals(cmd)
                 || "zrevrange".equals(cmd) || "zrevrangebylex".equals(cmd) || "zrevrangebyscore".equals(cmd) || "zrevrank".equals(cmd)
-                || "zscore".equals(cmd) || "zunion".equals(cmd) || "zunionstore".equals(cmd)) {
+                || "zscore".equals(cmd)) {
             if (data.length < 2) {
                 return slotWithKeyHashList;
             }
@@ -44,13 +42,60 @@ public class ZGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-        if ("zdiff".equals(cmd) || "zintercard".equals(cmd)) {
+        if ("zdiff".equals(cmd) || "zinter".equals(cmd) || "zunion".equals(cmd)) {
+            if (data.length < 2) {
+                return slotWithKeyHashList;
+            }
+            for (int i = 1; i < data.length; i++) {
+                var keyBytes = data[i];
+                var slotWithKeyHash = slot(keyBytes, slotNumber);
+                slotWithKeyHashList.add(slotWithKeyHash);
+            }
+            return slotWithKeyHashList;
+        }
+
+        if ("zdiffstore".equals(cmd) || "zinterstore".equals(cmd) || "zunionstore".equals(cmd)) {
+            if (data.length < 5) {
+                return slotWithKeyHashList;
+            }
+
+            var dstKeyBytes = data[1];
+            var dstSlotWithKeyHash = slot(dstKeyBytes, slotNumber);
+            slotWithKeyHashList.add(dstSlotWithKeyHash);
+
+            for (int i = 3; i < data.length; i++) {
+                var keyBytes = data[i];
+                var slotWithKeyHash = slot(keyBytes, slotNumber);
+                slotWithKeyHashList.add(slotWithKeyHash);
+            }
+            return slotWithKeyHashList;
+        }
+
+        if ("zrangestore".equals(cmd)) {
+            if (data.length < 5) {
+                return slotWithKeyHashList;
+            }
+
+            // dst first, src last
+            var dstKeyBytes = data[1];
+            var srcKeyBytes = data[2];
+
+            var s1 = slot(srcKeyBytes, slotNumber);
+            var s2 = slot(dstKeyBytes, slotNumber);
+            slotWithKeyHashList.add(s1);
+            slotWithKeyHashList.add(s2);
+            return slotWithKeyHashList;
+        }
+
+        if ("zintercard".equals(cmd)) {
             if (data.length < 3) {
                 return slotWithKeyHashList;
             }
-            var keyBytes = data[2];
-            var slotWithKeyHash = slot(keyBytes, slotNumber);
-            slotWithKeyHashList.add(slotWithKeyHash);
+            for (int i = 2; i < data.length; i++) {
+                var keyBytes = data[i];
+                var slotWithKeyHash = slot(keyBytes, slotNumber);
+                slotWithKeyHashList.add(slotWithKeyHash);
+            }
             return slotWithKeyHashList;
         }
 
