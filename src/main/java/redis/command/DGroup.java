@@ -165,7 +165,7 @@ public class DGroup extends BaseCommand {
     Reply dbsize() {
         // skip
         if (data.length == 2) {
-            return new IntegerReply(0);
+            return ErrorReply.FORMAT;
         }
 
         Promise<Long>[] promises = new Promise[slotNumber];

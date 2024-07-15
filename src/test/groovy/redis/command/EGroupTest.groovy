@@ -6,10 +6,7 @@ import redis.CompressedValue
 import redis.mock.InMemoryGetSet
 import redis.persist.LocalPersist
 import redis.persist.Mock
-import redis.reply.AsyncReply
-import redis.reply.ErrorReply
-import redis.reply.IntegerReply
-import redis.reply.NilReply
+import redis.reply.*
 import spock.lang.Specification
 
 import java.time.Duration
@@ -60,45 +57,65 @@ class EGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        def data2 = new byte[2][]
-        data2[1] = 'a'.bytes
+        def data1 = new byte[1][]
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def eGroup = new EGroup('exists', data2, null)
+        def eGroup = new EGroup('exists', data1, null)
         eGroup.byPassGetSet = inMemoryGetSet
         eGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
-        eGroup.slotWithKeyHashListParsed = EGroup.parseSlots('exists', data2, eGroup.slotNumber)
+        eGroup.slotWithKeyHashListParsed = EGroup.parseSlots('exists', data1, eGroup.slotNumber)
 
         when:
-        eGroup.handle()
+        def reply = eGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
         eGroup.cmd = 'expire'
-        eGroup.handle()
-        eGroup.data = data2
-        eGroup.cmd = 'expireat'
-        eGroup.handle()
-        eGroup.cmd = 'expiretime'
-        eGroup.handle()
-        eGroup.cmd = 'echo'
-        eGroup.handle()
+        reply = eGroup.handle()
 
         then:
-        1 == 1
+        reply == ErrorReply.FORMAT
 
         when:
-        def data1 = new byte[1][]
-
-        eGroup.data = data1
-        eGroup.cmd = 'echo'
-        def r = eGroup.handle()
+        eGroup.cmd = 'expireat'
+        reply = eGroup.handle()
 
         then:
-        r == ErrorReply.FORMAT
+        reply == ErrorReply.FORMAT
+
+        when:
+        eGroup.cmd = 'expiretime'
+        reply = eGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        eGroup.cmd = 'echo'
+        reply = eGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
+
+        eGroup.data = data2
+        eGroup.cmd = 'echo'
+        reply = eGroup.handle()
+
+        then:
+        reply instanceof BulkReply
+        ((BulkReply) reply).raw == 'a'.bytes
 
         when:
         eGroup.cmd = 'zzz'
-        def reply = eGroup.handle()
+        reply = eGroup.handle()
 
         then:
         reply == NilReply.INSTANCE
@@ -121,18 +138,18 @@ class EGroupTest extends Specification {
         def data1 = new byte[1][]
         eGroup.data = data1
         eGroup.slotWithKeyHashListParsed = DGroup.parseSlots('exists', data1, eGroup.slotNumber)
-        def r = eGroup.exists()
+        def reply = eGroup.exists()
 
         then:
-        r == ErrorReply.FORMAT
+        reply == ErrorReply.FORMAT
 
         when:
         eGroup.data = data2
         eGroup.slotWithKeyHashListParsed = EGroup.parseSlots('exists', data2, eGroup.slotNumber)
-        r = eGroup.exists()
+        reply = eGroup.exists()
 
         then:
-        r == ErrorReply.KEY_TOO_LONG
+        reply == ErrorReply.KEY_TOO_LONG
 
         when:
         def cv = Mock.prepareCompressedValueList(1)[0]
@@ -140,19 +157,19 @@ class EGroupTest extends Specification {
 
         data2[1] = 'a'.bytes
         eGroup.slotWithKeyHashListParsed = EGroup.parseSlots('exists', data2, eGroup.slotNumber)
-        r = eGroup.exists()
+        reply = eGroup.exists()
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == 1
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
 
         when:
         inMemoryGetSet.remove(slot, 'a')
-        r = eGroup.exists()
+        reply = eGroup.exists()
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == 0
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 0
 
         when:
         def eventloop = Eventloop.builder()
@@ -181,12 +198,12 @@ class EGroupTest extends Specification {
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.put(slot, 'b', 0, cv)
 
-        r = eGroup.exists()
+        reply = eGroup.exists()
         eventloopCurrent.run()
 
         then:
-        r instanceof AsyncReply
-        ((AsyncReply) r).settablePromise.whenResult { result ->
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
             result instanceof IntegerReply && ((IntegerReply) result).integer == 1
         }.result
 
@@ -207,10 +224,10 @@ class EGroupTest extends Specification {
         eGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
 
         when:
-        def r = eGroup.expire(true, true)
+        def reply = eGroup.expire(true, true)
 
         then:
-        r == ErrorReply.FORMAT
+        reply == ErrorReply.FORMAT
 
         when:
         def data3 = new byte[3][]
@@ -218,50 +235,50 @@ class EGroupTest extends Specification {
         data3[2] = (System.currentTimeMillis() + 1000 * 60).toString().bytes
 
         eGroup.data = data3
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
         // not exists
-        r == IntegerReply.REPLY_0
+        reply == IntegerReply.REPLY_0
 
         when:
         // not valid integer
         data3[2] = 'a'.bytes
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == ErrorReply.NOT_INTEGER
+        reply == ErrorReply.NOT_INTEGER
 
         when:
         def cv = Mock.prepareCompressedValueList(1)[0]
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
         data3[2] = (System.currentTimeMillis() + 1000 * 60).toString().bytes
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
 
         when:
         data3[2] = (1000 * 60).toString().bytes
-        r = eGroup.expire(false, true)
+        reply = eGroup.expire(false, true)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
 
         when:
         data3[2] = ((System.currentTimeMillis() / 1000).intValue() + 60).toString().bytes
-        r = eGroup.expire(true, false)
+        reply = eGroup.expire(true, false)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
 
         when:
         data3[2] = 60.toString().bytes
-        r = eGroup.expire(false, false)
+        reply = eGroup.expire(false, false)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
 
         when:
         def data4 = new byte[4][]
@@ -270,19 +287,19 @@ class EGroupTest extends Specification {
         data4[3] = 'nx'.bytes
 
         eGroup.data = data4
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_0
+        reply == IntegerReply.REPLY_0
 
         when:
         cv.expireAt = CompressedValue.NO_EXPIRE
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
 
         when:
         data4[2] = (System.currentTimeMillis() + 1000 * 60).toString().bytes
@@ -291,10 +308,10 @@ class EGroupTest extends Specification {
         cv.expireAt = CompressedValue.NO_EXPIRE
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_0
+        reply == IntegerReply.REPLY_0
 
         when:
         data4[2] = (System.currentTimeMillis() + 1000 * 60).toString().bytes
@@ -303,10 +320,10 @@ class EGroupTest extends Specification {
         cv.expireAt = System.currentTimeMillis() + 1000 * 60
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
 
         when:
         data4[2] = (System.currentTimeMillis() + 1000 * 60 + 1000).toString().bytes
@@ -315,10 +332,10 @@ class EGroupTest extends Specification {
         cv.expireAt = System.currentTimeMillis() + 1000 * 60
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
 
         when:
         data4[2] = (System.currentTimeMillis() + 1000 * 60 - 1000).toString().bytes
@@ -327,19 +344,19 @@ class EGroupTest extends Specification {
         cv.expireAt = System.currentTimeMillis() + 1000 * 60
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_0
+        reply == IntegerReply.REPLY_0
 
         when:
         cv.expireAt = CompressedValue.NO_EXPIRE
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
 
         when:
         data4[2] = (System.currentTimeMillis() + 1000 * 60 - 1000).toString().bytes
@@ -348,10 +365,10 @@ class EGroupTest extends Specification {
         cv.expireAt = System.currentTimeMillis() + 1000 * 60
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
 
         when:
         data4[2] = (System.currentTimeMillis() + 1000 * 60 + 1000).toString().bytes
@@ -360,19 +377,19 @@ class EGroupTest extends Specification {
         cv.expireAt = System.currentTimeMillis() + 1000 * 60
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_0
+        reply == IntegerReply.REPLY_0
 
         when:
         cv.expireAt = CompressedValue.NO_EXPIRE
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expire(true, true)
+        reply = eGroup.expire(true, true)
 
         then:
-        r == IntegerReply.REPLY_1
+        reply == IntegerReply.REPLY_1
     }
 
     def 'test expiretime'() {
@@ -392,10 +409,10 @@ class EGroupTest extends Specification {
         def data1 = new byte[1][]
         eGroup.data = data1
         eGroup.slotWithKeyHashListParsed = DGroup.parseSlots('expiretime', data1, eGroup.slotNumber)
-        def r = eGroup.expiretime(true)
+        def reply = eGroup.expiretime(true)
 
         then:
-        r == ErrorReply.FORMAT
+        reply == ErrorReply.FORMAT
 
         when:
         eGroup.data = data2
@@ -405,36 +422,36 @@ class EGroupTest extends Specification {
         cv.expireAt = CompressedValue.NO_EXPIRE
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expiretime(true)
+        reply = eGroup.expiretime(true)
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == -1
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == -1
 
         when:
         cv.expireAt = System.currentTimeMillis() + 1000 * 60
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = eGroup.expiretime(true)
+        reply = eGroup.expiretime(true)
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == cv.expireAt
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == cv.expireAt
 
         when:
-        r = eGroup.expiretime(false)
+        reply = eGroup.expiretime(false)
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == (cv.expireAt / 1000).intValue()
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == (cv.expireAt / 1000).intValue()
 
         when:
         inMemoryGetSet.remove(slot, 'a')
 
-        r = eGroup.expiretime(true)
+        reply = eGroup.expiretime(true)
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == -2
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == -2
     }
 }

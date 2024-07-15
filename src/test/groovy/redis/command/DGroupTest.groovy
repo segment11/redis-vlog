@@ -5,7 +5,6 @@ import redis.BaseCommand
 import redis.CompressedValue
 import redis.mock.InMemoryGetSet
 import redis.persist.LocalPersist
-import redis.persist.LocalPersistTest
 import redis.persist.Mock
 import redis.reply.*
 import spock.lang.Specification
@@ -57,37 +56,53 @@ class DGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        def data2 = new byte[2][]
-        data2[1] = 'a'.bytes
+        def data1 = new byte[1][]
 
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def dGroup = new DGroup('del', data2, null)
+        def dGroup = new DGroup('del', data1, null)
         dGroup.byPassGetSet = inMemoryGetSet
         dGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data2, dGroup.slotNumber)
+        when:
+        def reply = dGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
 
         when:
-        dGroup.handle()
+        def data2 = new byte[2][]
+        data2[1] = 'a'.bytes
+
+        dGroup.data = data2
         dGroup.cmd = 'dbsize'
-        dGroup.handle()
+        reply = dGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        dGroup.data = data1
+        dGroup.cmd = 'decr'
+        reply = dGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        dGroup.cmd = 'decrby'
+        reply = dGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
         dGroup.data = data2
         dGroup.cmd = 'decr'
-        dGroup.handle()
-        dGroup.cmd = 'decrby'
-        dGroup.handle()
+        reply = dGroup.handle()
 
         then:
-        1 == 1
-
-        when:
-        dGroup.data = new byte[1][]
-        dGroup.cmd = 'decr'
-        def r = dGroup.handle()
-
-        then:
-        r == ErrorReply.FORMAT
+        reply == ErrorReply.NOT_INTEGER
 
         when:
         def data3 = new byte[3][]
@@ -95,10 +110,10 @@ class DGroupTest extends Specification {
         data3[2] = 'b'.bytes
         dGroup.data = data3
         dGroup.cmd = 'decrby'
-        r = dGroup.handle()
+        reply = dGroup.handle()
 
         then:
-        r == ErrorReply.NOT_INTEGER
+        reply == ErrorReply.NOT_INTEGER
 
         when:
         // decrby
@@ -107,15 +122,15 @@ class DGroupTest extends Specification {
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data3, dGroup.slotNumber)
 
         dGroup.setNumber('n'.bytes, 0, dGroup.slotWithKeyHashListParsed.getFirst())
-        r = dGroup.handle()
+        reply = dGroup.handle()
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == -1
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == -1
 
         when:
         dGroup.cmd = 'zzz'
-        def reply = dGroup.handle()
+        reply = dGroup.handle()
 
         then:
         reply == NilReply.INSTANCE
@@ -138,18 +153,18 @@ class DGroupTest extends Specification {
         def data1 = new byte[1][]
         dGroup.data = data1
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data1, dGroup.slotNumber)
-        def r = dGroup.del()
+        def reply = dGroup.del()
 
         then:
-        r == ErrorReply.FORMAT
+        reply == ErrorReply.FORMAT
 
         when:
         dGroup.data = data2
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data2, dGroup.slotNumber)
-        r = dGroup.del()
+        reply = dGroup.del()
 
         then:
-        r == ErrorReply.KEY_TOO_LONG
+        reply == ErrorReply.KEY_TOO_LONG
 
         when:
         def cv = Mock.prepareCompressedValueList(1)[0]
@@ -157,18 +172,18 @@ class DGroupTest extends Specification {
 
         data2[1] = 'a'.bytes
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('del', data2, dGroup.slotNumber)
-        r = dGroup.handle()
+        reply = dGroup.handle()
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == 1
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
 
         when:
-        r = dGroup.handle()
+        reply = dGroup.handle()
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == 0
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 0
 
         when:
         def eventloop = Eventloop.builder()
@@ -197,12 +212,12 @@ class DGroupTest extends Specification {
 
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.put(slot, 'b', 0, cv)
-        r = dGroup.del()
+        reply = dGroup.del()
         eventloopCurrent.run()
 
         then:
-        r instanceof AsyncReply
-        ((AsyncReply) r).settablePromise.whenResult { result ->
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
             result instanceof IntegerReply && ((IntegerReply) result).integer == 1
         }.result
 
@@ -236,12 +251,12 @@ class DGroupTest extends Specification {
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
 
-        def r = dGroup.dbsize()
+        def reply = dGroup.dbsize()
         eventloopCurrent.run()
 
         then:
-        r instanceof AsyncReply
-        ((AsyncReply) r).settablePromise.whenResult { result ->
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
             result instanceof IntegerReply && ((IntegerReply) result).integer == 0
         }.result
 
@@ -272,48 +287,48 @@ class DGroupTest extends Specification {
         cv.compressedLength = 1
 
         inMemoryGetSet.put(slot, 'a', 0, cv)
-        def r = dGroup.decrBy(1, 0)
+        def reply = dGroup.decrBy(1, 0)
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == -1
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == -1
 
         when:
         data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data2, dGroup.slotNumber)
 
-        r = dGroup.decrBy(1, 0)
+        reply = dGroup.decrBy(1, 0)
 
         then:
-        r == ErrorReply.KEY_TOO_LONG
+        reply == ErrorReply.KEY_TOO_LONG
 
         when:
         data2[1] = 'a'.bytes
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data2, dGroup.slotNumber)
         inMemoryGetSet.remove(slot, 'a')
 
-        r = dGroup.decrBy(1, 0)
+        reply = dGroup.decrBy(1, 0)
 
         then:
-        r == ErrorReply.NOT_INTEGER
+        reply == ErrorReply.NOT_INTEGER
 
         when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH_COMPRESSED
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = dGroup.decrBy(1, 0)
+        reply = dGroup.decrBy(1, 0)
 
         then:
-        r == ErrorReply.NOT_INTEGER
+        reply == ErrorReply.NOT_INTEGER
 
         when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SHORT_STRING
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = dGroup.decrBy(1, 0)
+        reply = dGroup.decrBy(1, 0)
 
         then:
-        r == ErrorReply.NOT_INTEGER
+        reply == ErrorReply.NOT_INTEGER
 
         when:
         cv.compressedLength = 4
@@ -321,11 +336,11 @@ class DGroupTest extends Specification {
 
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = dGroup.decrBy(1, 0)
+        reply = dGroup.decrBy(1, 0)
 
         then:
-        r instanceof IntegerReply
-        ((IntegerReply) r).integer == 1233
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1233
 
         when:
         // float
@@ -337,11 +352,11 @@ class DGroupTest extends Specification {
 
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = dGroup.decrBy(0, 1)
+        reply = dGroup.decrBy(0, 1)
 
         then:
-        r instanceof BulkReply
-        ((BulkReply) r).raw == '0.10'.bytes
+        reply instanceof BulkReply
+        ((BulkReply) reply).raw == '0.10'.bytes
 
         when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SHORT_STRING
@@ -350,10 +365,10 @@ class DGroupTest extends Specification {
 
         inMemoryGetSet.put(slot, 'a', 0, cv)
 
-        r = dGroup.decrBy(0, 1)
+        reply = dGroup.decrBy(0, 1)
 
         then:
-        r instanceof BulkReply
-        ((BulkReply) r).raw == '0.10'.bytes
+        reply instanceof BulkReply
+        ((BulkReply) reply).raw == '0.10'.bytes
     }
 }

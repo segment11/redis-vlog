@@ -47,18 +47,28 @@ class CGroupTest extends Specification {
         cGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        cGroup.handle()
+        def reply = cGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
         cGroup.cmd = 'config'
-        cGroup.handle()
-        cGroup.cmd = 'copy'
         cGroup.handle()
 
         then:
-        1 == 1
+        reply == ErrorReply.FORMAT
+
+        when:
+        cGroup.cmd = 'copy'
+        reply = cGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
 
         when:
         cGroup.cmd = 'zzz'
-        def reply = cGroup.handle()
+        reply = cGroup.handle()
 
         then:
         reply == NilReply.INSTANCE
@@ -66,42 +76,31 @@ class CGroupTest extends Specification {
 
     def 'test client'() {
         given:
-        def data1 = new byte[1][]
+        def data2 = new byte[2][]
+        data2[1] = 'id'.bytes
 
         def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
                 new InetSocketAddress('localhost', 46379), null)
 
-        def cGroup = new CGroup('client', data1, socket)
+        def cGroup = new CGroup('client', data2, socket)
         cGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        def reply = cGroup.handle()
-
-        then:
-        reply == ErrorReply.FORMAT
-
-        when:
-        def data2 = new byte[2][]
-        data2[1] = 'id'.bytes
-        cGroup.data = data2
-
-        reply = cGroup.handle()
+        def reply = cGroup.client()
 
         then:
         reply instanceof IntegerReply
 
         when:
         data2[1] = 'setinfo'.bytes
-
-        reply = cGroup.handle()
+        reply = cGroup.client()
 
         then:
         reply == OKReply.INSTANCE
 
         when:
         data2[1] = 'zzz'.bytes
-
-        reply = cGroup.handle()
+        reply = cGroup.client()
 
         then:
         reply == NilReply.INSTANCE

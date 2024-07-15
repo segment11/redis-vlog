@@ -3,7 +3,6 @@ package redis.command
 import redis.BaseCommand
 import redis.mock.InMemoryGetSet
 import redis.reply.ErrorReply
-import redis.reply.IntegerReply
 import redis.reply.NilReply
 import spock.lang.Specification
 
@@ -38,27 +37,20 @@ class AGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        def data3 = new byte[3][]
+        def data1 = new byte[1][]
 
-        def inMemoryGetSet = new InMemoryGetSet()
-
-        def aGroup1 = new AGroup('append', data3, null)
-        aGroup1.byPassGetSet = inMemoryGetSet
-        aGroup1.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        def aGroup = new AGroup('append', data1, null)
+        aGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
-        data3[1] = 'a'.bytes
-        data3[2] = '123'.bytes
-
-        def reply = aGroup1.handle()
+        def reply = aGroup.handle()
 
         then:
-        reply instanceof IntegerReply
+        reply == ErrorReply.FORMAT
 
         when:
-        def aGroupNotCmdMatch = new AGroup('appendx', data3, null)
-
-        reply = aGroupNotCmdMatch.handle()
+        aGroup.cmd = 'zzz'
+        reply = aGroup.handle()
 
         then:
         reply == NilReply.INSTANCE

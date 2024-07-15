@@ -82,12 +82,12 @@ class FGroupTest extends Specification {
                 .build()
 
         when:
-        def r = fGroup.flushdb()
+        def reply = fGroup.flushdb()
         eventloopCurrent.run()
 
         then:
-        r instanceof AsyncReply
-        ((AsyncReply) r).settablePromise.whenResult { result ->
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
             result == OKReply.INSTANCE
         }.result
 
