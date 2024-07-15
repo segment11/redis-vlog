@@ -567,11 +567,7 @@ public class SGroup extends BaseCommand {
             }
         }
 
-        var encodedBytes = rhk.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_SET_COMPRESSED : CompressedValue.SP_TYPE_SET;
-
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        setByKeyBytes(rhk, keyBytes, slotWithKeyHash);
         return new IntegerReply(added);
     }
 
@@ -770,25 +766,27 @@ public class SGroup extends BaseCommand {
             list.add(new SlotWithKeyHashWithKeyBytes(slotWithKeyHash, data[i]));
         }
 
-        var first = list.getFirst();
-        var rhk = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
-        if (rhk == null) {
-            removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-            return IntegerReply.REPLY_0;
-        }
-        if (rhk.size() == 0) {
-            if (isInter) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                return IntegerReply.REPLY_0;
-            }
-            if (!isUnion) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                return IntegerReply.REPLY_0;
-            }
-        }
-
-        var set = rhk.getSet();
         if (!isCrossRequestWorker) {
+            // first key may be in other thread eventloop
+            var first = list.getFirst();
+            var rhk = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
+            if (rhk == null) {
+                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                return IntegerReply.REPLY_0;
+            }
+            if (rhk.size() == 0) {
+                if (isInter) {
+                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                    return IntegerReply.REPLY_0;
+                }
+                if (!isUnion) {
+                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                    return IntegerReply.REPLY_0;
+                }
+            }
+
+            var set = rhk.getSet();
+
             ArrayList<RedisHashKeys> otherRhkList = new ArrayList<>(list.size() - 1);
             for (int i = 1; i < list.size(); i++) {
                 var other = list.get(i);
@@ -806,8 +804,8 @@ public class SGroup extends BaseCommand {
             return new IntegerReply(set.size());
         }
 
-        ArrayList<Promise<RedisHashKeys>> promises = new ArrayList<>(list.size() - 1);
-        for (int i = 1; i < list.size(); i++) {
+        ArrayList<Promise<RedisHashKeys>> promises = new ArrayList<>(list.size());
+        for (int i = 0; i < list.size(); i++) {
             var other = list.get(i);
             var otherSlotWithKeyHash = other.slotWithKeyHash();
             var otherKeyBytes = other.keyBytes();
@@ -827,6 +825,27 @@ public class SGroup extends BaseCommand {
                 finalPromise.setException(e);
                 return;
             }
+
+            var rhk = promises.getFirst().getResult();
+            if (rhk == null) {
+                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                finalPromise.set(IntegerReply.REPLY_0);
+                return;
+            }
+            if (rhk.size() == 0) {
+                if (isInter) {
+                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                    finalPromise.set(IntegerReply.REPLY_0);
+                    return;
+                }
+                if (!isUnion) {
+                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                    finalPromise.set(IntegerReply.REPLY_0);
+                    return;
+                }
+            }
+
+            var set = rhk.getSet();
 
             ArrayList<RedisHashKeys> otherRhkList = new ArrayList<>(list.size() - 1);
             for (var promise : promises) {
