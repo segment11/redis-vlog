@@ -60,7 +60,7 @@ public class LocalPersist {
 
     public void addOneSlotForTest(byte slot, Eventloop eventloop) {
         var oneSlot = new OneSlot(slot, eventloop);
-        oneSlot.threadIdProtectedWhenPut = eventloop.getEventloopThread().threadId();
+        oneSlot.threadIdProtectedForSafe = eventloop.getEventloopThread().threadId();
         this.oneSlots = new OneSlot[slot + 1];
         this.oneSlots[slot] = oneSlot;
     }
@@ -87,7 +87,7 @@ public class LocalPersist {
     }
 
     public void fixSlotThreadId(byte slot, long threadId) {
-        oneSlots[slot].threadIdProtectedWhenPut = threadId;
+        oneSlots[slot].threadIdProtectedForSafe = threadId;
         log.warn("Fix slot thread id, s={}, tid={}", slot, threadId);
     }
 

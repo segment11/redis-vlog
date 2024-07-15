@@ -327,7 +327,7 @@ public class OneSlot {
 
     public Promise<Void> asyncRun(RunnableEx runnableEx) {
         var threadId = Thread.currentThread().getId();
-        if (threadId == threadIdProtectedWhenPut) {
+        if (threadId == threadIdProtectedForSafe) {
             try {
                 runnableEx.run();
                 return Promise.complete();
@@ -341,7 +341,7 @@ public class OneSlot {
 
     public <T> Promise<T> asyncCall(SupplierEx<T> supplierEx) {
         var threadId = Thread.currentThread().getId();
-        if (threadId == threadIdProtectedWhenPut) {
+        if (threadId == threadIdProtectedForSafe) {
             try {
                 return Promise.of(supplierEx.get());
             } catch (Exception e) {
@@ -601,7 +601,16 @@ public class OneSlot {
         });
     }
 
+    private void checkCurrentThreadId() {
+        var threadId = Thread.currentThread().getId();
+        if (threadId != threadIdProtectedForSafe) {
+            throw new IllegalStateException("Thread id not match, thread id: " + threadId + ", thread id protected for safe: " + threadIdProtectedForSafe);
+        }
+    }
+
     public Long getExpireAt(byte[] keyBytes, int bucketIndex, long keyHash) {
+        checkCurrentThreadId();
+
         var key = new String(keyBytes);
         var cvEncodedFromWal = getFromWal(key, bucketIndex);
         if (cvEncodedFromWal != null) {
@@ -638,6 +647,8 @@ public class OneSlot {
     }
 
     public BufOrCompressedValue get(byte[] keyBytes, int bucketIndex, long keyHash) {
+        checkCurrentThreadId();
+
         var key = new String(keyBytes);
         var cvEncodedFromWal = getFromWal(key, bucketIndex);
         if (cvEncodedFromWal != null) {
@@ -705,6 +716,8 @@ public class OneSlot {
     }
 
     byte[] getFromWal(String key, int bucketIndex) {
+        checkCurrentThreadId();
+
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
         var targetWal = walArray[walGroupIndex];
         return targetWal.get(key);
@@ -746,6 +759,8 @@ public class OneSlot {
     }
 
     public boolean remove(String key, int bucketIndex, long keyHash) {
+        checkCurrentThreadId();
+
         var isRemovedFromWal = removeFromWal(bucketIndex, key, keyHash);
         if (isRemovedFromWal) {
             return true;
@@ -761,6 +776,8 @@ public class OneSlot {
     }
 
     public void removeDelay(String key, int bucketIndex, long keyHash) {
+        checkCurrentThreadId();
+
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
         var targetWal = walArray[walGroupIndex];
         var putResult = targetWal.removeDelay(key, bucketIndex, keyHash);
@@ -785,6 +802,8 @@ public class OneSlot {
     }
 
     public boolean exists(String key, int bucketIndex, long keyHash) {
+        checkCurrentThreadId();
+
         var cvEncodedFromWal = getFromWal(key, bucketIndex);
         if (cvEncodedFromWal != null) {
             // write batch kv is the newest
@@ -802,7 +821,7 @@ public class OneSlot {
         return true;
     }
 
-    long threadIdProtectedWhenPut = -1;
+    long threadIdProtectedForSafe = -1;
 
     public void put(String key, int bucketIndex, CompressedValue cv) {
         put(key, bucketIndex, cv, false);
@@ -810,10 +829,7 @@ public class OneSlot {
 
     // thread safe, same slot, same event loop
     public void put(String key, int bucketIndex, CompressedValue cv, boolean isFromMerge) {
-        var threadId = Thread.currentThread().getId();
-        if (threadId != threadIdProtectedWhenPut) {
-            throw new IllegalStateException("Thread id not match, thread id: " + threadId + ", thread id protected: " + threadIdProtectedWhenPut);
-        }
+        checkCurrentThreadId();
 
         if (isReadonly()) {
             throw new ReadonlyException();
@@ -890,6 +906,8 @@ public class OneSlot {
     }
 
     public void asSlaveOnMasterWalAppendBatchGet(TreeMap<Integer, ArrayList<XGroup.ExtV>> extVsGroupByWalGroupIndex) {
+        checkCurrentThreadId();
+
         for (var entry : extVsGroupByWalGroupIndex.entrySet()) {
             var walGroupIndex = entry.getKey();
             var extVs = entry.getValue();
@@ -929,6 +947,8 @@ public class OneSlot {
     }
 
     public ToMasterExistsSegmentMeta.OncePull removeOncePull(int beginSegmentIndex) {
+        checkCurrentThreadId();
+
         if (oncePulls == null) {
             return null;
         }
@@ -954,6 +974,8 @@ public class OneSlot {
     }
 
     public void flush() {
+        checkCurrentThreadId();
+
         // can truncate all batch for better perf, todo
         for (var wal : walArray) {
             wal.clear();
@@ -1028,6 +1050,8 @@ public class OneSlot {
     }
 
     public void writeSegmentsFromMasterExists(int segmentIndex, int segmentCount, List<Long> segmentSeqList, int walGroupIndex, byte[] bytes) {
+        checkCurrentThreadId();
+
         if (bytes.length != chunk.chunkSegmentLength * segmentCount) {
             throw new IllegalStateException("Bytes length not match, bytes length: " + bytes.length +
                     ", chunk segment length: " + chunk.chunkSegmentLength + ", segment count: " + segmentCount);
@@ -1037,14 +1061,20 @@ public class OneSlot {
     }
 
     byte[] preadForMerge(int segmentIndex, int segmentCount) {
+        checkCurrentThreadId();
+
         return chunk.preadForMerge(segmentIndex, segmentCount);
     }
 
     public byte[] preadForRepl(int segmentIndex) {
+        checkCurrentThreadId();
+
         return chunk.preadForRepl(segmentIndex);
     }
 
     public void cleanUp() {
+        checkCurrentThreadId();
+
         // close wal raf
         try {
             raf.close();
@@ -1341,6 +1371,8 @@ public class OneSlot {
     }
 
     public List<Long> getSegmentMergeFlagListBatchForRepl(int segmentIndex, int segmentCount) {
+        checkCurrentThreadId();
+
         if (segmentIndex < 0 || segmentIndex + segmentCount > chunk.maxSegmentIndex) {
             throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
         }
