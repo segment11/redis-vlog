@@ -610,14 +610,20 @@ sunionstore
         ((IntegerReply) reply).integer == 2
 
         when:
+        boolean wrongTypeException = false
+
         def cv = Mock.prepareCompressedValueList(1)[0]
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
 
         inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = sGroup.sadd()
+        try {
+            reply = sGroup.sadd()
+        } catch (IllegalStateException e) {
+            wrongTypeException = true
+        }
 
         then:
-        reply == ErrorReply.WRONG_TYPE
+        wrongTypeException
 
         when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
@@ -761,15 +767,21 @@ sunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
+        boolean wrongTypeException = false
+
         def cvList = Mock.prepareCompressedValueList(2)
         def cvA = cvList[0]
         cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
 
         inMemoryGetSet.put(slot, 'a', 0, cvA)
-        reply = sGroup.sdiff(false, false)
+        try {
+            reply = sGroup.sdiff(false, false)
+        } catch (IllegalStateException e) {
+            wrongTypeException = true
+        }
 
         then:
-        reply == MultiBulkReply.EMPTY
+        wrongTypeException
 
         when:
         cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
@@ -959,15 +971,21 @@ sunionstore
         reply == IntegerReply.REPLY_0
 
         when:
+        boolean wrongTypeException = false
+
         def cvList = Mock.prepareCompressedValueList(2)
         def cvA = cvList[0]
         cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
 
         inMemoryGetSet.put(slot, 'a', 0, cvA)
-        reply = sGroup.sdiffstore(false, false)
+        try {
+            reply = sGroup.sdiffstore(false, false)
+        } catch (IllegalStateException e) {
+            wrongTypeException = true
+        }
 
         then:
-        reply == IntegerReply.REPLY_0
+        wrongTypeException
 
         when:
         cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_SET

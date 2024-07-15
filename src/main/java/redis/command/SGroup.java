@@ -548,13 +548,10 @@ public class SGroup extends BaseCommand {
 
         // use RedisHashKeys to store set
         var slotWithKeyHash = slotPreferParsed(keyBytes);
-        var setCv = getCv(keyBytes, slotWithKeyHash);
-        if (setCv != null && !setCv.isSet()) {
-            return ErrorReply.WRONG_TYPE;
+        var rhk = getByKeyBytes(keyBytes, slotWithKeyHash);
+        if (rhk == null) {
+            rhk = new RedisHashKeys();
         }
-
-        var setValueBytes = setCv != null ? getValueBytesByCv(setCv) : null;
-        var rhk = setValueBytes == null ? new RedisHashKeys() : RedisHashKeys.decode(setValueBytes);
 
         int added = 0;
         for (var memberBytes : memberBytesArr) {
@@ -603,8 +600,9 @@ public class SGroup extends BaseCommand {
         }
         if (!setCv.isSet()) {
             // throw exception ?
-            log.warn("Key {} is not set type", new String(keyBytes));
-            return null;
+            var key = new String(keyBytes);
+            log.warn("Key {} is not set type", key);
+            throw new IllegalStateException("Key is not set type: " + key);
         }
 
         var setValueBytes = getValueBytesByCv(setCv);
