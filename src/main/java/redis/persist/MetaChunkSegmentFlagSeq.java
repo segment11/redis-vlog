@@ -4,6 +4,7 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.StaticMemoryPrepareBytesStats;
 
 import java.io.File;
 import java.io.IOException;
@@ -96,6 +97,10 @@ public class MetaChunkSegmentFlagSeq {
         }
 
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
+
+        var initMemoryMB = allCapacity / 1024 / 1024;
+        log.info("Static memory init, type: {}, MB: {}, slot: {}", StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq, initMemoryMB, slot);
+        StaticMemoryPrepareBytesStats.add(StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq, initMemoryMB, true);
     }
 
     interface IterateCallBack {
@@ -189,11 +194,17 @@ public class MetaChunkSegmentFlagSeq {
             begin = halfSegmentNumber;
             end = ConfForSlot.global.confChunk.maxSegmentNumber();
         }
+        log.info("Get merged segment index end last time, current segment index: {}, half segment number: {}, begin: {}, end: {}, slot: {}",
+                currentSegmentIndex, halfSegmentNumber, begin, end, slot);
 
+        boolean isAllFlagInitHalf = true;
         for (int segmentIndex = begin; segmentIndex < end; segmentIndex++) {
             var offset = segmentIndex * ONE_LENGTH;
 
             var flag = inMemoryCachedByteBuffer.get(offset);
+            if (flag != SEGMENT_FLAG_INIT) {
+                isAllFlagInitHalf = false;
+            }
             if (flag == SEGMENT_FLAG_MERGED || flag == SEGMENT_FLAG_MERGED_AND_PERSISTED || flag == SEGMENT_FLAG_INIT) {
                 max = segmentIndex;
             } else {
@@ -201,6 +212,9 @@ public class MetaChunkSegmentFlagSeq {
             }
         }
 
+        if (isAllFlagInitHalf) {
+            max = NO_NEED_MERGE_SEGMENT_INDEX;
+        }
         return max;
     }
 
