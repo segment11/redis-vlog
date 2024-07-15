@@ -57,6 +57,7 @@ public class ChunkMergeWorker {
                 maybeOneMergedCvBytesLength,
                 lruMemoryRequireMB,
                 slot);
+        log.info("LRU prepare, type: {}, MB: {}, slot: {}", LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer, lruMemoryRequireMB, slot);
         LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer, lruMemoryRequireMB, false);
     }
 

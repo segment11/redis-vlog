@@ -47,6 +47,7 @@ public class BigStringFiles {
                 maybeOneBigStringBytesLength,
                 lruMemoryRequireMB,
                 slot);
+        log.info("LRU prepare, type: {}, MB: {}, slot: {}", LRUPrepareBytesStats.Type.big_string, lruMemoryRequireMB, slot);
         LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.big_string, lruMemoryRequireMB, false);
 
         this.bigStringBytesByUuidLRU = new LRUMap<>(maxSize);

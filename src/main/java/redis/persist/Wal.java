@@ -1,5 +1,6 @@
 package redis.persist;
 
+import org.apache.lucene.util.RamUsageEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
@@ -106,6 +107,8 @@ public class Wal {
     record PutResult(boolean needPersist, boolean isValueShort, V needPutV, int offset) {
     }
 
+    long initMemoryN = 0;
+
     public Wal(byte slot, int groupIndex, RandomAccessFile walSharedFile, RandomAccessFile walSharedFileShortValue,
                SnowFlake snowFlake) throws IOException {
         this.slot = slot;
@@ -114,17 +117,19 @@ public class Wal {
         this.walSharedFileShortValue = walSharedFileShortValue;
         this.snowFlake = snowFlake;
 
-        this.delayToKeyBucketValues = new HashMap<>(ConfForSlot.global.confWal.valueSizeTrigger);
-        this.delayToKeyBucketShortValues = new HashMap<>(ConfForSlot.global.confWal.shortValueSizeTrigger);
+        this.delayToKeyBucketValues = new HashMap<>();
+        this.delayToKeyBucketShortValues = new HashMap<>();
 
         if (!ConfForSlot.global.pureMemory) {
             var n1 = readWal(walSharedFile, delayToKeyBucketValues, false);
             var n2 = readWal(walSharedFileShortValue, delayToKeyBucketShortValues, true);
+            initMemoryN += RamUsageEstimator.shallowSizeOf(delayToKeyBucketValues);
+            initMemoryN += RamUsageEstimator.shallowSizeOf(delayToKeyBucketShortValues);
 
             // reduce log
             if (slot == 0 && groupIndex == 0) {
-                log.info("Read wal file success, slot: {}, group index: {}, value size: {}, short value size: {}",
-                        slot, groupIndex, n1, n2);
+                log.info("Read wal file success, slot: {}, group index: {}, value size: {}, short value size: {}, init memory n: {}KB",
+                        slot, groupIndex, n1, n2, initMemoryN / 1024);
             }
         }
     }
@@ -172,7 +177,7 @@ public class Wal {
         return bucketIndex / ConfForSlot.global.confWal.oneChargeBucketNumber;
     }
 
-    static int calcWalGroupNumber() {
+    public static int calcWalGroupNumber() {
         return ConfForSlot.global.confBucket.bucketsPerSlot / ConfForSlot.global.confWal.oneChargeBucketNumber;
     }
 

@@ -176,6 +176,7 @@ public class FdReadWrite {
             var lruMemoryRequireMB = 1L * maxSize * oneInnerLength / 1024 / 1024;
             log.info("Chunk lru max size for one chunk fd: {}, one inner length: {}, memory require: {}MB, name: {}",
                     maxSize, oneInnerLength, lruMemoryRequireMB, name);
+            log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_chunk_data, lruMemoryRequireMB, name);
             LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, (int) lruMemoryRequireMB, true);
 
             if (maxSize > 0) {
@@ -190,6 +191,7 @@ public class FdReadWrite {
             var lruMemoryRequireMB = 1L * maxSize * oneInnerLength / 1024 / 1024 * compressRatio;
             log.info("Key bucket lru max size for one key bucket fd: {}, one inner length: {}， compress ratio maybe: {}, memory require: {}MB, name: {}",
                     maxSize, oneInnerLength, compressRatio, lruMemoryRequireMB, name);
+            log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_key_bucket, lruMemoryRequireMB, name);
             LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, (int) lruMemoryRequireMB, false);
 
             if (maxSize > 0) {

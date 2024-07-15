@@ -216,10 +216,10 @@ public enum ConfForSlot {
     }
 
     public enum ConfWal {
-        debugMode(32, 1000, 1000),
-        c1m(32, 1000, 1000),
-        c10m(32, 1000, 1000),
-        c100m(32, 1000, 1000);
+        debugMode(32, 500, 500),
+        c1m(32, 500, 500),
+        c10m(32, 500, 500),
+        c100m(32, 500, 500);
 
         ConfWal(int oneChargeBucketNumber, int valueSizeTrigger, int shortValueSizeTrigger) {
             this.oneChargeBucketNumber = oneChargeBucketNumber;
@@ -257,6 +257,13 @@ public enum ConfForSlot {
                 Wal.ONE_GROUP_BUFFER_SIZE = oneGroupBufferSize;
                 Wal.EMPTY_BYTES_FOR_ONE_GROUP = new byte[Wal.ONE_GROUP_BUFFER_SIZE];
                 Wal.GROUP_COUNT_IN_M4 = 4 * 1024 * 1024 / Wal.ONE_GROUP_BUFFER_SIZE;
+
+                int groupNumber = Wal.calcWalGroupNumber();
+                var sum = oneGroupBufferSize * groupNumber / 1024;
+                // wal init m4
+                sum += 4;
+
+                StaticMemoryPrepareBytesStats.add(StaticMemoryPrepareBytesStats.Type.wal_cache, sum, false);
             }
             Wal.doLogAfterInit();
         }
@@ -268,7 +275,7 @@ public enum ConfForSlot {
             }
 
             if (estimateOneValueLength <= 500) {
-                this.valueSizeTrigger = 500;
+                this.valueSizeTrigger = 200;
                 resetWalStaticValues(PAGE_SIZE * oneChargeBucketNumber / 2);
                 return;
             }
