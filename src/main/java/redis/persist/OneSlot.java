@@ -384,6 +384,14 @@ public class OneSlot {
 
     private final Map<Integer, LRUMap<String, byte[]>> kvByWalGroupIndexLRU = new HashMap<>();
 
+    private int kvByWalGroupIndexCountTotal() {
+        int n = 0;
+        for (var lru : kvByWalGroupIndexLRU.values()) {
+            n += lru.size();
+        }
+        return n;
+    }
+
     private int lruClearedCount = 0;
 
     void clearKvLRUByWalGroupIndex(int walGroupIndex) {
@@ -1566,6 +1574,7 @@ public class OneSlot {
                 map.put("kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
                 map.put("kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
                 map.put("kv_lru_hit_rate", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal / hitMissTotal, labelValues));
+                map.put("kv_lru_current_count_total", new SimpleGauge.ValueWithLabelValues((double) kvByWalGroupIndexCountTotal(), labelValues));
             }
 
             if (kvLRUHitTotal > 0) {
