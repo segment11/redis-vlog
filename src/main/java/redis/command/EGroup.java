@@ -193,7 +193,7 @@ public class EGroup extends BaseCommand {
             isLt = "lt".equalsIgnoreCase(type);
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         // if nx xx gt lt, need not read cv, just read expire at from key bucket, todo
         var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
@@ -227,7 +227,8 @@ public class EGroup extends BaseCommand {
         }
 
         var keyBytes = data[1];
-        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return new IntegerReply(-2);
         }

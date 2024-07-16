@@ -46,12 +46,11 @@ public class AGroup extends BaseCommand {
         }
 
         var keyBytes = data[1];
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-
         var valueBytes = data[2];
 
         int length;
 
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var existsValueBytes = get(keyBytes, slotWithKeyHash);
         if (existsValueBytes == null) {
             set(keyBytes, valueBytes, slotWithKeyHash);

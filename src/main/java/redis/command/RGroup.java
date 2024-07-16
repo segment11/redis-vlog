@@ -217,7 +217,7 @@ public class RGroup extends BaseCommand {
             }
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         // check if key exists
         replace = true;
         if (!replace) {

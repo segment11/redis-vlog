@@ -96,24 +96,5 @@ class BaseCommandTest extends Specification {
         !c.isCrossRequestWorker
 
         c.handle() == null
-
-        when:
-        def s1 = c.slot('key1'.bytes)
-        def s11 = c.slotPreferParsed('key11'.bytes, 0)
-
-        c.slotWithKeyHashListParsed = null
-        s11 = c.slotPreferParsed('key11'.bytes, 0)
-
-        c.slotWithKeyHashListParsed = [s1]
-        def s111 = c.slotPreferParsed('key11'.bytes, 0)
-        def s1111 = c.slotPreferParsed('key11'.bytes, 1)
-        def s2 = c.slotPreferParsed('key11'.bytes)
-
-        then:
-        s1.slot == 0
-        s11.slot == 0
-        s111.slot == 0
-        s1111.slot == 0
-        s2.slot == 0
     }
 }

@@ -92,7 +92,8 @@ public class CGroup extends BaseCommand {
             }
         }
 
-        var srcCv = getCv(srcKeyBytes, slotWithKeyHashListParsed.getFirst());
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var srcCv = getCv(srcKeyBytes, slotWithKeyHash);
         if (srcCv == null) {
             return IntegerReply.REPLY_0;
         }

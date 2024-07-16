@@ -62,7 +62,8 @@ public class TGroup extends BaseCommand {
         }
 
         // need not decompress at all, todo: optimize
-        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             // hash keys changed
             var keysKey = RedisHashKeys.keysKey(new String(keyBytes));
@@ -102,7 +103,8 @@ public class TGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var expireAt = getExpireAt(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var expireAt = getExpireAt(keyBytes, slotWithKeyHash);
         if (expireAt == null) {
             return new IntegerReply(-2);
         }

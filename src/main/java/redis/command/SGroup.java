@@ -395,7 +395,7 @@ public class SGroup extends BaseCommand {
             }
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
 
         CompressedValue cv = null;
         if (isReturnExist || isNx || isXx || isKeepTtl) {
@@ -463,7 +463,7 @@ public class SGroup extends BaseCommand {
             return ErrorReply.INVALID_INTEGER;
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
 
         int lengthResult = 0;
         var valueBytesExist = get(keyBytes, slotWithKeyHash);
@@ -501,7 +501,8 @@ public class SGroup extends BaseCommand {
         }
 
         var keyBytes = data[1];
-        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return IntegerReply.REPLY_0;
         }
@@ -547,7 +548,7 @@ public class SGroup extends BaseCommand {
         }
 
         // use RedisHashKeys to store set
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhk = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rhk == null) {
             rhk = new RedisHashKeys();
@@ -578,7 +579,7 @@ public class SGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var setCv = getCv(keyBytes, slotWithKeyHash);
         if (setCv == null) {
             return IntegerReply.REPLY_0;
@@ -755,10 +756,11 @@ public class SGroup extends BaseCommand {
         if (dstKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
             return ErrorReply.KEY_TOO_LONG;
         }
-        var dstSlotWithKeyHash = slotPreferParsed(dstKeyBytes);
+        var dstSlotWithKeyHash = slotWithKeyHashListParsed.getFirst();
 
         ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 2);
         // begin from 2
+        // j = 1 -> dst key bytes is 0
         for (int i = 2, j = 1; i < data.length; i++, j++) {
             var keyBytes = data[i];
             if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
@@ -1001,7 +1003,8 @@ public class SGroup extends BaseCommand {
             return ErrorReply.SET_MEMBER_LENGTH_TO_LONG;
         }
 
-        var rhk = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var rhk = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rhk == null) {
             return IntegerReply.REPLY_0;
         }
@@ -1020,7 +1023,8 @@ public class SGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var rhk = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var rhk = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rhk == null) {
             return MultiBulkReply.EMPTY;
         }
@@ -1057,7 +1061,8 @@ public class SGroup extends BaseCommand {
             memberBytesArr[i - 2] = memberBytes;
         }
 
-        var rhk = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var rhk = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rhk == null) {
             return MultiBulkReply.EMPTY;
         }
@@ -1160,8 +1165,7 @@ public class SGroup extends BaseCommand {
             }
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhk = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rhk == null) {
             return hasCount ? MultiBulkReply.EMPTY : NilReply.INSTANCE;
@@ -1254,8 +1258,7 @@ public class SGroup extends BaseCommand {
             memberBytesArr[i - 2] = memberBytes;
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhk = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rhk == null) {
             return IntegerReply.REPLY_0;

@@ -61,13 +61,10 @@ public class GGroup extends BaseCommand {
         }
 
         var keyBytes = data[1];
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-        var slot = slotWithKeyHash.slot();
-        var key = new String(keyBytes);
-
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var valueBytes = get(keyBytes, slotWithKeyHash);
         if (valueBytes != null) {
-            removeDelay(slot, slotWithKeyHash.bucketIndex(), key, slotWithKeyHash.keyHash());
+            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
             return new BulkReply(valueBytes);
         } else {
             return NilReply.INSTANCE;
@@ -125,7 +122,7 @@ public class GGroup extends BaseCommand {
             return ErrorReply.FORMAT;
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return NilReply.INSTANCE;
@@ -174,7 +171,8 @@ public class GGroup extends BaseCommand {
             return ErrorReply.NOT_INTEGER;
         }
 
-        var valueBytes = get(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var valueBytes = get(keyBytes, slotWithKeyHash);
         if (valueBytes == null) {
             return NilReply.INSTANCE;
         }
@@ -217,8 +215,7 @@ public class GGroup extends BaseCommand {
         var keyBytes = data[1];
         var valueBytes = data[2];
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         // not only for type string, other types will be overwritten
         var valueBytesExist = get(keyBytes, slotWithKeyHash);
         if (valueBytesExist == null) {

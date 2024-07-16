@@ -961,7 +961,7 @@ public class ZGroup extends BaseCommand {
         if (dstKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
             return ErrorReply.KEY_TOO_LONG;
         }
-        var dstSlotWithKeyHash = slotPreferParsed(dstKeyBytes);
+        var dstSlotWithKeyHash = slotWithKeyHashListParsed.getFirst();
 
         var numKeysBytes = data[2];
         int numKeys;
@@ -1458,7 +1458,8 @@ public class ZGroup extends BaseCommand {
             hasCount = true;
         }
 
-        var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rz == null || rz.isEmpty()) {
             return hasCount ? MultiBulkReply.EMPTY : NilReply.INSTANCE;
         }
@@ -1936,7 +1937,8 @@ public class ZGroup extends BaseCommand {
 
         boolean withScores = "withscores".equalsIgnoreCase(new String(data[data.length - 1]));
 
-        var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rz == null) {
             return NilReply.INSTANCE;
         }
@@ -1964,7 +1966,7 @@ public class ZGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
-    private Reply zrem() {
+    Reply zrem() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
         }
@@ -1983,9 +1985,7 @@ public class ZGroup extends BaseCommand {
             memberBytesArr[i] = memberBytes;
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-        var slot = slotWithKeyHash.slot();
-
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rz == null) {
             return IntegerReply.REPLY_0;
@@ -2002,18 +2002,10 @@ public class ZGroup extends BaseCommand {
             }
         }
 
-        if (rz.isEmpty()) {
-            // remove key
-            var oneSlot = localPersist.oneSlot(slot);
-            oneSlot.removeDelay(new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
-        } else {
-            var encodedBytes = rz.encode();
-            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-            var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
-
-            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        if (removedCount > 0) {
+            setByKeyBytes(rz, keyBytes, slotWithKeyHash);
         }
-        return new IntegerReply(removedCount);
+        return removedCount == 0 ? IntegerReply.REPLY_0 : new IntegerReply(removedCount);
     }
 
     private Reply zremrangebyscore(boolean byScore, boolean byLex, boolean byRank) {
@@ -2123,9 +2115,7 @@ public class ZGroup extends BaseCommand {
             }
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-        var slot = slotWithKeyHash.slot();
-
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rz == null) {
             return IntegerReply.REPLY_0;
@@ -2188,23 +2178,13 @@ public class ZGroup extends BaseCommand {
         }
 
         if (removed > 0) {
-            if (rz.isEmpty()) {
-                // remove key
-                var oneSlot = localPersist.oneSlot(slot);
-                oneSlot.removeDelay(new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
-            } else {
-                var encodedBytes = rz.encode();
-                var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-                var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
-
-                set(keyBytes, encodedBytes, slotWithKeyHash, spType);
-            }
+            setByKeyBytes(rz, keyBytes, slotWithKeyHash);
         }
 
-        return new IntegerReply(removed);
+        return removed == 0 ? IntegerReply.REPLY_0 : new IntegerReply(removed);
     }
 
-    private Reply zscore() {
+    Reply zscore() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
         }
@@ -2219,7 +2199,8 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.ZSET_MEMBER_LENGTH_TO_LONG;
         }
 
-        var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
         if (rz == null) {
             return NilReply.INSTANCE;
         }

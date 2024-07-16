@@ -135,7 +135,8 @@ public class LGroup extends BaseCommand {
             return ErrorReply.LIST_SIZE_TO_LONG;
         }
 
-        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             // -1 or nil ? todo
             return NilReply.INSTANCE;
@@ -162,7 +163,7 @@ public class LGroup extends BaseCommand {
 
     private Reply addToList(byte[] keyBytes, byte[][] valueBytesArr, boolean addFirst,
                             boolean considerBeforeOrAfter, boolean isBefore, byte[] pivotBytes, boolean needKeyExist) {
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var cv = getCv(keyBytes, slotWithKeyHash);
 
         // lpushx / rpushx
@@ -264,7 +265,8 @@ public class LGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return IntegerReply.REPLY_0;
         }
@@ -317,8 +319,8 @@ public class LGroup extends BaseCommand {
             return ErrorReply.SYNTAX;
         }
 
-        var srcSlotWithKeyHash = slotPreferParsed(srcKeyBytes);
-        var dstSlotWithKeyHash = slotPreferParsed(dstKeyBytes, 1);
+        var srcSlotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
 
         var rGroup = new RGroup(cmd, data, socket);
         rGroup.from(this);
@@ -350,7 +352,7 @@ public class LGroup extends BaseCommand {
             }
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return NilReply.INSTANCE;
@@ -459,7 +461,8 @@ public class LGroup extends BaseCommand {
             }
         }
 
-        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return NilReply.INSTANCE;
         }
@@ -577,7 +580,8 @@ public class LGroup extends BaseCommand {
             return ErrorReply.NOT_INTEGER;
         }
 
-        var cv = getCv(keyBytes, slotPreferParsed(keyBytes));
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return MultiBulkReply.EMPTY;
         }
@@ -641,7 +645,7 @@ public class LGroup extends BaseCommand {
             return ErrorReply.NOT_INTEGER;
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return IntegerReply.REPLY_0;
@@ -710,7 +714,7 @@ public class LGroup extends BaseCommand {
             return ErrorReply.LIST_SIZE_TO_LONG;
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return ErrorReply.NO_SUCH_KEY;
@@ -768,10 +772,7 @@ public class LGroup extends BaseCommand {
             return ErrorReply.NOT_INTEGER;
         }
 
-        var key = new String(keyBytes);
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-        var slot = slotWithKeyHash.slot();
-
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             // ErrorReply.NO_SUCH_KEY
@@ -802,9 +803,7 @@ public class LGroup extends BaseCommand {
         }
 
         if (start > size || start > stop) {
-            var bucketIndex = slotWithKeyHash.bucketIndex();
-            var keyHash = slotWithKeyHash.keyHash();
-            removeDelay(slot, bucketIndex, key, keyHash);
+            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
             return OKReply.INSTANCE;
         }
 

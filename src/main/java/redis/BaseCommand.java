@@ -2,6 +2,7 @@ package redis;
 
 import com.github.luben.zstd.Zstd;
 import io.activej.net.socket.tcp.ITcpSocket;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.command.AGroup;
@@ -254,17 +255,6 @@ public abstract class BaseCommand {
         return slot(keyBytes, slotNumber);
     }
 
-    protected SlotWithKeyHash slotPreferParsed(byte[] keyBytes, int index) {
-        if (slotWithKeyHashListParsed != null && index < slotWithKeyHashListParsed.size()) {
-            return slotWithKeyHashListParsed.get(index);
-        }
-        return slot(keyBytes, slotNumber);
-    }
-
-    protected SlotWithKeyHash slotPreferParsed(byte[] keyBytes) {
-        return slotPreferParsed(keyBytes, 0);
-    }
-
     // for mock test
     private ByPassGetSet byPassGetSet;
 
@@ -272,17 +262,15 @@ public abstract class BaseCommand {
         this.byPassGetSet = byPassGetSet;
     }
 
-    public Long getExpireAt(byte[] keyBytes, SlotWithKeyHash slotWithKeyHashReuse) {
+    public Long getExpireAt(byte[] keyBytes, @NotNull SlotWithKeyHash slotWithKeyHash) {
         if (byPassGetSet != null) {
-            var cv = getCv(keyBytes, slotWithKeyHashReuse);
+            var cv = getCv(keyBytes, slotWithKeyHash);
             if (cv == null) {
                 return null;
             }
             return cv.expireAt;
         } else {
-            var slotWithKeyHash = slotWithKeyHashReuse != null ? slotWithKeyHashReuse : slot(keyBytes);
             var slot = slotWithKeyHash.slot();
-
             var oneSlot = localPersist.oneSlot(slot);
             return oneSlot.getExpireAt(keyBytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash);
         }

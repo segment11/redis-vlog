@@ -369,7 +369,8 @@ public class MGroup extends BaseCommand {
             }
 
             var keyBytes = data[3];
-            var valueBytes = get(keyBytes, slotPreferParsed(keyBytes));
+            var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+            var valueBytes = get(keyBytes, slotWithKeyHash);
             if (valueBytes == null) {
                 return NilReply.INSTANCE;
             }

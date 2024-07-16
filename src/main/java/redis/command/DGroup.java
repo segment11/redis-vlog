@@ -201,11 +201,10 @@ public class DGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
-
         boolean isByFloat = byFloat != 0;
         final var NOT_NUMBER_REPLY = isByFloat ? ErrorReply.NOT_FLOAT : ErrorReply.NOT_INTEGER;
 
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var cv = getCv(keyBytes, slotWithKeyHash);
         if (cv == null) {
             return NOT_NUMBER_REPLY;
