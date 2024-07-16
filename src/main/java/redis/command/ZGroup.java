@@ -171,7 +171,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zrangebylex".equals(cmd)) {
-            if (data.length < 4) {
+            if (data.length != 4 && data.length != 7) {
                 return ErrorReply.FORMAT;
             }
 
@@ -325,10 +325,6 @@ public class ZGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    private RedisZSet getByKeyBytes(byte[] keyBytes) {
-        return getByKeyBytes(keyBytes, null);
-    }
-
     private RedisZSet getByKeyBytes(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
         var zsetCv = getCv(keyBytes, slotWithKeyHash);
         if (zsetCv == null) {
@@ -358,13 +354,6 @@ public class ZGroup extends BaseCommand {
     }
 
     private record Member(double score, String e) {
-        @Override
-        public String toString() {
-            return "Member{" +
-                    "score=" + score +
-                    ", e='" + e + '\'' +
-                    '}';
-        }
     }
 
     Reply zadd() {
@@ -630,10 +619,7 @@ public class ZGroup extends BaseCommand {
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
-        if (rz == null) {
-            return IntegerReply.REPLY_0;
-        }
-        if (rz.isEmpty()) {
+        if (rz == null || rz.isEmpty()) {
             return IntegerReply.REPLY_0;
         }
 
@@ -859,7 +845,7 @@ public class ZGroup extends BaseCommand {
 
         var first = list.getFirst();
         var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
-        if (rz == null || rz.size() == 0) {
+        if (rz == null || rz.isEmpty()) {
             if (isInter) {
                 return MultiBulkReply.EMPTY;
             }
@@ -1053,7 +1039,7 @@ public class ZGroup extends BaseCommand {
             // first key may be in other thread eventloop
             var first = list.getFirst();
             var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
-            if (rz == null || rz.size() == 0) {
+            if (rz == null || rz.isEmpty()) {
                 if (isInter) {
                     removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
                     return IntegerReply.REPLY_0;
@@ -1108,7 +1094,7 @@ public class ZGroup extends BaseCommand {
             }
 
             var rz = promises.getFirst().getResult();
-            if (rz == null || rz.size() == 0) {
+            if (rz == null || rz.isEmpty()) {
                 if (isInter) {
                     removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
                     finalPromise.set(IntegerReply.REPLY_0);
@@ -1236,7 +1222,7 @@ public class ZGroup extends BaseCommand {
 
         var first = list.getFirst();
         var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
-        if (rz == null || rz.size() == 0) {
+        if (rz == null || rz.isEmpty()) {
             return IntegerReply.REPLY_0;
         }
 
@@ -1612,10 +1598,10 @@ public class ZGroup extends BaseCommand {
 
             int compareMinMax = minLex.compareTo(maxLex);
             if (compareMinMax > 0 && !isReverse) {
-                return IntegerReply.REPLY_0;
+                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
             if (compareMinMax < 0 && isReverse) {
-                return IntegerReply.REPLY_0;
+                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
 
             if (minBytes[0] == '(') {
@@ -1920,7 +1906,7 @@ public class ZGroup extends BaseCommand {
         }
     }
 
-    private Reply zrank(boolean isReverse) {
+    Reply zrank(boolean isReverse) {
         if (data.length != 3 && data.length != 4) {
             return ErrorReply.FORMAT;
         }
@@ -1935,20 +1921,17 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.ZSET_MEMBER_LENGTH_TO_LONG;
         }
 
-        boolean withScores = "withscores".equalsIgnoreCase(new String(data[data.length - 1]));
+        boolean withScore = "withscore".equalsIgnoreCase(new String(data[data.length - 1]));
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
-        if (rz == null) {
-            return NilReply.INSTANCE;
-        }
-        if (rz.isEmpty()) {
-            return NilReply.INSTANCE;
+        if (rz == null || rz.isEmpty()) {
+            return withScore ? MultiBulkReply.EMPTY : NilReply.INSTANCE;
         }
 
         var sv = rz.get(new String(memberBytes));
         if (sv == null) {
-            return NilReply.INSTANCE;
+            return withScore ? MultiBulkReply.EMPTY : NilReply.INSTANCE;
         }
 
         int rank = sv.getInitRank();
@@ -1956,7 +1939,7 @@ public class ZGroup extends BaseCommand {
             rank = rz.size() - rank - 1;
         }
 
-        if (!withScores) {
+        if (!withScore) {
             return new IntegerReply(rank);
         }
 
@@ -1987,10 +1970,7 @@ public class ZGroup extends BaseCommand {
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
-        if (rz == null) {
-            return IntegerReply.REPLY_0;
-        }
-        if (rz.isEmpty()) {
+        if (rz == null || rz.isEmpty()) {
             return IntegerReply.REPLY_0;
         }
 
@@ -2008,9 +1988,13 @@ public class ZGroup extends BaseCommand {
         return removedCount == 0 ? IntegerReply.REPLY_0 : new IntegerReply(removedCount);
     }
 
-    private Reply zremrangebyscore(boolean byScore, boolean byLex, boolean byRank) {
+    Reply zremrangebyscore(boolean byScore, boolean byLex, boolean byRank) {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
+        }
+
+        if (!byScore && !byLex && !byRank) {
+            return ErrorReply.SYNTAX;
         }
 
         var keyBytes = data[1];
@@ -2041,9 +2025,6 @@ public class ZGroup extends BaseCommand {
 
             int compareMinMax = minLex.compareTo(maxLex);
             if (compareMinMax > 0) {
-                return IntegerReply.REPLY_0;
-            }
-            if (compareMinMax < 0) {
                 return IntegerReply.REPLY_0;
             }
 
@@ -2117,11 +2098,24 @@ public class ZGroup extends BaseCommand {
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
-        if (rz == null) {
+        if (rz == null || rz.isEmpty()) {
             return IntegerReply.REPLY_0;
         }
-        if (rz.isEmpty()) {
-            return IntegerReply.REPLY_0;
+
+        if (byRank) {
+            if (start < 0) {
+                start = rz.size() + start;
+                if (start < 0) {
+                    start = 0;
+                }
+            }
+
+            if (stop < 0) {
+                stop = rz.size() + stop;
+                if (stop < 0) {
+                    return IntegerReply.REPLY_0;
+                }
+            }
         }
 
         int removed = 0;
@@ -2151,23 +2145,8 @@ public class ZGroup extends BaseCommand {
 
                 it.remove();
                 removed++;
-            } else if (byRank) {
+            } else {
                 int initRank = sv.getInitRank();
-
-                if (start < 0) {
-                    start = rz.size() + start;
-                    if (start < 0) {
-                        start = 0;
-                    }
-                }
-
-                if (stop < 0) {
-                    stop = rz.size() + stop;
-                    if (stop < 0) {
-                        return IntegerReply.REPLY_0;
-                    }
-                }
-
                 if (initRank < start || initRank > stop) {
                     continue;
                 }
@@ -2201,7 +2180,7 @@ public class ZGroup extends BaseCommand {
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
-        if (rz == null) {
+        if (rz == null || rz.isEmpty()) {
             return NilReply.INSTANCE;
         }
 

@@ -1060,6 +1060,14 @@ zunionstore
 
         then:
         reply == ErrorReply.SYNTAX
+
+        when:
+        def data5 = new byte[5][]
+        zGroup.data = data5
+        reply = zGroup.zrandmember()
+
+        then:
+        reply == ErrorReply.FORMAT
     }
 
     def 'test zrange'() {
@@ -1321,6 +1329,718 @@ zunionstore
         when:
         data10[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = zGroup.zrange(data10)
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+    }
+
+    def 'test zrangebylex'() {
+        given:
+        final byte slot = 0
+
+        def data7 = new byte[7][]
+        data7[1] = 'a'.bytes
+        data7[2] = '(1'.bytes
+        data7[3] = '(4'.bytes
+        data7[4] = 'limit'.bytes
+        data7[5] = '0'.bytes
+        data7[6] = '0'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zrangebylex', data7, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrangebylex', data7, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.handle()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = '(1'.bytes
+        data4[3] = '(4'.bytes
+        zGroup.data = data4
+        reply = zGroup.handle()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        def data5 = new byte[5][]
+        zGroup.data = data5
+        reply = zGroup.handle()
+
+        then:
+        reply == ErrorReply.FORMAT
+    }
+
+    def 'test zrangebyscore'() {
+        given:
+        final byte slot = 0
+
+        def data7 = new byte[7][]
+        data7[1] = 'a'.bytes
+        data7[2] = '(1'.bytes
+        data7[3] = '(4'.bytes
+        data7[4] = 'limit'.bytes
+        data7[5] = '0'.bytes
+        data7[6] = '0'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zrangebyscore', data7, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrangebyscore', data7, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.handle()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = '(1'.bytes
+        data4[3] = '(4'.bytes
+        zGroup.data = data4
+        reply = zGroup.handle()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+    }
+
+    def 'test zrangestore'() {
+        given:
+        final byte slot = 0
+
+        def data8 = new byte[8][]
+        data8[1] = 'dst'.bytes
+        data8[2] = 'a'.bytes
+        data8[3] = '1'.bytes
+        data8[4] = '4'.bytes
+        data8[5] = 'limit'.bytes
+        data8[6] = '0'.bytes
+        data8[7] = '0'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zrangestore', data8, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrangestore', data8, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.handle()
+
+        then:
+        reply == IntegerReply.REPLY_0
+    }
+
+    def 'test zrevrange'() {
+        given:
+        final byte slot = 0
+
+        def data5 = new byte[5][]
+        data5[1] = 'a'.bytes
+        data5[2] = '1'.bytes
+        data5[3] = '4'.bytes
+        data5[4] = 'withscores'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zrevrange', data5, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrevrange', data5, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.handle()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+    }
+
+    def 'test zrevrangebylex'() {
+        given:
+        final byte slot = 0
+
+        def data7 = new byte[7][]
+        data7[1] = 'a'.bytes
+        data7[2] = '(1'.bytes
+        data7[3] = '(4'.bytes
+        data7[4] = 'limit'.bytes
+        data7[5] = '0'.bytes
+        data7[6] = '0'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zrevrangebylex', data7, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrevrangebylex', data7, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.handle()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+    }
+
+    def 'test zrevrangebyscore'() {
+        given:
+        final byte slot = 0
+
+        def data7 = new byte[7][]
+        data7[1] = 'a'.bytes
+        data7[2] = '(1'.bytes
+        data7[3] = '(4'.bytes
+        data7[4] = 'limit'.bytes
+        data7[5] = '0'.bytes
+        data7[6] = '0'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zrevrangebyscore', data7, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrevrangebyscore', data7, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.handle()
+
+        then:
+        reply == MultiBulkReply.EMPTY
+    }
+
+    def 'test zrank'() {
+        given:
+        final byte slot = 0
+
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'member0'.bytes
+        data4[3] = 'withscore_'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zrank', data4, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrank', data4, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.zrank(false)
+
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        data4[3] = 'withscore'.bytes
+        reply = zGroup.zrank(false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        data4[3] = 'withscore_'.bytes
+
+        def cv = Mock.prepareCompressedValueList(1)[0]
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
+
+        def rz = new RedisZSet()
+        cv.compressedData = rz.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zrank(false)
+
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        data4[3] = 'withscore'.bytes
+        reply = zGroup.zrank(false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        data4[3] = 'withscore_'.bytes
+
+        rz.add(0.1, 'member0')
+        cv.compressedData = rz.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zrank(false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 0
+
+        when:
+        reply = zGroup.zrank(true)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 0
+
+        when:
+        data4[3] = 'withscore'.bytes
+        reply = zGroup.zrank(false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+        ((MultiBulkReply) reply).replies[0] instanceof IntegerReply
+        ((IntegerReply) ((MultiBulkReply) reply).replies[0]).integer == 0
+        ((MultiBulkReply) reply).replies[1] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == '0.1'.bytes
+
+        when:
+        data4[2] = 'member1'.bytes
+        data4[3] = 'withscore_'.bytes
+
+        reply = zGroup.zrank(false)
+
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        data4[3] = 'withscore'.bytes
+        reply = zGroup.zrank(false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        data4[2] = new byte[RedisZSet.ZSET_MEMBER_MAX_LENGTH + 1]
+        reply = zGroup.zrank(false)
+
+        then:
+        reply == ErrorReply.ZSET_MEMBER_LENGTH_TO_LONG
+
+        when:
+        data4[2] = 'member0'.bytes
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = zGroup.zrank(false)
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+    }
+
+    def 'test zrem'() {
+        given:
+        final byte slot = 0
+
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'member0'.bytes
+        data4[3] = 'member1'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zrem', data4, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrem', data4, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.zrem()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cv = Mock.prepareCompressedValueList(1)[0]
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
+
+        def rz = new RedisZSet()
+        cv.compressedData = rz.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zrem()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        rz.add(0.1, 'member0')
+        rz.add(0.2, 'member1')
+        rz.add(0.3, 'member2')
+        cv.compressedData = rz.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zrem()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        reply = zGroup.zrem()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data4[2] = new byte[RedisZSet.ZSET_MEMBER_MAX_LENGTH + 1]
+        reply = zGroup.zrem()
+
+        then:
+        reply == ErrorReply.ZSET_MEMBER_LENGTH_TO_LONG
+
+        when:
+        data4[2] = 'member0'.bytes
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = zGroup.zrem()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+    }
+
+    def 'test zremrangebyscore'() {
+        given:
+        final byte slot = 0
+
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = '(1'.bytes
+        data4[3] = '(4'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zremrangebyscore', data4, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zremrangebyscore', data4, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        reply = zGroup.zremrangebyscore(false, true, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data4[2] = '1'.bytes
+        data4[3] = '4'.bytes
+        reply = zGroup.zremrangebyscore(false, false, true)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cv = Mock.prepareCompressedValueList(1)[0]
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
+
+        def rz = new RedisZSet()
+        cv.compressedData = rz.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data4[2] = '(member1'.bytes
+        data4[3] = '(member4'.bytes
+        reply = zGroup.zremrangebyscore(false, true, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data4[2] = '1'.bytes
+        data4[3] = '4'.bytes
+        reply = zGroup.zremrangebyscore(false, false, true)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        10.times {
+            rz.add(it as double, 'member' + it)
+        }
+        cv.compressedData = rz.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        data4[2] = '(1'.bytes
+        data4[3] = '(4'.bytes
+        reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        data4[2] = '[1'.bytes
+        data4[3] = '[4'.bytes
+
+        // reset 10 members
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 4
+
+        when:
+        data4[2] = '[4'.bytes
+        data4[3] = '[1'.bytes
+        reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        // remove again
+        reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data4[2] = '[a'.bytes
+        reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply == ErrorReply.NOT_FLOAT
+
+        when:
+        data4[2] = '[1'.bytes
+        data4[3] = '[a'.bytes
+        reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply == ErrorReply.NOT_FLOAT
+
+        when:
+        data4[2] = '-inf'.bytes
+        data4[3] = '+inf'.bytes
+
+        // reset 10 members
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 10
+
+        // by rank
+        when:
+        data4[2] = '1'.bytes
+        data4[3] = '4'.bytes
+
+        // reset 10 members
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zremrangebyscore(false, false, true)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 4
+
+        when:
+        data4[2] = '-3'.bytes
+        data4[3] = '-1'.bytes
+
+        // reset 10 members
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zremrangebyscore(false, false, true)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 3
+
+        when:
+        data4[2] = '-11'.bytes
+        data4[3] = '-1'.bytes
+
+        // reset 10 members
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zremrangebyscore(false, false, true)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 10
+
+        when:
+        data4[3] = '-11'.bytes
+
+        // reset 10 members
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zremrangebyscore(false, false, true)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data4[2] = 'a'.bytes
+        reply = zGroup.zremrangebyscore(false, false, true)
+
+        then:
+        reply == ErrorReply.NOT_INTEGER
+
+        when:
+        data4[2] = '1'.bytes
+        data4[3] = 'a'.bytes
+        reply = zGroup.zremrangebyscore(false, false, true)
+
+        then:
+        reply == ErrorReply.NOT_INTEGER
+
+        when:
+        data4[2] = '(member1'.bytes
+        data4[3] = '(member4'.bytes
+
+        // reset 10 members
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zremrangebyscore(false, true, false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        data4[2] = '[member1'.bytes
+        data4[3] = '[member4'.bytes
+
+        // reset 10 members
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zremrangebyscore(false, true, false)
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 4
+
+        when:
+        // remove again
+        reply = zGroup.zremrangebyscore(false, true, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data4[2] = 'member0'.bytes
+        reply = zGroup.zremrangebyscore(false, true, false)
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data4[2] = '(member0'.bytes
+        data4[3] = 'member4'.bytes
+        reply = zGroup.zremrangebyscore(false, true, false)
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data4[2] = '(member4'.bytes
+        data4[3] = '(member0'.bytes
+        reply = zGroup.zremrangebyscore(false, true, false)
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = zGroup.zremrangebyscore(true, false, false)
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+
+        when:
+        reply = zGroup.zremrangebyscore(false, false, false)
+
+        then:
+        reply == ErrorReply.SYNTAX
+    }
+
+    def 'test zscore'() {
+        given:
+        final byte slot = 0
+
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'member0'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zscore', data3, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zscore', data3, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.zscore()
+
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        def cv = Mock.prepareCompressedValueList(1)[0]
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
+
+        def rz = new RedisZSet()
+        cv.compressedData = rz.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zscore()
+
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        rz.add(0.1, 'member0')
+        cv.compressedData = rz.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cv)
+        reply = zGroup.zscore()
+
+        then:
+        reply instanceof BulkReply
+        ((BulkReply) reply).raw == '0.1'.bytes
+
+        when:
+        data3[2] = 'member1'.bytes
+        reply = zGroup.zscore()
+
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        data3[2] = new byte[RedisZSet.ZSET_MEMBER_MAX_LENGTH + 1]
+        reply = zGroup.zscore()
+
+        then:
+        reply == ErrorReply.ZSET_MEMBER_LENGTH_TO_LONG
+
+        when:
+        data3[2] = 'member0'.bytes
+        data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = zGroup.zscore()
 
         then:
         reply == ErrorReply.KEY_TOO_LONG
