@@ -610,6 +610,11 @@ public class SGroup extends BaseCommand {
     }
 
     private void setByKeyBytes(RedisHashKeys rhk, byte[] dstKeyBytes, SlotWithKeyHash dstSlotWithKeyHash) {
+        if (rhk.size() == 0) {
+            removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+            return;
+        }
+
         var encodedBytes = rhk.encode();
         var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
         var spType = needCompress ? CompressedValue.SP_TYPE_SET_COMPRESSED : CompressedValue.SP_TYPE_SET;
@@ -793,13 +798,8 @@ public class SGroup extends BaseCommand {
             }
             operateSet(set, otherRhkList, isInter, isUnion);
 
-            if (set.isEmpty()) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                return IntegerReply.REPLY_0;
-            }
-
             setByKeyBytes(rhk, dstKeyBytes, dstSlotWithKeyHash);
-            return new IntegerReply(set.size());
+            return set.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(set.size());
         }
 
         ArrayList<Promise<RedisHashKeys>> promises = new ArrayList<>(list.size());
@@ -851,14 +851,8 @@ public class SGroup extends BaseCommand {
             }
             operateSet(set, otherRhkList, isInter, isUnion);
 
-            if (set.isEmpty()) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                finalPromise.set(IntegerReply.REPLY_0);
-                return;
-            }
-
             setByKeyBytes(rhk, dstKeyBytes, dstSlotWithKeyHash);
-            finalPromise.set(new IntegerReply(set.size()));
+            finalPromise.set(set.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(set.size()));
         });
 
         return asyncReply;
@@ -1113,12 +1107,7 @@ public class SGroup extends BaseCommand {
             return IntegerReply.REPLY_0;
         }
 
-        if (srcRhk.size() == 0) {
-            // remove key
-            removeDelay(srcSlotWithKeyHash.slot(), srcSlotWithKeyHash.bucketIndex(), new String(srcKeyBytes), srcSlotWithKeyHash.keyHash());
-        } else {
-            setByKeyBytes(srcRhk, srcKeyBytes, srcSlotWithKeyHash);
-        }
+        setByKeyBytes(srcRhk, srcKeyBytes, srcSlotWithKeyHash);
 
         if (!isCrossRequestWorker) {
             var dstRhk = getByKeyBytes(dstKeyBytes, dstSlotWithKeyHash);
@@ -1232,12 +1221,7 @@ public class SGroup extends BaseCommand {
         }
 
         if (doPop) {
-            if (set.isEmpty()) {
-                // remove key
-                removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
-            } else {
-                setByKeyBytes(rhk, keyBytes, slotWithKeyHash);
-            }
+            setByKeyBytes(rhk, keyBytes, slotWithKeyHash);
         }
 
         if (hasCount) {
@@ -1288,12 +1272,7 @@ public class SGroup extends BaseCommand {
             }
         }
 
-        if (rhk.size() == 0) {
-            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
-        } else {
-            setByKeyBytes(rhk, keyBytes, slotWithKeyHash);
-        }
-
+        setByKeyBytes(rhk, keyBytes, slotWithKeyHash);
         return new IntegerReply(removed);
     }
 }
