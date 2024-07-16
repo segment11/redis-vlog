@@ -98,15 +98,22 @@ public class RedisZSet {
 
     private static final double addFixed = 0.0000000000001;
 
-    public NavigableSet<ScoreValue> between(double min, boolean fromInclusive, double max, boolean toInclusive) {
-        if (min != Double.NEGATIVE_INFINITY) {
-            min -= addFixed;
-        }
-        if (max != Double.POSITIVE_INFINITY) {
-            max += addFixed;
-        }
+    public NavigableSet<ScoreValue> between(double min, boolean minInclusive, double max, boolean maxInclusive) {
+        double minFixed = min != Double.NEGATIVE_INFINITY ? min - addFixed : Double.NEGATIVE_INFINITY;
+        double maxFixed = max != Double.POSITIVE_INFINITY ? max + addFixed : Double.POSITIVE_INFINITY;
 
-        return set.subSet(new ScoreValue(min, ""), false, new ScoreValue(max, ""), false);
+        var subSet = set.subSet(new ScoreValue(minFixed, ""), false, new ScoreValue(maxFixed, ""), false);
+        var itTmp = subSet.iterator();
+        while (itTmp.hasNext()) {
+            var sv = itTmp.next();
+            if (sv.score() == min && !minInclusive) {
+                itTmp.remove();
+            }
+            if (sv.score() == max && !maxInclusive) {
+                itTmp.remove();
+            }
+        }
+        return subSet;
     }
 
     public ConcurrentNavigableMap<String, ScoreValue> betweenByMember(String min, boolean minInclusive, String max, boolean maxInclusive) {

@@ -13,7 +13,6 @@ import redis.type.RedisZSet;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
-import java.util.TreeSet;
 
 import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
@@ -66,7 +65,7 @@ public class ZGroup extends BaseCommand {
             var dstSlotWithKeyHash = slot(dstKeyBytes, slotNumber);
             slotWithKeyHashList.add(dstSlotWithKeyHash);
 
-            // include withscores never used
+            // include AGGREGATE or WEIGHTS never used
             for (int i = 3; i < data.length; i++) {
                 var keyBytes = data[i];
                 var slotWithKeyHash = slot(keyBytes, slotNumber);
@@ -86,6 +85,8 @@ public class ZGroup extends BaseCommand {
 
             var s1 = slot(srcKeyBytes, slotNumber);
             var s2 = slot(dstKeyBytes, slotNumber);
+            // add s1 first, important!!!
+            // so can reuse zrange method
             slotWithKeyHashList.add(s1);
             slotWithKeyHashList.add(s2);
             return slotWithKeyHashList;
@@ -126,7 +127,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zdiffstore".equals(cmd)) {
-            return zdiffstore();
+            return zdiffstore(false, false);
         }
 
         if ("zincrby".equals(cmd)) {
@@ -134,7 +135,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zinter".equals(cmd)) {
-            return zinter(data, false, null, false);
+            return zdiff(true, false);
         }
 
         if ("zintercard".equals(cmd)) {
@@ -142,21 +143,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zinterstore".equals(cmd)) {
-            if (data.length < 5) {
-                return ErrorReply.FORMAT;
-            }
-
-            var dd = new byte[data.length - 1][];
-            dd[0] = data[0];
-            dd[1] = data[2];
-            dd[2] = data[3];
-            dd[3] = data[4];
-
-            for (int i = 5; i < data.length; i++) {
-                dd[i - 1] = data[i];
-            }
-
-            return zinter(dd, true, data[1], false);
+            return zdiffstore(true, false);
         }
 
         if ("zlexcount".equals(cmd)) {
@@ -180,7 +167,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zrange".equals(cmd)) {
-            return zrange(data, false, null);
+            return zrange(data);
         }
 
         if ("zrangebylex".equals(cmd)) {
@@ -199,7 +186,7 @@ public class ZGroup extends BaseCommand {
                 dd[i + 1] = data[i];
             }
 
-            return zrange(dd, false, null);
+            return zrange(dd);
         }
 
         if ("zrangebyscore".equals(cmd)) {
@@ -218,7 +205,7 @@ public class ZGroup extends BaseCommand {
                 dd[i + 1] = data[i];
             }
 
-            return zrange(dd, false, null);
+            return zrange(dd);
         }
 
         if ("zrangestore".equals(cmd)) {
@@ -236,7 +223,8 @@ public class ZGroup extends BaseCommand {
                 dd[i - 1] = data[i];
             }
 
-            return zrange(dd, true, data[1]);
+            var dstKeyBytes = data[1];
+            return zrange(dd, dstKeyBytes);
         }
 
         if ("zrank".equals(cmd)) {
@@ -275,7 +263,7 @@ public class ZGroup extends BaseCommand {
                 dd[i + 1] = data[i];
             }
 
-            return zrange(dd, false, null);
+            return zrange(dd);
         }
 
         if ("zrevrangebylex".equals(cmd)) {
@@ -295,7 +283,7 @@ public class ZGroup extends BaseCommand {
                 dd[i + 2] = data[i];
             }
 
-            return zrange(dd, false, null);
+            return zrange(dd);
         }
 
         if ("zrevrangebyscore".equals(cmd)) {
@@ -315,7 +303,7 @@ public class ZGroup extends BaseCommand {
                 dd[i + 2] = data[i];
             }
 
-            return zrange(dd, false, null);
+            return zrange(dd);
         }
 
         if ("zrevrank".equals(cmd)) {
@@ -327,25 +315,11 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zunion".equals(cmd)) {
-            return zinter(data, false, null, true);
+            return zdiff(false, true);
         }
 
         if ("zunionstore".equals(cmd)) {
-            if (data.length < 5) {
-                return ErrorReply.FORMAT;
-            }
-
-            var dd = new byte[data.length - 1][];
-            dd[0] = data[0];
-            dd[1] = data[2];
-            dd[2] = data[3];
-            dd[3] = data[4];
-
-            for (int i = 5; i < data.length; i++) {
-                dd[i - 1] = data[i];
-            }
-
-            return zinter(dd, true, data[1], true);
+            return zdiff(false, true);
         }
 
         return NilReply.INSTANCE;
@@ -371,6 +345,11 @@ public class ZGroup extends BaseCommand {
     }
 
     private void setByKeyBytes(RedisZSet rz, byte[] dstKeyBytes, SlotWithKeyHash dstSlotWithKeyHash) {
+        if (rz.isEmpty()) {
+            removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+            return;
+        }
+
         var encodedBytes = rz.encode();
         var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
         var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
@@ -659,19 +638,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if (!byLex) {
-            var subSet = rz.between(min, false, max, false);
-            // remove min and max if not inclusive
-            var itTmp = subSet.iterator();
-            while (itTmp.hasNext()) {
-                var sv = itTmp.next();
-                if (sv.score() == min && !minInclusive) {
-                    itTmp.remove();
-                }
-                if (sv.score() == max && !maxInclusive) {
-                    itTmp.remove();
-                }
-            }
-
+            var subSet = rz.between(min, minInclusive, max, maxInclusive);
             return new IntegerReply(subSet.size());
         } else {
             var n = rz.betweenByMember(minLex, minInclusive, maxLex, maxInclusive).size();
@@ -679,37 +646,113 @@ public class ZGroup extends BaseCommand {
         }
     }
 
-    private void operateZset(RedisZSet zset, ArrayList<RedisZSet> otherRzList, boolean isInter, boolean isUnion) {
-        for (var otherRz : otherRzList) {
-            if (otherRz != null) {
-                var otherSet = otherRz.getSet();
-                if (isInter) {
-                    if (otherSet.isEmpty()) {
-                        zset.clear();
-                        break;
-                    }
-                    for (var otherSv : otherSet) {
-                        if (!zset.contains(otherSv.member())) {
-                            zset.remove(otherSv.member());
+    private void operateZset(RedisZSet rz, ArrayList<RedisZSet> otherRzList, boolean isInter, boolean isUnion,
+                             boolean isAggregateSum, boolean isAggregateMin, boolean isAggregateMax,
+                             boolean isWeights, double[] weights) {
+        if (isInter) {
+            int otherKeyIndex = 0;
+            outer:
+            for (var otherRz : otherRzList) {
+                if (otherRz == null || otherRz.isEmpty()) {
+                    rz.clear();
+                    break;
+                }
+
+                var memberMap = rz.getMemberMap();
+                var it = rz.getSet().iterator();
+                while (it.hasNext()) {
+                    var sv = it.next();
+                    var otherSv = otherRz.get(sv.member());
+                    if (otherSv == null) {
+                        it.remove();
+                        memberMap.remove(sv.member());
+
+                        if (memberMap.isEmpty()) {
+                            break outer;
                         }
+
+                        continue;
                     }
-                } else if (isUnion) {
-                    // todo
-                } else {
-                    // diff
-                    for (var otherSv : otherSet) {
-                        if (zset.contains(otherSv.member())) {
-                            zset.remove(otherSv.member());
+
+                    double memberScore = sv.score();
+                    if (!sv.isAlreadyWeighted) {
+                        if (isWeights) {
+                            memberScore *= weights[0];
+                        }
+                        sv.score(memberScore);
+                        sv.isAlreadyWeighted = true;
+                    }
+
+                    var otherMemberScore = isWeights ? weights[otherKeyIndex + 1] * otherSv.score() : otherSv.score();
+                    if (isAggregateSum) {
+                        sv.score(memberScore + otherMemberScore);
+                    } else if (isAggregateMin) {
+                        sv.score(Math.min(memberScore, otherMemberScore));
+                    } else if (isAggregateMax) {
+                        sv.score(Math.max(memberScore, otherMemberScore));
+                    }
+                }
+
+                otherKeyIndex++;
+            }
+        } else if (isUnion) {
+            int otherKeyIndex = 0;
+            for (var otherRz : otherRzList) {
+                if (otherRz == null || otherRz.isEmpty()) {
+                    otherKeyIndex++;
+                    continue;
+                }
+
+                for (var otherSv : otherRz.getSet()) {
+                    var sv = rz.get(otherSv.member());
+                    if (sv == null) {
+                        double memberScore = otherSv.score();
+                        if (isWeights) {
+                            memberScore *= weights[otherKeyIndex + 1];
+                        }
+
+                        rz.add(memberScore, otherSv.member(), true, true);
+                        if (rz.size() == RedisZSet.ZSET_MAX_SIZE) {
+                            throw new ErrorReplyException(ErrorReply.ZSET_SIZE_TO_LONG.getMessage());
+                        }
+                    } else {
+                        double memberScore = sv.score();
+                        if (!sv.isAlreadyWeighted) {
+                            if (isWeights) {
+                                memberScore *= weights[0];
+                            }
+                            sv.score(memberScore);
+                            sv.isAlreadyWeighted = true;
+                        }
+
+                        var otherMemberScore = isWeights ? weights[otherKeyIndex + 1] * otherSv.score() : otherSv.score();
+                        if (isAggregateSum) {
+                            sv.score(memberScore + otherMemberScore);
+                        } else if (isAggregateMin) {
+                            sv.score(Math.min(memberScore, otherMemberScore));
+                        } else if (isAggregateMax) {
+                            sv.score(Math.max(memberScore, otherMemberScore));
                         }
                     }
                 }
-                if (zset.isEmpty()) {
-                    break;
+
+                otherKeyIndex++;
+            }
+        } else {
+            // diff
+            outer:
+            for (var otherRz : otherRzList) {
+                if (otherRz == null || otherRz.isEmpty()) {
+                    continue;
                 }
-            } else {
-                if (isInter) {
-                    zset.clear();
-                    break;
+                for (var otherSv : otherRz.getSet()) {
+                    if (rz.contains(otherSv.member())) {
+                        rz.remove(otherSv.member());
+
+                        if (rz.isEmpty()) {
+                            break outer;
+                        }
+                    }
                 }
             }
         }
@@ -732,12 +775,76 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.SYNTAX;
         }
 
-        // withscores
-        if (data.length != numKeys + 2 && data.length != numKeys + 3) {
-            return ErrorReply.SYNTAX;
-        }
+        boolean isAggregateSum = true;
+        boolean isAggregateMin = false;
+        boolean isAggregateMax = false;
 
-        boolean withScores = "withscores".equalsIgnoreCase(new String(data[data.length - 1]));
+        boolean isWeights = false;
+        double[] weights = null;
+
+        boolean withScores = false;
+
+        if (isInter || isUnion) {
+            if (data.length < numKeys + 2) {
+                return ErrorReply.SYNTAX;
+            }
+
+            for (int i = 3 + numKeys - 1; i < data.length; i++) {
+                var tmpBytes = data[i];
+                var tmp = new String(tmpBytes).toLowerCase();
+
+                if ("aggregate".equals(tmp)) {
+                    if (i + 1 >= data.length) {
+                        return ErrorReply.SYNTAX;
+                    }
+                    var aggregateBytes = data[i + 1];
+                    var aggregate = new String(aggregateBytes).toLowerCase();
+                    if ("sum".equals(aggregate)) {
+                        isAggregateSum = true;
+                        isAggregateMin = false;
+                        isAggregateMax = false;
+                    } else if ("min".equals(aggregate)) {
+                        isAggregateSum = false;
+                        isAggregateMin = true;
+                        isAggregateMax = false;
+                    } else if ("max".equals(aggregate)) {
+                        isAggregateSum = false;
+                        isAggregateMin = false;
+                        isAggregateMax = true;
+                    } else {
+                        return ErrorReply.SYNTAX;
+                    }
+                    i++;
+                } else if ("weights".equals(tmp)) {
+                    isWeights = true;
+
+                    if (i + numKeys >= data.length) {
+                        return ErrorReply.SYNTAX;
+                    }
+
+                    weights = new double[numKeys];
+                    for (int j = 0; j < numKeys; j++) {
+                        var weightBytes = data[i + 1 + j];
+                        double weight;
+                        try {
+                            weight = Double.parseDouble(new String(weightBytes));
+                        } catch (NumberFormatException e) {
+                            return ErrorReply.NOT_FLOAT;
+                        }
+                        weights[j] = weight;
+                    }
+                } else if ("withscores".equals(tmp)) {
+                    withScores = true;
+                }
+            }
+        } else {
+            // withscores
+            if (data.length != numKeys + 2 && data.length != numKeys + 3) {
+                return ErrorReply.SYNTAX;
+            }
+
+            withScores = "withscores".equalsIgnoreCase(new String(data[data.length - 1]));
+        }
 
         ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 1);
         for (int i = 2, j = 0; i < data.length; i++, j++) {
@@ -752,15 +859,15 @@ public class ZGroup extends BaseCommand {
 
         var first = list.getFirst();
         var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
-        if (rz == null) {
-            return MultiBulkReply.EMPTY;
-        }
-        if (rz.size() == 0) {
+        if (rz == null || rz.size() == 0) {
             if (isInter) {
                 return MultiBulkReply.EMPTY;
             }
             if (!isUnion) {
                 return MultiBulkReply.EMPTY;
+            }
+            if (rz == null) {
+                rz = new RedisZSet();
             }
         }
 
@@ -771,7 +878,9 @@ public class ZGroup extends BaseCommand {
                 var otherRz = getByKeyBytes(other.keyBytes(), other.slotWithKeyHash());
                 otherRzList.add(otherRz);
             }
-            operateZset(rz, otherRzList, isInter, isUnion);
+            operateZset(rz, otherRzList, isInter, isUnion,
+                    isAggregateSum, isAggregateMin, isAggregateMax,
+                    isWeights, weights);
 
             if (rz.isEmpty()) {
                 return MultiBulkReply.EMPTY;
@@ -802,7 +911,13 @@ public class ZGroup extends BaseCommand {
         SettablePromise<Reply> finalPromise = new SettablePromise<>();
         var asyncReply = new AsyncReply(finalPromise);
 
-        // need not wait all, can optimize
+        boolean finalIsAggregateSum = isAggregateSum;
+        boolean finalIsAggregateMin = isAggregateMin;
+        boolean finalIsAggregateMax = isAggregateMax;
+        boolean finalIsWeights = isWeights;
+        double[] finalWeights = weights;
+        boolean finalWithScores = withScores;
+        RedisZSet finalRz = rz;
         Promises.all(promises).whenComplete((r, e) -> {
             if (e != null) {
                 log.error("zdiff error: {}, isInter: {}, isUnion: {}", e.getMessage(), isInter, isUnion);
@@ -814,18 +929,20 @@ public class ZGroup extends BaseCommand {
             for (var promise : promises) {
                 otherRzList.add(promise.getResult());
             }
-            operateZset(rz, otherRzList, isInter, isUnion);
+            operateZset(finalRz, otherRzList, isInter, isUnion,
+                    finalIsAggregateSum, finalIsAggregateMin, finalIsAggregateMax,
+                    finalIsWeights, finalWeights);
 
-            if (rz.isEmpty()) {
+            if (finalRz.isEmpty()) {
                 finalPromise.set(MultiBulkReply.EMPTY);
                 return;
             }
 
-            var replies = new Reply[rz.size() * (withScores ? 2 : 1)];
+            var replies = new Reply[finalRz.size() * (finalWithScores ? 2 : 1)];
             int i = 0;
-            for (var sv : rz.getSet()) {
+            for (var sv : finalRz.getSet()) {
                 replies[i++] = new BulkReply(sv.member().getBytes());
-                if (withScores) {
+                if (finalWithScores) {
                     replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
                 }
             }
@@ -835,7 +952,7 @@ public class ZGroup extends BaseCommand {
         return asyncReply;
     }
 
-    Reply zdiffstore() {
+    Reply zdiffstore(boolean isInter, boolean isUnion) {
         if (data.length < 5) {
             return ErrorReply.FORMAT;
         }
@@ -858,13 +975,71 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.SYNTAX;
         }
 
-        if (data.length != numKeys + 3) {
-            return ErrorReply.SYNTAX;
+        boolean isAggregateSum = true;
+        boolean isAggregateMin = false;
+        boolean isAggregateMax = false;
+
+        boolean isWeights = false;
+        double[] weights = null;
+
+        if (isInter || isUnion) {
+            if (data.length < numKeys + 2) {
+                return ErrorReply.SYNTAX;
+            }
+
+            for (int i = 3 + numKeys; i < data.length; i++) {
+                var tmpBytes = data[i];
+                var tmp = new String(tmpBytes).toLowerCase();
+
+                if ("aggregate".equals(tmp)) {
+                    if (i + 1 >= data.length) {
+                        return ErrorReply.SYNTAX;
+                    }
+                    var aggregateBytes = data[i + 1];
+                    var aggregate = new String(aggregateBytes).toLowerCase();
+                    if ("sum".equals(aggregate)) {
+                        isAggregateSum = true;
+                        isAggregateMin = false;
+                        isAggregateMax = false;
+                    } else if ("min".equals(aggregate)) {
+                        isAggregateSum = false;
+                        isAggregateMin = true;
+                        isAggregateMax = false;
+                    } else if ("max".equals(aggregate)) {
+                        isAggregateSum = false;
+                        isAggregateMin = false;
+                        isAggregateMax = true;
+                    } else {
+                        return ErrorReply.SYNTAX;
+                    }
+                    i++;
+                } else if ("weights".equals(tmp)) {
+                    isWeights = true;
+
+                    if (i + numKeys >= data.length) {
+                        return ErrorReply.SYNTAX;
+                    }
+
+                    weights = new double[numKeys];
+                    for (int j = 0; j < numKeys; j++) {
+                        var weightBytes = data[i + 1 + j];
+                        double weight;
+                        try {
+                            weight = Double.parseDouble(new String(weightBytes));
+                        } catch (NumberFormatException e) {
+                            return ErrorReply.NOT_FLOAT;
+                        }
+                        weights[j] = weight;
+                    }
+                    i += numKeys;
+                }
+            }
         }
 
-        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 2);
+        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(numKeys);
         // begin from 3
-        for (int i = 3, j = 1; i < data.length; i++, j++) {
+        // j = 1 -> dst key bytes is 0
+        for (int i = 3, j = 1; i < numKeys + 3; i++, j++) {
             var keyBytes = data[i];
             if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
                 return ErrorReply.KEY_TOO_LONG;
@@ -878,13 +1053,18 @@ public class ZGroup extends BaseCommand {
             // first key may be in other thread eventloop
             var first = list.getFirst();
             var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
-            if (rz == null) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                return IntegerReply.REPLY_0;
-            }
-            if (rz.size() == 0) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                return IntegerReply.REPLY_0;
+            if (rz == null || rz.size() == 0) {
+                if (isInter) {
+                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                    return IntegerReply.REPLY_0;
+                }
+                if (!isUnion) {
+                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                    return IntegerReply.REPLY_0;
+                }
+                if (rz == null) {
+                    rz = new RedisZSet();
+                }
             }
 
             ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
@@ -893,15 +1073,12 @@ public class ZGroup extends BaseCommand {
                 var otherRz = getByKeyBytes(other.keyBytes(), other.slotWithKeyHash());
                 otherRzList.add(otherRz);
             }
-            operateZset(rz, otherRzList, false, false);
-
-            if (rz.isEmpty()) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                return IntegerReply.REPLY_0;
-            }
+            operateZset(rz, otherRzList, false, false,
+                    isAggregateSum, isAggregateMin, isAggregateMax,
+                    isWeights, weights);
 
             setByKeyBytes(rz, dstKeyBytes, dstSlotWithKeyHash);
-            return new IntegerReply(rz.size());
+            return rz.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(rz.size());
         }
 
         ArrayList<Promise<RedisZSet>> promises = new ArrayList<>(list.size());
@@ -918,7 +1095,11 @@ public class ZGroup extends BaseCommand {
         SettablePromise<Reply> finalPromise = new SettablePromise<>();
         var asyncReply = new AsyncReply(finalPromise);
 
-        // need not wait all, can optimize
+        boolean finalIsAggregateSum = isAggregateSum;
+        boolean finalIsAggregateMin = isAggregateMin;
+        boolean finalIsAggregateMax = isAggregateMax;
+        boolean finalIsWeights = isWeights;
+        double[] finalWeights = weights;
         Promises.all(promises).whenComplete((r, e) -> {
             if (e != null) {
                 log.error("zdiffstore error: {}, isInter: {}, isUnion: {}", e.getMessage(), false, false);
@@ -927,31 +1108,32 @@ public class ZGroup extends BaseCommand {
             }
 
             var rz = promises.getFirst().getResult();
-            if (rz == null) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                finalPromise.set(IntegerReply.REPLY_0);
-                return;
-            }
-            if (rz.size() == 0) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                finalPromise.set(IntegerReply.REPLY_0);
-                return;
+            if (rz == null || rz.size() == 0) {
+                if (isInter) {
+                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                    finalPromise.set(IntegerReply.REPLY_0);
+                    return;
+                }
+                if (!isUnion) {
+                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+                    finalPromise.set(IntegerReply.REPLY_0);
+                    return;
+                }
+                if (rz == null) {
+                    rz = new RedisZSet();
+                }
             }
 
             ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
             for (var promise : promises) {
                 otherRzList.add(promise.getResult());
             }
-            operateZset(rz, otherRzList, false, false);
-
-            if (rz.isEmpty()) {
-                removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                finalPromise.set(IntegerReply.REPLY_0);
-                return;
-            }
+            operateZset(rz, otherRzList, false, false,
+                    finalIsAggregateSum, finalIsAggregateMin, finalIsAggregateMax,
+                    finalIsWeights, finalWeights);
 
             setByKeyBytes(rz, dstKeyBytes, dstSlotWithKeyHash);
-            finalPromise.set(new IntegerReply(rz.size()));
+            finalPromise.set(rz.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(rz.size()));
         });
 
         return asyncReply;
@@ -1002,221 +1184,6 @@ public class ZGroup extends BaseCommand {
         return new BulkReply(String.valueOf(score).getBytes());
     }
 
-    Reply zinter(byte[][] dd, boolean doStore, byte[] dstKeyBytes, boolean isUnion) {
-        if (dd.length < 4) {
-            return ErrorReply.FORMAT;
-        }
-
-        var numKeysBytes = dd[1];
-        int numKeys;
-        try {
-            numKeys = Integer.parseInt(new String(numKeysBytes));
-        } catch (NumberFormatException e) {
-            return ErrorReply.NOT_INTEGER;
-        }
-
-        if (numKeys < 1) {
-            return ErrorReply.SYNTAX;
-        }
-
-        var keyBytes = dd[2];
-        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-            return ErrorReply.KEY_TOO_LONG;
-        }
-
-        if (dd.length < numKeys + 2) {
-            return ErrorReply.SYNTAX;
-        }
-
-        var otherKeyBytesArr = new byte[numKeys - 1][];
-        for (int i = 0; i < numKeys - 1; i++) {
-            var otherKeyBytes = dd[3 + i];
-            if (otherKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-                return ErrorReply.KEY_TOO_LONG;
-            }
-            otherKeyBytesArr[i] = otherKeyBytes;
-        }
-
-        boolean isAggregateSum = true;
-        boolean isAggregateMin = false;
-        boolean isAggregateMax = false;
-
-        boolean isWeights = false;
-        double[] weights = null;
-
-        boolean withScores = false;
-
-        for (int i = 3 + numKeys - 1; i < dd.length; i++) {
-            var tmpBytes = dd[i];
-            var tmp = new String(tmpBytes).toLowerCase();
-
-            if ("aggregate".equals(tmp)) {
-                if (i + 1 >= dd.length) {
-                    return ErrorReply.SYNTAX;
-                }
-                var aggregateBytes = dd[i + 1];
-                var aggregate = new String(aggregateBytes).toLowerCase();
-                if ("sum".equals(aggregate)) {
-                    isAggregateSum = true;
-                    isAggregateMin = false;
-                    isAggregateMax = false;
-                } else if ("min".equals(aggregate)) {
-                    isAggregateSum = false;
-                    isAggregateMin = true;
-                    isAggregateMax = false;
-                } else if ("max".equals(aggregate)) {
-                    isAggregateSum = false;
-                    isAggregateMin = false;
-                    isAggregateMax = true;
-                } else {
-                    return ErrorReply.SYNTAX;
-                }
-                i++;
-            } else if ("weights".equals(tmp)) {
-                isWeights = true;
-
-                if (i + numKeys >= dd.length) {
-                    return ErrorReply.SYNTAX;
-                }
-
-                weights = new double[numKeys];
-                for (int j = 0; j < numKeys; j++) {
-                    var weightBytes = dd[i + 1 + j];
-                    double weight;
-                    try {
-                        weight = Double.parseDouble(new String(weightBytes));
-                    } catch (NumberFormatException e) {
-                        return ErrorReply.NOT_FLOAT;
-                    }
-                    weights[j] = weight;
-                }
-            } else if ("withscores".equals(tmp)) {
-                withScores = true;
-            }
-        }
-
-        var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
-        if (rz == null) {
-            return MultiBulkReply.EMPTY;
-        }
-        if (rz.isEmpty()) {
-            return MultiBulkReply.EMPTY;
-        }
-
-        var memberMap = rz.getMemberMap();
-
-        int otherKeyIndex = 0;
-        for (var otherKeyBytes : otherKeyBytesArr) {
-            var otherRz = getByKeyBytes(otherKeyBytes);
-            if (otherRz == null) {
-                if (!isUnion) {
-                    memberMap.clear();
-                    break;
-                }
-            } else {
-                if (isUnion) {
-                    var otherIt = otherRz.getSet().iterator();
-                    while (otherIt.hasNext()) {
-                        var otherSv = otherIt.next();
-                        var sv = rz.get(otherSv.member());
-
-                        if (sv == null) {
-                            double memberScore = otherSv.score();
-                            if (isWeights) {
-                                memberScore *= weights[otherKeyIndex + 1];
-                            }
-
-                            rz.add(memberScore, otherSv.member(), true, true);
-                            if (rz.size() == RedisZSet.ZSET_MAX_SIZE) {
-                                return ErrorReply.ZSET_SIZE_TO_LONG;
-                            }
-                        } else {
-                            double memberScore = sv.score();
-                            if (!sv.isAlreadyWeighted) {
-                                if (isWeights) {
-                                    memberScore *= weights[0];
-                                }
-                                sv.score(memberScore);
-                                sv.isAlreadyWeighted = true;
-                            }
-
-                            var otherMemberScore = isWeights ? weights[otherKeyIndex + 1] * otherSv.score() : otherSv.score();
-                            if (isAggregateSum) {
-                                sv.score(memberScore + otherMemberScore);
-                            } else if (isAggregateMin) {
-                                sv.score(Math.min(memberScore, otherMemberScore));
-                            } else if (isAggregateMax) {
-                                sv.score(Math.max(memberScore, otherMemberScore));
-                            }
-                        }
-                    }
-                } else {
-                    var it = rz.getSet().iterator();
-                    while (it.hasNext()) {
-                        var sv = it.next();
-                        var otherSv = otherRz.get(sv.member());
-                        if (otherSv == null) {
-                            it.remove();
-                            memberMap.remove(sv.member());
-                            continue;
-                        }
-
-                        double memberScore = sv.score();
-                        if (!sv.isAlreadyWeighted) {
-                            if (isWeights) {
-                                memberScore *= weights[0];
-                            }
-                            sv.score(memberScore);
-                            sv.isAlreadyWeighted = true;
-                        }
-
-                        var otherMemberScore = isWeights ? weights[otherKeyIndex + 1] * otherSv.score() : otherSv.score();
-                        if (isAggregateSum) {
-                            sv.score(memberScore + otherMemberScore);
-                        } else if (isAggregateMin) {
-                            sv.score(Math.min(memberScore, otherMemberScore));
-                        } else if (isAggregateMax) {
-                            sv.score(Math.max(memberScore, otherMemberScore));
-                        }
-                    }
-                    if (memberMap.isEmpty()) {
-                        break;
-                    }
-                }
-            }
-            otherKeyIndex++;
-        }
-
-        if (doStore) {
-            var dstRz = new RedisZSet();
-            for (var sv : memberMap.entrySet()) {
-                // resort
-                dstRz.add(sv.getValue().score(), sv.getKey());
-            }
-            storeRedisZSet(dstRz, dstKeyBytes);
-            return new IntegerReply(memberMap.size());
-        }
-
-        if (memberMap.isEmpty()) {
-            return MultiBulkReply.EMPTY;
-        }
-
-        var replies = new Reply[memberMap.size() * (withScores ? 2 : 1)];
-        TreeSet<RedisZSet.ScoreValue> sortedSet = new TreeSet<>();
-        for (var e : memberMap.entrySet()) {
-            sortedSet.add(new RedisZSet.ScoreValue(e.getValue().score(), e.getKey()));
-        }
-
-        int i = 0;
-        for (var sv : sortedSet) {
-            replies[i++] = new BulkReply(sv.member().getBytes());
-            if (withScores) {
-                replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
-            }
-        }
-        return new MultiBulkReply(replies);
-    }
-
     private Reply zintercard() {
         if (data.length < 4) {
             return ErrorReply.FORMAT;
@@ -1232,24 +1199,6 @@ public class ZGroup extends BaseCommand {
 
         if (numKeys < 1) {
             return ErrorReply.SYNTAX;
-        }
-
-        var keyBytes = data[2];
-        if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-            return ErrorReply.KEY_TOO_LONG;
-        }
-
-        if (data.length < numKeys + 2) {
-            return ErrorReply.SYNTAX;
-        }
-
-        var otherKeyBytesArr = new byte[numKeys - 1][];
-        for (int i = 0; i < numKeys - 1; i++) {
-            var otherKeyBytes = data[3 + i];
-            if (otherKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-                return ErrorReply.KEY_TOO_LONG;
-            }
-            otherKeyBytesArr[i] = otherKeyBytes;
         }
 
         int limit = 0;
@@ -1274,43 +1223,122 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.INVALID_INTEGER;
         }
 
-        var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
-        if (rz == null) {
-            return IntegerReply.REPLY_0;
+        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(numKeys);
+        for (int i = 2, j = 0; j < numKeys; i++, j++) {
+            var keyBytes = data[i];
+            if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
+                return ErrorReply.KEY_TOO_LONG;
+            }
+
+            var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
+            list.add(new SlotWithKeyHashWithKeyBytes(slotWithKeyHash, data[i]));
         }
-        if (rz.isEmpty()) {
+
+        var first = list.getFirst();
+        var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
+        if (rz == null || rz.size() == 0) {
             return IntegerReply.REPLY_0;
         }
 
-        var set = rz.getSet();
-//        var memberMap = rz.getMemberMap();
+        if (!isCrossRequestWorker) {
+            var memberMap = rz.getMemberMap();
 
-        for (var otherKeyBytes : otherKeyBytesArr) {
-            var otherRz = getByKeyBytes(otherKeyBytes);
-            if (otherRz != null) {
-                var it = set.iterator();
+            outer:
+            for (int i = 1; i < list.size(); i++) {
+                var other = list.get(i);
+                var otherRz = getByKeyBytes(other.keyBytes(), other.slotWithKeyHash());
+                if (otherRz == null || otherRz.size() == 0) {
+                    return IntegerReply.REPLY_0;
+                }
+
+                var it = rz.getSet().iterator();
                 while (it.hasNext()) {
                     var sv = it.next();
-                    if (!otherRz.contains(sv.member())) {
+                    var otherSv = otherRz.get(sv.member());
+                    if (otherSv == null) {
                         it.remove();
-                        // not necessary
-//                        memberMap.remove(sv.member());
+                        memberMap.remove(sv.member());
+
+                        if (memberMap.isEmpty()) {
+                            break outer;
+                        }
                     }
                 }
-                if (set.isEmpty()) {
-                    break;
-                }
-                if (limit != 0 && set.size() >= limit) {
+
+                if (limit != 0 && memberMap.size() >= limit) {
                     break;
                 }
             }
+
+            var n = limit == 0 ? rz.size() : Math.min(rz.size(), limit);
+            return n == 0 ? IntegerReply.REPLY_0 : new IntegerReply(rz.size());
         }
 
-        var n = limit == 0 ? set.size() : Math.min(set.size(), limit);
-        return new IntegerReply(n);
+        ArrayList<Promise<RedisZSet>> promises = new ArrayList<>(list.size() - 1);
+        for (int i = 1; i < list.size(); i++) {
+            var other = list.get(i);
+            var otherSlotWithKeyHash = other.slotWithKeyHash();
+            var otherKeyBytes = other.keyBytes();
+
+            var oneSlot = localPersist.oneSlot(otherSlotWithKeyHash.slot());
+            var p = oneSlot.asyncCall(() -> getByKeyBytes(otherKeyBytes, otherSlotWithKeyHash));
+            promises.add(p);
+        }
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        int finalLimit = limit;
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("zintercard error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
+            }
+
+            ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
+            for (var promise : promises) {
+                otherRzList.add(promise.getResult());
+            }
+
+            var memberMap = rz.getMemberMap();
+
+            outer:
+            for (var otherRz : otherRzList) {
+                if (otherRz == null || otherRz.size() == 0) {
+                    finalPromise.set(IntegerReply.REPLY_0);
+                    return;
+                }
+
+                var it = rz.getSet().iterator();
+                while (it.hasNext()) {
+                    var sv = it.next();
+                    var otherSv = otherRz.get(sv.member());
+                    if (otherSv == null) {
+                        it.remove();
+                        memberMap.remove(sv.member());
+
+                        if (memberMap.isEmpty()) {
+                            break outer;
+                        }
+                    }
+                }
+
+                if (finalLimit != 0 && memberMap.size() >= finalLimit) {
+                    break;
+                }
+            }
+
+            var n = finalLimit == 0 ? rz.size() : Math.min(rz.size(), finalLimit);
+            var rr = n == 0 ? IntegerReply.REPLY_0 : new IntegerReply(rz.size());
+
+            finalPromise.set(rr);
+        });
+
+        return asyncReply;
     }
 
-    private Reply zmscore() {
+    Reply zmscore() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
         }
@@ -1329,12 +1357,16 @@ public class ZGroup extends BaseCommand {
             memberBytesArr[i] = memberBytes;
         }
 
-        var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
-        if (rz == null) {
-            return MultiBulkReply.EMPTY;
+        var replies = new Reply[memberBytesArr.length];
+
+        var rz = getByKeyBytes(keyBytes, slotWithKeyHashListParsed.getFirst());
+        if (rz == null || rz.isEmpty()) {
+            for (int i = 0; i < replies.length; i++) {
+                replies[i] = NilReply.INSTANCE;
+            }
+            return new MultiBulkReply(replies);
         }
 
-        var replies = new Reply[memberBytesArr.length];
         int i = 0;
         for (var memberBytes : memberBytesArr) {
             var sv = rz.get(new String(memberBytes));
@@ -1347,7 +1379,7 @@ public class ZGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
-    private Reply zpopmax(boolean isMin) {
+    Reply zpopmax(boolean isMin) {
         if (data.length != 2 && data.length != 3) {
             return ErrorReply.FORMAT;
         }
@@ -1370,14 +1402,11 @@ public class ZGroup extends BaseCommand {
             }
         }
 
-        var slotWithKeyHash = slotPreferParsed(keyBytes);
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var slot = slotWithKeyHash.slot();
 
         var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
-        if (rz == null) {
-            return MultiBulkReply.EMPTY;
-        }
-        if (rz.isEmpty()) {
+        if (rz == null || rz.isEmpty()) {
             return MultiBulkReply.EMPTY;
         }
 
@@ -1388,21 +1417,11 @@ public class ZGroup extends BaseCommand {
             replies[j + 1] = new BulkReply(String.valueOf(sv.score()).getBytes());
         }
 
-        if (rz.isEmpty()) {
-            var oneSlot = localPersist.oneSlot(slot);
-            // remove key
-            oneSlot.removeDelay(new String(keyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
-        } else {
-            var encodedBytes = rz.encode();
-            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-            var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
-
-            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
-        }
+        setByKeyBytes(rz, keyBytes, slotWithKeyHash);
         return new MultiBulkReply(replies);
     }
 
-    private Reply zrandmember() {
+    Reply zrandmember() {
         if (data.length < 2 || data.length > 4) {
             return ErrorReply.FORMAT;
         }
@@ -1412,37 +1431,35 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        int count = 1;
-        boolean hasCount = false;
-        for (int i = 2; i < data.length; i++) {
-            var tmpBytes = data[i];
-            var tmp = new String(tmpBytes).toLowerCase();
-            if (!"withscores".equals(tmp)) {
-                try {
-                    count = Integer.parseInt(tmp);
-                } catch (NumberFormatException e) {
-                    return ErrorReply.NOT_INTEGER;
-                }
-                if (count <= 0) {
-                    return ErrorReply.INVALID_INTEGER;
-                }
-                hasCount = true;
-                i++;
-            } else {
-                if (data.length > i + 1) {
-                    return ErrorReply.SYNTAX;
-                }
-                break;
+        boolean withScores = "withscores".equalsIgnoreCase(new String(data[data.length - 1]));
+        if (withScores) {
+            if (data.length != 4) {
+                return ErrorReply.SYNTAX;
+            }
+        } else {
+            if (data.length == 4) {
+                return ErrorReply.SYNTAX;
             }
         }
 
-        boolean withScores = "withscores".equalsIgnoreCase(new String(data[data.length - 1]));
+        int count = 1;
+        boolean hasCount = false;
+        if (data.length > 2) {
+            var countBytes = data[2];
+            var tmp = new String(countBytes).toLowerCase();
+            try {
+                count = Integer.parseInt(tmp);
+            } catch (NumberFormatException e) {
+                return ErrorReply.NOT_INTEGER;
+            }
+            if (count == 0) {
+                return ErrorReply.INVALID_INTEGER;
+            }
+            hasCount = true;
+        }
 
         var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
-        if (rz == null) {
-            return hasCount ? MultiBulkReply.EMPTY : NilReply.INSTANCE;
-        }
-        if (rz.isEmpty()) {
+        if (rz == null || rz.isEmpty()) {
             return hasCount ? MultiBulkReply.EMPTY : NilReply.INSTANCE;
         }
 
@@ -1474,10 +1491,7 @@ public class ZGroup extends BaseCommand {
         var replies = new Reply[absCount * (withScores ? 2 : 1)];
 
         int j = 0;
-        var it = rz.getSet().iterator();
-        while (it.hasNext()) {
-            var sv = it.next();
-
+        for (var sv : rz.getSet()) {
             for (int k = 0; k < indexes.size(); k++) {
                 Integer index = indexes.get(k);
                 if (index != null && index == j) {
@@ -1486,7 +1500,16 @@ public class ZGroup extends BaseCommand {
                         replies[k * 2 + 1] = new BulkReply(String.valueOf(sv.score()).getBytes());
                     }
                     indexes.set(k, null);
-                    if (indexes.isEmpty()) {
+
+                    boolean isAllNull = true;
+                    for (int i = 0; i < indexes.size(); i++) {
+                        Integer tmpIndex = indexes.get(i);
+                        if (tmpIndex != null) {
+                            isAllNull = false;
+                            break;
+                        }
+                    }
+                    if (isAllNull) {
                         break;
                     }
                 }
@@ -1497,30 +1520,16 @@ public class ZGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
-    private void storeRedisZSet(RedisZSet rz, byte[] dstKeyBytes) {
-        var slotWithKeyHash = slot(dstKeyBytes);
-        var slot = slotWithKeyHash.slot();
-//        var bucketIndex = keyLoader.bucketIndex(slotWithKeyHash.keyHash());
-//        keyLoader.bucketLock(slot, bucketIndex, () -> {
-        if (rz.isEmpty()) {
-            var oneSlot = localPersist.oneSlot(slot);
-            // remove dst key
-            oneSlot.removeDelay(new String(dstKeyBytes), slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash());
-            return;
-        }
-
-        var encodedBytes = rz.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
-
-        set(dstKeyBytes, encodedBytes, slotWithKeyHash, spType);
-//        });
+    Reply zrange(byte[][] dd) {
+        return zrange(dd, null);
     }
 
-    private Reply zrange(byte[][] dd, boolean doStore, byte[] dstKeyBytes) {
+    Reply zrange(byte[][] dd, byte[] dstKeyBytes) {
         if (dd.length < 4) {
             return ErrorReply.FORMAT;
         }
+
+        var doStore = dstKeyBytes != null;
 
         var keyBytes = dd[1];
         if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
@@ -1555,8 +1564,6 @@ public class ZGroup extends BaseCommand {
             } else if ("rev".equals(tmp)) {
                 isReverse = true;
             } else if ("limit".equals(tmp)) {
-                hasLimit = true;
-
                 if (i + 2 >= dd.length) {
                     return ErrorReply.SYNTAX;
                 }
@@ -1576,6 +1583,8 @@ public class ZGroup extends BaseCommand {
                 } catch (NumberFormatException e) {
                     return ErrorReply.NOT_INTEGER;
                 }
+
+                hasLimit = count != 0 || offset != 0;
                 i += 2;
             } else if ("withscores".equals(tmp)) {
                 withScores = true;
@@ -1669,11 +1678,11 @@ public class ZGroup extends BaseCommand {
                     minInclusive = maxInclusive;
                     maxInclusive = tmp2;
                 } else {
-                    return IntegerReply.REPLY_0;
+                    return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
                 }
             } else {
                 if (min > max) {
-                    return IntegerReply.REPLY_0;
+                    return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
                 }
             }
         }
@@ -1693,20 +1702,18 @@ public class ZGroup extends BaseCommand {
             }
         }
 
-        var rz = getByKeyBytes(keyBytes, slotPreferParsed(keyBytes));
-        if (rz == null) {
-            return MultiBulkReply.EMPTY;
-        }
-        if (rz.isEmpty()) {
-            return MultiBulkReply.EMPTY;
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        if (rz == null || rz.isEmpty()) {
+            return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
         }
 
+        int size = rz.size();
         if (count <= 0) {
-            count = rz.size();
+            count = size;
         }
 
         if (byIndex) {
-            int size = rz.size();
             if (start < 0) {
                 start = size + start;
                 if (start < 0) {
@@ -1716,20 +1723,22 @@ public class ZGroup extends BaseCommand {
             if (stop < 0) {
                 stop = size + stop;
                 if (stop < 0) {
-                    return MultiBulkReply.EMPTY;
+                    return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
                 }
             }
             if (start >= size) {
-                return MultiBulkReply.EMPTY;
+                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
             if (stop >= size) {
                 stop = size - 1;
             }
             if (start > stop) {
-                return MultiBulkReply.EMPTY;
+                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
 
+            // for range store
             var dstRz = new RedisZSet();
+
             var replies = hasLimit ? new Reply[Math.min(stop - start + 1, count) * (withScores ? 2 : 1)] :
                     new Reply[(stop - start + 1) * (withScores ? 2 : 1)];
 
@@ -1750,23 +1759,30 @@ public class ZGroup extends BaseCommand {
 
                     if (doStore) {
                         dstRz.add(sv.score(), sv.member());
-                    } else {
-                        replies[i++] = new BulkReply(sv.member().getBytes());
-                        if (withScores) {
-                            replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
-                        }
-                        // exceed count
-                        if (i >= replies.length) {
-                            break;
-                        }
+                    }
+
+                    replies[i++] = new BulkReply(sv.member().getBytes());
+                    if (withScores) {
+                        replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
+                    }
+                    // exceed count
+                    if (i >= replies.length) {
+                        break;
                     }
                 }
                 j++;
             }
 
             if (doStore) {
-                storeRedisZSet(dstRz, dstKeyBytes);
-                return new IntegerReply(dstRz.size());
+                var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
+                if (!isCrossRequestWorker) {
+                    setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash);
+                } else {
+                    var dstOneSlot = localPersist.oneSlot(dstSlotWithKeyHash.slot());
+                    dstOneSlot.asyncRun(() -> setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash));
+                }
+
+                return dstRz.size() == 0 ? IntegerReply.REPLY_0 : new IntegerReply(dstRz.size());
             }
 
             // offset is too big, replies include null
@@ -1780,7 +1796,7 @@ public class ZGroup extends BaseCommand {
         } else if (byLex) {
             var subMap = rz.betweenByMember(minLex, minInclusive, maxLex, maxInclusive);
             if (subMap.isEmpty()) {
-                return MultiBulkReply.EMPTY;
+                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
 
             var it = isReverse ? subMap.descendingMap().entrySet().iterator() : subMap.entrySet().iterator();
@@ -1793,13 +1809,10 @@ public class ZGroup extends BaseCommand {
                 }
             }
 
-            if (count <= 0) {
-                count = subMap.size();
-            }
-
             if (doStore) {
                 var dstRz = new RedisZSet();
                 int storedCount = 0;
+                // subMap can be empty
                 var it2 = subMap.entrySet().iterator();
                 while (it2.hasNext()) {
                     if (storedCount >= count) {
@@ -1809,8 +1822,20 @@ public class ZGroup extends BaseCommand {
                     dstRz.add(entry.getValue().score(), entry.getKey());
                     storedCount++;
                 }
-                storeRedisZSet(dstRz, dstKeyBytes);
+
+                var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
+                if (!isCrossRequestWorker) {
+                    setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash);
+                } else {
+                    var dstOneSlot = localPersist.oneSlot(dstSlotWithKeyHash.slot());
+                    dstOneSlot.asyncRun(() -> setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash));
+                }
+
                 return new IntegerReply(dstRz.size());
+            }
+
+            if (subMap.isEmpty()) {
+                return MultiBulkReply.EMPTY;
             }
 
             var replies = hasLimit ? new Reply[Math.min(subMap.size(), count) * (withScores ? 2 : 1)] :
@@ -1830,21 +1855,10 @@ public class ZGroup extends BaseCommand {
             }
             return new MultiBulkReply(replies);
         } else {
-            var subSet = rz.between(min, false, max, false);
-            // remove min and max if not inclusive
-            var itTmp = subSet.iterator();
-            while (itTmp.hasNext()) {
-                var sv = itTmp.next();
-                if (sv.score() == min && !minInclusive) {
-                    itTmp.remove();
-                }
-                if (sv.score() == max && !maxInclusive) {
-                    itTmp.remove();
-                }
-            }
-
+            // by score
+            var subSet = rz.between(min, minInclusive, max, maxInclusive);
             if (subSet.isEmpty()) {
-                return MultiBulkReply.EMPTY;
+                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
 
             var it = isReverse ? subSet.descendingSet().iterator() : subSet.iterator();
@@ -1857,13 +1871,10 @@ public class ZGroup extends BaseCommand {
                 }
             }
 
-            if (count <= 0) {
-                count = subSet.size();
-            }
-
             if (doStore) {
                 var dstRz = new RedisZSet();
                 int storedCount = 0;
+                // subSet can be empty
                 var it2 = subSet.iterator();
                 while (it2.hasNext()) {
                     if (storedCount >= count) {
@@ -1873,8 +1884,20 @@ public class ZGroup extends BaseCommand {
                     dstRz.add(entry.score(), entry.member());
                     storedCount++;
                 }
-                storeRedisZSet(dstRz, dstKeyBytes);
+
+                var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
+                if (!isCrossRequestWorker) {
+                    setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash);
+                } else {
+                    var dstOneSlot = localPersist.oneSlot(dstSlotWithKeyHash.slot());
+                    dstOneSlot.asyncRun(() -> setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash));
+                }
+
                 return new IntegerReply(dstRz.size());
+            }
+
+            if (subSet.isEmpty()) {
+                return MultiBulkReply.EMPTY;
             }
 
             var replies = hasLimit ? new Reply[Math.min(subSet.size(), count) * (withScores ? 2 : 1)] :

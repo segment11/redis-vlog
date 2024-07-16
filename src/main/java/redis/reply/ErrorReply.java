@@ -33,6 +33,10 @@ public class ErrorReply implements Reply {
 
     private final String message;
 
+    public String getMessage() {
+        return message;
+    }
+
     public ErrorReply(String message) {
         this.message = message;
     }
