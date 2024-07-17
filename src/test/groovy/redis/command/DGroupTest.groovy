@@ -99,6 +99,7 @@ class DGroupTest extends Specification {
         when:
         dGroup.data = data2
         dGroup.cmd = 'decr'
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decr', data2, dGroup.slotNumber)
         reply = dGroup.handle()
 
         then:
@@ -110,6 +111,7 @@ class DGroupTest extends Specification {
         data3[2] = 'b'.bytes
         dGroup.data = data3
         dGroup.cmd = 'decrby'
+        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data3, dGroup.slotNumber)
         reply = dGroup.handle()
 
         then:
@@ -119,8 +121,6 @@ class DGroupTest extends Specification {
         // decrby
         data3[1] = 'n'.bytes
         data3[2] = '1'.bytes
-        dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data3, dGroup.slotNumber)
-
         dGroup.setNumber('n'.bytes, 0, dGroup.slotWithKeyHashListParsed.getFirst())
         reply = dGroup.handle()
 

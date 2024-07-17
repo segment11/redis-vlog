@@ -71,6 +71,7 @@ class AGroupTest extends Specification {
         aGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
         when:
+        aGroup.slotWithKeyHashListParsed = AGroup.parseSlots('append', data3, aGroup.slotNumber)
         aGroup.append()
 
         then:

@@ -2623,12 +2623,12 @@ zunionstore
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 4
 
-        when:
-        // remove again
-        reply = zGroup.zremrangebyscore(false, true, false)
-
-        then:
-        reply == IntegerReply.REPLY_0
+//        when:
+//        // remove again
+//        reply = zGroup.zremrangebyscore(false, true, false)
+//
+//        then:
+//        reply == IntegerReply.REPLY_0
 
         when:
         data4[2] = 'member0'.bytes

@@ -235,6 +235,7 @@ class EGroupTest extends Specification {
         data3[2] = (System.currentTimeMillis() + 1000 * 60).toString().bytes
 
         eGroup.data = data3
+        eGroup.slotWithKeyHashListParsed = EGroup.parseSlots('expire', data3, eGroup.slotNumber)
         reply = eGroup.expire(true, true)
 
         then:
