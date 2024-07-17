@@ -1620,36 +1620,42 @@ public class ZGroup extends BaseCommand {
         boolean maxInclusive = true;
 
         if (byLex) {
-            if (minBytes[0] != '(' && minBytes[0] != '[') {
-                return ErrorReply.SYNTAX;
+            if (minBytes[0] == '-') {
+                minLex = RedisZSet.MEMBER_MIN;
+                minInclusive = false;
+            } else {
+                if (minBytes[0] != '(' && minBytes[0] != '[') {
+                    return ErrorReply.SYNTAX;
+                }
+                if (minBytes.length == 1) {
+                    return ErrorReply.SYNTAX;
+                }
+                minLex = minStr.substring(1);
+                if (minBytes[0] == '(') {
+                    minInclusive = false;
+                }
             }
-            if (maxBytes[0] != '(' && maxBytes[0] != '[') {
-                return ErrorReply.SYNTAX;
+            if (maxBytes[0] == '+') {
+                maxLex = RedisZSet.MEMBER_MAX;
+                maxInclusive = false;
+            } else {
+                if (maxBytes[0] != '(' && maxBytes[0] != '[') {
+                    return ErrorReply.SYNTAX;
+                }
+                if (maxBytes.length == 1) {
+                    return ErrorReply.SYNTAX;
+                }
+                maxLex = maxStr.substring(1);
+                if (maxBytes[0] == '(') {
+                    maxInclusive = false;
+                }
             }
-
-            minLex = minStr.substring(1);
-            maxLex = maxStr.substring(1);
 
             int compareMinMax = minLex.compareTo(maxLex);
-            if (compareMinMax > 0 && !isReverse) {
+            // case - (a
+            if (compareMinMax > 0 && !RedisZSet.MEMBER_MIN.equals(minLex)) {
                 return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
-            if (compareMinMax < 0 && isReverse) {
-                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
-            }
-
-            if (minBytes[0] == '(') {
-                minInclusive = false;
-            }
-            if (maxBytes[0] == '(') {
-                maxInclusive = false;
-            }
-
-//            if (isReverse) {
-//                String tmp = minLex;
-//                minLex = maxLex;
-//                maxLex = tmp;
-//            }
         }
 
         double min = 0;
@@ -1852,7 +1858,7 @@ public class ZGroup extends BaseCommand {
                     dstOneSlot.asyncRun(() -> setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash));
                 }
 
-                return new IntegerReply(dstRz.size());
+                return dstRz.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(dstRz.size());
             }
 
             if (subMap.isEmpty()) {
@@ -1914,7 +1920,7 @@ public class ZGroup extends BaseCommand {
                     dstOneSlot.asyncRun(() -> setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash));
                 }
 
-                return new IntegerReply(dstRz.size());
+                return dstRz.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(dstRz.size());
             }
 
             if (subSet.isEmpty()) {

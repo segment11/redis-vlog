@@ -28,7 +28,15 @@ class RedisZSetTest extends Specification {
 
         rz.between(1, true, 2, true).collect { it.member() }.join(',') == 'a,b'
         rz.betweenByMember('a', true, 'b', true).collect { it.value.score() }.join(',') == '1.0,1.8'
+        rz.betweenByMember('-', true, '+', true).collect { it.value.score() }.join(',') == '1.0,1.8,3.0'
+        rz.between(Double.NEGATIVE_INFINITY, false, Double.POSITIVE_INFINITY, false).collect { it.member() }.join(',') == 'a,b,c'
         rz.between(0.9, true, 1.8, true).collect { it.member() }.join(',') == 'a,b'
+        rz.between(1.0, false, 3.0, false).collect { it.member() }.join(',') == 'b'
+
+        when:
+        def rz2 = new RedisZSet()
+        then:
+        rz2.betweenByMember('-', true, '+', true).isEmpty()
 
         when:
         def isDeletedA = rz.remove('a')

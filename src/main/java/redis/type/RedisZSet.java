@@ -20,6 +20,9 @@ public class RedisZSet {
     // set size short + crc int
     private static final int HEADER_LENGTH = 2 + 4;
 
+    public static final String MEMBER_MAX = "+";
+    public static final String MEMBER_MIN = "-";
+
     public static class ScoreValue implements Comparable<ScoreValue> {
         private double score;
         private final String member;
@@ -94,7 +97,8 @@ public class RedisZSet {
         double maxFixed = max != Double.POSITIVE_INFINITY ? max + addFixed : Double.POSITIVE_INFINITY;
 
         var subSet = set.subSet(new ScoreValue(minFixed, ""), false, new ScoreValue(maxFixed, ""), false);
-        var itTmp = subSet.iterator();
+        var copySet = new TreeSet<>(subSet);
+        var itTmp = copySet.iterator();
         while (itTmp.hasNext()) {
             var sv = itTmp.next();
             if (sv.score() == min && !minInclusive) {
@@ -104,11 +108,25 @@ public class RedisZSet {
                 itTmp.remove();
             }
         }
-        return subSet;
+        return copySet;
     }
 
     public NavigableMap<String, ScoreValue> betweenByMember(String min, boolean minInclusive, String max, boolean maxInclusive) {
-        return memberMap.subMap(min, minInclusive, max, maxInclusive);
+        if (memberMap.isEmpty()) {
+            return memberMap;
+        }
+
+        if (MEMBER_MIN.equals(min)) {
+            min = "";
+            minInclusive = true;
+        }
+        if (MEMBER_MAX.equals(max)) {
+            max = memberMap.lastKey();
+            maxInclusive = true;
+        }
+        var subMap = memberMap.subMap(min, minInclusive, max, maxInclusive);
+        // copy one
+        return new TreeMap<>(subMap);
     }
 
     public int size() {

@@ -1733,6 +1733,11 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
+        reply = zGroup.zrange(data10, dstKeyBytes)
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
         // limit offset
         data10[7] = '0'.bytes
         // limit count
@@ -2030,6 +2035,152 @@ zunionstore
         reply instanceof MultiBulkReply
         ((MultiBulkReply) reply).replies.length == 2
 
+        // bylex
+        when:
+        data10[4] = 'bylex'.bytes
+        // rev
+        data10[5] = 'bylex'.bytes
+        // limit count
+        data10[8] = '2'.bytes
+        // withscores
+        data10[9] = 'bylex'.bytes
+        data10[2] = '(member1'.bytes
+        data10[3] = '(member4'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+
+        when:
+        reply = zGroup.zrange(data10, dstKeyBytes)
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        data10[2] = '(member4'.bytes
+        data10[3] = '(member1'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = zGroup.zrange(data10, dstKeyBytes)
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data10[2] = '-'.bytes
+        data10[3] = '+'.bytes
+        data10[8] = '0'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 10
+
+        when:
+        reply = zGroup.zrange(data10, dstKeyBytes)
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 10
+
+        when:
+        data10[2] = '('.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data10[2] = '-'.bytes
+        data10[3] = '('.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data10[2] = '[member1'.bytes
+        data10[3] = '[member4'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 4
+
+        when:
+        reply = zGroup.zrange(data10, dstKeyBytes)
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 4
+
+        when:
+        data10[2] = '[member10'.bytes
+        data10[3] = '[member11'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = zGroup.zrange(data10, dstKeyBytes)
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data10[2] = '[member1'.bytes
+        data10[3] = '[member8'.bytes
+        // limit offset
+        data10[7] = '3'.bytes
+        data10[8] = '2'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+
+        when:
+        reply = zGroup.zrange(data10, dstKeyBytes)
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        data10[9] = 'withscores'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 4
+
+        when:
+        data10[7] = '0'.bytes
+        data10[8] = '0'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 16
+
+        when:
+        data10[7] = '10'.bytes
+        data10[8] = '2'.bytes
+        data10[9] = 'bylex'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = zGroup.zrange(data10, dstKeyBytes)
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        data10[2] = 'member1'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data10[2] = '(member1'.bytes
+        data10[3] = 'member4'.bytes
+        reply = zGroup.zrange(data10)
+        then:
+        reply == ErrorReply.SYNTAX
+
         when:
         data10[7] = '-1'.bytes
         reply = zGroup.zrange(data10)
@@ -2063,6 +2214,8 @@ zunionstore
         reply == ErrorReply.SYNTAX
 
         when:
+        data10[4] = 'byindex'.bytes
+        data10[5] = 'byindex'.bytes
         data10[9] = 'withscores'.bytes
         data10[2] = 'a'.bytes
         reply = zGroup.zrange(data10)
