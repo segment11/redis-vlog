@@ -4,10 +4,10 @@ import org.jetbrains.annotations.NotNull;
 import redis.KeyHash;
 
 import java.nio.ByteBuffer;
+import java.util.NavigableMap;
 import java.util.NavigableSet;
-import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 public class RedisZSet {
     // change here to limit zset size
@@ -55,19 +55,10 @@ public class RedisZSet {
 
         @Override
         public int compareTo(@NotNull RedisZSet.ScoreValue o) {
-            if (o == this) {
-                return 0;
+            if (score == o.score) {
+                return member.compareTo(o.member);
             }
-
-            int compScore = Double.compare(score, o.score);
-            if (compScore != 0) {
-                return compScore;
-            }
-
-            if (member.length() == 0) {
-                return -1;
-            }
-            return member.compareTo(o.member);
+            return Double.compare(score, o.score);
         }
 
         @Override
@@ -84,15 +75,15 @@ public class RedisZSet {
         }
     }
 
-    private final ConcurrentSkipListSet<ScoreValue> set = new ConcurrentSkipListSet<>();
-    private final ConcurrentSkipListMap<String, ScoreValue> memberMap = new ConcurrentSkipListMap<>();
+    private final TreeSet<ScoreValue> set = new TreeSet<>();
+    private final TreeMap<String, ScoreValue> memberMap = new TreeMap<>();
 
     // need not thread safe
-    public ConcurrentSkipListSet<ScoreValue> getSet() {
+    public TreeSet<ScoreValue> getSet() {
         return set;
     }
 
-    public ConcurrentSkipListMap<String, ScoreValue> getMemberMap() {
+    public TreeMap<String, ScoreValue> getMemberMap() {
         return memberMap;
     }
 
@@ -116,7 +107,7 @@ public class RedisZSet {
         return subSet;
     }
 
-    public ConcurrentNavigableMap<String, ScoreValue> betweenByMember(String min, boolean minInclusive, String max, boolean maxInclusive) {
+    public NavigableMap<String, ScoreValue> betweenByMember(String min, boolean minInclusive, String max, boolean maxInclusive) {
         return memberMap.subMap(min, minInclusive, max, maxInclusive);
     }
 
