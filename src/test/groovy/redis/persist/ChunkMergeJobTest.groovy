@@ -70,6 +70,8 @@ class ChunkMergeJobTest extends Specification {
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, 0)
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex + 1, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, 0)
 
+        oneSlot.threadIdProtectedForSafe = Thread.currentThread().threadId()
+
         var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader, null)
         chunk.fdReadWriteArray = [fdReadWriteForChunkSegments]
         oneSlot.chunk = chunk

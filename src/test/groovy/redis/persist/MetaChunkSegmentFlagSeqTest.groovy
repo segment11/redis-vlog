@@ -155,10 +155,12 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         ConfForSlot.global.pureMemory = false
     }
 
+    // need shell:
+    // cp persist/slot-0/meta_chunk_segment_flag_seq.dat test-persist/test-slot/
     def 'test iterate'() {
         given:
         def confChunk = ConfForSlot.global.confChunk
-        def targetConfChunk = ConfForSlot.ConfChunk.c1m
+        def targetConfChunk = ConfForSlot.ConfChunk.c10m
 //        def targetConfChunk = ConfForSlot.ConfChunk.debugMode
         confChunk.segmentNumberPerFd = targetConfChunk.segmentNumberPerFd
         confChunk.fdPerChunk = targetConfChunk.fdPerChunk
@@ -283,7 +285,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         def i3 = one.getMergedSegmentIndexEndLastTime(0, halfSegmentNumber)
 
         then:
-        i3 == maxSegmentNumber - 1
+        i3 == NO_NEED_MERGE_SEGMENT_INDEX
 
         cleanup:
         ConfForSlot.global.pureMemory = false

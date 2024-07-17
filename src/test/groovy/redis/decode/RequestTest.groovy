@@ -34,7 +34,7 @@ class RequestTest extends Specification {
         request.singleSlot == request.slotWithKeyHashList[0].slot
 
         when:
-        request.slotWithKeyHashList = [null]
+        request.slotWithKeyHashList = []
 
         then:
         request.singleSlot == Request.SLOT_CAN_HANDLE_BY_ANY_WORKER

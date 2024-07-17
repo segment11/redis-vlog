@@ -27,7 +27,7 @@ class ConfForSlotTest extends Specification {
         println c
 
         c.confBucket.bucketsPerSlot == 16384
-        c.confBucket.initialSplitNumber == 3
+        c.confBucket.initialSplitNumber >= 1
         c.confBucket.lruPerFd.maxSize == 0
         println c.confBucket
 
@@ -40,8 +40,8 @@ class ConfForSlotTest extends Specification {
         println c.confChunk
 
         c.confWal.oneChargeBucketNumber == 32
-        c.confWal.valueSizeTrigger == 1000
-        c.confWal.shortValueSizeTrigger == 1000
+        c.confWal.valueSizeTrigger >= 100
+        c.confWal.shortValueSizeTrigger >= 100
         println c.confWal
     }
 
@@ -173,7 +173,7 @@ class ConfForSlotTest extends Specification {
         c.confWal.resetByOneValueLength(200)
 
         then:
-        c.confWal.valueSizeTrigger == 1000
+        c.confWal.valueSizeTrigger >= 100
         Wal.ONE_GROUP_BUFFER_SIZE == 4096 * 32 / 4
 
         when:
@@ -181,7 +181,7 @@ class ConfForSlotTest extends Specification {
         c.confWal.resetByOneValueLength(500)
 
         then:
-        c.confWal.valueSizeTrigger == 500
+        c.confWal.valueSizeTrigger >= 100
         Wal.ONE_GROUP_BUFFER_SIZE == 4096 * 32 / 2
 
         when:

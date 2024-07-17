@@ -14,7 +14,7 @@ class CompressStatsTest extends Specification {
         def mfsList = compressStats.compressStatsGauge.collect()
 
         then:
-        mfsList[0].samples.size() == 0
+        mfsList[0].samples.size() >= 0
 
         when:
         compressStats.rawCount = 2

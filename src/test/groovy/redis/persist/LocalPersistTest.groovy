@@ -1,8 +1,11 @@
 package redis.persist
 
 import io.activej.config.Config
+import io.activej.eventloop.Eventloop
 import redis.SnowFlake
 import spock.lang.Specification
+
+import java.time.Duration
 
 class LocalPersistTest extends Specification {
     static void prepareLocalPersist(byte netWorkers = 1, short slotNumber = 1) {
@@ -44,9 +47,22 @@ class LocalPersistTest extends Specification {
         given:
         def localPersist = LocalPersist.instance
 
-        localPersist.addOneSlotForTest((byte) 0, null)
+        def eventloop = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        eventloop.keepAlive(true)
+
+        Thread.start {
+            eventloop.run()
+        }
+
+        localPersist.addOneSlotForTest((byte) 0, eventloop)
 
         expect:
         localPersist.oneSlots().length == 1
+
+        cleanup:
+        eventloop.breakEventloop()
     }
 }
