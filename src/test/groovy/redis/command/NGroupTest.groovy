@@ -15,7 +15,6 @@ class NGroupTest extends Specification {
 
         when:
         def sList = NGroup.parseSlots('nx', data2, slotNumber)
-
         then:
         sList.size() == 0
     }
@@ -29,7 +28,6 @@ class NGroupTest extends Specification {
 
         when:
         def reply = nGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }

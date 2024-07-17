@@ -30,7 +30,6 @@ class RGroupTest extends Specification {
         def sRpushList = RGroup.parseSlots('rpush', data3, slotNumber)
         def sRpushxList = RGroup.parseSlots('rpushx', data3, slotNumber)
         def sList = RGroup.parseSlots('rxxx', data3, slotNumber)
-
         then:
         sRenameList.size() == 2
         sRpoplpushList.size() == 2
@@ -47,7 +46,6 @@ class RGroupTest extends Specification {
         sRpoplpushList = RGroup.parseSlots('rpoplpush', data4, slotNumber)
         sRestoreList = RGroup.parseSlots('restore', data4, slotNumber)
         sRpopList = RGroup.parseSlots('rpop', data4, slotNumber)
-
         then:
         sRenameList.size() == 0
         sRpoplpushList.size() == 0
@@ -58,7 +56,6 @@ class RGroupTest extends Specification {
         def data1 = new byte[1][]
         sRpushList = RGroup.parseSlots('rpush', data1, slotNumber)
         sRpushxList = RGroup.parseSlots('rpushx', data1, slotNumber)
-
         then:
         sRpushList.size() == 0
         sRpushxList.size() == 0
@@ -67,7 +64,6 @@ class RGroupTest extends Specification {
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
         sRpopList = RGroup.parseSlots('rpop', data2, slotNumber)
-
         then:
         sRpopList.size() == 1
     }
@@ -81,28 +77,24 @@ class RGroupTest extends Specification {
 
         when:
         def reply = rGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         rGroup.cmd = 'restore'
         reply = rGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         rGroup.cmd = 'rpoplpush'
         reply = rGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         rGroup.cmd = 'zzz'
         reply = rGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }
@@ -126,7 +118,6 @@ class RGroupTest extends Specification {
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.remove(slot, 'b')
         def reply = rGroup.rename()
-
         then:
         reply == ErrorReply.NO_SUCH_KEY
 
@@ -134,7 +125,6 @@ class RGroupTest extends Specification {
         def cv = Mock.prepareCompressedValueList(1)[0]
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = rGroup.rename()
-
         then:
         reply == OKReply.INSTANCE
 
@@ -143,13 +133,10 @@ class RGroupTest extends Specification {
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
-
         Thread.start {
             eventloop.run()
         }
-
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
-
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
@@ -159,7 +146,6 @@ class RGroupTest extends Specification {
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = rGroup.rename()
         eventloopCurrent.run()
-
         then:
         reply instanceof AsyncReply
         ((AsyncReply) reply).settablePromise.whenResult { result ->
@@ -169,7 +155,6 @@ class RGroupTest extends Specification {
         when:
         data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = rGroup.rename()
-
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
@@ -177,7 +162,6 @@ class RGroupTest extends Specification {
         data3[1] = 'a'.bytes
         data3[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = rGroup.rename()
-
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
@@ -203,7 +187,6 @@ class RGroupTest extends Specification {
         rGroup.slotWithKeyHashListParsed = RGroup.parseSlots('rpop', data3, rGroup.slotNumber)
         inMemoryGetSet.remove(slot, 'a')
         def reply = rGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }
@@ -227,7 +210,6 @@ class RGroupTest extends Specification {
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.remove(slot, 'b')
         def reply = rGroup.rpoplpush()
-
         then:
         reply == NilReply.INSTANCE
 
@@ -235,27 +217,21 @@ class RGroupTest extends Specification {
         def cvList = Mock.prepareCompressedValueList(2)
         def cvA = cvList[0]
         cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST
-
         def rlA = new RedisList()
         10.times {
             rlA.addLast(it.toString().bytes)
         }
         cvA.compressedData = rlA.encode()
-
         def cvB = cvList[1]
         cvB.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST
-
         def rlB = new RedisList()
         10.times {
             rlB.addLast(it.toString().bytes)
         }
         cvB.compressedData = rlB.encode()
-
         inMemoryGetSet.put(slot, 'a', 0, cvA)
         inMemoryGetSet.put(slot, 'b', 0, cvB)
-
         reply = rGroup.rpoplpush()
-
         then:
         reply instanceof BulkReply
         ((BulkReply) reply).raw == '9'.bytes
@@ -265,22 +241,17 @@ class RGroupTest extends Specification {
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
-
         Thread.start {
             eventloop.run()
         }
-
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
-
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-
         rGroup.isCrossRequestWorker = true
         reply = rGroup.rpoplpush()
         eventloopCurrent.run()
-
         then:
         reply instanceof AsyncReply
         ((AsyncReply) reply).settablePromise.whenResult { result ->
@@ -290,7 +261,6 @@ class RGroupTest extends Specification {
         when:
         data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = rGroup.rpoplpush()
-
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
@@ -298,7 +268,6 @@ class RGroupTest extends Specification {
         data3[1] = 'a'.bytes
         data3[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = rGroup.rpoplpush()
-
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
@@ -324,7 +293,6 @@ class RGroupTest extends Specification {
         rGroup.slotWithKeyHashListParsed = RGroup.parseSlots('rpush', data3, rGroup.slotNumber)
         inMemoryGetSet.remove(slot, 'a')
         def reply = rGroup.handle()
-
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 1
@@ -333,7 +301,6 @@ class RGroupTest extends Specification {
         inMemoryGetSet.remove(slot, 'a')
         rGroup.cmd = 'rpushx'
         reply = rGroup.handle()
-
         then:
         reply == IntegerReply.REPLY_0
     }

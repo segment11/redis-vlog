@@ -13,7 +13,6 @@ class BGroupTest extends Specification {
 
         when:
         def sBgsaveList = BGroup.parseSlots('bgsave', data1, slotNumber)
-
         then:
         sBgsaveList.size() == 0
     }
@@ -26,14 +25,12 @@ class BGroupTest extends Specification {
 
         when:
         def reply = bGroup.handle()
-
         then:
         reply == OKReply.INSTANCE
 
         when:
         bGroup.cmd = 'zzz'
         reply = bGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }

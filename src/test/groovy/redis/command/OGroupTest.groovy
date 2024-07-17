@@ -15,7 +15,6 @@ class OGroupTest extends Specification {
 
         when:
         def sList = OGroup.parseSlots('ox', data2, slotNumber)
-
         then:
         sList.size() == 0
     }
@@ -29,7 +28,6 @@ class OGroupTest extends Specification {
 
         when:
         def reply = oGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }

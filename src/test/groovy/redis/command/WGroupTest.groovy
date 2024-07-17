@@ -15,7 +15,6 @@ class WGroupTest extends Specification {
 
         when:
         def sList = WGroup.parseSlots('wx', data2, slotNumber)
-
         then:
         sList.size() == 0
     }
@@ -29,7 +28,6 @@ class WGroupTest extends Specification {
 
         when:
         def reply = wGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }

@@ -23,7 +23,6 @@ class TGroupTest extends Specification {
         def sTypeList = TGroup.parseSlots('type', data2, slotNumber)
         def sTtlList = TGroup.parseSlots('ttl', data2, slotNumber)
         def sList = TGroup.parseSlots('txxx', data2, slotNumber)
-
         then:
         sTypeList.size() == 1
         sTtlList.size() == 1
@@ -34,7 +33,6 @@ class TGroupTest extends Specification {
         def data1 = new byte[1][]
         sTypeList = TGroup.parseSlots('type', data1, slotNumber)
         sTtlList = TGroup.parseSlots('ttl', data1, slotNumber)
-
         then:
         sTypeList.size() == 0
         sTtlList.size() == 0
@@ -49,21 +47,18 @@ class TGroupTest extends Specification {
 
         when:
         def reply = tGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         tGroup.cmd = 'ttl'
         reply = tGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         tGroup.cmd = 'zzz'
         reply = tGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }
@@ -85,17 +80,14 @@ class TGroupTest extends Specification {
         tGroup.slotWithKeyHashListParsed = TGroup.parseSlots('type', data2, tGroup.slotNumber)
         inMemoryGetSet.remove(slot, 'a')
         def reply = tGroup.type()
-
         then:
         reply == NilReply.INSTANCE
 
         when:
         def cv = Mock.prepareCompressedValueList(1)[0]
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = tGroup.type()
-
         then:
         reply == TGroup.TYPE_HASH
 
@@ -103,7 +95,6 @@ class TGroupTest extends Specification {
         inMemoryGetSet.remove(slot, 'a')
         inMemoryGetSet.put(slot, RedisHashKeys.keysKey('a'), 0, cv)
         reply = tGroup.type()
-
         then:
         reply == TGroup.TYPE_HASH
 
@@ -111,7 +102,6 @@ class TGroupTest extends Specification {
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = tGroup.type()
-
         then:
         reply == TGroup.TYPE_LIST
 
@@ -119,7 +109,6 @@ class TGroupTest extends Specification {
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = tGroup.type()
-
         then:
         reply == TGroup.TYPE_SET
 
@@ -127,7 +116,6 @@ class TGroupTest extends Specification {
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = tGroup.type()
-
         then:
         reply == TGroup.TYPE_ZSET
 
@@ -135,7 +123,6 @@ class TGroupTest extends Specification {
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_STREAM
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = tGroup.type()
-
         then:
         reply == TGroup.TYPE_STREAM
 
@@ -143,14 +130,12 @@ class TGroupTest extends Specification {
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SHORT_STRING
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = tGroup.type()
-
         then:
         reply == TGroup.TYPE_STRING
 
         when:
         data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = tGroup.type()
-
         then:
         reply == ErrorReply.KEY_TOO_LONG
 
@@ -173,7 +158,6 @@ class TGroupTest extends Specification {
         tGroup.slotWithKeyHashListParsed = TGroup.parseSlots('ttl', data2, tGroup.slotNumber)
         inMemoryGetSet.remove(slot, 'a')
         def reply = tGroup.ttl(false)
-
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == -2
@@ -184,7 +168,6 @@ class TGroupTest extends Specification {
         cv.expireAt = CompressedValue.NO_EXPIRE
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = tGroup.ttl(false)
-
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == -1
@@ -193,14 +176,12 @@ class TGroupTest extends Specification {
         cv.expireAt = System.currentTimeMillis() + 2500
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = tGroup.ttl(false)
-
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 2
 
         when:
         reply = tGroup.ttl(true)
-
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer > 2000
@@ -208,7 +189,6 @@ class TGroupTest extends Specification {
         when:
         data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = tGroup.ttl(false)
-
         then:
         reply == ErrorReply.KEY_TOO_LONG
     }

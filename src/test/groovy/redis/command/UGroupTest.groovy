@@ -15,7 +15,6 @@ class UGroupTest extends Specification {
 
         when:
         def sList = UGroup.parseSlots('ux', data2, slotNumber)
-
         then:
         sList.size() == 0
     }
@@ -29,7 +28,6 @@ class UGroupTest extends Specification {
 
         when:
         def reply = uGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }

@@ -15,7 +15,6 @@ class JGroupTest extends Specification {
 
         when:
         def sList = JGroup.parseSlots('jx', data2, slotNumber)
-
         then:
         sList.size() == 0
     }
@@ -29,7 +28,6 @@ class JGroupTest extends Specification {
 
         when:
         def reply = jGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }

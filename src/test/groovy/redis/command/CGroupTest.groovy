@@ -25,16 +25,13 @@ class CGroupTest extends Specification {
         when:
         def sCopyList = CGroup.parseSlots('copy', data3, slotNumber)
         def sConfigList = CGroup.parseSlots('config', data3, slotNumber)
-
         then:
         sCopyList.size() == 2
         sConfigList.size() == 0
 
         when:
         def data2 = new byte[2][]
-
         sCopyList = CGroup.parseSlots('copy', data2, slotNumber)
-
         then:
         sCopyList.size() == 0
     }
@@ -48,28 +45,24 @@ class CGroupTest extends Specification {
 
         when:
         def reply = cGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         cGroup.cmd = 'config'
         cGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         cGroup.cmd = 'copy'
         reply = cGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         cGroup.cmd = 'zzz'
         reply = cGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }
@@ -87,21 +80,18 @@ class CGroupTest extends Specification {
 
         when:
         def reply = cGroup.client()
-
         then:
         reply instanceof IntegerReply
 
         when:
         data2[1] = 'setinfo'.bytes
         reply = cGroup.client()
-
         then:
         reply == OKReply.INSTANCE
 
         when:
         data2[1] = 'zzz'.bytes
         reply = cGroup.client()
-
         then:
         reply == NilReply.INSTANCE
     }
@@ -123,16 +113,13 @@ class CGroupTest extends Specification {
         when:
         cGroup.slotWithKeyHashListParsed = CGroup.parseSlots('copy', data3, cGroup.slotNumber)
         def reply = cGroup.copy()
-
         then:
         reply == IntegerReply.REPLY_0
 
         when:
         def cv = Mock.prepareCompressedValueList(1)[0]
         inMemoryGetSet.put(slot, 'a', 0, cv)
-
         reply = cGroup.copy()
-
         then:
         reply == IntegerReply.REPLY_1
 
@@ -142,17 +129,13 @@ class CGroupTest extends Specification {
         data4[2] = 'b'.bytes
         data4[3] = 'replace_'.bytes
         cGroup.data = data4
-
         reply = cGroup.copy()
-
         then:
         reply == IntegerReply.REPLY_0
 
         when:
         data4[3] = 'replace'.bytes
-
         reply = cGroup.copy()
-
         then:
         reply == IntegerReply.REPLY_1
 
@@ -161,23 +144,17 @@ class CGroupTest extends Specification {
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
-
         Thread.start {
             eventloop.run()
         }
-
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
-
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-
         cGroup.isCrossRequestWorker = true
-
         reply = cGroup.copy()
         eventloopCurrent.run()
-
         then:
         reply instanceof AsyncReply
         ((AsyncReply) reply).settablePromise.whenResult { result ->
@@ -188,7 +165,6 @@ class CGroupTest extends Specification {
         inMemoryGetSet.remove(slot, 'b')
 
         reply = cGroup.copy()
-
         then:
         reply instanceof AsyncReply
         ((AsyncReply) reply).settablePromise.whenResult { result ->
@@ -197,9 +173,7 @@ class CGroupTest extends Specification {
 
         when:
         data4[3] = 'replace_'.bytes
-
         reply = cGroup.copy()
-
         then:
         reply instanceof AsyncReply
         ((AsyncReply) reply).settablePromise.whenResult { result ->

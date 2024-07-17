@@ -21,7 +21,6 @@ class IGroupTest extends Specification {
         def sIncrbyList = IGroup.parseSlots('incrby', data2, slotNumber)
         def sIncrbyfloatList = IGroup.parseSlots('incrbyfloat', data2, slotNumber)
         def sList = IGroup.parseSlots('ixxx', data2, slotNumber)
-
         then:
         sIncrList.size() == 1
         sIncrbyList.size() == 1
@@ -32,7 +31,6 @@ class IGroupTest extends Specification {
         def data1 = new byte[1][]
 
         sIncrbyList = IGroup.parseSlots('incrby', data1, slotNumber)
-
         then:
         sIncrbyList.size() == 0
     }
@@ -46,28 +44,24 @@ class IGroupTest extends Specification {
 
         when:
         def reply = iGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         iGroup.cmd = 'incrby'
         reply = iGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         iGroup.cmd = 'incrbyfloat'
         reply = iGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         iGroup.cmd = 'zzz'
         reply = iGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }
@@ -89,7 +83,6 @@ class IGroupTest extends Specification {
         iGroup.slotWithKeyHashListParsed = IGroup.parseSlots('incr', data2, iGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = iGroup.handle()
-
         then:
         reply == ErrorReply.NOT_INTEGER
 
@@ -97,18 +90,15 @@ class IGroupTest extends Specification {
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = '1'.bytes
-
         iGroup.data = data3
         iGroup.cmd = 'incrby'
         reply = iGroup.handle()
-
         then:
         reply == ErrorReply.NOT_INTEGER
 
         when:
         data3[2] = 'a'.bytes
         reply = iGroup.handle()
-
         then:
         reply == ErrorReply.NOT_INTEGER
 
@@ -116,14 +106,12 @@ class IGroupTest extends Specification {
         data3[2] = '1.1'.bytes
         iGroup.cmd = 'incrbyfloat'
         reply = iGroup.handle()
-
         then:
         reply == ErrorReply.NOT_FLOAT
 
         when:
         data3[2] = 'a'.bytes
         reply = iGroup.handle()
-
         then:
         reply == ErrorReply.NOT_FLOAT
     }

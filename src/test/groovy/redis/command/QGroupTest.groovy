@@ -15,7 +15,6 @@ class QGroupTest extends Specification {
 
         when:
         def sList = QGroup.parseSlots('qx', data2, slotNumber)
-
         then:
         sList.size() == 0
     }
@@ -29,7 +28,6 @@ class QGroupTest extends Specification {
 
         when:
         def reply = qGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }

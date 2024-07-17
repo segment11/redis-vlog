@@ -15,7 +15,6 @@ class KGroupTest extends Specification {
 
         when:
         def sList = KGroup.parseSlots('kx', data2, slotNumber)
-
         then:
         sList.size() == 0
     }
@@ -29,7 +28,6 @@ class KGroupTest extends Specification {
 
         when:
         def reply = kGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }

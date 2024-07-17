@@ -15,7 +15,6 @@ class YGroupTest extends Specification {
 
         when:
         def sList = YGroup.parseSlots('yx', data2, slotNumber)
-
         then:
         sList.size() == 0
     }
@@ -29,7 +28,6 @@ class YGroupTest extends Specification {
 
         when:
         def reply = yGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }

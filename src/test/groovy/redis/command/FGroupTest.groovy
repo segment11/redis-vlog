@@ -21,7 +21,6 @@ class FGroupTest extends Specification {
 
         when:
         def sFlushDbList = FGroup.parseSlots('flushdb', data2, slotNumber)
-
         then:
         sFlushDbList.size() == 0
     }
@@ -36,21 +35,18 @@ class FGroupTest extends Specification {
 
         when:
         def reply = fGroup.handle()
-
         then:
         reply == OKReply.INSTANCE
 
         when:
         fGroup.cmd = 'flushall'
         reply = fGroup.handle()
-
         then:
         reply == OKReply.INSTANCE
 
         when:
         fGroup.cmd = 'zzz'
         reply = fGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }
@@ -64,27 +60,21 @@ class FGroupTest extends Specification {
         def fGroup = new FGroup('flushdb', data1, null)
         fGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
 
-        and:
+        when:
         def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
-
         Thread.start {
             eventloop.run()
         }
-
         LocalPersist.instance.addOneSlotForTest(slot, eventloop)
-
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-
-        when:
         def reply = fGroup.flushdb()
         eventloopCurrent.run()
-
         then:
         reply instanceof AsyncReply
         ((AsyncReply) reply).settablePromise.whenResult { result ->

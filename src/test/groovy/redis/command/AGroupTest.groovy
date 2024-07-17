@@ -17,20 +17,17 @@ class AGroupTest extends Specification {
 
         when:
         def sAppendList = AGroup.parseSlots('append', data3, slotNumber)
-
         then:
         sAppendList.size() == 1
 
         when:
         sAppendList = AGroup.parseSlots('axxx', data3, slotNumber)
-
         then:
         sAppendList.size() == 0
 
         when:
         def data1 = new byte[1][]
         sAppendList = AGroup.parseSlots('append', data1, slotNumber)
-
         then:
         sAppendList.size() == 0
     }
@@ -44,14 +41,12 @@ class AGroupTest extends Specification {
 
         when:
         def reply = aGroup.handle()
-
         then:
         reply == ErrorReply.FORMAT
 
         when:
         aGroup.cmd = 'zzz'
         reply = aGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }
@@ -73,14 +68,12 @@ class AGroupTest extends Specification {
         when:
         aGroup.slotWithKeyHashListParsed = AGroup.parseSlots('append', data3, aGroup.slotNumber)
         aGroup.append()
-
         then:
         aGroup.get('a'.bytes) == '123'.bytes
 
         when:
         data3[2] = '456'.bytes
         aGroup.append()
-
         then:
         aGroup.get('a'.bytes) == '123456'.bytes
 
@@ -89,9 +82,7 @@ class AGroupTest extends Specification {
         def aGroup2 = new AGroup('append', data2, null)
 //        aGroup2.byPassGetSet = inMemoryGetSet
 //        aGroup2.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
-
         def reply = aGroup2.append()
-
         then:
         reply == ErrorReply.FORMAT
     }

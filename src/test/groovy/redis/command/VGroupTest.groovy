@@ -15,7 +15,6 @@ class VGroupTest extends Specification {
 
         when:
         def sList = VGroup.parseSlots('vx', data2, slotNumber)
-
         then:
         sList.size() == 0
     }
@@ -29,7 +28,6 @@ class VGroupTest extends Specification {
 
         when:
         def reply = vGroup.handle()
-
         then:
         reply == NilReply.INSTANCE
     }
