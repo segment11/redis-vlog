@@ -43,12 +43,28 @@ public class ZGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-        if ("zdiff".equals(cmd) || "zinter".equals(cmd) || "zunion".equals(cmd)) {
+        if ("zdiff".equals(cmd) || "zinter".equals(cmd) || "zintercard".equals(cmd) || "zunion".equals(cmd)) {
             if (data.length < 4) {
                 return slotWithKeyHashList;
             }
-            // include withscores never used
-            for (int i = 2; i < data.length; i++) {
+
+            var numKeysBytes = data[1];
+            int numKeys;
+            try {
+                numKeys = Integer.parseInt(new String(numKeysBytes));
+            } catch (NumberFormatException e) {
+                throw new ErrorReplyException(ErrorReply.NOT_INTEGER.getMessage());
+            }
+
+            if (numKeys < 2) {
+                throw new ErrorReplyException(ErrorReply.INVALID_INTEGER.getMessage());
+            }
+
+            if (data.length < numKeys + 2) {
+                throw new ErrorReplyException(ErrorReply.SYNTAX.getMessage());
+            }
+
+            for (int i = 2; i < numKeys + 2; i++) {
                 var keyBytes = data[i];
                 var slotWithKeyHash = slot(keyBytes, slotNumber);
                 slotWithKeyHashList.add(slotWithKeyHash);
@@ -65,8 +81,23 @@ public class ZGroup extends BaseCommand {
             var dstSlotWithKeyHash = slot(dstKeyBytes, slotNumber);
             slotWithKeyHashList.add(dstSlotWithKeyHash);
 
-            // include AGGREGATE or WEIGHTS never used
-            for (int i = 3; i < data.length; i++) {
+            var numKeysBytes = data[2];
+            int numKeys;
+            try {
+                numKeys = Integer.parseInt(new String(numKeysBytes));
+            } catch (NumberFormatException e) {
+                throw new ErrorReplyException(ErrorReply.NOT_INTEGER.getMessage());
+            }
+
+            if (numKeys < 2) {
+                throw new ErrorReplyException(ErrorReply.INVALID_INTEGER.getMessage());
+            }
+
+            if (data.length < numKeys + 3) {
+                throw new ErrorReplyException(ErrorReply.SYNTAX.getMessage());
+            }
+
+            for (int i = 3; i < numKeys + 3; i++) {
                 var keyBytes = data[i];
                 var slotWithKeyHash = slot(keyBytes, slotNumber);
                 slotWithKeyHashList.add(slotWithKeyHash);
@@ -89,18 +120,6 @@ public class ZGroup extends BaseCommand {
             // so can reuse zrange method
             slotWithKeyHashList.add(s1);
             slotWithKeyHashList.add(s2);
-            return slotWithKeyHashList;
-        }
-
-        if ("zintercard".equals(cmd)) {
-            if (data.length < 3) {
-                return slotWithKeyHashList;
-            }
-            for (int i = 2; i < data.length; i++) {
-                var keyBytes = data[i];
-                var slotWithKeyHash = slot(keyBytes, slotNumber);
-                slotWithKeyHashList.add(slotWithKeyHash);
-            }
             return slotWithKeyHashList;
         }
 
@@ -636,6 +655,8 @@ public class ZGroup extends BaseCommand {
                              boolean isAggregateSum, boolean isAggregateMin, boolean isAggregateMax,
                              boolean isWeights, double[] weights) {
         if (isInter) {
+            var memberMap = rz.getMemberMap();
+
             int otherKeyIndex = 0;
             outer:
             for (var otherRz : otherRzList) {
@@ -644,7 +665,6 @@ public class ZGroup extends BaseCommand {
                     break;
                 }
 
-                var memberMap = rz.getMemberMap();
                 var it = rz.getSet().iterator();
                 while (it.hasNext()) {
                     var sv = it.next();
@@ -674,7 +694,7 @@ public class ZGroup extends BaseCommand {
                         sv.score(memberScore + otherMemberScore);
                     } else if (isAggregateMin) {
                         sv.score(Math.min(memberScore, otherMemberScore));
-                    } else if (isAggregateMax) {
+                    } else {
                         sv.score(Math.max(memberScore, otherMemberScore));
                     }
                 }
@@ -716,7 +736,7 @@ public class ZGroup extends BaseCommand {
                             sv.score(memberScore + otherMemberScore);
                         } else if (isAggregateMin) {
                             sv.score(Math.min(memberScore, otherMemberScore));
-                        } else if (isAggregateMax) {
+                        } else {
                             sv.score(Math.max(memberScore, otherMemberScore));
                         }
                     }
@@ -757,9 +777,16 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.NOT_INTEGER;
         }
 
-        if (numKeys < 1) {
+        if (numKeys < 2) {
+            return ErrorReply.INVALID_INTEGER;
+        }
+
+        if (data.length < numKeys + 2) {
             return ErrorReply.SYNTAX;
         }
+
+        // already checked when parse slots
+//        int numKeys = Integer.parseInt(new String(data[1]));
 
         boolean isAggregateSum = true;
         boolean isAggregateMin = false;
@@ -771,11 +798,7 @@ public class ZGroup extends BaseCommand {
         boolean withScores = false;
 
         if (isInter || isUnion) {
-            if (data.length < numKeys + 2) {
-                return ErrorReply.SYNTAX;
-            }
-
-            for (int i = 3 + numKeys - 1; i < data.length; i++) {
+            for (int i = 2 + numKeys; i < data.length; i++) {
                 var tmpBytes = data[i];
                 var tmp = new String(tmpBytes).toLowerCase();
 
@@ -832,8 +855,9 @@ public class ZGroup extends BaseCommand {
             withScores = "withscores".equalsIgnoreCase(new String(data[data.length - 1]));
         }
 
-        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(data.length - 1);
-        for (int i = 2, j = 0; i < data.length; i++, j++) {
+        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(numKeys);
+        // begin from 2
+        for (int i = 2, j = 0; i < numKeys + 2; i++, j++) {
             var keyBytes = data[i];
             if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
                 return ErrorReply.KEY_TOO_LONG;
@@ -957,9 +981,16 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.NOT_INTEGER;
         }
 
-        if (numKeys < 1) {
+        if (numKeys < 2) {
+            return ErrorReply.INVALID_INTEGER;
+        }
+
+        if (data.length < numKeys + 3) {
             return ErrorReply.SYNTAX;
         }
+
+        // already checked when parse slots
+//        int numKeys = Integer.parseInt(new String(data[2]));
 
         boolean isAggregateSum = true;
         boolean isAggregateMin = false;
@@ -969,10 +1000,6 @@ public class ZGroup extends BaseCommand {
         double[] weights = null;
 
         if (isInter || isUnion) {
-            if (data.length < numKeys + 2) {
-                return ErrorReply.SYNTAX;
-            }
-
             for (int i = 3 + numKeys; i < data.length; i++) {
                 var tmpBytes = data[i];
                 var tmp = new String(tmpBytes).toLowerCase();
@@ -1059,7 +1086,7 @@ public class ZGroup extends BaseCommand {
                 var otherRz = getByKeyBytes(other.keyBytes(), other.slotWithKeyHash());
                 otherRzList.add(otherRz);
             }
-            operateZset(rz, otherRzList, false, false,
+            operateZset(rz, otherRzList, isInter, isUnion,
                     isAggregateSum, isAggregateMin, isAggregateMax,
                     isWeights, weights);
 
@@ -1088,7 +1115,7 @@ public class ZGroup extends BaseCommand {
         double[] finalWeights = weights;
         Promises.all(promises).whenComplete((r, e) -> {
             if (e != null) {
-                log.error("zdiffstore error: {}, isInter: {}, isUnion: {}", e.getMessage(), false, false);
+                log.error("zdiffstore error: {}, isInter: {}, isUnion: {}", e.getMessage(), isInter, isUnion);
                 finalPromise.setException(e);
                 return;
             }
@@ -1111,10 +1138,11 @@ public class ZGroup extends BaseCommand {
             }
 
             ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
-            for (var promise : promises) {
-                otherRzList.add(promise.getResult());
+            for (int i = 1; i < list.size(); i++) {
+                var otherRz = promises.get(i).getResult();
+                otherRzList.add(otherRz);
             }
-            operateZset(rz, otherRzList, false, false,
+            operateZset(rz, otherRzList, isInter, isUnion,
                     finalIsAggregateSum, finalIsAggregateMin, finalIsAggregateMax,
                     finalIsWeights, finalWeights);
 
@@ -1170,7 +1198,7 @@ public class ZGroup extends BaseCommand {
         return new BulkReply(String.valueOf(score).getBytes());
     }
 
-    private Reply zintercard() {
+    Reply zintercard() {
         if (data.length < 4) {
             return ErrorReply.FORMAT;
         }
@@ -1183,30 +1211,34 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.NOT_INTEGER;
         }
 
-        if (numKeys < 1) {
+        if (numKeys < 2) {
+            return ErrorReply.INVALID_INTEGER;
+        }
+
+        if (data.length < 2 + numKeys) {
             return ErrorReply.SYNTAX;
         }
 
         int limit = 0;
-        for (int i = 3 + numKeys - 1; i < data.length; i++) {
-            var tmpBytes = data[i];
-            var tmp = new String(tmpBytes).toLowerCase();
-
-            if ("limit".equals(tmp)) {
-                if (i + 1 >= data.length) {
-                    return ErrorReply.SYNTAX;
-                }
-                var limitBytes = data[i + 1];
-                try {
-                    limit = Integer.parseInt(new String(limitBytes));
-                } catch (NumberFormatException e) {
-                    return ErrorReply.NOT_INTEGER;
-                }
-                i++;
+        if (data.length > numKeys + 2) {
+            if (data.length != numKeys + 2 + 2) {
+                return ErrorReply.SYNTAX;
             }
-        }
-        if (limit < 0) {
-            return ErrorReply.INVALID_INTEGER;
+            var tmpBytes = data[numKeys + 2];
+            var tmp = new String(tmpBytes).toLowerCase();
+            if (!"limit".equals(tmp)) {
+                return ErrorReply.SYNTAX;
+            }
+
+            var limitBytes = data[numKeys + 3];
+            try {
+                limit = Integer.parseInt(new String(limitBytes));
+            } catch (NumberFormatException e) {
+                return ErrorReply.NOT_INTEGER;
+            }
+            if (limit < 0) {
+                return ErrorReply.INVALID_INTEGER;
+            }
         }
 
         ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(numKeys);
@@ -1257,7 +1289,7 @@ public class ZGroup extends BaseCommand {
             }
 
             var n = limit == 0 ? rz.size() : Math.min(rz.size(), limit);
-            return n == 0 ? IntegerReply.REPLY_0 : new IntegerReply(rz.size());
+            return n == 0 ? IntegerReply.REPLY_0 : new IntegerReply(n);
         }
 
         ArrayList<Promise<RedisZSet>> promises = new ArrayList<>(list.size() - 1);
@@ -1316,7 +1348,7 @@ public class ZGroup extends BaseCommand {
             }
 
             var n = finalLimit == 0 ? rz.size() : Math.min(rz.size(), finalLimit);
-            var rr = n == 0 ? IntegerReply.REPLY_0 : new IntegerReply(rz.size());
+            var rr = n == 0 ? IntegerReply.REPLY_0 : new IntegerReply(n);
 
             finalPromise.set(rr);
         });
@@ -2119,6 +2151,7 @@ public class ZGroup extends BaseCommand {
         }
 
         int removed = 0;
+        var memberMap = rz.getMemberMap();
         var it = rz.getSet().iterator();
         while (it.hasNext()) {
             var sv = it.next();
@@ -2133,6 +2166,7 @@ public class ZGroup extends BaseCommand {
                 }
 
                 it.remove();
+                memberMap.remove(sv.member());
                 removed++;
             } else if (byScore) {
                 double score = sv.score();
@@ -2144,6 +2178,7 @@ public class ZGroup extends BaseCommand {
                 }
 
                 it.remove();
+                memberMap.remove(sv.member());
                 removed++;
             } else {
                 int initRank = sv.getInitRank();
@@ -2152,6 +2187,7 @@ public class ZGroup extends BaseCommand {
                 }
 
                 it.remove();
+                memberMap.remove(sv.member());
                 removed++;
             }
         }

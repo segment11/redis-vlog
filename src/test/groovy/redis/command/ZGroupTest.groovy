@@ -1,12 +1,16 @@
 package redis.command
 
+import io.activej.eventloop.Eventloop
 import redis.BaseCommand
 import redis.CompressedValue
 import redis.mock.InMemoryGetSet
+import redis.persist.LocalPersist
 import redis.persist.Mock
 import redis.reply.*
 import redis.type.RedisZSet
 import spock.lang.Specification
+
+import java.time.Duration
 
 class ZGroupTest extends Specification {
     def singleKeyCmdList1 = '''
@@ -37,6 +41,7 @@ zscore
     def multiKeyCmdList2 = '''
 zdiff
 zinter
+zintercard
 zunion
 '''.readLines().collect { it.trim() }.findAll { it }
 
@@ -53,18 +58,16 @@ zunionstore
         int slotNumber = 128
 
         and:
-        data4[1] = 'a'.bytes
-        data4[2] = 'b'.bytes
-        data4[3] = 'c'.bytes
+        data4[1] = '2'.bytes
+        data4[2] = 'a'.bytes
+        data4[3] = 'b'.bytes
 
         when:
         def sZdiff = ZGroup.parseSlots('zdiff', data1, slotNumber)
-        def sZintercard = ZGroup.parseSlots('zintercard', data1, slotNumber)
         def sList = ZGroup.parseSlots('zxxx', data4, slotNumber)
 
         then:
         sZdiff.size() == 0
-        sZintercard.size() == 0
         sList.size() == 0
 
         when:
@@ -90,9 +93,9 @@ zunionstore
         }
 
         then:
-        sListList2.size() == 3
+        sListList2.size() == 4
         sListList2.every { it.size() > 1 }
-        sListList22.size() == 3
+        sListList22.size() == 4
         sListList22.every { it.size() == 0 }
 
         when:
@@ -645,8 +648,437 @@ zunionstore
         given:
         final byte slot = 0
 
-        expect:
-        1 == 1
+        def data5 = new byte[5][]
+        data5[1] = '2'.bytes
+        data5[2] = 'a'.bytes
+        data5[3] = 'b'.bytes
+        data5[4] = 'withscores_'.bytes
+
+        // zinter/zunion
+        def data10 = new byte[10][]
+        data10[1] = '2'.bytes
+        data10[2] = 'a'.bytes
+        data10[3] = 'b'.bytes
+        data10[4] = 'weights'.bytes
+        data10[5] = '1'.bytes
+        data10[6] = '2'.bytes
+        data10[7] = 'aggregate'.bytes
+        data10[8] = 'sum'.bytes
+        data10[9] = 'withscores_'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zdiff', data5, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zdiff', data5, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.zdiff(false, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        zGroup.data = data10
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(2)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
+
+        def rzA = new RedisZSet()
+        cvA.compressedData = rzA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+
+        zGroup.data = data5
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        zGroup.data = data10
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        rzA.add(0.1, 'member0')
+        cvA.compressedData = rzA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        zGroup.data = data5
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+        ((MultiBulkReply) reply).replies[0] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == 'member0'.bytes
+
+        when:
+        zGroup.data = data10
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        data5[4] = 'withscores'.bytes
+        data10[9] = 'withscores'.bytes
+
+        zGroup.data = data5
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+        ((MultiBulkReply) reply).replies[0] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == 'member0'.bytes
+        ((MultiBulkReply) reply).replies[1] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == '0.1'.bytes
+
+        when:
+        zGroup.data = data10
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+
+        when:
+        data5[4] = 'withscores_'.bytes
+        data10[9] = 'withscores_'.bytes
+
+        def cvB = cvList[1]
+        cvB.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
+
+        def rzB = new RedisZSet()
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        zGroup.data = data5
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        zGroup.data = data10
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        rzB.add(0.1, 'member0')
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        zGroup.data = data5
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        zGroup.data = data10
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        data10[8] = 'min'.bytes
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        data10[8] = 'max'.bytes
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        data10[8] = 'xxx'.bytes
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data10[8] = 'sum'.bytes
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        data10[8] = 'min'.bytes
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        data10[8] = 'max'.bytes
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        rzA.remove('member0')
+        10.times {
+            rzA.add(it as double, 'member' + it)
+        }
+        cvA.compressedData = rzA.encode()
+
+        rzB.remove('member0')
+        5.times {
+            rzB.add(it as double, 'member' + it)
+        }
+        rzB.add(10.0, 'member10')
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        zGroup.data = data5
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 5
+
+        when:
+        zGroup.data = data10
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 5
+
+        when:
+        reply = zGroup.zdiff(false, true)
+
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 11
+
+        when:
+        rzB.clear()
+        RedisZSet.ZSET_MAX_SIZE.times {
+            rzB.add(it as double, 'member' + it)
+        }
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+
+        boolean exception = false
+        String exceptionMessage = null
+        try {
+            reply = zGroup.zdiff(false, true)
+        } catch (ErrorReplyException e) {
+            exception = true
+            exceptionMessage = e.message
+        }
+
+        then:
+        exception
+        exceptionMessage.contains(ErrorReply.ZSET_SIZE_TO_LONG.message)
+
+        when:
+        def eventloop = Eventloop.builder()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        eventloop.keepAlive(true)
+
+        Thread.start {
+            eventloop.run()
+        }
+
+        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
+        zGroup.isCrossRequestWorker = true
+
+        rzB.clear()
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = zGroup.zdiff(true, false)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == MultiBulkReply.EMPTY
+        }.result
+
+        when:
+        5.times {
+            rzB.add(it as double, 'member' + it)
+        }
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = zGroup.zdiff(false, true)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result instanceof MultiBulkReply && ((MultiBulkReply) result).replies.length == 5
+        }.result
+
+        when:
+        data10[9] = 'withscores'.bytes
+        reply = zGroup.zdiff(true, false)
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result instanceof MultiBulkReply && ((MultiBulkReply) result).replies.length == 10
+        }.result
+
+        when:
+        data5[1] = 'a'.bytes
+        zGroup.data = data5
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply == ErrorReply.NOT_INTEGER
+
+        when:
+        data5[1] = '1'.bytes
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply == ErrorReply.INVALID_INTEGER
+
+        when:
+        data5[1] = '2'.bytes
+        data5[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+
+        when:
+        def data6 = new byte[6][]
+        data6[1] = '2'.bytes
+        data6[2] = 'a'.bytes
+        data6[3] = 'b'.bytes
+        data6[4] = 'withscores_'.bytes
+        data6[5] = 'c'.bytes
+
+        zGroup.data = data6
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data6[1] = '5'.bytes
+        reply = zGroup.zdiff(false, false)
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data6[4] = 'weights'.bytes
+        data6[5] = '1'.bytes
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        def data7 = new byte[7][]
+        data7[1] = '2'.bytes
+        data7[2] = 'a'.bytes
+        data7[3] = 'b'.bytes
+        data7[4] = 'weights'.bytes
+        data7[5] = '1'.bytes
+        data7[6] = 'a'.bytes
+
+        zGroup.data = data7
+        reply = zGroup.zdiff(true, false)
+
+        then:
+        reply == ErrorReply.NOT_FLOAT
+
+        cleanup:
+        eventloop.breakEventloop()
     }
 
     def 'test zdiffstore'() {
@@ -733,8 +1165,266 @@ zunionstore
         given:
         final byte slot = 0
 
-        expect:
-        1 == 1
+        def data6 = new byte[6][]
+        data6[1] = '2'.bytes
+        data6[2] = 'a'.bytes
+        data6[3] = 'b'.bytes
+        data6[4] = 'limit'.bytes
+        data6[5] = '0'.bytes
+
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def zGroup = new ZGroup('zintercard', data6, null)
+        zGroup.byPassGetSet = inMemoryGetSet
+        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+
+        when:
+        zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zintercard', data6, zGroup.slotNumber)
+        inMemoryGetSet.remove(slot, 'a')
+        def reply = zGroup.zintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(2)
+        def cvA = cvList[0]
+        cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
+
+        def rzA = new RedisZSet()
+        cvA.compressedData = rzA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = zGroup.zintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        rzA.add(0.1, 'member0')
+        rzA.add(0.2, 'member1')
+        rzA.add(0.3, 'member2')
+        cvA.compressedData = rzA.encode()
+
+        inMemoryGetSet.put(slot, 'a', 0, cvA)
+        reply = zGroup.zintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def cvB = cvList[1]
+        cvB.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
+
+        def rzB = new RedisZSet()
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = zGroup.zintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        rzB.add(0.1, 'member0')
+        rzB.add(0.2, 'member1')
+        rzB.add(0.4, 'member3')
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = zGroup.zintercard()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        data6[5] = '1'.bytes
+        reply = zGroup.zintercard()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        data6[5] = '3'.bytes
+        reply = zGroup.zintercard()
+
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 2
+
+        when:
+        rzB.remove('member0')
+        rzB.remove('member1')
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = zGroup.zintercard()
+
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        def eventloop = Eventloop.builder()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        eventloop.keepAlive(true)
+
+        Thread.start {
+            eventloop.run()
+        }
+
+        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+
+        zGroup.isCrossRequestWorker = true
+        reply = zGroup.zintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == IntegerReply.REPLY_0
+        }.result
+
+        when:
+        rzB.add(0.1, 'member0')
+        rzB.add(0.2, 'member1')
+        rzB.add(0.4, 'member3')
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = zGroup.zintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result instanceof IntegerReply && ((IntegerReply) result).integer == 2
+        }.result
+
+        when:
+        data6[5] = '1'.bytes
+        reply = zGroup.zintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result instanceof IntegerReply && ((IntegerReply) result).integer == 1
+        }.result
+
+        when:
+        data6[5] = '0'.bytes
+        reply = zGroup.zintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result instanceof IntegerReply && ((IntegerReply) result).integer == 2
+        }.result
+
+        when:
+        rzB.clear()
+        cvB.compressedData = rzB.encode()
+
+        inMemoryGetSet.put(slot, 'b', 0, cvB)
+        reply = zGroup.zintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == IntegerReply.REPLY_0
+        }.result
+
+        when:
+        inMemoryGetSet.remove(slot, 'b')
+        reply = zGroup.zintercard()
+        eventloopCurrent.run()
+
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == IntegerReply.REPLY_0
+        }.result
+
+        when:
+        data6[4] = 'limit_'.bytes
+        reply = zGroup.zintercard()
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data6[4] = 'limit'.bytes
+        data6[5] = 'a'.bytes
+        reply = zGroup.zintercard()
+
+        then:
+        reply == ErrorReply.NOT_INTEGER
+
+        when:
+        data6[5] = '-1'.bytes
+        reply = zGroup.zintercard()
+
+        then:
+        reply == ErrorReply.INVALID_INTEGER
+
+        when:
+        data6[5] = '0'.bytes
+        data6[1] = '1'.bytes
+        reply = zGroup.zintercard()
+
+        then:
+        reply == ErrorReply.INVALID_INTEGER
+
+        when:
+        data6[1] = 'a'.bytes
+        reply = zGroup.zintercard()
+
+        then:
+        reply == ErrorReply.NOT_INTEGER
+
+        when:
+        data6[1] = '2'.bytes
+        data6[2] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
+        reply = zGroup.zintercard()
+
+        then:
+        reply == ErrorReply.KEY_TOO_LONG
+
+        when:
+        def data7 = new byte[7][]
+        data7[1] = '6'.bytes
+        data7[2] = 'a'.bytes
+        data7[3] = 'b'.bytes
+        data7[4] = 'c'.bytes
+        data7[5] = 'd'.bytes
+        data7[6] = 'e'.bytes
+
+        zGroup.data = data7
+        reply = zGroup.zintercard()
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data7[1] = '4'.bytes
+        data7[6] = 'limit'.bytes
+        reply = zGroup.zintercard()
+
+        then:
+        reply == ErrorReply.SYNTAX
+
+        cleanup:
+        eventloop.breakEventloop()
     }
 
     def 'test zmscore'() {
