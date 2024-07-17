@@ -1607,6 +1607,8 @@ public class ZGroup extends BaseCommand {
                 i += 2;
             } else if ("withscores".equals(tmp)) {
                 withScores = true;
+            } else if ("byindex".equals(tmp)) {
+                // do nothing
             } else {
                 return ErrorReply.SYNTAX;
             }
