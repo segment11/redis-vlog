@@ -6,9 +6,12 @@ import redis.reply.Reply;
 import java.nio.ByteBuffer;
 
 public class Repl {
+    private Repl() {
+    }
+
     public static final byte[] PROTOCOL_KEYWORD_BYTES = "X-REPL".getBytes();
     // 8 bytes for slaveUuid, 1 byte for slot, 1 byte for type, 4 bytes for length
-    private static final int HEADER_LENGTH = PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1 + 4;
+    static final int HEADER_LENGTH = PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1 + 4;
 
     public static io.activej.bytebuf.ByteBuf buffer(long slaveUuid, byte slot, ReplType type, ReplContent content) {
         var encodeLength = content.encodeLength();
@@ -25,13 +28,7 @@ public class Repl {
         return buf;
     }
 
-    static class ReplReply implements Reply {
-        private final io.activej.bytebuf.ByteBuf buf;
-
-        ReplReply(io.activej.bytebuf.ByteBuf buf) {
-            this.buf = buf;
-        }
-
+    record ReplReply(io.activej.bytebuf.ByteBuf buf) implements Reply {
         @Override
         public io.activej.bytebuf.ByteBuf buffer() {
             return buf;
