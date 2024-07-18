@@ -77,9 +77,10 @@ public class ZGroup extends BaseCommand {
                 return slotWithKeyHashList;
             }
 
-            var dstKeyBytes = data[1];
-            var dstSlotWithKeyHash = slot(dstKeyBytes, slotNumber);
-            slotWithKeyHashList.add(dstSlotWithKeyHash);
+            // reuse zdiff method, need to keep the order, exclude dst key
+//            var dstKeyBytes = data[1];
+//            var dstSlotWithKeyHash = slot(dstKeyBytes, slotNumber);
+//            slotWithKeyHashList.add(dstSlotWithKeyHash);
 
             var numKeysBytes = data[2];
             int numKeys;
@@ -142,7 +143,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zdiff".equals(cmd)) {
-            return zdiff(false, false);
+            return zdiff(data, false, false, null);
         }
 
         if ("zdiffstore".equals(cmd)) {
@@ -154,7 +155,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zinter".equals(cmd)) {
-            return zdiff(true, false);
+            return zdiff(data, true, false, null);
         }
 
         if ("zintercard".equals(cmd)) {
@@ -334,11 +335,11 @@ public class ZGroup extends BaseCommand {
         }
 
         if ("zunion".equals(cmd)) {
-            return zdiff(false, true);
+            return zdiff(data, false, true, null);
         }
 
         if ("zunionstore".equals(cmd)) {
-            return zdiff(false, true);
+            return zdiffstore(false, true);
         }
 
         return NilReply.INSTANCE;
@@ -765,11 +766,49 @@ public class ZGroup extends BaseCommand {
     }
 
     Reply zdiff(boolean isInter, boolean isUnion) {
-        if (data.length < 4) {
+        return zdiff(data, isInter, isUnion, null);
+    }
+
+    // for unit test
+    void addDstKeyBytesForStoreForTest(byte[] dstKeyBytes) {
+        var data2 = new byte[data.length + 1][];
+        data2[0] = data[0];
+        data2[1] = dstKeyBytes;
+
+        for (int i = 1; i < data.length; i++) {
+            data2[i + 1] = data[i];
+        }
+        this.data = data2;
+    }
+
+    Reply zdiffstore(boolean isInter, boolean isUnion) {
+        if (data.length < 5) {
             return ErrorReply.FORMAT;
         }
 
-        var numKeysBytes = data[1];
+        var dd = new byte[data.length - 1][];
+        dd[0] = data[0];
+        dd[1] = data[2];
+        dd[2] = data[3];
+        dd[3] = data[4];
+
+        for (int i = 5; i < data.length; i++) {
+            dd[i - 1] = data[i];
+        }
+
+        var dstKeyBytes = data[1];
+        return zdiff(dd, isInter, isUnion, dstKeyBytes);
+    }
+
+    Reply zdiff(byte[][] dd, boolean isInter, boolean isUnion, byte[] dstKeyBytes) {
+        if (dd.length < 4) {
+            return ErrorReply.FORMAT;
+        }
+
+        var doStore = dstKeyBytes != null;
+        var dstSlotWithKeyHash = doStore ? slot(dstKeyBytes) : null;
+
+        var numKeysBytes = dd[1];
         int numKeys;
         try {
             numKeys = Integer.parseInt(new String(numKeysBytes));
@@ -781,12 +820,12 @@ public class ZGroup extends BaseCommand {
             return ErrorReply.INVALID_INTEGER;
         }
 
-        if (data.length < numKeys + 2) {
+        if (dd.length < numKeys + 2) {
             return ErrorReply.SYNTAX;
         }
 
         // already checked when parse slots
-//        int numKeys = Integer.parseInt(new String(data[1]));
+//        int numKeys = Integer.parseInt(new String(dd[1]));
 
         boolean isAggregateSum = true;
         boolean isAggregateMin = false;
@@ -798,15 +837,15 @@ public class ZGroup extends BaseCommand {
         boolean withScores = false;
 
         if (isInter || isUnion) {
-            for (int i = 2 + numKeys; i < data.length; i++) {
-                var tmpBytes = data[i];
+            for (int i = 2 + numKeys; i < dd.length; i++) {
+                var tmpBytes = dd[i];
                 var tmp = new String(tmpBytes).toLowerCase();
 
                 if ("aggregate".equals(tmp)) {
-                    if (i + 1 >= data.length) {
+                    if (i + 1 >= dd.length) {
                         return ErrorReply.SYNTAX;
                     }
-                    var aggregateBytes = data[i + 1];
+                    var aggregateBytes = dd[i + 1];
                     var aggregate = new String(aggregateBytes).toLowerCase();
                     if ("sum".equals(aggregate)) {
                         isAggregateSum = true;
@@ -827,13 +866,13 @@ public class ZGroup extends BaseCommand {
                 } else if ("weights".equals(tmp)) {
                     isWeights = true;
 
-                    if (i + numKeys >= data.length) {
+                    if (i + numKeys >= dd.length) {
                         return ErrorReply.SYNTAX;
                     }
 
                     weights = new double[numKeys];
                     for (int j = 0; j < numKeys; j++) {
-                        var weightBytes = data[i + 1 + j];
+                        var weightBytes = dd[i + 1 + j];
                         double weight;
                         try {
                             weight = Double.parseDouble(new String(weightBytes));
@@ -848,33 +887,33 @@ public class ZGroup extends BaseCommand {
             }
         } else {
             // withscores
-            if (data.length != numKeys + 2 && data.length != numKeys + 3) {
+            if (dd.length != numKeys + 2 && dd.length != numKeys + 3) {
                 return ErrorReply.SYNTAX;
             }
 
-            withScores = "withscores".equalsIgnoreCase(new String(data[data.length - 1]));
+            withScores = "withscores".equalsIgnoreCase(new String(dd[dd.length - 1]));
         }
 
         ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(numKeys);
         // begin from 2
         for (int i = 2, j = 0; i < numKeys + 2; i++, j++) {
-            var keyBytes = data[i];
+            var keyBytes = dd[i];
             if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
                 return ErrorReply.KEY_TOO_LONG;
             }
 
             var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
-            list.add(new SlotWithKeyHashWithKeyBytes(slotWithKeyHash, data[i]));
+            list.add(new SlotWithKeyHashWithKeyBytes(slotWithKeyHash, dd[i]));
         }
 
         var first = list.getFirst();
         var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
         if (rz == null || rz.isEmpty()) {
             if (isInter) {
-                return MultiBulkReply.EMPTY;
+                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
             if (!isUnion) {
-                return MultiBulkReply.EMPTY;
+                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
             if (rz == null) {
                 rz = new RedisZSet();
@@ -893,18 +932,23 @@ public class ZGroup extends BaseCommand {
                     isWeights, weights);
 
             if (rz.isEmpty()) {
-                return MultiBulkReply.EMPTY;
+                return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
             }
 
-            var replies = new Reply[rz.size() * (withScores ? 2 : 1)];
-            int i = 0;
-            for (var sv : rz.getSet()) {
-                replies[i++] = new BulkReply(sv.member().getBytes());
-                if (withScores) {
-                    replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
+            if (doStore) {
+                setByKeyBytes(rz, dstKeyBytes, dstSlotWithKeyHash);
+                return new IntegerReply(rz.size());
+            } else {
+                var replies = new Reply[rz.size() * (withScores ? 2 : 1)];
+                int i = 0;
+                for (var sv : rz.getSet()) {
+                    replies[i++] = new BulkReply(sv.member().getBytes());
+                    if (withScores) {
+                        replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
+                    }
                 }
+                return new MultiBulkReply(replies);
             }
-            return new MultiBulkReply(replies);
         }
 
         ArrayList<Promise<RedisZSet>> promises = new ArrayList<>(list.size() - 1);
@@ -944,210 +988,25 @@ public class ZGroup extends BaseCommand {
                     finalIsWeights, finalWeights);
 
             if (finalRz.isEmpty()) {
-                finalPromise.set(MultiBulkReply.EMPTY);
+                finalPromise.set(doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY);
                 return;
             }
 
-            var replies = new Reply[finalRz.size() * (finalWithScores ? 2 : 1)];
-            int i = 0;
-            for (var sv : finalRz.getSet()) {
-                replies[i++] = new BulkReply(sv.member().getBytes());
-                if (finalWithScores) {
-                    replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
-                }
-            }
-            finalPromise.set(new MultiBulkReply(replies));
-        });
-
-        return asyncReply;
-    }
-
-    Reply zdiffstore(boolean isInter, boolean isUnion) {
-        if (data.length < 5) {
-            return ErrorReply.FORMAT;
-        }
-
-        var dstKeyBytes = data[1];
-        if (dstKeyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-            return ErrorReply.KEY_TOO_LONG;
-        }
-        var dstSlotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-
-        var numKeysBytes = data[2];
-        int numKeys;
-        try {
-            numKeys = Integer.parseInt(new String(numKeysBytes));
-        } catch (NumberFormatException e) {
-            return ErrorReply.NOT_INTEGER;
-        }
-
-        if (numKeys < 2) {
-            return ErrorReply.INVALID_INTEGER;
-        }
-
-        if (data.length < numKeys + 3) {
-            return ErrorReply.SYNTAX;
-        }
-
-        // already checked when parse slots
-//        int numKeys = Integer.parseInt(new String(data[2]));
-
-        boolean isAggregateSum = true;
-        boolean isAggregateMin = false;
-        boolean isAggregateMax = false;
-
-        boolean isWeights = false;
-        double[] weights = null;
-
-        if (isInter || isUnion) {
-            for (int i = 3 + numKeys; i < data.length; i++) {
-                var tmpBytes = data[i];
-                var tmp = new String(tmpBytes).toLowerCase();
-
-                if ("aggregate".equals(tmp)) {
-                    if (i + 1 >= data.length) {
-                        return ErrorReply.SYNTAX;
+            if (doStore) {
+                var dstOneSlot = localPersist.oneSlot(dstSlotWithKeyHash.slot());
+                dstOneSlot.asyncRun(() -> setByKeyBytes(finalRz, dstKeyBytes, dstSlotWithKeyHash));
+                finalPromise.set(new IntegerReply(finalRz.size()));
+            } else {
+                var replies = new Reply[finalRz.size() * (finalWithScores ? 2 : 1)];
+                int i = 0;
+                for (var sv : finalRz.getSet()) {
+                    replies[i++] = new BulkReply(sv.member().getBytes());
+                    if (finalWithScores) {
+                        replies[i++] = new BulkReply(String.valueOf(sv.score()).getBytes());
                     }
-                    var aggregateBytes = data[i + 1];
-                    var aggregate = new String(aggregateBytes).toLowerCase();
-                    if ("sum".equals(aggregate)) {
-                        isAggregateSum = true;
-                        isAggregateMin = false;
-                        isAggregateMax = false;
-                    } else if ("min".equals(aggregate)) {
-                        isAggregateSum = false;
-                        isAggregateMin = true;
-                        isAggregateMax = false;
-                    } else if ("max".equals(aggregate)) {
-                        isAggregateSum = false;
-                        isAggregateMin = false;
-                        isAggregateMax = true;
-                    } else {
-                        return ErrorReply.SYNTAX;
-                    }
-                    i++;
-                } else if ("weights".equals(tmp)) {
-                    isWeights = true;
-
-                    if (i + numKeys >= data.length) {
-                        return ErrorReply.SYNTAX;
-                    }
-
-                    weights = new double[numKeys];
-                    for (int j = 0; j < numKeys; j++) {
-                        var weightBytes = data[i + 1 + j];
-                        double weight;
-                        try {
-                            weight = Double.parseDouble(new String(weightBytes));
-                        } catch (NumberFormatException e) {
-                            return ErrorReply.NOT_FLOAT;
-                        }
-                        weights[j] = weight;
-                    }
-                    i += numKeys;
                 }
+                finalPromise.set(new MultiBulkReply(replies));
             }
-        }
-
-        ArrayList<SlotWithKeyHashWithKeyBytes> list = new ArrayList<>(numKeys);
-        // begin from 3
-        // j = 1 -> dst key bytes is 0
-        for (int i = 3, j = 1; i < numKeys + 3; i++, j++) {
-            var keyBytes = data[i];
-            if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
-                return ErrorReply.KEY_TOO_LONG;
-            }
-
-            var slotWithKeyHash = slotWithKeyHashListParsed.get(j);
-            list.add(new SlotWithKeyHashWithKeyBytes(slotWithKeyHash, data[i]));
-        }
-
-        if (!isCrossRequestWorker) {
-            // first key may be in other thread eventloop
-            var first = list.getFirst();
-            var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
-            if (rz == null || rz.isEmpty()) {
-                if (isInter) {
-                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                    return IntegerReply.REPLY_0;
-                }
-                if (!isUnion) {
-                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                    return IntegerReply.REPLY_0;
-                }
-                if (rz == null) {
-                    rz = new RedisZSet();
-                }
-            }
-
-            ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
-            for (int i = 1; i < list.size(); i++) {
-                var other = list.get(i);
-                var otherRz = getByKeyBytes(other.keyBytes(), other.slotWithKeyHash());
-                otherRzList.add(otherRz);
-            }
-            operateZset(rz, otherRzList, isInter, isUnion,
-                    isAggregateSum, isAggregateMin, isAggregateMax,
-                    isWeights, weights);
-
-            setByKeyBytes(rz, dstKeyBytes, dstSlotWithKeyHash);
-            return rz.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(rz.size());
-        }
-
-        ArrayList<Promise<RedisZSet>> promises = new ArrayList<>(list.size());
-        for (int i = 0; i < list.size(); i++) {
-            var other = list.get(i);
-            var otherSlotWithKeyHash = other.slotWithKeyHash();
-            var otherKeyBytes = other.keyBytes();
-
-            var oneSlot = localPersist.oneSlot(otherSlotWithKeyHash.slot());
-            var p = oneSlot.asyncCall(() -> getByKeyBytes(otherKeyBytes, otherSlotWithKeyHash));
-            promises.add(p);
-        }
-
-        SettablePromise<Reply> finalPromise = new SettablePromise<>();
-        var asyncReply = new AsyncReply(finalPromise);
-
-        boolean finalIsAggregateSum = isAggregateSum;
-        boolean finalIsAggregateMin = isAggregateMin;
-        boolean finalIsAggregateMax = isAggregateMax;
-        boolean finalIsWeights = isWeights;
-        double[] finalWeights = weights;
-        Promises.all(promises).whenComplete((r, e) -> {
-            if (e != null) {
-                log.error("zdiffstore error: {}, isInter: {}, isUnion: {}", e.getMessage(), isInter, isUnion);
-                finalPromise.setException(e);
-                return;
-            }
-
-            var rz = promises.getFirst().getResult();
-            if (rz == null || rz.isEmpty()) {
-                if (isInter) {
-                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                    finalPromise.set(IntegerReply.REPLY_0);
-                    return;
-                }
-                if (!isUnion) {
-                    removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
-                    finalPromise.set(IntegerReply.REPLY_0);
-                    return;
-                }
-                if (rz == null) {
-                    rz = new RedisZSet();
-                }
-            }
-
-            ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
-            for (int i = 1; i < list.size(); i++) {
-                var otherRz = promises.get(i).getResult();
-                otherRzList.add(otherRz);
-            }
-            operateZset(rz, otherRzList, isInter, isUnion,
-                    finalIsAggregateSum, finalIsAggregateMin, finalIsAggregateMax,
-                    finalIsWeights, finalWeights);
-
-            setByKeyBytes(rz, dstKeyBytes, dstSlotWithKeyHash);
-            finalPromise.set(rz.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(rz.size()));
         });
 
         return asyncReply;
