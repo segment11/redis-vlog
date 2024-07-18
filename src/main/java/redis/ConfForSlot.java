@@ -29,6 +29,7 @@ public enum ConfForSlot {
     public final ConfWal confWal;
     public final ConfLru lruBigString = new ConfLru(1000);
     public final ConfLru lruKeyAndCompressedValueEncoded = new ConfLru(100_000);
+    public final ConfRepl confRepl = new ConfRepl();
 
     public boolean pureMemory = false;
     public short slotNumber = 1;
@@ -311,5 +312,12 @@ public enum ConfForSlot {
                     ", shortValueSizeTrigger=" + shortValueSizeTrigger +
                     '}';
         }
+    }
+
+    public static class ConfRepl {
+        // because padding, can not change
+        // for better latency, do not configure too large
+        public final int tempWalOneSegmentLength = 256 * 1024;
+        public final long tempWalOneFileMaxLength = 256 * 1024 * 1024;
     }
 }
