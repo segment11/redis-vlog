@@ -575,7 +575,7 @@ public class OneSlot {
                         var replPair = it.next();
                         if (replPair.equals(needCloseReplPair)) {
                             it.remove();
-                            log.warn("Remove repl pair after bye, host: {}, port: {}, slot: {}", replPair.getHost(), replPair.getPort(), slot);
+                            log.warn("Remove repl pair after bye, to server: {}, slot: {}", replPair.getHostAndPort(), slot);
                             break;
                         }
                     }

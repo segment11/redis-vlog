@@ -252,8 +252,8 @@ public class XGroup extends BaseCommand {
     }
 
     private Reply dict_create(byte slot, byte[] contentBytes) {
-        log.debug("Repl handle dict create, slot={}, slave uuid={}, {}:{}", slot,
-                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        log.debug("Repl handle dict create, slot={}, slave uuid={}, {}", slot,
+                replPair.getSlaveUuid(), replPair.getHostAndPort());
         // refer Dict.encode
         var is = new DataInputStream(new ByteArrayInputStream(contentBytes));
         try {
@@ -267,8 +267,8 @@ public class XGroup extends BaseCommand {
     }
 
     private Reply big_string_file_write(byte slot, byte[] contentBytes) {
-        log.debug("Repl handle big string file write, slot={}, slave uuid={}, {}:{}", slot,
-                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        log.debug("Repl handle big string file write, slot={}, slave uuid={}, {}", slot,
+                replPair.getSlaveUuid(), replPair.getHostAndPort());
         // refer to ToSlaveBigStringFileWrite.encodeTo
         var buffer = ByteBuffer.wrap(contentBytes);
         var uuid = buffer.getLong();
@@ -640,14 +640,14 @@ public class XGroup extends BaseCommand {
 
     private Reply exists_all_done(byte slot, byte[] contentBytes) {
         // server received from client
-        log.warn("Slave exists/meta fetch all done, slot={}, slave uuid={}, {}:{}", slot,
-                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        log.warn("Slave exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
+                replPair.getSlaveUuid(), replPair.getHostAndPort());
         return Repl.reply(slot, replPair, ReplType.s_exists_all_done, new EmptyContent());
     }
 
     private Reply s_exists_all_done(byte slot, byte[] contentBytes) {
-        log.warn("Master reply exists/meta fetch all done, slot={}, slave uuid={}, {}:{}", slot,
-                replPair.getSlaveUuid(), replPair.getHost(), replPair.getPort());
+        log.warn("Master reply exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
+                replPair.getSlaveUuid(), replPair.getHostAndPort());
 
         var oneSlot = localPersist.oneSlot(slot);
         try {

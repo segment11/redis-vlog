@@ -30,16 +30,14 @@ class ReplPairTest extends Specification {
 
         expect:
         replPair.slot == slot
-        replPair.host == 'localhost'
-        replPair.port == 6379
+        replPair.hostAndPort == 'localhost:6379'
         replPair.asMaster
         replPair.masterUuid == 0L
         replPair.lastPingGetTimestamp == 0L
         !replPair.sendBye
 
         replPair2.slot == slot
-        replPair2.host == 'localhost'
-        replPair2.port == 6380
+        replPair2.hostAndPort == 'localhost:6380'
         !replPair2.asMaster
         replPair2.masterUuid == 0L
         replPair2.slaveUuid == 1L

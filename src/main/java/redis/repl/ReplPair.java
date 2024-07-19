@@ -27,12 +27,8 @@ public class ReplPair {
         return slot;
     }
 
-    public String getHost() {
-        return host;
-    }
-
-    public int getPort() {
-        return port;
+    public String getHostAndPort() {
+        return host + ":" + port;
     }
 
     boolean flushToSlaveWalAppendBatch(ToSlaveWalAppendBatch toSlaveWalAppendBatch) {

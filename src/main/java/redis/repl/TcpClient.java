@@ -50,7 +50,8 @@ public class TcpClient {
             } catch (Exception e) {
                 // reduce log
                 if (writeErrorCount % 1000 == 0) {
-                    log.error("Could not write to server", e);
+                    log.error("Could not write to server, to server: " +
+                            replPair.getHostAndPort() + ", slot: " + slot, e);
                 }
                 writeErrorCount++;
                 return false;
@@ -59,7 +60,8 @@ public class TcpClient {
             }
         } else {
             if (notConnectedErrorCount % 1000 == 0) {
-                log.error("Socket is not connected");
+                log.error("Socket is not connected, to server: {}, slot: {}",
+                        replPair.getHostAndPort(), slot);
             }
             notConnectedErrorCount++;
             return false;
@@ -71,7 +73,7 @@ public class TcpClient {
     }
 
     public boolean bye() {
-        System.out.println("Send bye to server: " + replPair.getHost() + ":" + replPair.getPort() + ", slot: " + slot);
+        System.out.println("Send bye to server: " + replPair.getHostAndPort() + ", slot: " + slot);
         return write(ReplType.bye, new Ping(ConfForSlot.global.netListenAddresses));
     }
 
@@ -105,15 +107,15 @@ public class TcpClient {
                         sock.write(callback.call());
                     }
                 })
-                .whenException(e -> log.error("Could not connect to server", e));
+                .whenException(e -> log.error("Could not connect to server, to server: " + host + ":" + port + ", slot: " + slot, e));
     }
 
     public void close() {
         if (sock != null && !sock.isClosed()) {
             sock.close();
-            System.out.println("Closed socket, slot: " + slot + ", host: " + replPair.getHost() + ", port: " + replPair.getPort());
+            System.out.println("Closed socket, to server: " + replPair.getHostAndPort() + ", slot: " + slot);
         } else {
-            System.out.println("Socket is already closed, slot: " + slot + ", host: " + replPair.getHost() + ", port: " + replPair.getPort());
+            System.out.println("Socket is already closed, to server: " + replPair.getHostAndPort() + ", slot: " + slot);
         }
     }
 }
