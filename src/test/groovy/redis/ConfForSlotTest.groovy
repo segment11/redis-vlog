@@ -43,6 +43,11 @@ class ConfForSlotTest extends Specification {
         c.confWal.valueSizeTrigger >= 100
         c.confWal.shortValueSizeTrigger >= 100
         println c.confWal
+
+        c.confRepl.tempWalOneSegmentLength == 256 * 1024
+        c.confRepl.tempWalOneFileMaxLength == 256 * 1024 * 1024
+        c.confRepl.tempWalForReadCacheSegmentMaxCount == 1_000
+        println c.confRepl
     }
 
     def 'test different estimate key number'() {

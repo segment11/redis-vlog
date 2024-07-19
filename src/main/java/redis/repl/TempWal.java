@@ -1,6 +1,7 @@
 package redis.repl;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
@@ -9,7 +10,9 @@ import redis.persist.Wal;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.TreeSet;
 
 // after all exists data received by slave, before wal (is like memory sst) use this append file for slave catch up
 public class TempWal {
@@ -21,8 +24,31 @@ public class TempWal {
     // old files, read and send to slave when catch up
     private final HashMap<Integer, RandomAccessFile> prevRafByFileIndex = new HashMap<>();
 
+    private final TreeSet<BytesWithFileIndexAndOffset> latestAppendForReadCacheSegmentBytesSet = new TreeSet<>();
+    private final short forReadCacheSegmentMaxCount;
+
     private static final String TEMP_WAL_DIR_NAME = "temp-wal";
     private static final String META_FILE_NAME = "meta.dat";
+
+    record BytesWithFileIndexAndOffset(byte[] bytes, int fileIndex,
+                                       long offset) implements Comparable<BytesWithFileIndexAndOffset> {
+        @Override
+        public String toString() {
+            return "BytesWithFileIndexAndOffset{" +
+                    "fileIndex=" + fileIndex +
+                    ", offset=" + offset +
+                    ", bytes.length=" + bytes.length +
+                    '}';
+        }
+
+        @Override
+        public int compareTo(@NotNull TempWal.BytesWithFileIndexAndOffset o) {
+            if (fileIndex != o.fileIndex) {
+                return Integer.compare(fileIndex, o.fileIndex);
+            }
+            return Long.compare(offset, o.offset);
+        }
+    }
 
     public record OffsetV(int fileIndex, long offset, Wal.V v) {
         @Override
@@ -128,10 +154,14 @@ public class TempWal {
                 }
 
                 var n = readWal(file, fileIndex == fileIndexAndOffset.fileIndex ? fileIndexAndOffset.offset : 0);
-                log.info("Read temp wal success, slot: {}, file: {}, begin offset: {}, count: {}",
-                        slot, file.getName(), fileIndexAndOffset.offset, n);
+                log.info("Read temp wal success, file: {}, begin offset: {}, count: {}, slot: {}",
+                        file.getName(), fileIndexAndOffset.offset, n, slot);
             }
         }
+
+        this.forReadCacheSegmentMaxCount = ConfForSlot.global.confRepl.tempWalForReadCacheSegmentMaxCount;
+        this.tempAppendSegmentBytes = new byte[ConfForSlot.global.confRepl.tempWalOneSegmentLength];
+        this.tempAppendSegmentBuffer = ByteBuffer.wrap(tempAppendSegmentBytes);
     }
 
     int currentFileIndex = 0;
@@ -191,6 +221,20 @@ public class TempWal {
         return map.size();
     }
 
+    private final byte[] tempAppendSegmentBytes;
+    private final ByteBuffer tempAppendSegmentBuffer;
+
+    private void addForReadCacheSegmentBytes(int fileIndex, long offset) {
+        if (latestAppendForReadCacheSegmentBytesSet.size() >= forReadCacheSegmentMaxCount) {
+            latestAppendForReadCacheSegmentBytesSet.removeFirst();
+        }
+
+        // copy one
+        var bytes = new byte[tempAppendSegmentBytes.length];
+        System.arraycopy(tempAppendSegmentBytes, 0, bytes, 0, tempAppendSegmentBytes.length);
+        latestAppendForReadCacheSegmentBytesSet.add(new BytesWithFileIndexAndOffset(bytes, fileIndex, offset));
+    }
+
     public void append(Wal.V v) {
         var oneSegmentLength = ConfForSlot.global.confRepl.tempWalOneSegmentLength;
         var oneFileMaxLength = ConfForSlot.global.confRepl.tempWalOneFileMaxLength;
@@ -210,9 +254,14 @@ public class TempWal {
                 raf.seek(currentFileOffset);
                 raf.write(padding);
                 currentFileOffset += padding.length;
+
+                tempAppendSegmentBuffer.put(padding);
+                addForReadCacheSegmentBytes(currentFileIndex, currentFileOffset - oneSegmentLength);
+                tempAppendSegmentBuffer.clear();
+                Arrays.fill(tempAppendSegmentBytes, (byte) 0);
             } catch (IOException e) {
-                log.error("Write padding to temp wal file error", e);
-                throw new RuntimeException("Write padding to temp wal file error: " + e.getMessage());
+                log.error("Write padding to temp wal file error, slot: " + slot, e);
+                throw new RuntimeException("Write padding to temp wal file error: " + e.getMessage() + ", slot: " + slot);
             }
 
             beforeAppendFileOffset = currentFileOffset;
@@ -225,13 +274,13 @@ public class TempWal {
                 try {
                     raf.close();
                 } catch (IOException e) {
-                    log.error("Close temp wal raf error", e);
+                    log.error("Close temp wal raf error, file index: " + currentFileIndex + ", slot: " + slot, e);
                 }
 
                 currentFileIndex++;
                 var nextFile = new File(tempWalDir, fileName());
                 FileUtils.touch(nextFile);
-                log.info("Create new temp wal file, slot: {}, file: {}", slot, nextFile.getName());
+                log.info("Create new temp wal file, file: {}, slot: {}", nextFile.getName(), slot);
                 raf = new RandomAccessFile(nextFile, "rw");
 
                 currentFileOffset = 0;
@@ -241,9 +290,11 @@ public class TempWal {
             raf.seek(currentFileOffset);
             raf.write(encoded);
             currentFileOffset += encoded.length;
+
+            tempAppendSegmentBuffer.put(encoded);
         } catch (IOException e) {
-            log.error("Write to temp wal file error", e);
-            throw new RuntimeException("Write to temp wal file error: " + e.getMessage());
+            log.error("Write to temp wal file error, slot: " + slot, e);
+            throw new RuntimeException("Write to temp wal file error: " + e.getMessage() + ", slot: " + slot);
         }
 
         map.put(v.key(), new OffsetV(currentFileIndex, beforeAppendFileOffset, v));
@@ -321,7 +372,35 @@ public class TempWal {
         });
     }
 
+    private byte[] getLatestAppendForReadCacheSegmentBytes(int fileIndex, long offset) {
+        for (var bytesWithFileIndexAndOffset : latestAppendForReadCacheSegmentBytesSet) {
+            if (bytesWithFileIndexAndOffset.fileIndex == fileIndex && bytesWithFileIndexAndOffset.offset == offset) {
+                return bytesWithFileIndexAndOffset.bytes;
+            }
+        }
+        return null;
+    }
+
     byte[] readPrevRafOneSegment(int fileIndex, long offset) throws IOException {
+        if (fileIndex < 0) {
+            return null;
+        }
+
+        var oneSegmentLength = ConfForSlot.global.confRepl.tempWalOneSegmentLength;
+        var modGiven = offset % oneSegmentLength;
+        if (modGiven != 0) {
+            throw new IllegalArgumentException("Repl read temp wal segment bytes, offset must be multiple of one segment length, offset: " + offset);
+        }
+
+        // refer to ConfForSlot.global.confRepl.tempWalOneFileMaxLength = 256 * 1024 * 1024
+        if ((currentFileIndex - fileIndex) * 1024 < forReadCacheSegmentMaxCount) {
+            // check cache
+            var segmentBytes = getLatestAppendForReadCacheSegmentBytes(fileIndex, offset);
+            if (segmentBytes != null) {
+                return segmentBytes;
+            }
+        }
+
         // need not close
         var prevRaf = prevRaf(fileIndex);
         if (prevRaf == null) {
@@ -332,13 +411,11 @@ public class TempWal {
             return null;
         }
 
-        var length = ConfForSlot.global.confRepl.tempWalOneSegmentLength;
-        var bytes = new byte[length];
-
+        var bytes = new byte[oneSegmentLength];
         prevRaf.seek(offset);
         var n = prevRaf.read(bytes);
-        if (n != length) {
-            throw new RuntimeException("Read temp wal one segment error, fileIndex: " + fileIndex + ", offset: " + offset);
+        if (n != oneSegmentLength) {
+            throw new RuntimeException("Read temp wal one segment error, file index: " + fileIndex + ", offset: " + offset + ", slot: " + slot);
         }
         return bytes;
     }
@@ -348,17 +425,40 @@ public class TempWal {
             return null;
         }
 
-        var length = ConfForSlot.global.confRepl.tempWalOneSegmentLength;
-        var bytes = new byte[length];
+        var oneSegmentLength = ConfForSlot.global.confRepl.tempWalOneSegmentLength;
+        var modGiven = offset % oneSegmentLength;
+        if (modGiven != 0) {
+            throw new IllegalArgumentException("Repl read temp wal segment bytes, offset must be multiple of one segment length, offset: " + offset);
+        }
+
+        // check cache
+        // current append segment
+        long currentFileOffsetMarginSegmentOffset;
+        var mod = currentFileOffset % oneSegmentLength;
+        if (mod != 0) {
+            currentFileOffsetMarginSegmentOffset = currentFileOffset - mod;
+        } else {
+            currentFileOffsetMarginSegmentOffset = currentFileOffset;
+        }
+        if (offset == currentFileOffsetMarginSegmentOffset) {
+            return tempAppendSegmentBytes;
+        }
+
+        var segmentBytes = getLatestAppendForReadCacheSegmentBytes(currentFileIndex, offset);
+        if (segmentBytes != null) {
+            return segmentBytes;
+        }
+
+        var bytes = new byte[oneSegmentLength];
 
         raf.seek(offset);
         var n = raf.read(bytes);
-        if (n == length) {
-            return bytes;
+        if (n < 0) {
+            throw new RuntimeException("Read temp wal one segment error, file index: " + currentFileIndex + ", offset: " + offset + ", slot: " + slot);
         }
 
-        if (n < 0) {
-            return null;
+        if (n == oneSegmentLength) {
+            return bytes;
         } else {
             var readBytes = new byte[n];
             System.arraycopy(bytes, 0, readBytes, 0, n);
@@ -374,7 +474,7 @@ public class TempWal {
             try {
                 raf.setLength(0);
             } catch (Exception e) {
-                log.error("clear temp wal error", e);
+                log.error("clear temp wal error, slot: " + slot, e);
             }
         }
 
@@ -387,7 +487,7 @@ public class TempWal {
                     prevRaf.setLength(0);
                     prevRaf.close();
                 } catch (Exception e) {
-                    log.error("clear temp wal old raf error", e);
+                    log.error("clear temp wal old raf error, slot: " + slot + ", file index: " + entry.getKey(), e);
                 }
                 it.remove();
             }
@@ -400,9 +500,9 @@ public class TempWal {
             }
 
             if (!file.delete()) {
-                log.error("Delete temp wal file error, file: {}", file.getName());
+                log.error("Delete temp wal file error, file: {}, slot: {}", file.getName(), slot);
             } else {
-                log.info("Delete temp wal file success, file: {}", file.getName());
+                log.info("Delete temp wal file success, file: {}, slot: {}", file.getName(), slot);
             }
         }
 
@@ -415,9 +515,9 @@ public class TempWal {
         if (raf != null) {
             try {
                 raf.close();
-                System.out.println("Close temp wal raf success, slot: " + slot);
+                System.out.println("Close temp wal current raf success, slot: " + slot);
             } catch (IOException e) {
-                System.err.println("Close temp wal raf error, slot: " + slot);
+                System.err.println("Close temp wal current raf error, slot: " + slot);
             }
         }
 

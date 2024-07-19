@@ -319,5 +319,15 @@ public enum ConfForSlot {
         // for better latency, do not configure too large
         public final int tempWalOneSegmentLength = 256 * 1024;
         public final long tempWalOneFileMaxLength = 256 * 1024 * 1024;
+        public short tempWalForReadCacheSegmentMaxCount = 1_000;
+
+        @Override
+        public String toString() {
+            return "ConfRepl{" +
+                    "tempWalOneSegmentLength=" + tempWalOneSegmentLength +
+                    ", tempWalOneFileMaxLength=" + tempWalOneFileMaxLength +
+                    ", tempWalForReadCacheSegmentMaxCount=" + tempWalForReadCacheSegmentMaxCount +
+                    '}';
+        }
     }
 }

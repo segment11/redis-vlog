@@ -10,6 +10,7 @@ class TempWalTest extends Specification {
     def 'test read and append'() {
         given:
         final byte slot = 0
+        ConfForSlot.global.confRepl.tempWalForReadCacheSegmentMaxCount = 2
 
         def tempWal = new TempWal(slot, Consts.slotDir)
 
@@ -19,10 +20,12 @@ class TempWalTest extends Specification {
             tempWal.append(v)
         }
         println 'temp wal meta: ' + tempWal.getMetaFileIndexAndOffset()
+        println new TempWal.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
         then:
         tempWal.getMetaFileIndexAndOffset().offset() == 0
         tempWal.prevRaf(-1) == null
         tempWal.readPrevRafOneSegment(-1, 0) == null
+        tempWal.readPrevRafOneSegment(1, 0) == null
         tempWal.size() == 10
         tempWal.getCvEncoded(vList[0].key()).length == vList[0].cvEncodedLength()
         tempWal.getCvEncoded(vList[10].key()) == null
@@ -44,11 +47,26 @@ class TempWalTest extends Specification {
         for (v in vList[0..9]) {
             tempWal.append(v)
         }
+        tempWal.currentFileOffset = oneSegmentLength * 2 - 1
+        for (v in vList[0..9]) {
+            tempWal.append(v)
+        }
+        tempWal.currentFileOffset = oneSegmentLength * 3 - 1
+        for (v in vList[0..9]) {
+            tempWal.append(v)
+        }
         then:
         tempWal.size() == 10
         tempWal.readCurrentRafOneSegment(0).length == oneSegmentLength
-        tempWal.readCurrentRafOneSegment(oneSegmentLength).length == vList[0].encodeLength() * 10
+        tempWal.readCurrentRafOneSegment(oneSegmentLength).length == oneSegmentLength
+        tempWal.readCurrentRafOneSegment(oneSegmentLength * 2).length == oneSegmentLength
+        tempWal.readCurrentRafOneSegment(oneSegmentLength * 3).length == oneSegmentLength
         tempWal.readCurrentRafOneSegment(tempWal.currentFileOffset) == null
+
+        when:
+        tempWal.currentFileOffset = oneSegmentLength * 4
+        then:
+        tempWal.readCurrentRafOneSegment(oneSegmentLength * 3).length == vList[0].encodeLength() * 10
 
         when:
         tempWal.close()
@@ -85,6 +103,26 @@ class TempWalTest extends Specification {
         tempWal3.getCvEncoded('test3') != null
         // for clear
         tempWal3.prevRaf(tempWal3.currentFileIndex - 1) != null
+
+        when:
+        boolean exception = false
+        try {
+            tempWal3.readPrevRafOneSegment(0, 1)
+        } catch (IllegalArgumentException ignored) {
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        try {
+            tempWal3.readCurrentRafOneSegment(1)
+        } catch (IllegalArgumentException ignored) {
+            exception = true
+        }
+        then:
+        exception
 
         cleanup:
         tempWal3.clear()
