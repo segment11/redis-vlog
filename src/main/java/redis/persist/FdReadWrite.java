@@ -90,7 +90,7 @@ public class FdReadWrite {
         });
     }
 
-    private final String name;
+    final String name;
 
     private final LibC libC;
 
@@ -201,8 +201,13 @@ public class FdReadWrite {
         }
 
         if (ConfForSlot.global.pureMemory) {
-            var maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
-            this.allBytesByOneInnerIndex = new byte[maxSegmentNumberPerFd][];
+            if (isChunkFd) {
+                var segmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
+                this.allBytesByOneInnerIndex = new byte[segmentNumberPerFd][];
+            } else {
+                var bucketsPerSlotIgnoreFd = ConfForSlot.global.confBucket.bucketsPerSlot;
+                this.allBytesByOneInnerIndex = new byte[bucketsPerSlotIgnoreFd][];
+            }
         } else {
             var pageManager = PageManager.getInstance();
             var m = MemoryIO.getInstance();

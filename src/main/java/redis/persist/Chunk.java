@@ -45,9 +45,9 @@ public class Chunk {
         chunkPersistGauge.register();
     }
 
-    private long persistCountTotal;
-    private long persistCvCountTotal;
-    private long updatePvmBatchCostTimeTotalUsTotal;
+    long persistCountTotal;
+    long persistCvCountTotal;
+    long updatePvmBatchCostTimeTotalUsTotal;
 
     final OneSlot oneSlot;
     private final KeyLoader keyLoader;
@@ -300,6 +300,7 @@ public class Chunk {
 
     int mergedSegmentIndexEndLastTime = NO_NEED_MERGE_SEGMENT_INDEX;
 
+    // for find bug
     void checkMergedSegmentIndexEndLastTimeValidAfterServerStart() {
         if (mergedSegmentIndexEndLastTime != NO_NEED_MERGE_SEGMENT_INDEX) {
             if (mergedSegmentIndexEndLastTime < 0 || mergedSegmentIndexEndLastTime >= maxSegmentIndex) {
@@ -365,10 +366,10 @@ public class Chunk {
                     segmentSeqList.add(segment.segmentSeq());
                 }
             }
-            segmentIndex += segments.size();
 
             oneSlot.setSegmentMergeFlagBatch(segmentIndex, segments.size(),
                     isNewAppendAfterBatch ? Flag.new_write : Flag.reuse_new, segmentSeqListAll, walGroupIndex);
+            moveSegmentIndexNext(segments.size());
         } else {
             if (segments.size() < BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
                 for (var segment : segments) {
@@ -473,7 +474,15 @@ public class Chunk {
         }
 
         needMergeSegmentIndexList.sort(Integer::compareTo);
+        updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList);
 
+        if (doLog) {
+            log.info("Chunk persist need merge segment index list, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
+        }
+        return needMergeSegmentIndexList;
+    }
+
+    void updateLastMergedSegmentIndexEnd(ArrayList<Integer> needMergeSegmentIndexList) {
         // recycle, need spit to two part
         if (needMergeSegmentIndexList.getLast() - needMergeSegmentIndexList.getFirst() > halfSegmentNumber) {
             if (!needMergeSegmentIndexList.contains(0)) {
@@ -495,7 +504,6 @@ public class Chunk {
             }
             log.warn("Recycle merge chunk, s={}, one part need merge segment index list ={}, another part need merge segment index list={}",
                     slot, onePart, anotherPart);
-
 
             // prepend from merged segment index end last time
             var firstNeedMergeSegmentIndex = anotherPart.getFirst();
@@ -551,15 +559,9 @@ public class Chunk {
             checkNeedMergeSegmentIndexListContinuous(needMergeSegmentIndexList);
             mergedSegmentIndexEndLastTime = needMergeSegmentIndexList.getLast();
         }
-
-        if (doLog) {
-            log.info("Chunk persist need merge segment index list, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
-        }
-
-        return needMergeSegmentIndexList;
     }
 
-    private void checkNeedMergeSegmentIndexListContinuous(ArrayList<Integer> list) {
+    void checkNeedMergeSegmentIndexListContinuous(ArrayList<Integer> list) {
         if (list.size() == 1) {
             return;
         }
