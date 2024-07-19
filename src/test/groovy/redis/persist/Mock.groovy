@@ -13,7 +13,7 @@ class Mock {
 
             def keyHash = KeyHash.hash(keyBytes)
 
-            def v = new Wal.V(it, bucketIndex, keyHash, redis.CompressedValue.NO_EXPIRE,
+            def v = new Wal.V(it, bucketIndex, keyHash, CompressedValue.NO_EXPIRE,
                     key, valueBytes, valueBytes.length, false)
 
             shortValueList << v
@@ -21,8 +21,8 @@ class Mock {
         shortValueList
     }
 
-    static List<Wal.V> prepareValueList(int n, int bucketIndex = 0) {
-        List<Wal.V> valueList = []
+    static ArrayList<Wal.V> prepareValueList(int n, int bucketIndex = 0) {
+        ArrayList<Wal.V> valueList = []
         n.times {
             def key = "key:" + it.toString().padLeft(12, '0')
             def keyBytes = key.bytes
@@ -37,7 +37,7 @@ class Mock {
             cv.compressedLength = 10
             cv.uncompressedLength = 10
 
-            def v = new Wal.V(it, bucketIndex, keyHash, redis.CompressedValue.NO_EXPIRE,
+            def v = new Wal.V(it, bucketIndex, keyHash, CompressedValue.NO_EXPIRE,
                     key, cv.encode(), cv.encodedLength(), false)
 
             valueList << v

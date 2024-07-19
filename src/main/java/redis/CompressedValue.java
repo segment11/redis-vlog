@@ -90,7 +90,12 @@ public class CompressedValue {
     }
 
     long keyHash;
+
     int uncompressedLength;
+
+    public int getUncompressedLength() {
+        return uncompressedLength;
+    }
 
     public void setUncompressedLength(int uncompressedLength) {
         this.uncompressedLength = uncompressedLength;
@@ -100,6 +105,10 @@ public class CompressedValue {
 
     public int getCompressedLength() {
         return compressedLength;
+    }
+
+    public void setCompressedLength(int compressedLength) {
+        this.compressedLength = compressedLength;
     }
 
     public boolean isTypeNumber() {
