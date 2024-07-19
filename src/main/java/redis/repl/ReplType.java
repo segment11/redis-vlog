@@ -6,9 +6,9 @@ public enum ReplType {
     pong(true, false, (byte) 1),
     hello(true, true, (byte) 2),
     hi(true, false, (byte) 3),
-    ok(true, false, (byte) 4),
-    bye(true, true, (byte) 5),
-    byeBye(true, false, (byte) 6),
+    bye(true, true, (byte) 4),
+    byeBye(true, false, (byte) 5),
+    ok(true, false, (byte) 100),
 
     wal_append_batch(true, false, (byte) 10),
     dict_create(true, false, (byte) 11),
