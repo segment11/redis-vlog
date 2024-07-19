@@ -80,14 +80,14 @@ public class BigStringFiles {
     private byte[] readBigStringBytes(long uuid) {
         var file = new File(bigStringDir, String.valueOf(uuid));
         if (!file.exists()) {
-            log.warn("Big string file not exists, uuid: {}", uuid);
+            log.warn("Big string file not exists, uuid: {}, slot: {}", uuid, slot);
             return null;
         }
 
         try {
             return FileUtils.readFileToByteArray(file);
         } catch (IOException e) {
-            log.error("Read big string file error, uuid: " + uuid, e);
+            log.error("Read big string file error, uuid: " + uuid + ", slot: " + slot, e);
             return null;
         }
     }
@@ -98,7 +98,7 @@ public class BigStringFiles {
             FileUtils.writeByteArrayToFile(file, bytes);
             return true;
         } catch (IOException e) {
-            log.error("Write big string file error, uuid: " + uuid + ", key: " + key, e);
+            log.error("Write big string file error, uuid: " + uuid + ", key: " + key + ", slot: " + slot, e);
             return false;
         }
     }
