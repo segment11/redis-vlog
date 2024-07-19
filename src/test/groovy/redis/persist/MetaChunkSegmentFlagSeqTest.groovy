@@ -59,26 +59,26 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
         when:
-        one.setSegmentMergeFlag(10, (byte) 1, 1L, 0)
+        one.setSegmentMergeFlag(10, Chunk.Flag.merging, 1L, 0)
         def segmentFlag = one.getSegmentMergeFlag(10)
 
         then:
-        segmentFlag.flag == 1
-        segmentFlag.segmentSeq == 1L
-        segmentFlag.walGroupIndex == 0
+        segmentFlag.flag() == Chunk.Flag.merging
+        segmentFlag.segmentSeq() == 1L
+        segmentFlag.walGroupIndex() == 0
 
         when:
         ConfForSlot.global.pureMemory = true
 
         def one2 = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
-        one2.setSegmentMergeFlag(10, (byte) 1, 1L, 0)
+        one2.setSegmentMergeFlag(10, Chunk.Flag.merging, 1L, 0)
         def segmentFlag2 = one2.getSegmentMergeFlag(10)
 
         then:
-        segmentFlag2.flag == 1
-        segmentFlag2.segmentSeq == 1L
-        segmentFlag2.walGroupIndex == 0
+        segmentFlag2.flag() == Chunk.Flag.merging
+        segmentFlag2.segmentSeq() == 1L
+        segmentFlag2.walGroupIndex() == 0
 
         cleanup:
         ConfForSlot.global.pureMemory = false
@@ -97,23 +97,23 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
         when:
-        one.setSegmentMergeFlag(10, (byte) 1, 1L, 0)
-        one.setSegmentMergeFlag(11, (byte) 2, 2L, 11)
+        one.setSegmentMergeFlag(10, Chunk.Flag.merging, 1L, 0)
+        one.setSegmentMergeFlag(11, Chunk.Flag.merged, 2L, 11)
         def segmentFlag = one.getSegmentMergeFlag(10)
         def segmentFlagList = one.getSegmentMergeFlagBatch(10, 2)
 
         then:
-        segmentFlag.flag == 1
-        segmentFlag.segmentSeq == 1L
-        segmentFlag.walGroupIndex == 0
+        segmentFlag.flag() == Chunk.Flag.merging
+        segmentFlag.segmentSeq() == 1L
+        segmentFlag.walGroupIndex() == 0
 
         segmentFlagList.size() == 2
-        segmentFlagList[0].flag == 1
-        segmentFlagList[0].segmentSeq == 1L
-        segmentFlagList[0].walGroupIndex == 0
-        segmentFlagList[1].flag == 2
-        segmentFlagList[1].segmentSeq == 2L
-        segmentFlagList[1].walGroupIndex == 11
+        segmentFlagList[0].flag() == Chunk.Flag.merging
+        segmentFlagList[0].segmentSeq() == 1L
+        segmentFlagList[0].walGroupIndex() == 0
+        segmentFlagList[1].flag() == Chunk.Flag.merged
+        segmentFlagList[1].segmentSeq() == 2L
+        segmentFlagList[1].walGroupIndex() == 11
 
         cleanup:
         one.clear()
@@ -132,7 +132,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         10.times {
             seqLongList << (it as Long)
         }
-        one.setSegmentMergeFlagBatch(10, 10, (byte) 1, seqLongList, 0)
+        one.setSegmentMergeFlagBatch(10, 10, Chunk.Flag.merging, seqLongList, 0)
 
         then:
         one.getSegmentSeqListBatchForRepl(10, 10) == seqLongList
@@ -144,7 +144,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         10.times {
             seqLongList << (it as Long)
         }
-        one.setSegmentMergeFlagBatch(10, 10, (byte) 1, seqLongList, 0)
+        one.setSegmentMergeFlagBatch(10, 10, Chunk.Flag.merging, seqLongList, 0)
 
         then:
         one.getSegmentSeqListBatchForRepl(10, 10) == seqLongList
@@ -214,7 +214,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         r[1] == 0
 
         when:
-        one.setSegmentMergeFlag(1024, Chunk.SEGMENT_FLAG_NEW, 1L, targetWalGroupIndex)
+        one.setSegmentMergeFlag(1024, Chunk.Flag.new_write, 1L, targetWalGroupIndex)
         def r2 = one.iterateAndFind(1024, 1024 * 10, targetWalGroupIndex, chunk)
 
         then:
@@ -222,7 +222,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         r2[1] == FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT
 
         when:
-        one.setSegmentMergeFlag(1024, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, targetWalGroupIndex)
+        one.setSegmentMergeFlag(1024, Chunk.Flag.reuse_new, 1L, targetWalGroupIndex)
         r2 = one.iterateAndFind(1024, 1024 * 10, targetWalGroupIndex, chunk)
 
         then:
@@ -230,8 +230,8 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         r2[1] == FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT
 
         when:
-        one.setSegmentMergeFlag(confChunk.segmentNumberPerFd - 1, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, targetWalGroupIndex)
-        one.setSegmentMergeFlag(confChunk.segmentNumberPerFd, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, targetWalGroupIndex)
+        one.setSegmentMergeFlag(confChunk.segmentNumberPerFd - 1, Chunk.Flag.reuse_new, 1L, targetWalGroupIndex)
+        one.setSegmentMergeFlag(confChunk.segmentNumberPerFd, Chunk.Flag.reuse_new, 1L, targetWalGroupIndex)
         r2 = one.iterateAndFind(confChunk.segmentNumberPerFd - 1, 1024 * 10, targetWalGroupIndex, chunk)
 
         then:
@@ -260,22 +260,22 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         var maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber()
         int halfSegmentNumber = maxSegmentNumber / 2
 
-        one.setSegmentMergeFlag(10, Chunk.SEGMENT_FLAG_NEW, 1L, 0)
-        one.setSegmentMergeFlag(11, Chunk.SEGMENT_FLAG_NEW, 1L, 0)
+        one.setSegmentMergeFlag(10, Chunk.Flag.new_write, 1L, 0)
+        one.setSegmentMergeFlag(11, Chunk.Flag.new_write, 1L, 0)
         def i2 = one.getMergedSegmentIndexEndLastTime(halfSegmentNumber, halfSegmentNumber)
 
         then:
         i2 == 9
 
         when:
-        one.setSegmentMergeFlag(10, Chunk.SEGMENT_FLAG_MERGED, 1L, 0)
+        one.setSegmentMergeFlag(10, Chunk.Flag.merged, 1L, 0)
         i2 = one.getMergedSegmentIndexEndLastTime(halfSegmentNumber, halfSegmentNumber)
 
         then:
         i2 == 10
 
         when:
-        one.setSegmentMergeFlag(10, Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED, 1L, 0)
+        one.setSegmentMergeFlag(10, Chunk.Flag.merged_and_persisted, 1L, 0)
         i2 = one.getMergedSegmentIndexEndLastTime(halfSegmentNumber, halfSegmentNumber)
 
         then:

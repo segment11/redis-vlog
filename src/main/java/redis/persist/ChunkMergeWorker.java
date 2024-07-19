@@ -13,8 +13,6 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import static redis.persist.Chunk.SEGMENT_FLAG_MERGED_AND_PERSISTED;
-
 public class ChunkMergeWorker {
     private final byte slot;
     private final String slotStr;
@@ -193,7 +191,7 @@ public class ChunkMergeWorker {
             }
 
             // can reuse this chunk by segment segmentIndex
-            oneSlot.updateSegmentMergeFlag(one.segmentIndex, SEGMENT_FLAG_MERGED_AND_PERSISTED, 0L);
+            oneSlot.updateSegmentMergeFlag(one.segmentIndex, Chunk.Flag.merged_and_persisted, 0L);
             it.remove();
             sb.append(one.segmentIndex).append(";");
         }

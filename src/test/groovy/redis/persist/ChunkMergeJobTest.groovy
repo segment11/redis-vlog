@@ -67,8 +67,8 @@ class ChunkMergeJobTest extends Specification {
 
         def wal = new Wal(slot, walGroupIndex, null, null, snowFlake)
         def oneSlot = new OneSlot(slot, Consts.slotDir, keyLoader, wal)
-        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, 0)
-        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex + 1, Chunk.SEGMENT_FLAG_REUSE_AND_PERSISTED, 1L, 0)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.Flag.reuse_new, 1L, 0)
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex + 1, Chunk.Flag.reuse_new, 1L, 0)
 
         oneSlot.threadIdProtectedForSafe = Thread.currentThread().threadId()
 
