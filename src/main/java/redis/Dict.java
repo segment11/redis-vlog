@@ -178,7 +178,7 @@ public class Dict implements Serializable {
         return new DictWithKeyPrefix(new String(keyPrefixBytes), dict);
     }
 
-    private Dict() {
+    public Dict() {
         this.dictBytes = null;
         this.seq = SELF_ZSTD_DICT_SEQ;
         this.createdTime = System.currentTimeMillis();

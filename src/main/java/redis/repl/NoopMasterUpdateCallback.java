@@ -9,12 +9,12 @@ import redis.persist.Wal;
 public class NoopMasterUpdateCallback implements MasterUpdateCallback {
     private final Logger log = LoggerFactory.getLogger(NoopMasterUpdateCallback.class);
 
-    private long walAppendCount = 0;
+    long walAppendCount = 0;
 
     @Override
     public void onWalAppend(byte slot, int bucketIndex, boolean isValueShort, Wal.V v, int offset) {
         walAppendCount++;
-        if (walAppendCount % 100000 == 0) {
+        if (walAppendCount % 100_000 == 0) {
             log.warn("onWalAppend called with slot: {}, bucketIndex: {}, isValueShort: {}, offset: {}, v: {}",
                     slot, bucketIndex, isValueShort, offset, v);
         }
@@ -35,7 +35,7 @@ public class NoopMasterUpdateCallback implements MasterUpdateCallback {
         log.warn("onDictCreate called with key: {}, dict: {}", key, dict);
     }
 
-    private long bigStringFileWriteCount = 0;
+    long bigStringFileWriteCount = 0;
 
     @Override
     public void onBigStringFileWrite(byte slot, long uuid, byte[] bytes) {
