@@ -49,6 +49,15 @@ public class DynConfig {
         update("canRead", canRead);
     }
 
+    boolean isCanWrite() {
+        var obj = get("canWrite");
+        return obj == null || (boolean) obj;
+    }
+
+    void setCanWrite(boolean canWrite) throws IOException {
+        update("canWrite", canWrite);
+    }
+
     int getTestKey() {
         var obj = get("testKey");
         return obj == null ? 10 : (int) obj;
