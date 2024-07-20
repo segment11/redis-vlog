@@ -203,6 +203,7 @@ public class KeyLoader {
         return fdReadWrite.readOneInnerForRepl(beginBucketIndex);
     }
 
+    @Deprecated
     public void writeKeyBucketBytesBatchFromMasterExists(byte[] contentBytes) {
         var splitIndex = contentBytes[0];
 //            var splitNumber = contentBytes[1];
@@ -226,7 +227,7 @@ public class KeyLoader {
         if (ConfForSlot.global.pureMemory) {
             if (leftLength == 0) {
                 for (int i = 0; i < BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL; i++) {
-                    fdReadWrite.clearOneOneInnerToMemory(beginBucketIndex + i);
+                    fdReadWrite.clearOneKeyBucketToMemory(beginBucketIndex + i);
                 }
             } else {
                 var bucketCount = leftLength / KEY_BUCKET_ONE_COST_SIZE;
@@ -244,14 +245,26 @@ public class KeyLoader {
                 slot, splitIndex, beginBucketIndex);
     }
 
-    boolean isBytesValidAsKeyBucket(byte[] bytes) {
+    boolean isBytesValidAsKeyBucket(byte[] bytes, int position) {
         if (bytes == null) {
             return false;
         }
 
         // init is 0, not write yet
-        var firstLong = ByteBuffer.wrap(bytes, 0, 8).getLong();
+        var firstLong = ByteBuffer.wrap(bytes, position, 8).getLong();
         return firstLong != 0;
+    }
+
+    static int getPositionInSharedBytes(int bucketIndex) {
+        int firstBucketIndexInTargetWalGroup;
+        var mod = bucketIndex % ConfForSlot.global.confWal.oneChargeBucketNumber;
+        if (mod != 0) {
+            firstBucketIndexInTargetWalGroup = bucketIndex - mod;
+        } else {
+            firstBucketIndexInTargetWalGroup = bucketIndex;
+        }
+
+        return (bucketIndex - firstBucketIndexInTargetWalGroup) * KEY_BUCKET_ONE_COST_SIZE;
     }
 
     KeyBucket readKeyBucketForSingleKey(int bucketIndex, byte splitIndex, byte splitNumber, long keyHash, boolean isRefreshLRUCache) {
@@ -261,10 +274,18 @@ public class KeyLoader {
         }
 
         var bytes = fdReadWrite.readOneInner(bucketIndex, isRefreshLRUCache);
-        if (!isBytesValidAsKeyBucket(bytes)) {
-            return null;
+        if (ConfForSlot.global.pureMemory) {
+            // shared bytes
+            var position = getPositionInSharedBytes(bucketIndex);
+            if (!isBytesValidAsKeyBucket(bytes, position)) {
+                return null;
+            }
+            return new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, bytes, position, snowFlake);
         }
 
+        if (!isBytesValidAsKeyBucket(bytes, 0)) {
+            return null;
+        }
         return new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, bytes, snowFlake);
     }
 
@@ -307,11 +328,22 @@ public class KeyLoader {
             }
 
             var bytes = fdReadWrite.readOneInner(bucketIndex, false);
-            if (!isBytesValidAsKeyBucket(bytes)) {
-                keyBuckets.add(null);
+            if (ConfForSlot.global.pureMemory) {
+                // shared bytes
+                var position = getPositionInSharedBytes(bucketIndex);
+                if (!isBytesValidAsKeyBucket(bytes, position)) {
+                    keyBuckets.add(null);
+                } else {
+                    var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, position, snowFlake);
+                    keyBuckets.add(keyBucket);
+                }
             } else {
-                var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
-                keyBuckets.add(keyBucket);
+                if (!isBytesValidAsKeyBucket(bytes, 0)) {
+                    keyBuckets.add(null);
+                } else {
+                    var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, splitNumber, bytes, snowFlake);
+                    keyBuckets.add(keyBucket);
+                }
             }
         }
         return keyBuckets;

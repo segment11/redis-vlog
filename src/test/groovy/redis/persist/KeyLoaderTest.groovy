@@ -353,7 +353,7 @@ class KeyLoaderTest extends Specification {
         ConfForSlot.global.pureMemory = true
         var fdReadWrite = keyLoader.fdReadWriteArray[0]
         var maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
-        fdReadWrite.allBytesByOneInnerIndex = new byte[maxSegmentNumberPerFd][];
+        fdReadWrite.allBytesByOneInnerIndexForChunk = new byte[maxSegmentNumberPerFd][];
 
         keyLoader.writeKeyBucketBytesBatchFromMasterExists(contentBytes)
 

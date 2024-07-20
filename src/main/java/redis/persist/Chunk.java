@@ -136,7 +136,7 @@ public class Chunk {
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
-        return fdReadWrite.readSegmentForMerge(segmentIndexTargetFd, segmentCount);
+        return fdReadWrite.readSegmentsForMerge(segmentIndexTargetFd, segmentCount);
     }
 
     byte[] preadForRepl(int targetSegmentIndex) {
@@ -701,7 +701,7 @@ public class Chunk {
         if (segmentCount == 1) {
             fdReadWrite.writeOneInner(segmentIndexTargetFd, bytes, false);
         } else if (segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
-            fdReadWrite.writeSegmentBatch(segmentIndexTargetFd, bytes, false);
+            fdReadWrite.writeSegmentsBatch(segmentIndexTargetFd, bytes, false);
         } else if (segmentCount == REPL_ONCE_SEGMENT_COUNT) {
             fdReadWrite.writeOneInnerForRepl(segmentIndexTargetFd, bytes, 0);
         } else {
