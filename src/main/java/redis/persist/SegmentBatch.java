@@ -27,23 +27,24 @@ public class SegmentBatch {
     private final int chunkSegmentLength;
     private final SnowFlake snowFlake;
 
-    private final static SimpleGauge segmentBatchGauge = new SimpleGauge("segment_batch", "chunk segment compress",
+    final static SimpleGauge segmentBatchGauge = new SimpleGauge("segment_batch", "chunk segment compress",
             "slot");
 
     static {
         segmentBatchGauge.register();
     }
 
+    long segmentCompressCountTotal;
     private long segmentCompressTimeTotalUs;
-    private long segmentCompressCountTotal;
-    private long compressBytesTotal;
+
+    long compressBytesTotal;
     private long compressedBytesTotal;
 
-    private long batchSegmentCountTotal;
+    long batchSegmentCountTotal;
     private long batchKvCountTotal;
 
     private long beforeTightSegmentCountTotal;
-    private long afterTightSegmentCountTotal;
+    long afterTightSegmentCountTotal;
 
     private final Logger log = LoggerFactory.getLogger(SegmentBatch.class);
 
@@ -93,7 +94,7 @@ public class SegmentBatch {
         });
     }
 
-    private record SegmentCompressedBytesWithIndex(byte[] compressedBytes, int segmentIndex, long segmentSeq) {
+    record SegmentCompressedBytesWithIndex(byte[] compressedBytes, int segmentIndex, long segmentSeq) {
         @Override
         public String toString() {
             return "SegmentCompressedBytesWithIndex{" +
@@ -310,9 +311,6 @@ public class SegmentBatch {
         var beginT = System.nanoTime();
         var compressedBytes = Zstd.compress(bytes);
         var costT = (System.nanoTime() - beginT) / 1000;
-        if (costT == 0) {
-            costT = 1;
-        }
         segmentCompressTimeTotalUs += costT;
         compressBytesTotal += bytes.length;
         compressedBytesTotal += compressedBytes.length;
@@ -334,10 +332,6 @@ public class SegmentBatch {
         }
     }
 
-    static void iterateFromSegmentBytesForDebug(byte[] decompressedBytes) {
-        iterateFromSegmentBytes(decompressedBytes, new ForDebugCvCallback());
-    }
-
     public static void iterateFromSegmentBytes(byte[] decompressedBytes, CvCallback cvCallback) {
         var buf = Unpooled.wrappedBuffer(decompressedBytes);
         // for crc check
@@ -348,7 +342,7 @@ public class SegmentBatch {
         int offsetInThisSegment = Chunk.SEGMENT_HEADER_LENGTH;
         while (true) {
             // refer to comment: write 0 short, so merge loop can break, because reuse old bytes
-            if (buf.readableBytes() < 2 || buf.getShort(buf.readerIndex()) == 0) {
+            if (buf.readableBytes() < 2) {
                 break;
             }
 
