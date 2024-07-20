@@ -27,14 +27,12 @@ class LocalPersistTest extends Specification {
         LocalPersist.DEFAULT_SLOT_NUMBER == 4
         LocalPersist.MAX_SLOT_NUMBER == 128
         LocalPersist.O_DIRECT == 040000
-
         localPersist.oneSlots() == null
 
         when:
         prepareLocalPersist()
-        localPersist.fixSlotThreadId((byte) 0, 0L)
+        localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
         localPersist.persistMergeSegmentsUndone()
-
         then:
         localPersist.oneSlots().length == 1
         localPersist.oneSlot((byte) 0) != null
@@ -45,18 +43,15 @@ class LocalPersistTest extends Specification {
 
     def 'test mock one slot'() {
         given:
-        def localPersist = LocalPersist.instance
-
         def eventloop = Eventloop.builder()
-                .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
-
         Thread.start {
             eventloop.run()
         }
 
+        def localPersist = LocalPersist.instance
         localPersist.addOneSlotForTest((byte) 0, eventloop)
 
         expect:
