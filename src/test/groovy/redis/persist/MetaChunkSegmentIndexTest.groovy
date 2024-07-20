@@ -12,43 +12,43 @@ class MetaChunkSegmentIndexTest extends Specification {
 
         when:
         def allInMemoryCachedBytes = one.getInMemoryCachedBytes()
-
         then:
         allInMemoryCachedBytes.length == 4
 
         when:
         ConfForSlot.global.pureMemory = false
-
         def bytes0 = new byte[4]
         one.overwriteInMemoryCachedBytes(bytes0)
-
         then:
         one.inMemoryCachedBytes.length == 4
 
         when:
         ConfForSlot.global.pureMemory = true
-
         one.overwriteInMemoryCachedBytes(bytes0)
-
         then:
         one.inMemoryCachedBytes.length == 4
 
         when:
         boolean exception = false
         def bytes0WrongSize = new byte[3]
-
         try {
             one.overwriteInMemoryCachedBytes(bytes0WrongSize)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
+
+        when:
+        def two = new MetaChunkSegmentIndex((byte) 0, slotDir)
+        then:
+        two.get() == one.get()
 
         cleanup:
         one.clear()
         one.cleanUp()
+        two.cleanUp()
         ConfForSlot.global.pureMemory = false
         slotDir.deleteDir()
     }
@@ -76,7 +76,6 @@ class MetaChunkSegmentIndexTest extends Specification {
         when:
         ConfForSlot.global.pureMemory = true
         def one2 = new MetaChunkSegmentIndex((byte) 0, slotDir)
-
         one2.set(10)
         then:
         one2.get() == 10
@@ -87,5 +86,6 @@ class MetaChunkSegmentIndexTest extends Specification {
         ConfForSlot.global.pureMemory = true
         one2.cleanUp()
         ConfForSlot.global.pureMemory = false
+        slotDir.deleteDir()
     }
 }

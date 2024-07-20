@@ -12,41 +12,42 @@ class MetaKeyBucketSplitNumberTest extends Specification {
 
         when:
         def allInMemoryCachedBytes = one.getInMemoryCachedBytes()
-
         then:
         allInMemoryCachedBytes.length == one.allCapacity
 
         when:
         def bytes0 = new byte[one.allCapacity]
         one.overwriteInMemoryCachedBytes(bytes0)
-
         then:
         one.inMemoryCachedBytes.length == one.allCapacity
 
         when:
         ConfForSlot.global.pureMemory = true
-
         one.overwriteInMemoryCachedBytes(bytes0)
-
         then:
         one.inMemoryCachedBytes.length == one.allCapacity
 
         when:
         boolean exception = false
         def bytes0WrongSize = new byte[one.allCapacity - 1]
-
         try {
             one.overwriteInMemoryCachedBytes(bytes0WrongSize)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
+
+        when:
+        def two = new MetaKeyBucketSplitNumber((byte) 0, slotDir)
+        then:
+        two != null
 
         cleanup:
         one.clear()
         one.cleanUp()
+        two.cleanUp()
         ConfForSlot.global.pureMemory = false
         slotDir.deleteDir()
     }
@@ -78,9 +79,7 @@ class MetaKeyBucketSplitNumberTest extends Specification {
 
         when:
         ConfForSlot.global.pureMemory = true
-
         def one2 = new MetaKeyBucketSplitNumber((byte) 0, slotDir)
-
         one2.setForTest(10, (byte) 3)
         one2.setForTest(20, (byte) 9)
         one2.setForTest(30, (byte) 27)
@@ -111,5 +110,6 @@ class MetaKeyBucketSplitNumberTest extends Specification {
         one2.clear()
         one2.cleanUp()
         ConfForSlot.global.pureMemory = false
+        slotDir.deleteDir()
     }
 }
