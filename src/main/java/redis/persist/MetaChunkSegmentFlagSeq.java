@@ -108,7 +108,7 @@ public class MetaChunkSegmentFlagSeq {
         void call(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex);
     }
 
-    int[] iterateAndFind(int beginSegmentIndex, int nextSegmentCount, int targetWalGroupIndex, Chunk chunk) {
+    int[] iterateAndFindThoseNeedToMerge(int beginSegmentIndex, int nextSegmentCount, int targetWalGroupIndex, Chunk chunk) {
         var findSegmentIndexWithSegmentCount = new int[]{NO_NEED_MERGE_SEGMENT_INDEX, 0};
 
         var end = Math.min(beginSegmentIndex + nextSegmentCount, maxSegmentNumber);
@@ -123,7 +123,6 @@ public class MetaChunkSegmentFlagSeq {
             var flag = Flag.fromFlagByte(flagByte);
 //            var segmentSeq = inMemoryCachedByteBuffer.getLong(offset + 1);
             var walGroupIndex = inMemoryCachedByteBuffer.getInt(offset + 1 + 8);
-
             if (walGroupIndex != targetWalGroupIndex) {
                 continue;
             }

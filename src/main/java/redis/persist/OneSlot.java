@@ -1141,22 +1141,22 @@ public class OneSlot {
         // find continuous segments those wal group index is same from need merge segment index
         // * 4 make sure to find one
         int untilSegmentCount = Math.min(Math.max(walGroupNumber * 4, (chunk.maxSegmentIndex + 1) / 4), 16384);
-        final int[] firstSegmentIndexWithReadSegmentCountArray = metaChunkSegmentFlagSeq
-                .iterateAndFind(needMergeSegmentIndex, untilSegmentCount, walGroupIndex, chunk);
+        final int[] firstSegmentIndexWithReadSegmentCountArray = metaChunkSegmentFlagSeq.iterateAndFindThoseNeedToMerge(
+                        needMergeSegmentIndex, untilSegmentCount, walGroupIndex, chunk);
 
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
 
         // always consider first / last segments
         if (firstSegmentIndexWithReadSegmentCountArray[0] == NO_NEED_MERGE_SEGMENT_INDEX) {
-            final int[] arrayLastN = metaChunkSegmentFlagSeq
-                    .iterateAndFind(chunk.maxSegmentIndex - ONCE_PREPARE_SEGMENT_COUNT, chunk.maxSegmentIndex, walGroupIndex, chunk);
+            final int[] arrayLastN = metaChunkSegmentFlagSeq.iterateAndFindThoseNeedToMerge(
+                    chunk.maxSegmentIndex - ONCE_PREPARE_SEGMENT_COUNT, chunk.maxSegmentIndex, walGroupIndex, chunk);
             if (arrayLastN[0] != NO_NEED_MERGE_SEGMENT_INDEX) {
                 firstSegmentIndexWithReadSegmentCountArray[0] = arrayLastN[0];
                 firstSegmentIndexWithReadSegmentCountArray[1] = arrayLastN[1];
             } else {
-                final int[] arrayFirstN = metaChunkSegmentFlagSeq
-                        .iterateAndFind(0, ONCE_PREPARE_SEGMENT_COUNT, walGroupIndex, chunk);
+                final int[] arrayFirstN = metaChunkSegmentFlagSeq.iterateAndFindThoseNeedToMerge(
+                        0, ONCE_PREPARE_SEGMENT_COUNT, walGroupIndex, chunk);
                 if (arrayFirstN[0] != NO_NEED_MERGE_SEGMENT_INDEX) {
                     firstSegmentIndexWithReadSegmentCountArray[0] = arrayFirstN[0];
                     firstSegmentIndexWithReadSegmentCountArray[1] = arrayFirstN[1];
