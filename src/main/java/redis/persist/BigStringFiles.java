@@ -10,6 +10,7 @@ import redis.ConfForSlot;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public class BigStringFiles {
@@ -21,6 +22,8 @@ public class BigStringFiles {
 
     private final LRUMap<Long, byte[]> bigStringBytesByUuidLRU;
 
+    private final HashMap<Long, byte[]> allBytesByUuid = new HashMap<>();
+
     private static final Gauge bigStringFilesCountGauge = Gauge.build()
             .name("big_string_files_count")
             .help("big string files count")
@@ -31,6 +34,14 @@ public class BigStringFiles {
 
     public BigStringFiles(byte slot, File slotDir) throws IOException {
         this.slot = slot;
+        if (ConfForSlot.global.pureMemory) {
+            log.warn("Pure memory mode, big string files will not be used, slot: {}", slot);
+            this.slotStr = null;
+            this.bigStringDir = null;
+            this.bigStringBytesByUuidLRU = null;
+            return;
+        }
+
         this.slotStr = String.valueOf(slot);
         this.bigStringDir = new File(slotDir, BIG_STRING_DIR_NAME);
         if (!bigStringDir.exists()) {
@@ -56,6 +67,13 @@ public class BigStringFiles {
 
     public List<Long> getBigStringFileUuidList() {
         var list = new ArrayList<Long>();
+        if (ConfForSlot.global.pureMemory) {
+            for (var entry : allBytesByUuid.entrySet()) {
+                list.add(entry.getKey());
+            }
+            return list;
+        }
+
         File[] files = bigStringDir.listFiles();
         for (File file : files) {
             list.add(Long.parseLong(file.getName()));
@@ -64,6 +82,10 @@ public class BigStringFiles {
     }
 
     public byte[] getBigStringBytesFromCache(long uuid) {
+        if (ConfForSlot.global.pureMemory) {
+            return allBytesByUuid.get(uuid);
+        }
+
         var bytesCached = bigStringBytesByUuidLRU.get(uuid);
         if (bytesCached != null) {
             return bytesCached;
@@ -93,6 +115,11 @@ public class BigStringFiles {
     }
 
     boolean writeBigStringBytes(long uuid, String key, byte[] bytes) {
+        if (ConfForSlot.global.pureMemory) {
+            allBytesByUuid.put(uuid, bytes);
+            return true;
+        }
+
         var file = new File(bigStringDir, String.valueOf(uuid));
         try {
             FileUtils.writeByteArrayToFile(file, bytes);
@@ -104,6 +131,11 @@ public class BigStringFiles {
     }
 
     boolean deleteBigStringFileIfExist(long uuid) {
+        if (ConfForSlot.global.pureMemory) {
+            allBytesByUuid.remove(uuid);
+            return true;
+        }
+
         bigStringBytesByUuidLRU.remove(uuid);
         bigStringFilesCountGauge.labels(slotStr).set(bigStringBytesByUuidLRU.size());
 
