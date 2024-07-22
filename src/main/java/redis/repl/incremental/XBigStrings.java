@@ -13,7 +13,6 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
 
     private final byte[] contentBytes;
 
-
     public long getUuid() {
         return uuid;
     }
