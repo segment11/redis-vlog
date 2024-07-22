@@ -317,16 +317,16 @@ public enum ConfForSlot {
     public static class ConfRepl {
         // because padding, can not change
         // for better latency, do not configure too large
-        public final int tempWalOneSegmentLength = 256 * 1024;
-        public final long tempWalOneFileMaxLength = 256 * 1024 * 1024;
-        public short tempWalForReadCacheSegmentMaxCount = 1_000;
+        public final int binlogOneSegmentLength = 256 * 1024;
+        public final long binlogOneFileMaxLength = 256 * 1024 * 1024;
+        public short binlogForReadCacheSegmentMaxCount = 100;
 
         @Override
         public String toString() {
             return "ConfRepl{" +
-                    "tempWalOneSegmentLength=" + tempWalOneSegmentLength +
-                    ", tempWalOneFileMaxLength=" + tempWalOneFileMaxLength +
-                    ", tempWalForReadCacheSegmentMaxCount=" + tempWalForReadCacheSegmentMaxCount +
+                    "binlogOneSegmentLength=" + binlogOneSegmentLength +
+                    ", binlogOneFileMaxLength=" + binlogOneFileMaxLength +
+                    ", binlogForReadCacheSegmentMaxCount=" + binlogForReadCacheSegmentMaxCount +
                     '}';
         }
     }

@@ -44,9 +44,9 @@ class ConfForSlotTest extends Specification {
         c.confWal.shortValueSizeTrigger >= 100
         println c.confWal
 
-        c.confRepl.tempWalOneSegmentLength == 256 * 1024
-        c.confRepl.tempWalOneFileMaxLength == 256 * 1024 * 1024
-        c.confRepl.tempWalForReadCacheSegmentMaxCount == 1_000
+        c.confRepl.binlogOneSegmentLength == 256 * 1024
+        c.confRepl.binlogOneFileMaxLength == 256 * 1024 * 1024
+        c.confRepl.binlogForReadCacheSegmentMaxCount == 100
         println c.confRepl
     }
 

@@ -514,9 +514,8 @@ public class MultiWorkerServer extends Launcher {
 
                         c.confWal.resetByOneValueLength(estimateOneValueLength);
 
-                        // tempWalForReadCacheSegmentMaxCount
-                        if (config.getChild("repl.tempWalForReadCacheSegmentMaxCount").hasValue()) {
-                            c.confRepl.tempWalForReadCacheSegmentMaxCount = config.get(ofInteger(), "repl.tempWalForReadCacheSegmentMaxCount").shortValue();
+                        if (config.getChild("repl.binlogForReadCacheSegmentMaxCount").hasValue()) {
+                            c.confRepl.binlogForReadCacheSegmentMaxCount = config.get(ofInteger(), "repl.binlogForReadCacheSegmentMaxCount").shortValue();
                         }
 
                         if (config.getChild("big.string.lru.maxSize").hasValue()) {
