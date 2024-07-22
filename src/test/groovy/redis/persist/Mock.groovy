@@ -14,7 +14,7 @@ class Mock {
             def keyHash = KeyHash.hash(keyBytes)
 
             def v = new Wal.V(it, bucketIndex, keyHash, CompressedValue.NO_EXPIRE,
-                    key, valueBytes, valueBytes.length, false)
+                    key, valueBytes, false)
 
             shortValueList << v
         }
@@ -38,7 +38,7 @@ class Mock {
             cv.uncompressedLength = 10
 
             def v = new Wal.V(it, bucketIndex, keyHash, CompressedValue.NO_EXPIRE,
-                    key, cv.encode(), cv.encodedLength(), false)
+                    key, cv.encode(), false)
 
             valueList << v
         }

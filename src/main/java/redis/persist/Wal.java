@@ -21,7 +21,11 @@ import static redis.persist.LocalPersist.PAGE_SIZE;
 
 public class Wal {
     public record V(long seq, int bucketIndex, long keyHash, long expireAt,
-                    String key, byte[] cvEncoded, int cvEncodedLength, boolean isFromMerge) {
+                    String key, byte[] cvEncoded, boolean isFromMerge) {
+        boolean isRemove() {
+            return CompressedValue.isDeleted(cvEncoded);
+        }
+
         @Override
         public String toString() {
             return "V{" +
@@ -100,7 +104,7 @@ public class Wal {
                 throw new IllegalStateException("Invalid length: " + vLength);
             }
 
-            return new V(seq, bucketIndex, keyHash, expireAt, new String(keyBytes), cvEncoded, cvEncodedLength, false);
+            return new V(seq, bucketIndex, keyHash, expireAt, new String(keyBytes), cvEncoded, false);
         }
     }
 
@@ -138,10 +142,9 @@ public class Wal {
     public String toString() {
         return "Wal{" +
                 "slot=" + slot +
-                ", delayToKeyBucketValues=" + delayToKeyBucketValues.size() +
-                ", delayToKeyBucketShortValues=" + delayToKeyBucketShortValues.size() +
-                ", persistCount=" + persistCount +
-                ", persistCostTimeMillis=" + persistCostTimeMillis +
+                ", groupIndex=" + groupIndex +
+                ", value.size=" + delayToKeyBucketValues.size() +
+                ", shortValue.size=" + delayToKeyBucketShortValues.size() +
                 '}';
     }
 
@@ -167,8 +170,8 @@ public class Wal {
     }
 
     // current wal group write position in target group of wal file
-    private final int[] writePositionArray = new int[MAX_WAL_GROUP_NUMBER];
-    private final int[] writePositionArrayShortValue = new int[MAX_WAL_GROUP_NUMBER];
+    final int[] writePositionArray = new int[MAX_WAL_GROUP_NUMBER];
+    final int[] writePositionArrayShortValue = new int[MAX_WAL_GROUP_NUMBER];
 
     private final byte slot;
     final int groupIndex;
@@ -191,9 +194,6 @@ public class Wal {
     int getKeyCount() {
         return delayToKeyBucketValues.size() + delayToKeyBucketShortValues.size();
     }
-
-    long persistCount;
-    long persistCostTimeMillis;
 
     int readWal(RandomAccessFile fromWalFile, HashMap<String, V> toMap, boolean isShortValue) throws IOException {
         // for unit test
@@ -229,7 +229,7 @@ public class Wal {
         return n;
     }
 
-    private void truncateWal(boolean isShortValue) {
+    private void resetWal(boolean isShortValue) {
         var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
         var positionArray = isShortValue ? writePositionArrayShortValue : writePositionArray;
 
@@ -252,8 +252,8 @@ public class Wal {
         delayToKeyBucketValues.clear();
         delayToKeyBucketShortValues.clear();
 
-        truncateWal(false);
-        truncateWal(true);
+        resetWal(false);
+        resetWal(true);
 
         if (groupIndex % 100 == 0) {
             log.info("Clear wal, slot: {}, group index: {}", slot, groupIndex);
@@ -265,7 +265,7 @@ public class Wal {
 
     void clearShortValues() {
         delayToKeyBucketShortValues.clear();
-        truncateWal(true);
+        resetWal(true);
 
         clearShortValuesCount++;
         if (clearShortValuesCount % 1000 == 0) {
@@ -275,7 +275,7 @@ public class Wal {
 
     void clearValues() {
         delayToKeyBucketValues.clear();
-        truncateWal(false);
+        resetWal(false);
 
         clearValuesCount++;
         if (clearValuesCount % 1000 == 0) {
@@ -302,25 +302,29 @@ public class Wal {
             }
         }
 
-        if (v2 != null) {
-            return v2.cvEncoded;
-        }
-
-        return null;
+        return v2.cvEncoded;
     }
 
     PutResult removeDelay(String key, int bucketIndex, long keyHash) {
         byte[] encoded = {CompressedValue.SP_FLAG_DELETE_TMP};
-        var v = new V(snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, key, encoded, 1, false);
+        var v = new V(snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, key, encoded, false);
 
         return put(true, key, v);
     }
 
     boolean remove(String key) {
-        boolean r = delayToKeyBucketShortValues.remove(key) != null;
-        boolean r2 = delayToKeyBucketValues.remove(key) != null;
-
-        return r || r2;
+        var vShort = delayToKeyBucketShortValues.get(key);
+        if (vShort != null) {
+            // already removed
+            if (vShort.isRemove()) {
+                return false;
+            } else {
+                delayToKeyBucketShortValues.remove(key);
+                return true;
+            }
+        } else {
+            return delayToKeyBucketValues.remove(key) != null;
+        }
     }
 
     void writeRafAndOffsetFromMasterNewly(boolean isValueShort, V v, int offset) {
@@ -328,15 +332,13 @@ public class Wal {
         var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
         var encodeLength = v.encodeLength();
 
-        if (!ConfForSlot.global.pureMemory) {
-            var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
-            try {
-                raf.seek(targetGroupBeginOffset + offset);
-                raf.write(v.encode());
-            } catch (IOException e) {
-                log.error("Write to file error", e);
-                throw new RuntimeException("Write to file error: " + e.getMessage());
-            }
+        var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
+        try {
+            raf.seek(targetGroupBeginOffset + offset);
+            raf.write(v.encode());
+        } catch (IOException e) {
+            log.error("Write to file error", e);
+            throw new RuntimeException("Write to file error: " + e.getMessage());
         }
 
         positionArray[groupIndex] += encodeLength;

@@ -27,7 +27,7 @@ class TempWalTest extends Specification {
         tempWal.readPrevRafOneSegment(-1, 0) == null
         tempWal.readPrevRafOneSegment(1, 0) == null
         tempWal.size() == 10
-        tempWal.getCvEncoded(vList[0].key()).length == vList[0].cvEncodedLength()
+        tempWal.getCvEncoded(vList[0].key()).length == vList[0].cvEncoded().length
         tempWal.getCvEncoded(vList[10].key()) == null
 
         when:

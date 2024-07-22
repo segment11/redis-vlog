@@ -869,7 +869,7 @@ public class OneSlot {
             cvEncoded = cv.encode();
         }
         var v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                key, cvEncoded, cv.encodedLength(), isFromMerge);
+                key, cvEncoded, isFromMerge);
 
         // for big string, use single file
         boolean isPersistLengthOverSegmentLength = v.persistLength() + SEGMENT_HEADER_LENGTH > chunkSegmentLength;
@@ -888,7 +888,7 @@ public class OneSlot {
             // encode again
             cvEncoded = cv.encodeAsBigStringMeta(uuid);
             v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                    key, cvEncoded, cv.encodedLength(), isFromMerge);
+                    key, cvEncoded, isFromMerge);
 
             isValueShort = true;
         }
@@ -945,7 +945,9 @@ public class OneSlot {
                 }
 
                 var v = extV.v();
-                wal.writeRafAndOffsetFromMasterNewly(extV.isValueShort(), v, offset);
+                if (!ConfForSlot.global.pureMemory) {
+                    wal.writeRafAndOffsetFromMasterNewly(extV.isValueShort(), v, offset);
+                }
 
                 var key = v.key();
                 if (extV.isValueShort()) {
@@ -1142,7 +1144,7 @@ public class OneSlot {
         // * 4 make sure to find one
         int untilSegmentCount = Math.min(Math.max(walGroupNumber * 4, (chunk.maxSegmentIndex + 1) / 4), 16384);
         final int[] firstSegmentIndexWithReadSegmentCountArray = metaChunkSegmentFlagSeq.iterateAndFindThoseNeedToMerge(
-                        needMergeSegmentIndex, untilSegmentCount, walGroupIndex, chunk);
+                needMergeSegmentIndex, untilSegmentCount, walGroupIndex, chunk);
 
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
@@ -1233,7 +1235,7 @@ public class OneSlot {
                         var cv = one.cv;
                         var bucketIndex = KeyHash.bucketIndex(cv.getKeyHash(), keyLoader.bucketsPerSlot);
                         list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                                one.key, cv.encode(), cv.encodedLength(), true));
+                                one.key, cv.encode(), true));
                     }
                 }
             }
