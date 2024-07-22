@@ -10,7 +10,6 @@ import redis.Dict;
 import redis.DictMap;
 import redis.persist.KeyLoader;
 import redis.persist.OneSlot;
-import redis.persist.Wal;
 import redis.repl.Repl;
 import redis.repl.ReplPair;
 import redis.repl.ReplType;
@@ -25,7 +24,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.LinkedList;
-import java.util.TreeMap;
 
 import static redis.repl.ReplType.hi;
 import static redis.repl.ReplType.pong;
@@ -130,9 +128,6 @@ public class XGroup extends BaseCommand {
                 oneSlot.addDelayNeedCloseReplPair(replPair);
                 yield Repl.emptyReply();
             }
-            case wal_append_batch -> wal_append_batch(slot, contentBytes);
-            case dict_create -> dict_create(slot, contentBytes);
-            case big_string_file_write -> big_string_file_write(slot, contentBytes);
             case exists_chunk_segments -> exists_chunk_segments(slot, contentBytes);
             case exists_key_buckets -> exists_key_buckets(slot, contentBytes);
             case meta_chunk_segment_index -> meta_chunk_segment_index(slot, contentBytes);
@@ -204,66 +199,6 @@ public class XGroup extends BaseCommand {
 
             return Repl.reply(slot, replPair, ReplType.exists_dict, new RawBytesContent(rawBytes));
         }
-    }
-
-    public record ExtV(boolean isValueShort, int offset, Wal.V v) {
-
-    }
-
-    private Reply wal_append_batch(byte slot, byte[] contentBytes) {
-        // client received from server
-        // refer to ToSlaveWalAppendBatch.encodeTo
-        var buffer = ByteBuffer.wrap(contentBytes);
-        var batchCount = buffer.getShort();
-        var dataLength = buffer.getInt();
-
-        // v already sorted by seq
-        // sort by wal group index, debug better
-        TreeMap<Integer, ArrayList<ExtV>> extVsGroupByWalGroupIndex = new TreeMap<>();
-        try {
-            for (int i = 0; i < batchCount; i++) {
-                var isValueShort = buffer.get() == 1;
-                var offset = buffer.getInt();
-                var vEncodeLength = buffer.getInt();
-                var vEncodeBytes = new byte[vEncodeLength];
-                buffer.get(vEncodeBytes);
-
-                var is = new DataInputStream(new ByteArrayInputStream(vEncodeBytes));
-                var v = Wal.V.decode(is);
-
-                var walGroupIndex = v.bucketIndex() / ConfForSlot.global.confWal.oneChargeBucketNumber;
-
-                var vList = extVsGroupByWalGroupIndex.get(walGroupIndex);
-                if (vList == null) {
-                    vList = new ArrayList<>();
-                    extVsGroupByWalGroupIndex.put(walGroupIndex, vList);
-                }
-                vList.add(new ExtV(isValueShort, offset, v));
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        var oneSlot = localPersist.oneSlot(slot);
-        // need write to wal, perf too bad
-        oneSlot.asSlaveOnMasterWalAppendBatchGet(extVsGroupByWalGroupIndex);
-
-        return Repl.emptyReply();
-    }
-
-    private Reply dict_create(byte slot, byte[] contentBytes) {
-        log.debug("Repl handle dict create, slot={}, slave uuid={}, {}", slot,
-                replPair.getSlaveUuid(), replPair.getHostAndPort());
-        // refer Dict.encode
-        var is = new DataInputStream(new ByteArrayInputStream(contentBytes));
-        try {
-            var dictWithKey = Dict.decode(is);
-            DictMap.getInstance().putDict(dictWithKey.keyPrefix(), dictWithKey.dict());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        return Repl.emptyReply();
     }
 
     private Reply big_string_file_write(byte slot, byte[] contentBytes) {

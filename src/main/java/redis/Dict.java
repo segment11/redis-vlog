@@ -71,13 +71,40 @@ public class Dict implements Serializable {
 
     static AtomicInteger seqGenerator = new AtomicInteger(BEGIN_SEQ);
 
+    int seq;
+
     public int getSeq() {
         return seq;
     }
 
-    int seq;
+    public void setSeq(int seq) {
+        this.seq = seq;
+    }
+
     long createdTime;
+
+
+    public long getCreatedTime() {
+        return createdTime;
+    }
+
+    public void setCreatedTime(long createdTime) {
+        this.createdTime = createdTime;
+    }
+
     byte[] dictBytes;
+
+    public byte[] getDictBytes() {
+        return dictBytes;
+    }
+
+    public boolean hasDictBytes() {
+        return dictBytes != null;
+    }
+
+    public void setDictBytes(byte[] dictBytes) {
+        this.dictBytes = dictBytes;
+    }
 
     @Override
     public String toString() {
@@ -99,14 +126,6 @@ public class Dict implements Serializable {
         if (obj == null || getClass() != obj.getClass()) return false;
         Dict dict = (Dict) obj;
         return seq == dict.seq;
-    }
-
-    public byte[] getDictBytes() {
-        return dictBytes;
-    }
-
-    public boolean hasDictBytes() {
-        return dictBytes != null;
     }
 
     // seq int + create time long + key prefix length short + key prefix + dict bytes length short + dict bytes

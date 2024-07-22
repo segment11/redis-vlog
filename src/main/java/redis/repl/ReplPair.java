@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.RequestHandler;
 import redis.repl.content.Hello;
-import redis.repl.content.ToSlaveWalAppendBatch;
 
 public class ReplPair {
     public ReplPair(byte slot, boolean asMaster, String host, int port) {
@@ -29,10 +28,6 @@ public class ReplPair {
 
     public String getHostAndPort() {
         return host + ":" + port;
-    }
-
-    boolean flushToSlaveWalAppendBatch(ToSlaveWalAppendBatch toSlaveWalAppendBatch) {
-        return write(ReplType.wal_append_batch, toSlaveWalAppendBatch);
     }
 
     @Override

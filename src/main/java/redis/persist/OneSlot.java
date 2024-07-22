@@ -15,13 +15,13 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
-import redis.command.XGroup;
 import redis.metric.SimpleGauge;
-import redis.repl.MasterUpdateCallback;
+import redis.repl.Binlog;
+import redis.repl.GetCurrentSlaveReplPairList;
 import redis.repl.ReplPair;
-import redis.repl.SendToSlaveMasterUpdateCallback;
 import redis.repl.content.ToMasterExistsSegmentMeta;
-import redis.repl.content.ToSlaveWalAppendBatch;
+import redis.repl.incremental.XBigStrings;
+import redis.repl.incremental.XWalV;
 import redis.task.ITask;
 import redis.task.TaskChain;
 
@@ -32,7 +32,6 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static io.activej.config.converter.ConfigConverters.ofInteger;
 import static redis.persist.Chunk.*;
 import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
 
@@ -56,11 +55,12 @@ public class OneSlot {
         this.walArray = new Wal[]{wal};
         this.raf = null;
         this.rafShortValue = null;
-        this.masterUpdateCallback = null;
         this.masterUuid = 0L;
 
         this.metaChunkSegmentFlagSeq = new MetaChunkSegmentFlagSeq(slot, slotDir);
         this.metaChunkSegmentIndex = new MetaChunkSegmentIndex(slot, slotDir);
+
+        this.binlog = null;
     }
 
     // for unit test, only for async run/call
@@ -82,11 +82,12 @@ public class OneSlot {
         this.walArray = new Wal[0];
         this.raf = null;
         this.rafShortValue = null;
-        this.masterUpdateCallback = null;
         this.masterUuid = 0L;
 
         this.metaChunkSegmentFlagSeq = null;
         this.metaChunkSegmentIndex = null;
+
+        this.binlog = null;
 
         this.netWorkerEventloop = eventloop;
     }
@@ -195,17 +196,15 @@ public class OneSlot {
             kvByWalGroupIndexLRU.put(walGroupIndex, lru);
         }
 
-        // default 2000, I do not know if it is suitable
-        var sendOnceMaxCount = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxCount", 2000);
-        var sendOnceMaxSize = persistConfig.get(ofInteger(), "repl.wal.sendOnceMaxSize", 1024 * 1024);
-        var toSlaveWalAppendBatch = new ToSlaveWalAppendBatch(sendOnceMaxCount, sendOnceMaxSize);
-        // sync / async to slave callback
-        this.masterUpdateCallback = new SendToSlaveMasterUpdateCallback(() -> replPairs.stream().
-                filter(ReplPair::isAsMaster).collect(Collectors.toList()), toSlaveWalAppendBatch);
-
         this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, this);
 
-        DictMap.getInstance().setMasterUpdateCallback(masterUpdateCallback);
+        GetCurrentSlaveReplPairList inner = () -> replPairs.stream().filter(ReplPair::isAsMaster).collect(Collectors.toList());
+        this.binlog = new Binlog(slot, slotDir);
+        this.binlog.setGetCurrentSlaveReplPairList(inner);
+        // only set slot 0, binlog, if current instance do not include slot 0, need change here
+        if (this.slot == 0) {
+            DictMap.getInstance().setBinlog(this.binlog);
+        }
 
         this.initTasks();
         this.initMetricsCollect();
@@ -464,6 +463,11 @@ public class OneSlot {
     // index is group index
     private final Wal[] walArray;
 
+    public Wal getWalByBucketIndex(int bucketIndex) {
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
+        return walArray[walGroupIndex];
+    }
+
     private final RandomAccessFile raf;
     private final RandomAccessFile rafShortValue;
 
@@ -472,8 +476,6 @@ public class OneSlot {
     public KeyLoader getKeyLoader() {
         return keyLoader;
     }
-
-    private final MasterUpdateCallback masterUpdateCallback;
 
     public long getWalKeyCount() {
         long r = 0;
@@ -530,6 +532,8 @@ public class OneSlot {
         metaChunkSegmentIndex.overwriteInMemoryCachedBytes(bytes);
     }
 
+    final Binlog binlog;
+
     private final TaskChain taskChain = new TaskChain();
 
     public TaskChain getTaskChain() {
@@ -559,10 +563,6 @@ public class OneSlot {
                     if (!replPair.isAsMaster()) {
                         // only slave need send ping
                         replPair.ping();
-                    } else {
-                        if (!masterUpdateCallback.isToSlaveWalAppendBatchEmpty()) {
-                            masterUpdateCallback.flushToSlaveWalAppendBatch();
-                        }
                     }
                 }
 
@@ -804,8 +804,9 @@ public class OneSlot {
         if (putResult.needPersist()) {
             doPersist(walGroupIndex, key, bucketIndex, putResult);
         } else {
-            if (masterUpdateCallback != null) {
-                masterUpdateCallback.onWalAppend(slot, bucketIndex, putResult.isValueShort(), putResult.needPutV(), putResult.offset());
+            if (binlog != null) {
+                var xWalV = new XWalV(putResult.needPutV(), putResult.isValueShort(), putResult.offset());
+                binlog.append(xWalV);
             }
         }
     }
@@ -881,8 +882,9 @@ public class OneSlot {
                 throw new RuntimeException("Write big string file error, uuid: " + uuid + ", key: " + key);
             }
 
-            if (masterUpdateCallback != null) {
-                masterUpdateCallback.onBigStringFileWrite(slot, uuid, bytes);
+            if (binlog != null) {
+                var xBigStrings = new XBigStrings(uuid, key, bytes);
+                binlog.append(xBigStrings);
             }
 
             // encode again
@@ -895,8 +897,9 @@ public class OneSlot {
 
         var putResult = targetWal.put(isValueShort, key, v);
         if (!putResult.needPersist()) {
-            if (masterUpdateCallback != null) {
-                masterUpdateCallback.onWalAppend(slot, bucketIndex, isValueShort, v, putResult.offset());
+            if (binlog != null) {
+                var xWalV = new XWalV(v, isValueShort, putResult.offset());
+                binlog.append(xWalV);
             }
 
             return;
@@ -918,45 +921,9 @@ public class OneSlot {
         var needPutV = putResult.needPutV();
         if (needPutV != null) {
             targetWal.put(putResult.isValueShort(), key, needPutV);
-            if (masterUpdateCallback != null) {
-                masterUpdateCallback.onWalAppend(slot, bucketIndex, putResult.isValueShort(), needPutV, putResult.offset());
-            }
-        }
-    }
-
-    public void asSlaveOnMasterWalAppendBatchGet(TreeMap<Integer, ArrayList<XGroup.ExtV>> extVsGroupByWalGroupIndex) {
-        checkCurrentThreadId();
-
-        for (var entry : extVsGroupByWalGroupIndex.entrySet()) {
-            var walGroupIndex = entry.getKey();
-            var extVs = entry.getValue();
-
-            for (var extV : extVs) {
-                var wal = walArray[walGroupIndex];
-
-                var offset = extV.offset();
-                if (offset == 0) {
-                    // clear
-                    if (extV.isValueShort()) {
-                        wal.delayToKeyBucketShortValues.clear();
-                    } else {
-                        wal.delayToKeyBucketValues.clear();
-                    }
-                }
-
-                var v = extV.v();
-                if (!ConfForSlot.global.pureMemory) {
-                    wal.writeRafAndOffsetFromMasterNewly(extV.isValueShort(), v, offset);
-                }
-
-                var key = v.key();
-                if (extV.isValueShort()) {
-                    wal.delayToKeyBucketShortValues.put(key, v);
-                    wal.delayToKeyBucketValues.remove(key);
-                } else {
-                    wal.delayToKeyBucketValues.put(key, v);
-                    wal.delayToKeyBucketShortValues.remove(key);
-                }
+            if (binlog != null) {
+                var xWalV = new XWalV(needPutV, putResult.isValueShort(), putResult.offset());
+                binlog.append(xWalV);
             }
         }
     }
@@ -1037,7 +1004,7 @@ public class OneSlot {
     }
 
     private void initChunk() throws IOException {
-        this.chunk = new Chunk(slot, slotDir, this, snowFlake, keyLoader, masterUpdateCallback);
+        this.chunk = new Chunk(slot, slotDir, this, snowFlake, keyLoader);
         chunk.initFds(libC);
 
         var segmentIndexLastSaved = getChunkWriteSegmentIndex();

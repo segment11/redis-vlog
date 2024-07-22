@@ -1,7 +1,6 @@
 package redis
 
 import org.apache.commons.io.FileUtils
-import redis.repl.NoopMasterUpdateCallback
 import spock.lang.Specification
 
 class DictMapTest extends Specification {
@@ -20,8 +19,6 @@ class DictMapTest extends Specification {
         dictMap.close()
         dictMap.initDictMap(dirFile)
 
-        dictMap.masterUpdateCallback = new NoopMasterUpdateCallback()
-
         def dict = new Dict()
         dict.dictBytes = 'test'.bytes
         dict.seq = 1
@@ -38,7 +35,6 @@ class DictMapTest extends Specification {
 
         when:
         dictMap.putDict('test', dict)
-        dictMap.masterUpdateCallback = null
         dictMap.putDict('test2', dict2)
         then:
         dictMap.dictSize() == 2

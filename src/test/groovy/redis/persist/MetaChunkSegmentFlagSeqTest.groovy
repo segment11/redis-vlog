@@ -188,7 +188,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
 
         and:
         final byte slot = 0
-        var chunk = new Chunk(slot, slotDir, null, null, null, null)
+        var chunk = new Chunk(slot, slotDir, null, null, null)
 
         when:
         def r = one.iterateAndFindThoseNeedToMerge(1024, 1024 * 10, targetWalGroupIndex, chunk)

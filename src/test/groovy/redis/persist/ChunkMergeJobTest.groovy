@@ -72,7 +72,7 @@ class ChunkMergeJobTest extends Specification {
 
         oneSlot.threadIdProtectedForSafe = Thread.currentThread().threadId()
 
-        var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader, null)
+        var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader)
         chunk.fdReadWriteArray = [fdReadWriteForChunkSegments]
         oneSlot.chunk = chunk
         chunk.initSegmentIndexWhenFirstStart(segmentIndex)

@@ -114,7 +114,7 @@ public class BigStringFiles {
         }
     }
 
-    boolean writeBigStringBytes(long uuid, String key, byte[] bytes) {
+    public boolean writeBigStringBytes(long uuid, String key, byte[] bytes) {
         if (ConfForSlot.global.pureMemory) {
             allBytesByUuid.put(uuid, bytes);
             return true;

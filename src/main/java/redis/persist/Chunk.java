@@ -7,7 +7,7 @@ import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
-import redis.repl.MasterUpdateCallback;
+import redis.repl.Binlog;
 
 import java.io.File;
 import java.io.IOException;
@@ -51,14 +51,14 @@ public class Chunk {
 
     final OneSlot oneSlot;
     private final KeyLoader keyLoader;
-    private final MasterUpdateCallback masterUpdateCallback;
+    private final Binlog binlog;
     private final SegmentBatch segmentBatch;
 
     int[] fdLengths;
     FdReadWrite[] fdReadWriteArray;
 
     public Chunk(byte slot, File slotDir, OneSlot oneSlot,
-                 SnowFlake snowFlake, KeyLoader keyLoader, MasterUpdateCallback masterUpdateCallback) {
+                 SnowFlake snowFlake, KeyLoader keyLoader) {
         var confChunk = ConfForSlot.global.confChunk;
         this.segmentNumberPerFd = confChunk.segmentNumberPerFd;
         this.fdPerChunk = confChunk.fdPerChunk;
@@ -78,7 +78,7 @@ public class Chunk {
 
         this.oneSlot = oneSlot;
         this.keyLoader = keyLoader;
-        this.masterUpdateCallback = masterUpdateCallback;
+        this.binlog = oneSlot.binlog;
         this.segmentBatch = new SegmentBatch(slot, snowFlake);
 
         this.initMetricsCollect();
@@ -360,11 +360,6 @@ public class Chunk {
             for (var segment : segments) {
                 byte[] bytes = segment.tightBytesWithLength();
                 fdReadWrite.writeOneInner(targetFdIndex(segment.segmentIndex()), bytes, false);
-
-                if (masterUpdateCallback != null) {
-                    List<Long> segmentSeqList = new ArrayList<>();
-                    segmentSeqList.add(segment.segmentSeq());
-                }
             }
 
             oneSlot.setSegmentMergeFlagBatch(segmentIndex, segments.size(),
@@ -455,6 +450,10 @@ public class Chunk {
 
         // update meta, segment index for next time
         oneSlot.setChunkWriteSegmentIndex(segmentIndex);
+
+        if (binlog != null) {
+            // todo
+        }
 
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
         if (isMerge) {

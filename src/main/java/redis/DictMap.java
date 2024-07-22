@@ -3,7 +3,8 @@ package redis;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.repl.MasterUpdateCallback;
+import redis.repl.Binlog;
+import redis.repl.incremental.XDict;
 
 import java.io.*;
 import java.util.HashMap;
@@ -24,10 +25,10 @@ public class DictMap {
     private DictMap() {
     }
 
-    private MasterUpdateCallback masterUpdateCallback;
+    private Binlog binlog;
 
-    public void setMasterUpdateCallback(MasterUpdateCallback masterUpdateCallback) {
-        this.masterUpdateCallback = masterUpdateCallback;
+    public void setBinlog(Binlog binlog) {
+        this.binlog = binlog;
     }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -49,8 +50,8 @@ public class DictMap {
             }
         }
 
-        if (masterUpdateCallback != null) {
-            masterUpdateCallback.onDictCreate(keyPrefix, dict);
+        if (binlog != null) {
+            binlog.append(new XDict(keyPrefix, dict));
         }
 
         cacheDictBySeq.put(dict.seq, dict);

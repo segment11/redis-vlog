@@ -3,33 +3,10 @@ package redis.repl
 import redis.ConfForSlot
 import redis.persist.Consts
 import redis.persist.Mock
-import redis.persist.Wal
+import redis.repl.incremental.XWalV
 import spock.lang.Specification
 
 class BinlogTest extends Specification {
-    class ForWal implements BinlogAppendContent<ForWal> {
-        private final Wal.V v
-
-        ForWal(Wal.V v) {
-            this.v = v
-        }
-
-        @Override
-        Binlog.Type type() {
-            Binlog.Type.wal
-        }
-
-        @Override
-        byte[] encode() {
-            v.encode()
-        }
-
-        @Override
-        ForWal decode(byte[] bytes) {
-            Wal.V.decode(new DataInputStream(new ByteArrayInputStream(bytes)))
-        }
-    }
-
     def 'test append'() {
         given:
         final byte slot = 0
@@ -59,7 +36,7 @@ class BinlogTest extends Specification {
         and:
         def vList = Mock.prepareValueList(11)
         for (v in vList[0..9]) {
-            binlog.append(new ForWal(v))
+            binlog.append(new XWalV(v))
         }
 
         then:
@@ -72,7 +49,7 @@ class BinlogTest extends Specification {
         def oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
         binlog.currentFileOffset = oneFileMaxLength - 1
         for (v in vList[0..9]) {
-            binlog.append(new ForWal(v))
+            binlog.append(new XWalV(v))
         }
         then:
         binlog.currentFileIndex == 1
@@ -82,15 +59,15 @@ class BinlogTest extends Specification {
         when:
         binlog.currentFileOffset = oneSegmentLength - 1
         for (v in vList[0..9]) {
-            binlog.append(new ForWal(v))
+            binlog.append(new XWalV(v))
         }
         binlog.currentFileOffset = oneSegmentLength * 2 - 1
         for (v in vList[0..9]) {
-            binlog.append(new ForWal(v))
+            binlog.append(new XWalV(v))
         }
         binlog.currentFileOffset = oneSegmentLength * 3 - 1
         for (v in vList[0..9]) {
-            binlog.append(new ForWal(v))
+            binlog.append(new XWalV(v))
         }
         then:
         binlog.readCurrentRafOneSegment(0).length == oneSegmentLength

@@ -327,26 +327,36 @@ public class Wal {
         }
     }
 
-    void writeRafAndOffsetFromMasterNewly(boolean isValueShort, V v, int offset) {
-        var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
-        var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
-        var encodeLength = v.encodeLength();
-
-        var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
-        try {
-            raf.seek(targetGroupBeginOffset + offset);
-            raf.write(v.encode());
-        } catch (IOException e) {
-            log.error("Write to file error", e);
-            throw new RuntimeException("Write to file error: " + e.getMessage());
-        }
-
-        positionArray[groupIndex] += encodeLength;
-    }
-
     long needPersistCountTotal = 0;
     long needPersistKvCountTotal = 0;
     long needPersistOffsetTotal = 0;
+
+    public void putFromX(V v, boolean isValueShort, int offset) {
+        if (!ConfForSlot.global.pureMemory) {
+            var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
+            var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
+            var encodeLength = v.encodeLength();
+
+            var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
+            try {
+                raf.seek(targetGroupBeginOffset + offset);
+                raf.write(v.encode());
+            } catch (IOException e) {
+                log.error("Write to file error", e);
+                throw new RuntimeException("Write to file error: " + e.getMessage());
+            }
+
+            positionArray[groupIndex] += encodeLength;
+        }
+
+        if (isValueShort) {
+            delayToKeyBucketShortValues.put(v.key, v);
+            delayToKeyBucketValues.remove(v.key);
+        } else {
+            delayToKeyBucketValues.put(v.key, v);
+            delayToKeyBucketShortValues.remove(v.key);
+        }
+    }
 
     // return need persist
     PutResult put(boolean isValueShort, String key, V v) {

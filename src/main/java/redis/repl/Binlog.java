@@ -15,9 +15,6 @@ import java.util.*;
 
 // before slave start receive data from master, master need start this binlog for slave catch up
 public class Binlog {
-    public enum Type {
-        wal, chunk_segments, key_buckets, dict, big_strings, dyn_config
-    }
 
     private final byte slot;
     private final File binlogDir;
@@ -31,7 +28,12 @@ public class Binlog {
     private final short forReadCacheSegmentMaxCount;
 
     private static final String BINLOG_DIR_NAME = "binlog";
-    private static final String META_FILE_NAME = "meta.dat";
+
+    private GetCurrentSlaveReplPairList getCurrentSlaveReplPairList;
+
+    public void setGetCurrentSlaveReplPairList(GetCurrentSlaveReplPairList getCurrentSlaveReplPairList) {
+        this.getCurrentSlaveReplPairList = getCurrentSlaveReplPairList;
+    }
 
     record BytesWithFileIndexAndOffset(byte[] bytes, int fileIndex,
                                        long offset) implements Comparable<BytesWithFileIndexAndOffset> {
@@ -97,7 +99,7 @@ public class Binlog {
     int currentFileIndex = 0;
     long currentFileOffset = 0;
 
-    private static final String FILE_NAME_PREFIX = "tmp-wal-";
+    private static final String FILE_NAME_PREFIX = "binlog-";
 
     private String fileName() {
         return FILE_NAME_PREFIX + currentFileIndex;
@@ -121,11 +123,11 @@ public class Binlog {
         latestAppendForReadCacheSegmentBytesSet.add(new BytesWithFileIndexAndOffset(bytes, fileIndex, offset));
     }
 
-    public void append(BinlogAppendContent content) {
+    public void append(BinlogContent content) {
         var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
         var oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
 
-        var encoded = content.encode();
+        var encoded = content.encodeWithType();
 
         var beforeAppendFileOffset = currentFileOffset;
         var beforeAppendSegmentIndex = beforeAppendFileOffset / oneSegmentLength;
@@ -289,6 +291,24 @@ public class Binlog {
             var readBytes = new byte[n];
             System.arraycopy(bytes, 0, readBytes, 0, n);
             return readBytes;
+        }
+    }
+
+    public void decodeAndApply(byte[] oneSegmentBytes) {
+        var byteBuffer = ByteBuffer.wrap(oneSegmentBytes);
+        while (true) {
+            if (byteBuffer.remaining() == 0) {
+                break;
+            }
+
+            var code = byteBuffer.get();
+            if (code == 0) {
+                break;
+            }
+
+            var type = BinlogContent.Type.fromCode(code);
+            var content = type.decodeFrom(byteBuffer);
+            content.apply(slot);
         }
     }
 

@@ -122,10 +122,6 @@ class WalTest extends Specification {
         when:
         wal.writePositionArray[0] = 0
         wal.writePositionArrayShortValue[0] = 0
-        wal.writeRafAndOffsetFromMasterNewly(true, v1, 0)
-        wal.writeRafAndOffsetFromMasterNewly(false, v1, 0)
-        wal.writeRafAndOffsetFromMasterNewly(true, v1, v1.encodeLength())
-        wal.writeRafAndOffsetFromMasterNewly(false, v1, v1.encodeLength())
         then:
         wal.writePositionArray[0] == v1.encodeLength() * 2
         wal.writePositionArrayShortValue[0] == v1.encodeLength() * 2

@@ -31,7 +31,7 @@ class ChunkMergeWorkerTest extends Specification {
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.Flag.reuse_new, 1L, walGroupIndex)
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex + 1, Chunk.Flag.reuse_new, 1L, walGroupIndex)
 
-        var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader, null)
+        var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader)
         oneSlot.chunk = chunk
         chunk.initSegmentIndexWhenFirstStart(segmentIndex)
         chunk.initFds(libC)

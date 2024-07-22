@@ -10,10 +10,6 @@ public enum ReplType {
     byeBye(true, false, (byte) 5),
     ok(true, false, (byte) 100),
 
-    wal_append_batch(true, false, (byte) 10),
-    dict_create(true, false, (byte) 11),
-    big_string_file_write(true, false, (byte) 12),
-
     exists_chunk_segments(false, true, (byte) 20),
     exists_key_buckets(false, true, (byte) 21),
     meta_chunk_segment_index(false, true, (byte) 22),
