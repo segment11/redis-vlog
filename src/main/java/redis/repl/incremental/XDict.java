@@ -1,5 +1,6 @@
 package redis.repl.incremental;
 
+import redis.CompressedValue;
 import redis.Dict;
 import redis.DictMap;
 import redis.repl.BinlogContent;
@@ -8,7 +9,16 @@ import java.nio.ByteBuffer;
 
 public class XDict implements BinlogContent<XDict> {
     private final String keyPrefix;
+
     private final Dict dict;
+
+    public String getKeyPrefix() {
+        return keyPrefix;
+    }
+
+    public Dict getDict() {
+        return dict;
+    }
 
     public XDict(String keyPrefix, Dict dict) {
         this.keyPrefix = keyPrefix;
@@ -22,7 +32,8 @@ public class XDict implements BinlogContent<XDict> {
 
     @Override
     public int encodedLength() {
-        // 1 byte for type, 4 bytes for encoded length for check, 4 bytes for seq, 8 bytes for created time
+        // 1 byte for type, 4 bytes for encoded length for check
+        // 4 bytes for seq, 8 bytes for created time
         // 2 bytes for key prefix length, key prefix, 2 bytes for dict bytes length, dict bytes
         return 1 + 4 + 4 + 8 + 2 + keyPrefix.length() + 2 + dict.getDictBytes().length;
     }
@@ -51,6 +62,12 @@ public class XDict implements BinlogContent<XDict> {
         var seq = buffer.getInt();
         var createdTime = buffer.getLong();
         var keyPrefixLength = buffer.getShort();
+
+
+        if (keyPrefixLength > CompressedValue.KEY_MAX_LENGTH || keyPrefixLength <= 0) {
+            throw new IllegalStateException("Key prefix length error, key prefix length: " + keyPrefixLength);
+        }
+
         var keyPrefixBytes = new byte[keyPrefixLength];
         buffer.get(keyPrefixBytes);
         var keyPrefix = new String(keyPrefixBytes);
@@ -75,7 +92,7 @@ public class XDict implements BinlogContent<XDict> {
         // ignore slot, need sync
         var dictMap = DictMap.getInstance();
         synchronized (dictMap) {
-
+            dictMap.putDict(keyPrefix, dict);
         }
     }
 }
