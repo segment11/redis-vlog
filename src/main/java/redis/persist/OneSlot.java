@@ -32,6 +32,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static io.activej.config.converter.ConfigConverters.ofBoolean;
 import static redis.persist.Chunk.*;
 import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
 
@@ -131,6 +132,11 @@ public class OneSlot {
             dynConfig.setMasterUuid(masterUuid);
         }
 
+        if (!this.dynConfig.isBinlogOn()) {
+            this.dynConfig.setBinlogOn(persistConfig.get(ofBoolean(), "binlogOn", false));
+        }
+        log.warn("Binlog on: {}", this.dynConfig.isBinlogOn());
+
         this.walGroupNumber = Wal.calcWalGroupNumber();
         this.walArray = new Wal[walGroupNumber];
         log.info("One slot wal group number: {}, slot: {}", walGroupNumber, slot);
@@ -199,7 +205,7 @@ public class OneSlot {
         this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, this);
 
         GetCurrentSlaveReplPairList inner = () -> replPairs.stream().filter(ReplPair::isAsMaster).collect(Collectors.toList());
-        this.binlog = new Binlog(slot, slotDir);
+        this.binlog = new Binlog(slot, slotDir, dynConfig);
         this.binlog.setGetCurrentSlaveReplPairList(inner);
         // only set slot 0, binlog, if current instance do not include slot 0, need change here
         if (this.slot == 0) {

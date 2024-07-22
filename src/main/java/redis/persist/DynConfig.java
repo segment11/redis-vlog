@@ -67,6 +67,15 @@ public class DynConfig {
         update("testKey", testKey);
     }
 
+    public boolean isBinlogOn() {
+        var obj = get("binlogOn");
+        return obj != null && (boolean) obj;
+    }
+
+    public void setBinlogOn(boolean binlogOn) throws IOException {
+        update("binlogOn", binlogOn);
+    }
+
     DynConfig(byte slot, File dynConfigFile) throws IOException {
         this.slot = slot;
         this.dynConfigFile = dynConfigFile;

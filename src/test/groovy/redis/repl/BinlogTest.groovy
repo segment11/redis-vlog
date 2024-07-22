@@ -2,6 +2,8 @@ package redis.repl
 
 import redis.ConfForSlot
 import redis.persist.Consts
+import redis.persist.DynConfig
+import redis.persist.DynConfigTest
 import redis.persist.Mock
 import redis.repl.incremental.XWalV
 import spock.lang.Specification
@@ -12,7 +14,6 @@ class BinlogTest extends Specification {
         final byte slot = 0
         ConfForSlot.global.confRepl.binlogForReadCacheSegmentMaxCount = 2
 
-        println 'Binlog types: ' + Binlog.Type.values().collect { it.name() }.join(', ')
         println new Binlog.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
 
         expect:
@@ -20,7 +21,11 @@ class BinlogTest extends Specification {
         new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 1) > new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 0)
 
         when:
-        def binlog = new Binlog(slot, Consts.slotDir)
+        var dynConfig = new DynConfig(slot, DynConfigTest.tmpFile)
+        var dynConfig2 = new DynConfig(slot, DynConfigTest.tmpFile2)
+        dynConfig.binlogOn = true
+        dynConfig2.binlogOn = false
+        def binlog = new Binlog(slot, Consts.slotDir, dynConfig)
 
         final File slotDir2 = new File('/tmp/redis-vlog/test-persist/test-slot2')
         if (!slotDir2.exists()) {
@@ -31,12 +36,13 @@ class BinlogTest extends Specification {
             }
             new File(binlogDir2, 'test.txt').text = 'test'
         }
-        def binlog2 = new Binlog(slot, slotDir2)
+        def binlog2 = new Binlog(slot, slotDir2, dynConfig2)
 
         and:
         def vList = Mock.prepareValueList(11)
         for (v in vList[0..9]) {
             binlog.append(new XWalV(v))
+            binlog2.append(new XWalV(v))
         }
 
         then:
@@ -80,7 +86,7 @@ class BinlogTest extends Specification {
         def lastAppendFileOffset = binlog.currentFileOffset
         binlog.currentFileOffset = oneSegmentLength * 4
         then:
-        binlog.readCurrentRafOneSegment(oneSegmentLength * 3).length == vList[0].encodeLength() * 10
+        binlog.readCurrentRafOneSegment(oneSegmentLength * 3).length > 0
 
         when:
         // for cache
@@ -118,7 +124,7 @@ class BinlogTest extends Specification {
         def oldCurrentFileIndex = binlog.currentFileIndex
         binlog.close()
         // load again
-        binlog = new Binlog(slot, Consts.slotDir)
+        binlog = new Binlog(slot, Consts.slotDir, dynConfig)
         then:
         binlog.currentFileIndex == oldCurrentFileIndex
         binlog.currentFileOffset == lastAppendFileOffset

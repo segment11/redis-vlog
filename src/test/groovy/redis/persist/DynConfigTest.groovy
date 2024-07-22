@@ -3,20 +3,22 @@ package redis.persist
 import spock.lang.Specification
 
 class DynConfigTest extends Specification {
+    static File tmpFile = new File('/tmp/dyn-config.json')
+    static File tmpFile2 = new File('/tmp/dyn-config2.json')
 
     def 'test all'() {
         given:
-        def dynConfigFile = new File('/tmp/dyn-config.json')
-        if (dynConfigFile.exists()) {
-            dynConfigFile.delete()
+        if (tmpFile.exists()) {
+            tmpFile.delete()
         }
-        def config = new DynConfig((byte) 0, dynConfigFile)
+        def config = new DynConfig((byte) 0, tmpFile)
 
         expect:
         config.masterUuid == null
         !config.readonly
         config.canRead
         config.canWrite
+        !config.binlogOn
         config.testKey == 10
 
         when:
@@ -30,6 +32,11 @@ class DynConfigTest extends Specification {
         config.testKey == 1
 
         when:
+        config.binlogOn = true
+        then:
+        config.binlogOn
+
+        when:
         config.readonly = true
         config.canRead = false
         config.canWrite = false
@@ -40,7 +47,7 @@ class DynConfigTest extends Specification {
 
         // reload from file
         when:
-        config = new DynConfig((byte) 0, dynConfigFile)
+        config = new DynConfig((byte) 0, tmpFile)
         then:
         config.masterUuid == 1234L
         config.testKey == 1
@@ -58,6 +65,6 @@ class DynConfigTest extends Specification {
         config.canWrite
 
         cleanup:
-        dynConfigFile.delete()
+        tmpFile.delete()
     }
 }

@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.persist.DynConfig;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -18,6 +19,7 @@ public class Binlog {
 
     private final byte slot;
     private final File binlogDir;
+    private final DynConfig dynConfig;
     private RandomAccessFile raf;
 
     // old files, read and send to slave when catch up
@@ -69,7 +71,7 @@ public class Binlog {
         return list;
     }
 
-    public Binlog(byte slot, File slotDir) throws IOException {
+    public Binlog(byte slot, File slotDir, DynConfig dynConfig) throws IOException {
         this.slot = slot;
         this.binlogDir = new File(slotDir, BINLOG_DIR_NAME);
         if (!binlogDir.exists()) {
@@ -77,6 +79,7 @@ public class Binlog {
                 throw new IOException("Create binlog dir error, slot: " + slot);
             }
         }
+        this.dynConfig = dynConfig;
 
         File latestFile;
         var files = listFiles();
@@ -124,6 +127,10 @@ public class Binlog {
     }
 
     public void append(BinlogContent content) {
+        if (!dynConfig.isBinlogOn()) {
+            return;
+        }
+
         var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
         var oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
 
