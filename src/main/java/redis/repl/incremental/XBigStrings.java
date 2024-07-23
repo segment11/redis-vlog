@@ -1,7 +1,6 @@
 package redis.repl.incremental;
 
 import redis.CompressedValue;
-import redis.persist.LocalPersist;
 import redis.repl.BinlogContent;
 
 import java.nio.ByteBuffer;
@@ -11,8 +10,6 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
 
     private final String key;
 
-    private final byte[] contentBytes;
-
     public long getUuid() {
         return uuid;
     }
@@ -21,14 +18,9 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
         return key;
     }
 
-    public byte[] getContentBytes() {
-        return contentBytes;
-    }
-
-    public XBigStrings(long uuid, String key, byte[] contentBytes) {
+    public XBigStrings(long uuid, String key) {
         this.uuid = uuid;
         this.key = key;
-        this.contentBytes = contentBytes;
     }
 
     @Override
@@ -40,8 +32,7 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
     public int encodedLength() {
         // 1 byte for type, 4 bytes for encoded length for check
         // 8 bytes for uuid, 2 bytes for key length, key bytes
-        // 4 bytes for content bytes length, content bytes
-        return 1 + 4 + 8 + 2 + key.length() + 4 + contentBytes.length;
+        return 1 + 4 + 8 + 2 + key.length();
     }
 
     @Override
@@ -54,8 +45,6 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
         buffer.putLong(uuid);
         buffer.putShort((short) key.length());
         buffer.put(key.getBytes());
-        buffer.putInt(contentBytes.length);
-        buffer.put(contentBytes);
 
         return bytes;
     }
@@ -74,22 +63,16 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
         var keyBytes = new byte[keyLength];
         buffer.get(keyBytes);
         var key = new String(keyBytes);
-        var contentBytesLength = buffer.getInt();
-        var contentBytes = new byte[contentBytesLength];
-        buffer.get(contentBytes);
 
-        var r = new XBigStrings(uuid, key, contentBytes);
+        var r = new XBigStrings(uuid, key);
         if (encodedLength != r.encodedLength()) {
             throw new IllegalStateException("Invalid encoded length: " + encodedLength);
         }
         return r;
     }
 
-    private final LocalPersist localPersist = LocalPersist.getInstance();
-
     @Override
     public void apply(byte slot) {
-        var oneSlot = localPersist.oneSlot(slot);
-        oneSlot.getBigStringFiles().writeBigStringBytes(uuid, key, contentBytes);
+        // add pull job to job list
     }
 }

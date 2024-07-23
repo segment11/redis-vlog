@@ -808,7 +808,7 @@ public class OneSlot {
         var putResult = targetWal.removeDelay(key, bucketIndex, keyHash);
 
         if (putResult.needPersist()) {
-            doPersist(walGroupIndex, key, bucketIndex, putResult);
+            doPersist(walGroupIndex, key, putResult);
         } else {
             if (binlog != null) {
                 var xWalV = new XWalV(putResult.needPutV(), putResult.isValueShort(), putResult.offset());
@@ -889,7 +889,7 @@ public class OneSlot {
             }
 
             if (binlog != null) {
-                var xBigStrings = new XBigStrings(uuid, key, bytes);
+                var xBigStrings = new XBigStrings(uuid, key);
                 binlog.append(xBigStrings);
             }
 
@@ -911,10 +911,10 @@ public class OneSlot {
             return;
         }
 
-        doPersist(walGroupIndex, key, bucketIndex, putResult);
+        doPersist(walGroupIndex, key, putResult);
     }
 
-    private void doPersist(int walGroupIndex, String key, int bucketIndex, Wal.PutResult putResult) {
+    private void doPersist(int walGroupIndex, String key, Wal.PutResult putResult) {
         var targetWal = walArray[walGroupIndex];
         persistWal(putResult.isValueShort(), targetWal);
 

@@ -11,9 +11,8 @@ class XBigStringsTest extends Specification {
         given:
         def uuid = 1L
         def key = 'test-big-string-key'
-        def bytes = new byte[1024 * 200]
 
-        def xBigStrings = new XBigStrings(uuid, key, bytes)
+        def xBigStrings = new XBigStrings(uuid, key)
 
         expect:
         xBigStrings.type() == BinlogContent.Type.big_strings
@@ -27,7 +26,6 @@ class XBigStringsTest extends Specification {
         xBigStrings2.encodedLength() == encoded.length
         xBigStrings2.uuid == xBigStrings.uuid
         xBigStrings2.key == xBigStrings.key
-        xBigStrings2.contentBytes == xBigStrings.contentBytes
 
         when:
         boolean exception = false
