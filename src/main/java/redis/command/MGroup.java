@@ -406,12 +406,10 @@ public class MGroup extends BaseCommand {
 
             var configKey = new String(configKeyBytes);
 
-            ArrayList<Promise<Void>> promises = new ArrayList<>();
+            ArrayList<Promise<Boolean>> promises = new ArrayList<>();
             var oneSlots = localPersist.oneSlots();
             for (var oneSlot : oneSlots) {
-                var p = oneSlot.asyncRun(() -> {
-                    oneSlot.updateDynConfig(configKey, configValueBytes);
-                });
+                var p = oneSlot.asyncCall(() -> oneSlot.updateDynConfig(configKey, configValueBytes));
                 promises.add(p);
             }
 
@@ -423,6 +421,15 @@ public class MGroup extends BaseCommand {
                     log.error("manage dyn-config set error: {}", e.getMessage());
                     finalPromise.setException(e);
                     return;
+                }
+
+                // every true
+                for (int i = 0; i < promises.size(); i++) {
+                    var p = promises.get(i);
+                    if (!p.getResult()) {
+                        finalPromise.set(new ErrorReply("Slot " + i + " set dyn-config failed"));
+                        return;
+                    }
                 }
 
                 finalPromise.set(OKReply.INSTANCE);
