@@ -57,6 +57,28 @@ public class Binlog {
         }
     }
 
+    public record FileIndexAndOffset(int fileIndex, long offset) {
+        @Override
+        public String toString() {
+            return "FileIndexAndOffset{" +
+                    "fileIndex=" + fileIndex +
+                    ", offset=" + offset +
+                    '}';
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || getClass() != obj.getClass()) {
+                return false;
+            }
+            FileIndexAndOffset that = (FileIndexAndOffset) obj;
+            return fileIndex == that.fileIndex && offset == that.offset;
+        }
+    }
+
     private final Logger log = LoggerFactory.getLogger(Binlog.class);
 
     private ArrayList<File> listFiles() {
@@ -101,6 +123,10 @@ public class Binlog {
 
     int currentFileIndex = 0;
     long currentFileOffset = 0;
+
+    public FileIndexAndOffset currentFileIndexAndOffset() {
+        return new FileIndexAndOffset(currentFileIndex, currentFileOffset);
+    }
 
     private static final String FILE_NAME_PREFIX = "binlog-";
 
@@ -301,7 +327,7 @@ public class Binlog {
         }
     }
 
-    public void decodeAndApply(byte[] oneSegmentBytes) {
+    public static void decodeAndApply(byte slot, byte[] oneSegmentBytes) {
         var byteBuffer = ByteBuffer.wrap(oneSegmentBytes);
         while (true) {
             if (byteBuffer.remaining() == 0) {

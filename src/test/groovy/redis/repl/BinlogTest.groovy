@@ -1,12 +1,11 @@
 package redis.repl
 
 import redis.ConfForSlot
-import redis.persist.Consts
-import redis.persist.DynConfig
-import redis.persist.DynConfigTest
-import redis.persist.Mock
+import redis.persist.*
 import redis.repl.incremental.XWalV
 import spock.lang.Specification
+
+import java.nio.ByteBuffer
 
 class BinlogTest extends Specification {
     def 'test append'() {
@@ -15,8 +14,14 @@ class BinlogTest extends Specification {
         ConfForSlot.global.confRepl.binlogForReadCacheSegmentMaxCount = 2
 
         println new Binlog.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
+        def fileIndexAndOffset = new Binlog.FileIndexAndOffset(1, 1)
 
         expect:
+        fileIndexAndOffset == fileIndexAndOffset
+        fileIndexAndOffset != null
+        fileIndexAndOffset != 1
+        fileIndexAndOffset == new Binlog.FileIndexAndOffset(1, 1)
+        fileIndexAndOffset != new Binlog.FileIndexAndOffset(1, 2)
         new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 0) > new Binlog.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
         new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 1) > new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 0)
 
@@ -26,6 +31,7 @@ class BinlogTest extends Specification {
         dynConfig.binlogOn = true
         dynConfig2.binlogOn = false
         def binlog = new Binlog(slot, Consts.slotDir, dynConfig)
+        println binlog.currentFileIndexAndOffset()
 
         final File slotDir2 = new File('/tmp/redis-vlog/test-persist/test-slot2')
         if (!slotDir2.exists()) {
@@ -135,5 +141,37 @@ class BinlogTest extends Specification {
         binlog.close()
         Consts.slotDir.deleteDir()
         slotDir2.deleteDir()
+    }
+
+    def 'test apply'() {
+        given:
+        final byte slot = 0
+
+        def oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
+        def oneSegmentBytes = new byte[oneSegmentLength]
+        def buffer = ByteBuffer.wrap(oneSegmentBytes)
+
+        and:
+        def vList = Mock.prepareValueList(10)
+        vList.each { v ->
+            def xWalV = new XWalV(v)
+            def encoded = xWalV.encodeWithType()
+            buffer.put(encoded)
+        }
+
+        and:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        when:
+        Binlog.decodeAndApply(slot, oneSegmentBytes)
+        then:
+        oneSlot.getWalByBucketIndex(0).keyCount == 10
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 }
