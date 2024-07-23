@@ -1,6 +1,7 @@
 package redis.persist
 
 import redis.ConfForSlot
+import redis.repl.Binlog
 import spock.lang.Specification
 
 import static redis.persist.Consts.getSlotDir
@@ -9,38 +10,11 @@ class MetaChunkSegmentIndexTest extends Specification {
     def 'test for repl'() {
         given:
         def one = new MetaChunkSegmentIndex((byte) 0, slotDir)
+        def one2 = new MetaChunkSegmentIndex((byte) 0, slotDir)
 
         when:
-        def allInMemoryCachedBytes = one.getInMemoryCachedBytes()
-        then:
-        allInMemoryCachedBytes.length == 4
-
-        when:
-        ConfForSlot.global.pureMemory = false
-        def bytes0 = new byte[4]
-        one.overwriteInMemoryCachedBytes(bytes0)
-        then:
-        one.inMemoryCachedBytes.length == 4
-
-        when:
+        one2.cleanUp()
         ConfForSlot.global.pureMemory = true
-        one.overwriteInMemoryCachedBytes(bytes0)
-        then:
-        one.inMemoryCachedBytes.length == 4
-
-        when:
-        boolean exception = false
-        def bytes0WrongSize = new byte[3]
-        try {
-            one.overwriteInMemoryCachedBytes(bytes0WrongSize)
-        } catch (IllegalArgumentException e) {
-            println e.message
-            exception = true
-        }
-        then:
-        exception
-
-        when:
         def two = new MetaChunkSegmentIndex((byte) 0, slotDir)
         then:
         two.get() == one.get()
@@ -67,6 +41,18 @@ class MetaChunkSegmentIndexTest extends Specification {
         one.set(20)
         then:
         one.get() == 20
+
+        when:
+        one.setMasterBinlogFileIndexAndOffset(1, 0)
+        then:
+        one.masterBinlogFileIndexAndOffset == new Binlog.FileIndexAndOffset(1, 0)
+
+        when:
+        one.setAll(30, 1L, 2, 0)
+        then:
+        one.get() == 30
+        one.masterUuid == 1L
+        one.masterBinlogFileIndexAndOffset == new Binlog.FileIndexAndOffset(2, 0)
 
         when:
         one.clear()

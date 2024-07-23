@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
-import static redis.repl.content.ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT;
+import static redis.repl.content.ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT;
 
 public class Chunk {
     private final int segmentNumberPerFd;
@@ -646,12 +646,8 @@ public class Chunk {
         return segmentIndexToMerge;
     }
 
-    public boolean writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount, List<Long> segmentSeqList, int walGroupIndex, int capacity) {
+    public boolean writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount) {
         if (ConfForSlot.global.pureMemory) {
-            if (capacity != bytes.length) {
-                throw new IllegalArgumentException("Write buffer capacity not match, expect: " + capacity + ", actual: " + bytes.length);
-            }
-
             var fdIndex = targetFdIndex(segmentIndex);
             var segmentIndexTargetFd = targetSegmentIndexTargetFd(segmentIndex);
 
@@ -660,9 +656,6 @@ public class Chunk {
             var isNewAppend = fdReadWrite.isTargetSegmentIndexNullInMemory(segmentIndexTargetFd);
             if (segmentCount == 1) {
                 fdReadWrite.writeOneInner(segmentIndexTargetFd, bytes, false);
-
-                oneSlot.setSegmentMergeFlag(segmentIndex,
-                        isNewAppend ? Flag.new_write : Flag.reuse_new, segmentSeqList.getFirst(), walGroupIndex);
             } else {
                 for (int i = 0; i < segmentCount; i++) {
                     var oneSegmentBytes = new byte[chunkSegmentLength];
@@ -670,25 +663,12 @@ public class Chunk {
 
                     fdReadWrite.writeOneInner(segmentIndexTargetFd + i, oneSegmentBytes, false);
                 }
-
-                oneSlot.setSegmentMergeFlagBatch(segmentIndex, segmentCount,
-                        isNewAppend ? Flag.new_write : Flag.reuse_new, segmentSeqList, walGroupIndex);
             }
 
             return isNewAppend;
         } else {
             this.segmentIndex = segmentIndex;
-            boolean isNewAppend = writeSegments(bytes, segmentCount);
-
-            if (segmentCount == 1) {
-                oneSlot.setSegmentMergeFlag(segmentIndex,
-                        isNewAppend ? Flag.new_write : Flag.reuse_new, segmentSeqList.getFirst(), walGroupIndex);
-            } else {
-                oneSlot.setSegmentMergeFlagBatch(segmentIndex, segmentCount,
-                        isNewAppend ? Flag.new_write : Flag.reuse_new, segmentSeqList, walGroupIndex);
-            }
-
-            return isNewAppend;
+            return writeSegments(bytes, segmentCount);
         }
     }
 
@@ -701,7 +681,7 @@ public class Chunk {
             fdReadWrite.writeOneInner(segmentIndexTargetFd, bytes, false);
         } else if (segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
             fdReadWrite.writeSegmentsBatch(segmentIndexTargetFd, bytes, false);
-        } else if (segmentCount == REPL_ONCE_SEGMENT_COUNT) {
+        } else if (segmentCount == REPL_ONCE_CHUNK_SEGMENT_COUNT) {
             fdReadWrite.writeOneInnerForRepl(segmentIndexTargetFd, bytes, 0);
         } else {
             throw new IllegalArgumentException("Write segment count not support: " + segmentCount);

@@ -84,16 +84,16 @@ public class ReplPair {
 
     public boolean isLinkUp() {
         if (asMaster) {
-            var isPingOk = System.currentTimeMillis() - lastPingGetTimestamp < 1000 * 3
-                    && tcpClient != null && tcpClient.isSocketConnected();
-            return isPingOk;
+            var isPingReceivedOk = System.currentTimeMillis() - lastPingGetTimestamp < 1000 * 3;
+            return isPingReceivedOk;
         } else {
-            var isPongOk = System.currentTimeMillis() - lastPongGetTimestamp < 1000 * 3
+            var isPongReceivedOk = System.currentTimeMillis() - lastPongGetTimestamp < 1000 * 3
                     && tcpClient != null && tcpClient.isSocketConnected();
-            return isPongOk;
+            return isPongReceivedOk;
         }
     }
 
+    // only for slave pull, master never push
     private TcpClient tcpClient;
 
     public void initAsSlave(Eventloop eventloop, RequestHandler requestHandler) {
@@ -103,28 +103,13 @@ public class ReplPair {
         } else {
             if (tcpClient != null) {
                 tcpClient.close();
+                log.warn("Repl pair init as slave: close old connection, target host: {}, port: {}, slot: {}", host, port, slot);
             }
 
             var replContent = new Hello(slaveUuid, ConfForSlot.global.netListenAddresses);
 
             tcpClient = new TcpClient(slot, eventloop, requestHandler, this);
             tcpClient.connect(host, port, () -> Repl.buffer(slaveUuid, slot, ReplType.hello, replContent));
-        }
-    }
-
-    public void initAsMaster(long slaveUuid, Eventloop netWorkerEventloop, RequestHandler requestHandler) {
-        if (System.currentTimeMillis() - lastPingGetTimestamp < 1000 * 3 && slaveUuid == this.slaveUuid
-                && tcpClient != null && tcpClient.isSocketConnected()) {
-            log.warn("Repl pair init as master: already connected, target host: {}, port: {}, slot: {}", host, port, slot);
-        } else {
-            if (tcpClient != null) {
-                tcpClient.close();
-            }
-
-            this.slaveUuid = slaveUuid;
-
-            tcpClient = new TcpClient(slot, netWorkerEventloop, requestHandler, this);
-            tcpClient.connect(host, port, null);
         }
     }
 

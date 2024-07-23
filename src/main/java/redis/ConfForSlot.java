@@ -319,10 +319,12 @@ public enum ConfForSlot {
         // for better latency, do not configure too large
         // 256KB ~= io depths = 64 (4KB * 64 = 256KB)
         public final int binlogOneSegmentLength = 256 * 1024;
-        public final long binlogOneFileMaxLength = 256 * 1024 * 1024;
+        public final int binlogOneFileMaxLength = 256 * 1024 * 1024;
         public short binlogForReadCacheSegmentMaxCount = 100;
         // once read 4 segments = 1M to slave, for better latency, you can change to 1 segment = 256K
         public short binlogForReadToSlaveSegmentOnceCount = 1;
+        // if slave catch up binlog offset is less than min diff, slave can service read
+        public int catchUpOffsetMinDiff = 1024;
 
         @Override
         public String toString() {

@@ -19,7 +19,6 @@ import redis.metric.SimpleGauge;
 import redis.repl.Binlog;
 import redis.repl.GetCurrentSlaveReplPairList;
 import redis.repl.ReplPair;
-import redis.repl.content.ToMasterExistsSegmentMeta;
 import redis.repl.incremental.XBigStrings;
 import redis.repl.incremental.XWalV;
 import redis.task.ITask;
@@ -317,13 +316,11 @@ public class OneSlot {
 
         for (var replPair1 : replPairs) {
             if (replPair1.equals(replPair)) {
-                log.warn("Repl pair already exists, host: {}, port: {}, slot: {}", host, port, slot);
-                replPair1.initAsMaster(slaveUuid, netWorkerEventloop, requestHandler);
+                log.warn("Repl pair as master already exists, host: {}, port: {}, slot: {}", host, port, slot);
                 return replPair1;
             }
         }
 
-        replPair.initAsMaster(slaveUuid, netWorkerEventloop, requestHandler);
         log.warn("Create repl pair as master, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
         return replPair;
@@ -419,7 +416,12 @@ public class OneSlot {
     final ChunkMergeWorker chunkMergeWorker;
 
     private static final String DYN_CONFIG_FILE_NAME = "dyn-config.json";
+
     private final DynConfig dynConfig;
+
+    public DynConfig getDynConfig() {
+        return dynConfig;
+    }
 
     private static final ArrayList<String> dynConfigKeyWhiteList = new ArrayList<>();
 
@@ -507,15 +509,15 @@ public class OneSlot {
 
     MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
 
-    public byte[] getMetaChunkSegmentFlagSeqBytesToSlaveExists() {
-        return metaChunkSegmentFlagSeq.getInMemoryCachedBytes();
+    public MetaChunkSegmentFlagSeq getMetaChunkSegmentFlagSeq() {
+        return metaChunkSegmentFlagSeq;
     }
 
-    public void overwriteMetaChunkSegmentFlagSeqBytesFromMasterExists(byte[] bytes) {
-        metaChunkSegmentFlagSeq.overwriteInMemoryCachedBytes(bytes);
-    }
+    MetaChunkSegmentIndex metaChunkSegmentIndex;
 
-    private MetaChunkSegmentIndex metaChunkSegmentIndex;
+    public MetaChunkSegmentIndex getMetaChunkSegmentIndex() {
+        return metaChunkSegmentIndex;
+    }
 
     private int getChunkWriteSegmentIndex() {
         return metaChunkSegmentIndex.get();
@@ -529,16 +531,11 @@ public class OneSlot {
         metaChunkSegmentIndex.set(segmentIndex);
     }
 
-    // read only, important
-    public byte[] getMetaChunkSegmentIndexBytesToSlaveExists() {
-        return metaChunkSegmentIndex.getInMemoryCachedBytes();
-    }
-
-    public void overwriteMetaChunkSegmentIndexBytesFromRepl(byte[] bytes) {
-        metaChunkSegmentIndex.overwriteInMemoryCachedBytes(bytes);
-    }
-
     final Binlog binlog;
+
+    public Binlog getBinlog() {
+        return binlog;
+    }
 
     private final TaskChain taskChain = new TaskChain();
 
@@ -934,39 +931,6 @@ public class OneSlot {
         }
     }
 
-    private LinkedList<ToMasterExistsSegmentMeta.OncePull> oncePulls = new LinkedList<>();
-
-    public void resetOncePulls(LinkedList<ToMasterExistsSegmentMeta.OncePull> oncePulls) {
-        this.oncePulls = oncePulls;
-    }
-
-    public ToMasterExistsSegmentMeta.OncePull removeOncePull(int beginSegmentIndex) {
-        checkCurrentThreadId();
-
-        if (oncePulls == null) {
-            return null;
-        }
-
-        var it = oncePulls.iterator();
-        while (it.hasNext()) {
-            var oncePull = it.next();
-            if (oncePull.beginSegmentIndex() == beginSegmentIndex) {
-                it.remove();
-                break;
-            }
-        }
-
-        var it2 = oncePulls.iterator();
-        while (it2.hasNext()) {
-            var oncePull = it2.next();
-            if (oncePull.beginSegmentIndex() > beginSegmentIndex) {
-                return oncePull;
-            }
-        }
-
-        return null;
-    }
-
     public void flush() {
         checkCurrentThreadId();
 
@@ -1043,17 +1007,6 @@ public class OneSlot {
         }
     }
 
-    public void writeSegmentsFromMasterExists(int segmentIndex, int segmentCount, List<Long> segmentSeqList, int walGroupIndex, byte[] bytes) {
-        checkCurrentThreadId();
-
-        if (bytes.length != chunk.chunkSegmentLength * segmentCount) {
-            throw new IllegalStateException("Bytes length not match, bytes length: " + bytes.length +
-                    ", chunk segment length: " + chunk.chunkSegmentLength + ", segment count: " + segmentCount);
-        }
-
-        chunk.writeSegmentsFromMasterExists(bytes, segmentIndex, segmentCount, segmentSeqList, walGroupIndex, bytes.length);
-    }
-
     byte[] preadForMerge(int segmentIndex, int segmentCount) {
         checkCurrentThreadId();
 
@@ -1064,6 +1017,18 @@ public class OneSlot {
         checkCurrentThreadId();
 
         return chunk.preadForRepl(segmentIndex);
+    }
+
+    public void writeChunkSegmentsFromMasterExists(byte[] bytes, int beginSegmentIndex, int segmentCount) {
+        checkCurrentThreadId();
+
+        if (bytes.length != chunk.chunkSegmentLength * segmentCount) {
+            throw new IllegalStateException("Repl write chunk segments bytes length not match, bytes length: " + bytes.length +
+                    ", chunk segment length: " + chunk.chunkSegmentLength + ", segment count: " + segmentCount);
+        }
+
+        chunk.writeSegmentsFromMasterExists(bytes, beginSegmentIndex, segmentCount);
+        log.warn("Repl write chunk segments from master exists, s={}, i={}, c={}", slot, beginSegmentIndex, segmentCount);
     }
 
     public void cleanUp() {

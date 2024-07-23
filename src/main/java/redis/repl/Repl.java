@@ -1,6 +1,7 @@
 package redis.repl;
 
 import io.netty.buffer.ByteBuf;
+import redis.repl.content.RawBytesContent;
 import redis.reply.Reply;
 
 import java.nio.ByteBuffer;
@@ -37,6 +38,14 @@ public class Repl {
 
     public static Reply reply(byte slot, ReplPair replPair, ReplType type, ReplContent content) {
         return new ReplReply(buffer(replPair.getSlaveUuid(), slot, type, content));
+    }
+
+    public static Reply error(byte slot, ReplPair replPair, String errorMessage) {
+        return reply(slot, replPair, ReplType.error, new RawBytesContent(errorMessage.getBytes()));
+    }
+
+    public static Reply ok(byte slot, ReplPair replPair, String message) {
+        return reply(slot, replPair, ReplType.ok, new RawBytesContent(message.getBytes()));
     }
 
     public static Reply emptyReply() {

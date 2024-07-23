@@ -6,7 +6,6 @@ import redis.ConfForSlot;
 import redis.KeyHash;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
-import redis.repl.content.ToMasterExistsSegmentMeta;
 
 import java.io.File;
 import java.io.IOException;
@@ -84,6 +83,7 @@ public class KeyLoader {
 
     public void overwriteMetaKeyBucketSplitNumberBytesFromMasterExists(byte[] bytes) {
         metaKeyBucketSplitNumber.overwriteInMemoryCachedBytes(bytes);
+        log.warn("Repl overwrite meta key bucket split number bytes from master exists, slot: {}", slot);
     }
 
     void setMetaKeyBucketSplitNumberForTest(int bucketIndex, byte splitNumber) {
@@ -111,7 +111,7 @@ public class KeyLoader {
 
     private final Logger log = org.slf4j.LoggerFactory.getLogger(KeyLoader.class);
 
-    public static final int BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL = ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT;
+    public static final int BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL = 1024;
 
     StatKeyCountInBuckets statKeyCountInBuckets;
 
@@ -203,8 +203,7 @@ public class KeyLoader {
         return fdReadWrite.readOneInnerForRepl(beginBucketIndex);
     }
 
-    @Deprecated
-    public void writeKeyBucketBytesBatchFromMasterExists(byte[] contentBytes) {
+    public void writeKeyBucketsBytesBatchFromMasterExists(byte[] contentBytes) {
         var splitIndex = contentBytes[0];
 //            var splitNumber = contentBytes[1];
         var beginBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
@@ -226,13 +225,15 @@ public class KeyLoader {
 
         if (ConfForSlot.global.pureMemory) {
             if (leftLength == 0) {
-                for (int i = 0; i < BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL; i++) {
-                    fdReadWrite.clearOneKeyBucketToMemory(beginBucketIndex + i);
+                var walGroupNumber = BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL / ConfForSlot.global.confWal.oneChargeBucketNumber;
+                for (int i = 0; i < walGroupNumber; i++) {
+                    var toClearBeginBucketIndex = beginBucketIndex + i * ConfForSlot.global.confWal.oneChargeBucketNumber;
+                    fdReadWrite.clearKeyBucketsInOneWalGroup(toClearBeginBucketIndex);
                 }
             } else {
                 var bucketCount = leftLength / KEY_BUCKET_ONE_COST_SIZE;
-                if (bucketCount != BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL) {
-                    throw new IllegalStateException("Write pure memory key bucket from master error,  bucket count batch not match, slot: "
+                if (bucketCount != BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL) {
+                    throw new IllegalStateException("Write pure memory key buckets from master error, bucket count batch not match, slot: "
                             + slot + ", split index: " + splitIndex + ", begin bucket index: " + beginBucketIndex + ", bucket count: " + bucketCount);
                 }
 
@@ -241,8 +242,8 @@ public class KeyLoader {
         } else {
             fdReadWrite.writeOneInnerForRepl(beginBucketIndex, contentBytes, position);
         }
-        log.info("Write key bucket from master success, slot: {}, split index: {}, begin bucket index: {}",
-                slot, splitIndex, beginBucketIndex);
+        log.warn("Write key buckets from master success, slot: {}, split index: {}, begin bucket index: {}, once key bucket count: {}",
+                slot, splitIndex, beginBucketIndex, BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL);
     }
 
     boolean isBytesValidAsKeyBucket(byte[] bytes, int position) {

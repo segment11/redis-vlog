@@ -12,27 +12,27 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
         when:
-        def allInMemoryCachedBytes = one.getInMemoryCachedBytes()
+        def oneBatchBytes = one.getOneBath(0, 1024)
         then:
-        allInMemoryCachedBytes.length == one.allCapacity
+        oneBatchBytes.length == one.ONE_LENGTH * 1024
 
         when:
-        def bytes0 = new byte[one.allCapacity]
-        one.overwriteInMemoryCachedBytes(bytes0)
+        Arrays.fill(oneBatchBytes, (byte) 1)
+        one.overwriteOneBatch(oneBatchBytes, 0, 1024)
         then:
-        one.inMemoryCachedBytes.length == one.allCapacity
+        one.getOneBath(0, 1024) == oneBatchBytes
 
         when:
         ConfForSlot.global.pureMemory = true
-        one.overwriteInMemoryCachedBytes(bytes0)
+        one.overwriteOneBatch(oneBatchBytes, 0, 1024)
         then:
-        one.inMemoryCachedBytes.length == one.allCapacity
+        one.getOneBath(0, 1024) == oneBatchBytes
 
         when:
         boolean exception = false
-        def bytes0WrongSize = new byte[one.allCapacity - 1]
+        def bytes0WrongSize = new byte[oneBatchBytes.length - 1]
         try {
-            one.overwriteInMemoryCachedBytes(bytes0WrongSize)
+            one.overwriteOneBatch(bytes0WrongSize, 0, 1024)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true

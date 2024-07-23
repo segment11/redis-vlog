@@ -332,7 +332,7 @@ class KeyLoaderTest extends Specification {
         when:
         // split index byte + split number byte + begin bucket index int + key buckets encoded bytes
         def position = 6
-        def contentBytes = new byte[KeyLoader.BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL * KeyLoader.KEY_BUCKET_ONE_COST_SIZE + position]
+        def contentBytes = new byte[KeyLoader.BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL * KeyLoader.KEY_BUCKET_ONE_COST_SIZE + position]
         // begin bucket index 0
         def buffer = ByteBuffer.wrap(contentBytes)
         buffer.putInt(2, 0)
@@ -342,7 +342,7 @@ class KeyLoaderTest extends Specification {
         buffer.put(position, keyBucket.encode(true))
 
         ConfForSlot.global.pureMemory = false
-        keyLoader.writeKeyBucketBytesBatchFromMasterExists(contentBytes)
+        keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes)
 
         var k0 = keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 1, 10L, false)
 
@@ -355,7 +355,7 @@ class KeyLoaderTest extends Specification {
         var maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
         fdReadWrite.allBytesByOneInnerIndexForChunk = new byte[maxSegmentNumberPerFd][];
 
-        keyLoader.writeKeyBucketBytesBatchFromMasterExists(contentBytes)
+        keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes)
 
         then:
         1 == 1

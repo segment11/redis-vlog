@@ -3,13 +3,13 @@ package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
 import org.apache.commons.io.FileUtils;
-import org.jetbrains.annotations.NotNull;
 import redis.BaseCommand;
 import redis.ConfForSlot;
 import redis.Dict;
 import redis.DictMap;
 import redis.persist.KeyLoader;
 import redis.persist.OneSlot;
+import redis.repl.Binlog;
 import redis.repl.Repl;
 import redis.repl.ReplPair;
 import redis.repl.ReplType;
@@ -23,7 +23,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.LinkedList;
 
 import static redis.repl.ReplType.hi;
 import static redis.repl.ReplType.pong;
@@ -54,7 +53,7 @@ public class XGroup extends BaseCommand {
         var slot = data[1][0];
         var replType = ReplType.fromCode(data[2][0]);
         if (replType == null) {
-            log.error("Repl handle error: unknown repl type");
+            log.error("Repl handle error: unknown repl type: {}", replType);
             return null;
         }
         var contentBytes = data[3];
@@ -67,19 +66,21 @@ public class XGroup extends BaseCommand {
                 this.replPair = oneSlot.getReplPairAsSlave(slaveUuid);
 
                 if (this.replPair == null) {
-                    log.warn("Repl handle error: repl pair as slave not found, maybe closed already, slave uuid={}, repl type={}", slaveUuid, replType);
+                    log.warn("Repl handle error: repl pair as slave not found, maybe closed already, slave uuid={}, repl type={}",
+                            slaveUuid, replType);
                     return Repl.emptyReply();
                 }
             }
         }
 
         if (!replType.newly && !replType.isSlaveSend) {
-            log.warn("Repl slave fetch date from master, slave uuid={}, repl type={}, content length={}", slaveUuid, replType, contentBytes.length);
+            log.warn("Repl slave fetch date from master, slave uuid={}, repl type={}, content length={}",
+                    slaveUuid, replType, contentBytes.length);
         }
 
         return switch (replType) {
             case error -> {
-                log.error("Repl handle error: {}", new String(contentBytes));
+                log.error("Repl handle receive error: {}", new String(contentBytes));
                 yield null;
             }
             case ping -> {
@@ -103,7 +104,10 @@ public class XGroup extends BaseCommand {
             }
             case hello -> hello(slot, contentBytes);
             case hi -> hi(slot, contentBytes);
-            case ok -> Repl.emptyReply();
+            case ok -> {
+                log.info("Repl handle ok: slave uuid={}, {}", slaveUuid, replPair.getHostAndPort());
+                yield Repl.emptyReply();
+            }
             case bye -> {
                 // server received bye from client
                 var netListenAddresses = new String(contentBytes);
@@ -130,18 +134,18 @@ public class XGroup extends BaseCommand {
             }
             case exists_chunk_segments -> exists_chunk_segments(slot, contentBytes);
             case exists_key_buckets -> exists_key_buckets(slot, contentBytes);
-            case meta_chunk_segment_index -> meta_chunk_segment_index(slot, contentBytes);
             case meta_key_bucket_split_number -> meta_key_bucket_split_number(slot, contentBytes);
             case exists_big_string -> exists_big_string(slot, contentBytes);
             case exists_dict -> exists_dict(slot, contentBytes);
             case exists_all_done -> exists_all_done(slot, contentBytes);
+            case catch_up -> catch_up(slot, contentBytes);
             case s_exists_chunk_segments -> s_exists_chunk_segments(slot, contentBytes);
             case s_exists_key_buckets -> s_exists_key_buckets(slot, contentBytes);
-            case s_meta_chunk_segment_index -> s_meta_chunk_segment_index(slot, contentBytes);
             case s_meta_key_bucket_split_number -> s_meta_key_bucket_split_number(slot, contentBytes);
             case s_exists_big_string -> s_exists_big_string(slot, contentBytes);
             case s_exists_dict -> s_exists_dict(slot, contentBytes);
             case s_exists_all_done -> s_exists_all_done(slot, contentBytes);
+            case s_catch_up -> s_catch_up(slot, contentBytes);
         };
     }
 
@@ -163,8 +167,20 @@ public class XGroup extends BaseCommand {
             replPair = oneSlot.createIfNotExistReplPairAsMaster(slaveUuid, host, port);
         }
 
-        log.warn("Repl handle hello: slave uuid={}, net listen addresses={}", slaveUuid, netListenAddresses);
-        return Repl.reply(slot, replPair, hi, new Hi(slaveUuid, oneSlot.getMasterUuid()));
+        // start binlog
+        try {
+            oneSlot.getDynConfig().setBinlogOn(true);
+            log.warn("Repl master start binlog, master uuid={}", replPair.getMasterUuid());
+        } catch (IOException e) {
+            var errorMessage = "Repl handle error: start binlog error";
+            log.error(errorMessage, e);
+            return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
+        }
+
+        log.warn("Repl master handle hello: slave uuid={}, net listen addresses={}", slaveUuid, netListenAddresses);
+        var binlogFileIndexAndOffset = oneSlot.getBinlog().currentFileIndexAndOffset();
+        var content = new Hi(slaveUuid, oneSlot.getMasterUuid(), binlogFileIndexAndOffset);
+        return Repl.reply(slot, replPair, hi, content);
     }
 
     private Reply hi(byte slot, byte[] contentBytes) {
@@ -172,23 +188,30 @@ public class XGroup extends BaseCommand {
         var buffer = ByteBuffer.wrap(contentBytes);
         var slaveUuid = buffer.getLong();
         var masterUuid = buffer.getLong();
+        var binlogFileIndex = buffer.getInt();
+        var binlogOffset = buffer.getLong();
 
         // should not happen
         if (slaveUuid != replPair.getSlaveUuid()) {
-            log.error("Repl handle error: slave uuid not match, client slave uuid={}, server hi slave uuid={}",
+            log.error("Repl slave handle error: slave uuid not match, client slave uuid={}, server hi slave uuid={}",
                     replPair.getSlaveUuid(), slaveUuid);
             return null;
         }
 
         replPair.setMasterUuid(masterUuid);
-        log.warn("Repl handle hi: slave uuid={}, master uuid={}", slaveUuid, masterUuid);
+        log.warn("Repl slave handle hi: slave uuid={}, master uuid={}", slaveUuid, masterUuid);
+
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.getMetaChunkSegmentIndex().setMasterBinlogFileIndexAndOffset(masterUuid, binlogFileIndex, binlogOffset);
+        log.warn("Repl set master binlog file index and offset for incremental catch up, slot: {}, master binlog file index: {}, master binlog offset: {}",
+                slot, binlogFileIndex, binlogOffset);
 
         // begin to fetch exist data from master
         // first fetch dict
         var dictMap = DictMap.getInstance();
         var cacheDictBySeqCopy = dictMap.getCacheDictBySeqCopy();
         if (cacheDictBySeqCopy.isEmpty()) {
-            return Repl.reply(slot, replPair, ReplType.exists_dict, new EmptyContent());
+            return Repl.reply(slot, replPair, ReplType.exists_dict, EmptyContent.INSTANCE);
         } else {
             var rawBytes = new byte[4 * cacheDictBySeqCopy.size()];
             var rawBuffer = ByteBuffer.wrap(rawBytes);
@@ -201,110 +224,80 @@ public class XGroup extends BaseCommand {
         }
     }
 
-    private Reply big_string_file_write(byte slot, byte[] contentBytes) {
-        log.debug("Repl handle big string file write, slot={}, slave uuid={}, {}", slot,
-                replPair.getSlaveUuid(), replPair.getHostAndPort());
-        // refer to ToSlaveBigStringFileWrite.encodeTo
-        var buffer = ByteBuffer.wrap(contentBytes);
-        var uuid = buffer.getLong();
-        var encodeLength = buffer.remaining();
-        var encodeBytes = new byte[encodeLength];
-        buffer.get(encodeBytes);
-
-        var oneSlot = localPersist.oneSlot(slot);
-        var bigStringDir = oneSlot.getBigStringDir();
-        var uuidAsFileName = String.valueOf(uuid);
-
-        var file = new File(bigStringDir, uuidAsFileName);
-        try {
-            FileUtils.writeByteArrayToFile(file, encodeBytes);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        return Repl.emptyReply();
-    }
-
-    private Reply exists_chunk_segments(byte slot, byte[] contentBytes) {
+    Reply exists_chunk_segments(byte slot, byte[] contentBytes) {
         // server received from client
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var beginSegmentIndex = buffer.getInt();
+        var segmentCount = buffer.getInt();
+
         var oneSlot = localPersist.oneSlot(slot);
-        var flag = contentBytes[0];
-
-        if (flag == ToMasterExistsSegmentMeta.FLAG_IS_MY_CHARGE) {
-            // refer to ToMasterExistsSegmentMeta.encodeTo
-            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeqBytesToSlaveExists();
-
-            var oncePulls = ToMasterExistsSegmentMeta.diffMasterAndSlave(metaBytes, contentBytes);
-            return Repl.reply(slot, replPair, ReplType.s_exists_chunk_segments, new ToSlaveExistsSegmentMeta(oncePulls));
-        } else if (flag == ToMasterExistsSegmentOncePull.FLAG_IS_MY_CHARGE) {
-            // refer to ToMasterExistsSegmentOncePull.encodeTo
-            var buffer = ByteBuffer.wrap(contentBytes, 3, contentBytes.length - 3);
-            var oncePull = ToMasterExistsSegmentMeta.OncePull.decode(buffer);
-            return Repl.reply(slot, replPair, ReplType.s_exists_chunk_segments, new ToSlaveExistsSegmentOncePull(oneSlot, oncePull));
-        } else {
-            throw new IllegalArgumentException("Repl handle error: unknown flag");
+        var masterMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(beginSegmentIndex, segmentCount);
+        if (ToMasterExistsChunkSegments.isSlaveSameForThisBatch(masterMetaBytes, contentBytes)) {
+            var responseBytes = new byte[4 + 4];
+            var responseBuffer = ByteBuffer.wrap(responseBytes);
+            responseBuffer.putInt(beginSegmentIndex);
+            responseBuffer.putInt(segmentCount);
+            return Repl.reply(slot, replPair, ReplType.s_exists_chunk_segments, new RawBytesContent(responseBytes));
         }
+
+        var chunkSegmentsBytes = oneSlot.preadForRepl(beginSegmentIndex);
+        if (chunkSegmentsBytes == null) {
+            chunkSegmentsBytes = new byte[0];
+        }
+
+        var responseBytes = new byte[4 + 4 + 4 + masterMetaBytes.length + 4 + chunkSegmentsBytes.length];
+        var responseBuffer = ByteBuffer.wrap(responseBytes);
+        responseBuffer.putInt(beginSegmentIndex);
+        responseBuffer.putInt(segmentCount);
+        responseBuffer.putInt(masterMetaBytes.length);
+        responseBuffer.put(masterMetaBytes);
+        responseBuffer.putInt(chunkSegmentsBytes.length);
+        if (chunkSegmentsBytes.length > 0) {
+            responseBuffer.put(chunkSegmentsBytes);
+        }
+
+        return Repl.reply(slot, replPair, ReplType.s_exists_chunk_segments, new RawBytesContent(responseBytes));
     }
 
-    private Reply s_exists_chunk_segments(byte slot, byte[] contentBytes) {
+    Reply s_exists_chunk_segments(byte slot, byte[] contentBytes) {
         // client received from server
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var beginSegmentIndex = buffer.getInt();
+        var segmentCount = buffer.getInt();
+
         var oneSlot = localPersist.oneSlot(slot);
-        var flag = contentBytes[0];
+        // content bytes length == 8 -> slave is same for this batch, skip
+        if (contentBytes.length != 8) {
+            var metaBytesLength = buffer.getInt();
+            var metaBytes = new byte[metaBytesLength];
+            buffer.get(metaBytes);
+            oneSlot.getMetaChunkSegmentFlagSeq().overwriteOneBatch(metaBytes, beginSegmentIndex, segmentCount);
 
-        if (flag == ToSlaveExistsSegmentMeta.FLAG_IS_MY_CHARGE) {
-            // refer to ToSlaveExistsSegmentMeta.encodeTo
-            var buffer = ByteBuffer.wrap(contentBytes, 3, contentBytes.length - 3);
-            var size = buffer.getInt();
-            if (size != 0) {
-                LinkedList<ToMasterExistsSegmentMeta.OncePull> oncePulls = new LinkedList<>();
-                for (int i = 0; i < size; i++) {
-                    var oncePull = ToMasterExistsSegmentMeta.OncePull.decode(buffer);
-                    oncePulls.add(oncePull);
-                }
-                oneSlot.resetOncePulls(oncePulls);
-                var firstOncePull = oncePulls.getFirst();
-                return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentOncePull(firstOncePull));
+            var chunkSegmentsLength = buffer.getInt();
+            if (chunkSegmentsLength == 0) {
+                var bytes0 = new byte[segmentCount * ConfForSlot.global.confChunk.segmentLength];
+                oneSlot.writeChunkSegmentsFromMasterExists(bytes0, beginSegmentIndex, segmentCount);
             } else {
-                return nextExistsSegmentMetaReply(oneSlot);
+                var chunkSegmentsBytes = new byte[chunkSegmentsLength];
+                buffer.get(chunkSegmentsBytes);
+
+                oneSlot.writeChunkSegmentsFromMasterExists(chunkSegmentsBytes, beginSegmentIndex, segmentCount);
             }
-        } else if (flag == ToSlaveExistsSegmentOncePull.FLAG_IS_MY_CHARGE) {
-            // refer to ToSlaveExistsSegmentOncePull.encodeTo
-            var buffer = ByteBuffer.wrap(contentBytes, 3, contentBytes.length - 3);
-            var beginSegmentIndex = buffer.getInt();
-            var segmentCount = buffer.getInt();
+        }
 
-            var segmentSeqList = new ArrayList<Long>();
-            for (int i = 0; i < segmentCount; i++) {
-                segmentSeqList.add(buffer.getLong());
-            }
-
-            var walGroupIndex = buffer.getInt();
-
-            var bytes = new byte[buffer.remaining()];
-            buffer.get(bytes);
-
-            oneSlot.writeSegmentsFromMasterExists(beginSegmentIndex, segmentCount, segmentSeqList, walGroupIndex, bytes);
-            var nextOncePull = oneSlot.removeOncePull(beginSegmentIndex);
-            if (nextOncePull == null) {
-                return nextExistsSegmentMetaReply(oneSlot);
-            } else {
-                return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentOncePull(nextOncePull));
-            }
+        var maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber();
+        boolean isLastBatch = maxSegmentNumber == beginSegmentIndex + segmentCount;
+        if (isLastBatch) {
+            return Repl.reply(slot, replPair, ReplType.exists_all_done, EmptyContent.INSTANCE);
         } else {
-            throw new IllegalArgumentException("Repl handle error: unknown flag");
+            var nextBatchBeginSegmentIndex = beginSegmentIndex + segmentCount;
+            var nextBatchMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(nextBatchBeginSegmentIndex, segmentCount);
+            var content = new ToMasterExistsChunkSegments(0, segmentCount, nextBatchMetaBytes);
+            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
         }
     }
 
-    @NotNull
-    private Reply nextExistsSegmentMetaReply(OneSlot oneSlot) {
-        // todo
-//        var slot = oneSlot.slot();
-//            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeqBytesToSlaveExists();
-//            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentMeta(metaBytes));
-        return null;
-    }
-
-    private Reply exists_key_buckets(byte slot, byte[] contentBytes) {
+    Reply exists_key_buckets(byte slot, byte[] contentBytes) {
         // server received from client
         var splitIndex = contentBytes[0];
         var beginBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
@@ -315,13 +308,13 @@ public class XGroup extends BaseCommand {
         try {
             bytes = oneSlot.getKeyLoader().readKeyBucketBytesBatchToSlaveExists(splitIndex, beginBucketIndex);
         } catch (Exception e) {
-            var errorMessage = "Repl key loader read bytes to slave error";
+            var errorMessage = "Repl key loader read key buckets bytes to slave error";
             log.error(errorMessage, e);
-            return Repl.reply(slot, replPair, ReplType.error, new RawBytesContent((errorMessage + ": " + e.getMessage()).getBytes()));
+            return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
         }
 
         if (bytes == null) {
-            return Repl.reply(slot, replPair, ReplType.s_exists_key_buckets, new EmptyContent());
+            bytes = new byte[0];
         }
 
         var responseBytes = new byte[1 + 1 + 4 + bytes.length];
@@ -336,38 +329,42 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_key_buckets, new RawBytesContent(responseBytes));
     }
 
-    private Reply s_exists_key_buckets(byte slot, byte[] contentBytes) {
+    Reply s_exists_key_buckets(byte slot, byte[] contentBytes) {
         // client received from server
-        // empty content means no exist key buckets, next step
+        // empty content means no exist key buckets, next step, fetch exists chunk segments
         var oneSlot = localPersist.oneSlot(slot);
-        if (contentBytes.length == 1) {
+        if (EmptyContent.isEmpty(contentBytes)) {
             // next step, fetch exists chunk segments
-            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeqBytesToSlaveExists();
-            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentMeta(metaBytes));
+            var segmentCount = ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT;
+            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(0, segmentCount);
+            var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
+            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
         }
 
         try {
-            oneSlot.getKeyLoader().writeKeyBucketBytesBatchFromMasterExists(contentBytes);
+            oneSlot.getKeyLoader().writeKeyBucketsBytesBatchFromMasterExists(contentBytes);
         } catch (Exception e) {
             var errorMessage = "Repl key loader write bytes from master error";
             log.error(errorMessage, e);
-            return Repl.reply(slot, replPair, ReplType.error, new RawBytesContent((errorMessage + ": " + e.getMessage()).getBytes()));
+            return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
         }
 
         var splitIndex = contentBytes[0];
         var splitNumber = contentBytes[1];
-        var beginBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
+        var prevBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
         var bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
 
-        boolean isLastBatchInThisSplit = beginBucketIndex == bucketsPerSlot - KeyLoader.BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL;
+        boolean isLastBatchInThisSplit = prevBucketIndex == bucketsPerSlot - KeyLoader.BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL;
         var isAllReceived = splitIndex == splitNumber - 1 && isLastBatchInThisSplit;
         if (isAllReceived) {
             // next step, fetch exists chunk segments
-            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeqBytesToSlaveExists();
-            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, new ToMasterExistsSegmentMeta(metaBytes));
+            var segmentCount = ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT;
+            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(0, segmentCount);
+            var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
+            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
         } else {
             var nextSplitIndex = isLastBatchInThisSplit ? splitIndex + 1 : splitIndex;
-            var nextBeginBucketIndex = isLastBatchInThisSplit ? 0 : beginBucketIndex + KeyLoader.BATCH_ONCE_SEGMENT_COUNT_READ_FOR_REPL;
+            var nextBeginBucketIndex = isLastBatchInThisSplit ? 0 : prevBucketIndex + KeyLoader.BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL;
             var requestBytes = new byte[1 + 1 + 4];
             requestBytes[0] = (byte) nextSplitIndex;
             requestBytes[1] = 0;
@@ -376,24 +373,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
-    private Reply meta_chunk_segment_index(byte slot, byte[] contentBytes) {
-        // server received from client
-        // ignore content bytes, send all
-        var oneSlot = localPersist.oneSlot(slot);
-        var bytes = oneSlot.getMetaChunkSegmentIndexBytesToSlaveExists();
-        return Repl.reply(slot, replPair, ReplType.s_meta_chunk_segment_index, new RawBytesContent(bytes));
-    }
-
-    private Reply s_meta_chunk_segment_index(byte slot, byte[] contentBytes) {
-        // client received from server
-        var oneSlot = localPersist.oneSlot(slot);
-        oneSlot.overwriteMetaChunkSegmentIndexBytesFromRepl(contentBytes);
-        // next step, fetch meta top chunk segment index
-        // all slots only need fetch once, todo
-        return Repl.reply(slot, replPair, ReplType.exists_key_buckets, new EmptyContent());
-    }
-
-    private Reply meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
+    Reply meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
         // server received from client
         // ignore content bytes, send all
         var oneSlot = localPersist.oneSlot(slot);
@@ -401,15 +381,15 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_meta_key_bucket_split_number, new RawBytesContent(bytes));
     }
 
-    private Reply s_meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
+    Reply s_meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
         oneSlot.getKeyLoader().overwriteMetaKeyBucketSplitNumberBytesFromMasterExists(contentBytes);
-        // next step, fetch meta chunk segment index
-        return Repl.reply(slot, replPair, ReplType.meta_chunk_segment_index, new EmptyContent());
+        // next step, fetch exists key buckets
+        return Repl.reply(slot, replPair, ReplType.exists_key_buckets, EmptyContent.INSTANCE);
     }
 
-    private Reply exists_big_string(byte slot, byte[] contentBytes) {
+    Reply exists_big_string(byte slot, byte[] contentBytes) {
         // server received from client, send back exists big string to client, with flag can do next step
         // client already persisted big string uuid, send to client exclude sent big string
         var sentUuidList = new ArrayList<Long>();
@@ -425,7 +405,7 @@ public class XGroup extends BaseCommand {
         var oneSlot = localPersist.oneSlot(slot);
         var uuidListInMaster = oneSlot.getBigStringFiles().getBigStringFileUuidList();
         if (uuidListInMaster.isEmpty()) {
-            return Repl.reply(slot, replPair, ReplType.s_exists_big_string, new EmptyContent());
+            return Repl.reply(slot, replPair, ReplType.s_exists_big_string, EmptyContent.INSTANCE);
         }
 
         var toSlaveExistsBigString = new ToSlaveExistsBigString(oneSlot.getBigStringDir(), uuidListInMaster, sentUuidList);
@@ -433,11 +413,11 @@ public class XGroup extends BaseCommand {
     }
 
     // need delete local big string file if not exists in master, todo
-    private Reply s_exists_big_string(byte slot, byte[] contentBytes) {
+    Reply s_exists_big_string(byte slot, byte[] contentBytes) {
         // client received from server
         // empty content means no big string, next step
-        if (contentBytes.length == 1) {
-            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, new EmptyContent());
+        if (EmptyContent.isEmpty(contentBytes)) {
+            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, EmptyContent.INSTANCE);
         }
 
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -446,7 +426,7 @@ public class XGroup extends BaseCommand {
 
         if (bigStringCount == 0) {
             // next step, fetch meta key bucket split number
-            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, new EmptyContent());
+            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, EmptyContent.INSTANCE);
         }
 
         var oneSlot = localPersist.oneSlot(slot);
@@ -468,16 +448,16 @@ public class XGroup extends BaseCommand {
 
         if (isSendAllOnce) {
             // next step, fetch big string
-            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, new EmptyContent());
+            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, EmptyContent.INSTANCE);
         } else {
             return fetchExistsBigString(slot, oneSlot);
         }
     }
 
-    private Reply fetchExistsBigString(byte slot, OneSlot oneSlot) {
+    Reply fetchExistsBigString(byte slot, OneSlot oneSlot) {
         var uuidListLocal = oneSlot.getBigStringFiles().getBigStringFileUuidList();
         if (uuidListLocal.isEmpty()) {
-            return Repl.reply(slot, replPair, ReplType.exists_big_string, new EmptyContent());
+            return Repl.reply(slot, replPair, ReplType.exists_big_string, EmptyContent.INSTANCE);
         }
 
         var rawBytes = new byte[8 * uuidListLocal.size()];
@@ -489,7 +469,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.exists_big_string, new RawBytesContent(rawBytes));
     }
 
-    private Reply exists_dict(byte slot, byte[] contentBytes) {
+    Reply exists_dict(byte slot, byte[] contentBytes) {
         // client already persisted dict seq, send to client exclude sent dict
         ArrayList<Integer> sentDictSeqList = new ArrayList<>();
         if (contentBytes.length >= 4) {
@@ -507,19 +487,18 @@ public class XGroup extends BaseCommand {
         var cacheDictBySeqCopy = dictMap.getCacheDictBySeqCopy();
 
         if (cacheDictBySeqCopy.isEmpty()) {
-            return Repl.reply(slot, replPair, ReplType.s_exists_dict, new EmptyContent());
+            return Repl.reply(slot, replPair, ReplType.s_exists_dict, EmptyContent.INSTANCE);
         } else {
-            var toSlaveExistsDict = new ToSlaveExistsDict(cacheDictCopy, cacheDictBySeqCopy, sentDictSeqList);
-            return Repl.reply(slot, replPair, ReplType.s_exists_dict, toSlaveExistsDict);
+            var content = new ToSlaveExistsDict(cacheDictCopy, cacheDictBySeqCopy, sentDictSeqList);
+            return Repl.reply(slot, replPair, ReplType.s_exists_dict, content);
         }
     }
 
-    private Reply s_exists_dict(byte slot, byte[] contentBytes) {
-        var oneSlot = localPersist.oneSlot(slot);
-
+    Reply s_exists_dict(byte slot, byte[] contentBytes) {
         // client received from server
+        var oneSlot = localPersist.oneSlot(slot);
         // empty content means no dict, next step
-        if (contentBytes.length == 1) {
+        if (EmptyContent.isEmpty(contentBytes)) {
             return fetchExistsBigString(slot, oneSlot);
         }
 
@@ -558,7 +537,7 @@ public class XGroup extends BaseCommand {
         } else {
             var cacheDictBySeqCopyLocal = dictMap.getCacheDictBySeqCopy();
             if (cacheDictBySeqCopyLocal.isEmpty()) {
-                return Repl.reply(slot, replPair, ReplType.exists_dict, new EmptyContent());
+                return Repl.reply(slot, replPair, ReplType.exists_dict, EmptyContent.INSTANCE);
             }
 
             var rawBytes = new byte[4 * cacheDictBySeqCopyLocal.size()];
@@ -573,24 +552,143 @@ public class XGroup extends BaseCommand {
         }
     }
 
-    private Reply exists_all_done(byte slot, byte[] contentBytes) {
+    Reply exists_all_done(byte slot, byte[] contentBytes) {
         // server received from client
         log.warn("Slave exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
                 replPair.getSlaveUuid(), replPair.getHostAndPort());
-        return Repl.reply(slot, replPair, ReplType.s_exists_all_done, new EmptyContent());
+        return Repl.reply(slot, replPair, ReplType.s_exists_all_done, EmptyContent.INSTANCE);
     }
 
-    private Reply s_exists_all_done(byte slot, byte[] contentBytes) {
+    Reply s_exists_all_done(byte slot, byte[] contentBytes) {
+        // client received from server
         log.warn("Master reply exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
                 replPair.getSlaveUuid(), replPair.getHostAndPort());
 
         var oneSlot = localPersist.oneSlot(slot);
-        try {
-            log.warn("Slot can read, slot={}", slot);
-            oneSlot.setCanRead(true);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        // catch up
+        var binlogMasterUuid = oneSlot.getMetaChunkSegmentIndex().getMasterUuid();
+        var fileIndexAndOffset = oneSlot.getMetaChunkSegmentIndex().getMasterBinlogFileIndexAndOffset();
+
+        var binlogFileIndex = fileIndexAndOffset.fileIndex();
+        var marginFileOffset = Binlog.marginFileOffset(fileIndexAndOffset.offset());
+        var content = new ToMasterCatchUpForBinlogOneSegment(binlogMasterUuid, binlogFileIndex, marginFileOffset);
+        return Repl.reply(slot, replPair, ReplType.catch_up, content);
+    }
+
+    Reply catch_up(byte slot, byte[] contentBytes) {
+        // server received from client
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var binlogMasterUuid = buffer.getLong();
+        var binlogFileIndex = buffer.getInt();
+        var binlogOffset = buffer.getLong();
+
+        var oneSlot = localPersist.oneSlot(slot);
+        if (oneSlot.getMasterUuid() != binlogMasterUuid) {
+            var errorMessage = "Repl handle error: master uuid not match";
+            log.error(errorMessage);
+            return Repl.error(slot, replPair, errorMessage);
         }
-        return Repl.emptyReply();
+
+        var binlog = oneSlot.getBinlog();
+        byte[] oneSegmentBytes;
+        try {
+            oneSegmentBytes = binlog.readPrevRafOneSegment(binlogFileIndex, binlogOffset);
+        } catch (IOException e) {
+            var errorMessage = "Repl handle error: read binlog file error";
+            log.error(errorMessage, e);
+            return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
+        }
+
+        if (oneSegmentBytes == null) {
+            log.warn("Repl handle catch up: get binlog null, slot={}, slave uuid={}, {}, binlog file index={}, offset={}", slot,
+                    replPair.getSlaveUuid(), replPair.getHostAndPort(), binlogFileIndex, binlogOffset);
+            return Repl.error(slot, replPair, "Get binlog null, slot=" + slot +
+                    ", binlog file index=" + binlogFileIndex + ", offset=" + binlogOffset);
+        }
+
+        var currentFileIndexAndOffset = binlog.currentFileIndexAndOffset();
+
+        var responseBytes = new byte[4 + 8 + 4 + 8 + 4 + oneSegmentBytes.length];
+        var responseBuffer = ByteBuffer.wrap(responseBytes);
+        responseBuffer.putInt(binlogFileIndex);
+        responseBuffer.putLong(binlogOffset);
+        responseBuffer.putInt(currentFileIndexAndOffset.fileIndex());
+        responseBuffer.putLong(currentFileIndexAndOffset.offset());
+        responseBuffer.putInt(oneSegmentBytes.length);
+        responseBuffer.put(oneSegmentBytes);
+
+        return Repl.reply(slot, replPair, ReplType.s_catch_up, new RawBytesContent(responseBytes));
+    }
+
+    Reply s_catch_up(byte slot, byte[] contentBytes) {
+        // client received from server
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var catchUpFileIndex = buffer.getInt();
+        var catchUpOffset = buffer.getLong();
+
+        var currentFileIndex = buffer.getInt();
+        var currentOffset = buffer.getLong();
+
+        var oneSegmentLength = buffer.getInt();
+        var oneSegmentBytes = new byte[oneSegmentLength];
+        buffer.get(oneSegmentBytes);
+
+        int currentMarginFileOffset = Binlog.marginFileOffset(currentOffset);
+
+        // update last catch up file index and offset
+        var oneSlot = localPersist.oneSlot(slot);
+
+        var skipBytesN = 0;
+        var ff = oneSlot.getMetaChunkSegmentIndex().getMasterBinlogFileIndexAndOffset();
+        if (ff.fileIndex() == currentFileIndex && ff.offset() > currentMarginFileOffset) {
+            skipBytesN = (int) (ff.offset() - currentMarginFileOffset);
+        }
+
+        try {
+            var n = Binlog.decodeAndApply(slot, oneSegmentBytes, skipBytesN);
+            if (catchUpOffset == 0) {
+                log.info("Repl binlog catch up success, slot={}, slave uuid={}, {}, catch up file index={}, catch up offset={}, apply n={}",
+                        slot, replPair.getSlaveUuid(), replPair.getHostAndPort(), catchUpFileIndex, catchUpOffset, n);
+            }
+        } catch (Exception e) {
+            var errorMessage = "Repl handle error: decode and apply binlog error";
+            log.error(errorMessage, e);
+            return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
+        }
+
+        var isCatchUpToCurrentFile = catchUpFileIndex == currentFileIndex;
+        if (isCatchUpToCurrentFile) {
+            var diffOffset = currentOffset - catchUpOffset;
+            if (diffOffset < ConfForSlot.global.confRepl.catchUpOffsetMinDiff) {
+                try {
+                    log.warn("Slot can read, slot={}", slot);
+                    oneSlot.setCanRead(true);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+
+        var binlogMasterUuid = oneSlot.getMetaChunkSegmentIndex().getMasterUuid();
+
+        var isCatchUpOffsetInLatestSegment = isCatchUpToCurrentFile && catchUpOffset >= currentMarginFileOffset;
+        if (isCatchUpOffsetInLatestSegment) {
+            oneSlot.getMetaChunkSegmentIndex().setMasterBinlogFileIndexAndOffset(binlogMasterUuid, currentFileIndex, currentOffset);
+            // still catch up current segment
+            var content = new ToMasterCatchUpForBinlogOneSegment(binlogMasterUuid, currentFileIndex, catchUpOffset);
+            return Repl.reply(slot, replPair, ReplType.catch_up, new RawBytesContent(contentBytes));
+        }
+
+        var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
+        var nextCatchUpFileIndex = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? catchUpFileIndex : catchUpFileIndex + 1;
+        var nextCatchUpOffset = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? 0 : catchUpOffset + oneSegmentLength;
+
+        oneSlot.getMetaChunkSegmentIndex().setMasterBinlogFileIndexAndOffset(binlogMasterUuid, nextCatchUpFileIndex, nextCatchUpOffset);
+        if (nextCatchUpOffset == 0) {
+            log.info("Repl handle catch up: catch up to next file, slot={}, slave uuid={}, {}, binlog file index={}, offset={}",
+                    slot, replPair.getSlaveUuid(), replPair.getHostAndPort(), nextCatchUpFileIndex, nextCatchUpOffset);
+        }
+        var content = new ToMasterCatchUpForBinlogOneSegment(binlogMasterUuid, nextCatchUpFileIndex, nextCatchUpOffset);
+        return Repl.reply(slot, replPair, ReplType.catch_up, content);
     }
 }

@@ -69,6 +69,7 @@ public class Dict implements Serializable {
         }
     }
 
+    // when master / slave failover, this seq may conflict, need change to uuid
     static AtomicInteger seqGenerator = new AtomicInteger(BEGIN_SEQ);
 
     int seq;

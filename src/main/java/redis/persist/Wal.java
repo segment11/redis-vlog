@@ -191,7 +191,7 @@ public class Wal {
     HashMap<String, V> delayToKeyBucketValues;
     HashMap<String, V> delayToKeyBucketShortValues;
 
-    int getKeyCount() {
+    public int getKeyCount() {
         return delayToKeyBucketValues.size() + delayToKeyBucketShortValues.size();
     }
 

@@ -152,6 +152,15 @@ public class Binlog {
         latestAppendForReadCacheSegmentBytesSet.add(new BytesWithFileIndexAndOffset(bytes, fileIndex, offset));
     }
 
+    public static int oneFileMaxSegmentCount() {
+        return ConfForSlot.global.confRepl.binlogOneFileMaxLength / ConfForSlot.global.confRepl.binlogOneSegmentLength;
+    }
+
+    public static int marginFileOffset(long fileOffset) {
+        var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
+        return (int) (fileOffset - fileOffset % oneSegmentLength);
+    }
+
     public void append(BinlogContent content) {
         if (!dynConfig.isBinlogOn()) {
             return;
@@ -240,7 +249,7 @@ public class Binlog {
         return one >= 0 ? latestAppendForReadCacheSegmentBytesSet.get(one).bytes : null;
     }
 
-    byte[] readPrevRafOneSegment(int fileIndex, long offset) throws IOException {
+    public byte[] readPrevRafOneSegment(int fileIndex, long offset) throws IOException {
         if (fileIndex < 0) {
             return null;
         }
@@ -327,8 +336,11 @@ public class Binlog {
         }
     }
 
-    public static void decodeAndApply(byte slot, byte[] oneSegmentBytes) {
+    public static int decodeAndApply(byte slot, byte[] oneSegmentBytes, int skipBytesN) {
         var byteBuffer = ByteBuffer.wrap(oneSegmentBytes);
+        byteBuffer.position(skipBytesN);
+
+        var n = 0;
         while (true) {
             if (byteBuffer.remaining() == 0) {
                 break;
@@ -342,7 +354,9 @@ public class Binlog {
             var type = BinlogContent.Type.fromCode(code);
             var content = type.decodeFrom(byteBuffer);
             content.apply(slot);
+            n++;
         }
+        return n;
     }
 
     void clear() {

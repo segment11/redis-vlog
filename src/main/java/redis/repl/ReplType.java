@@ -12,19 +12,19 @@ public enum ReplType {
 
     exists_chunk_segments(false, true, (byte) 20),
     exists_key_buckets(false, true, (byte) 21),
-    meta_chunk_segment_index(false, true, (byte) 22),
-    meta_key_bucket_split_number(false, true, (byte) 25),
-    exists_big_string(false, true, (byte) 26),
-    exists_dict(false, true, (byte) 27),
-    exists_all_done(false, true, (byte) 28),
+    meta_key_bucket_split_number(false, true, (byte) 22),
+    exists_big_string(false, true, (byte) 23),
+    exists_dict(false, true, (byte) 24),
+    exists_all_done(false, true, (byte) 25),
+    catch_up(true, true, (byte) 26),
 
     s_exists_chunk_segments(false, false, (byte) 30),
     s_exists_key_buckets(false, false, (byte) 31),
-    s_meta_chunk_segment_index(false, false, (byte) 32),
-    s_meta_key_bucket_split_number(false, true, (byte) 35),
-    s_exists_big_string(false, false, (byte) 36),
-    s_exists_dict(false, false, (byte) 37),
-    s_exists_all_done(false, false, (byte) 38),
+    s_meta_key_bucket_split_number(false, true, (byte) 32),
+    s_exists_big_string(false, false, (byte) 33),
+    s_exists_dict(false, false, (byte) 34),
+    s_exists_all_done(false, false, (byte) 35),
+    s_catch_up(true, false, (byte) 36),
     ;
 
     public final boolean newly;

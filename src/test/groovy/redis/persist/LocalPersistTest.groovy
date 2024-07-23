@@ -39,6 +39,7 @@ class LocalPersistTest extends Specification {
 
         cleanup:
         localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 
     def 'test mock one slot'() {

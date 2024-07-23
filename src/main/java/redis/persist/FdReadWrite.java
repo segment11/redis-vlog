@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.metric.SimpleGauge;
-import redis.repl.content.ToMasterExistsSegmentMeta;
+import redis.repl.content.ToMasterExistsChunkSegments;
 
 import java.io.File;
 import java.io.IOException;
@@ -197,7 +197,7 @@ public class FdReadWrite {
             this.writePageAddressB = pageManager.allocatePages(npagesOneInner * BATCH_ONCE_SEGMENT_COUNT_PWRITE, PROTECTION);
             this.writePageBufferB = m.newDirectByteBuffer(writePageAddressB, oneInnerLength * BATCH_ONCE_SEGMENT_COUNT_PWRITE);
 
-            var npagesRepl = npagesOneInner * ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT;
+            var npagesRepl = npagesOneInner * ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT;
             this.readForReplAddress = pageManager.allocatePages(npagesRepl, PROTECTION);
             this.readForReplBuffer = m.newDirectByteBuffer(readForReplAddress, npagesRepl * PAGE_SIZE);
 
@@ -283,7 +283,7 @@ public class FdReadWrite {
             writePageBufferB = null;
         }
 
-        var npagesRepl = npagesOneInner * ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT;
+        var npagesRepl = npagesOneInner * ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT;
         if (readForReplAddress != 0) {
             pageManager.freePages(readForReplAddress, npagesRepl);
             System.out.println("Clean up fd read repl, name: " + name + ", read page address: " + readForReplAddress);
@@ -513,9 +513,9 @@ public class FdReadWrite {
             if (oneInnerCount == 1 || oneInnerCount == ConfForSlot.global.confWal.oneChargeBucketNumber) {
                 // readonly
                 return allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex];
-            } else if (oneInnerCount == ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT) {
+            } else if (oneInnerCount == ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT) {
                 var oneWalGroupSharedBytesLength = ConfForSlot.global.confWal.oneChargeBucketNumber * oneInnerLength;
-                var walGroupCount = ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT / ConfForSlot.global.confWal.oneChargeBucketNumber;
+                var walGroupCount = ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT / ConfForSlot.global.confWal.oneChargeBucketNumber;
 
                 // for repl, use copy
                 var bytesRead = new byte[oneWalGroupSharedBytesLength * walGroupCount];
@@ -563,7 +563,7 @@ public class FdReadWrite {
 
     public byte[] readOneInnerForRepl(int oneInnerIndex) {
         if (ConfForSlot.global.pureMemory) {
-            return readOneInnerBatchFromMemory(oneInnerIndex, ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT);
+            return readOneInnerBatchFromMemory(oneInnerIndex, ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT);
         }
 
         return readInnerNotPureMemory(oneInnerIndex, readForReplBuffer, false);
@@ -590,6 +590,11 @@ public class FdReadWrite {
         Arrays.fill(sharedBytes, position, position + oneInnerLength, (byte) 0);
     }
 
+    public void clearKeyBucketsInOneWalGroup(int bucketIndex) {
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
+        allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex] = null;
+    }
+
     int writeOneInnerBatchToMemory(int beginOneInnerIndex, byte[] bytes, int position) {
         var isSmallerThanOneInner = bytes.length < oneInnerLength;
         if (!isSmallerThanOneInner && (bytes.length - position) % oneInnerLength != 0) {
@@ -607,12 +612,12 @@ public class FdReadWrite {
         }
 
         var oneInnerCount = (bytes.length - position) / oneInnerLength;
-        if (oneInnerCount == ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT) {
+        if (oneInnerCount == ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT) {
             if (!isChunkFd) {
                 // set shared bytes batch
                 var walGroupIndex = Wal.calWalGroupIndex(beginOneInnerIndex);
                 var oneWalGroupSharedBytesLength = ConfForSlot.global.confWal.oneChargeBucketNumber * oneInnerLength;
-                var walGroupCount = ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT / ConfForSlot.global.confWal.oneChargeBucketNumber;
+                var walGroupCount = ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT / ConfForSlot.global.confWal.oneChargeBucketNumber;
 
                 var offset = position;
                 for (int i = 0; i < walGroupCount; i++) {
@@ -702,7 +707,7 @@ public class FdReadWrite {
 
     public int writeOneInnerForRepl(int oneInnerIndex, byte[] bytes, int position) {
         var oneInnerCount = bytes.length / oneInnerLength;
-        if (oneInnerCount != ToMasterExistsSegmentMeta.REPL_ONCE_SEGMENT_COUNT) {
+        if (oneInnerCount != ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT) {
             throw new IllegalArgumentException("Repl write bytes length not match once repl segment count");
         }
 

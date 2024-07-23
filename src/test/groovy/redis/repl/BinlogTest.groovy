@@ -13,6 +13,7 @@ class BinlogTest extends Specification {
         final byte slot = 0
         ConfForSlot.global.confRepl.binlogForReadCacheSegmentMaxCount = 2
 
+        println Binlog.oneFileMaxSegmentCount()
         println new Binlog.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
         def fileIndexAndOffset = new Binlog.FileIndexAndOffset(1, 1)
 
@@ -24,6 +25,8 @@ class BinlogTest extends Specification {
         fileIndexAndOffset != new Binlog.FileIndexAndOffset(1, 2)
         new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 0) > new Binlog.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
         new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 1) > new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 0)
+        Binlog.marginFileOffset(100) == 0
+        Binlog.marginFileOffset(256 * 1024 + 100) == 256 * 1024
 
         when:
         var dynConfig = new DynConfig(slot, DynConfigTest.tmpFile)

@@ -39,29 +39,34 @@ public class MetaChunkSegmentFlagSeq {
     final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
-    byte[] getInMemoryCachedBytes() {
-        var dst = new byte[inMemoryCachedBytes.length];
-        inMemoryCachedByteBuffer.position(0).get(dst);
+    public byte[] getOneBath(int beginBucketIndex, int bucketCount) {
+        var dst = new byte[bucketCount * ONE_LENGTH];
+        var offset = beginBucketIndex * ONE_LENGTH;
+        inMemoryCachedByteBuffer.position(offset).get(dst);
         return dst;
     }
 
-    void overwriteInMemoryCachedBytes(byte[] bytes) {
-        if (bytes.length != inMemoryCachedBytes.length) {
-            throw new IllegalArgumentException("Repl chunk segment flag seq, bytes length not match");
+    public void overwriteOneBatch(byte[] bytes, int beginBucketIndex, int bucketCount) {
+        if (bytes.length != bucketCount * ONE_LENGTH) {
+            throw new IllegalArgumentException("Repl chunk segments from master one batch meta bytes length not match, slot: "
+                    + slot + ", length: " + bytes.length + ", bucket count: " + bucketCount + ", one length: " + ONE_LENGTH);
         }
 
+        var offset = beginBucketIndex * ONE_LENGTH;
         if (ConfForSlot.global.pureMemory) {
-            inMemoryCachedByteBuffer.position(0).put(bytes);
+            inMemoryCachedByteBuffer.position(offset).put(bytes);
             return;
         }
 
         try {
-            raf.seek(0);
+            raf.seek(offset);
             raf.write(bytes);
-            inMemoryCachedByteBuffer.position(0).put(bytes);
+            inMemoryCachedByteBuffer.position(offset).put(bytes);
         } catch (IOException e) {
-            throw new RuntimeException("Repl chunk segment flag seq, write file error", e);
+            throw new RuntimeException("Repl chunk segments from master one batch meta bytes, write file error", e);
         }
+        log.warn("Repl chunk segments from master one batch meta bytes, write file success, slot: {}, begin bucket index: {}, bucket count: {}",
+                slot, beginBucketIndex, bucketCount);
     }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
