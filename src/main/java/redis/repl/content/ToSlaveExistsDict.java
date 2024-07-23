@@ -8,14 +8,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.TreeMap;
 
-import static redis.DictMap.ANONYMOUS_DICT_KEY;
-
 public class ToSlaveExistsDict implements ReplContent {
     private final HashMap<Dict, String> cacheKeyByDict;
     private final TreeMap<Integer, Dict> toSendCacheDictBySeq;
-    private final boolean isSendAllOnce;
-
-    private static final int ONCE_SEND_DICT_COUNT = 1000;
 
     public ToSlaveExistsDict(HashMap<String, Dict> cacheDict, TreeMap<Integer, Dict> cacheDictBySeq, ArrayList<Integer> sentDictSeqList) {
         var cacheKeyByDict = new HashMap<Dict, String>();
@@ -31,51 +26,40 @@ public class ToSlaveExistsDict implements ReplContent {
                 toSendCacheDictBySeq.put(entry.getKey(), entry.getValue());
             }
         }
-
-        this.isSendAllOnce = toSendCacheDictBySeq.size() <= ONCE_SEND_DICT_COUNT;
-        if (!isSendAllOnce) {
-            toSendCacheDictBySeq = new TreeMap<>(toSendCacheDictBySeq.subMap(0, ONCE_SEND_DICT_COUNT));
-        }
-
         this.toSendCacheDictBySeq = toSendCacheDictBySeq;
     }
-
-    // 2 bytes as short for send dict count, 1 byte as flag for is sent all
-    private static final int HEADER_LENGTH = 2 + 1;
 
     @Override
     public void encodeTo(ByteBuf toBuf) {
         if (toSendCacheDictBySeq.isEmpty()) {
-            toBuf.writeShort((short) 0);
-            toBuf.writeByte((byte) 1);
+            toBuf.writeInt(0);
             return;
         }
 
-        toBuf.writeShort((short) toSendCacheDictBySeq.size());
-        toBuf.writeByte((byte) (isSendAllOnce ? 1 : 0));
+        toBuf.writeInt(toSendCacheDictBySeq.size());
 
         for (var entry : toSendCacheDictBySeq.entrySet()) {
             var dict = entry.getValue();
             var key = cacheKeyByDict.get(dict);
 
-            var encodeLength = key == null ? dict.encodeLength(ANONYMOUS_DICT_KEY) : dict.encodeLength(key);
+            var encodeLength = dict.encodeLength(key);
             toBuf.writeInt(encodeLength);
-            toBuf.write(dict.encode(key == null ? ANONYMOUS_DICT_KEY : key));
+            toBuf.write(dict.encode(key));
         }
     }
 
     @Override
     public int encodeLength() {
         if (toSendCacheDictBySeq.isEmpty()) {
-            return HEADER_LENGTH;
+            return 4;
         }
 
-        var length = HEADER_LENGTH;
+        var length = 4;
         for (var entry : toSendCacheDictBySeq.entrySet()) {
             var dict = entry.getValue();
             var key = cacheKeyByDict.get(dict);
 
-            var encodeLength = key == null ? dict.encodeLength(ANONYMOUS_DICT_KEY) : dict.encodeLength(key);
+            var encodeLength = dict.encodeLength(key);
             length += 4 + encodeLength;
         }
         return length;

@@ -127,6 +127,15 @@ public class KeyLoader {
         return statKeyCountInBuckets.getKeyCount();
     }
 
+    public byte[] getStatKeyCountInBucketsBytesToSlaveExists() {
+        return statKeyCountInBuckets.getInMemoryCachedBytes();
+    }
+
+    public void overwriteStatKeyCountInBucketsBytesFromMasterExists(byte[] bytes) {
+        statKeyCountInBuckets.overwriteInMemoryCachedBytes(bytes);
+        log.warn("Repl overwrite stat key count in buckets bytes from master exists, slot: {}", slot);
+    }
+
     void updateKeyCountBatchCached(int[] keyCountTmp, int beginBucketIndex) {
         if (beginBucketIndex < 0 || beginBucketIndex + keyCountTmp.length > bucketsPerSlot) {
             throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);

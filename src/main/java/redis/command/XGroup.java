@@ -135,6 +135,7 @@ public class XGroup extends BaseCommand {
             case exists_chunk_segments -> exists_chunk_segments(slot, contentBytes);
             case exists_key_buckets -> exists_key_buckets(slot, contentBytes);
             case meta_key_bucket_split_number -> meta_key_bucket_split_number(slot, contentBytes);
+            case stat_key_count_in_buckets -> stat_key_count_in_buckets(slot, contentBytes);
             case exists_big_string -> exists_big_string(slot, contentBytes);
             case exists_dict -> exists_dict(slot, contentBytes);
             case exists_all_done -> exists_all_done(slot, contentBytes);
@@ -142,6 +143,7 @@ public class XGroup extends BaseCommand {
             case s_exists_chunk_segments -> s_exists_chunk_segments(slot, contentBytes);
             case s_exists_key_buckets -> s_exists_key_buckets(slot, contentBytes);
             case s_meta_key_bucket_split_number -> s_meta_key_bucket_split_number(slot, contentBytes);
+            case s_stat_key_count_in_buckets -> s_stat_key_count_in_buckets(slot, contentBytes);
             case s_exists_big_string -> s_exists_big_string(slot, contentBytes);
             case s_exists_dict -> s_exists_dict(slot, contentBytes);
             case s_exists_all_done -> s_exists_all_done(slot, contentBytes);
@@ -373,6 +375,22 @@ public class XGroup extends BaseCommand {
         }
     }
 
+    Reply stat_key_count_in_buckets(byte slot, byte[] contentBytes) {
+        // server received from client
+        // ignore content bytes, send all
+        var oneSlot = localPersist.oneSlot(slot);
+        var bytes = oneSlot.getKeyLoader().getStatKeyCountInBucketsBytesToSlaveExists();
+        return Repl.reply(slot, replPair, ReplType.s_stat_key_count_in_buckets, new RawBytesContent(bytes));
+    }
+
+    Reply s_stat_key_count_in_buckets(byte slot, byte[] contentBytes) {
+        // client received from server
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.getKeyLoader().overwriteStatKeyCountInBucketsBytesFromMasterExists(contentBytes);
+        // next step, fetch exists key buckets
+        return Repl.reply(slot, replPair, ReplType.exists_key_buckets, EmptyContent.INSTANCE);
+    }
+
     Reply meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
         // server received from client
         // ignore content bytes, send all
@@ -386,7 +404,7 @@ public class XGroup extends BaseCommand {
         var oneSlot = localPersist.oneSlot(slot);
         oneSlot.getKeyLoader().overwriteMetaKeyBucketSplitNumberBytesFromMasterExists(contentBytes);
         // next step, fetch exists key buckets
-        return Repl.reply(slot, replPair, ReplType.exists_key_buckets, EmptyContent.INSTANCE);
+        return Repl.reply(slot, replPair, ReplType.stat_key_count_in_buckets, EmptyContent.INSTANCE);
     }
 
     Reply exists_big_string(byte slot, byte[] contentBytes) {
@@ -503,9 +521,7 @@ public class XGroup extends BaseCommand {
         }
 
         var buffer = ByteBuffer.wrap(contentBytes);
-        var dictCount = buffer.getShort();
-        var isSendAllOnce = buffer.get() == 1;
-
+        var dictCount = buffer.getInt();
         if (dictCount == 0) {
             // next step, fetch big string
             return fetchExistsBigString(slot, oneSlot);
@@ -531,25 +547,8 @@ public class XGroup extends BaseCommand {
             throw new RuntimeException(e);
         }
 
-        if (isSendAllOnce) {
-            // next step, fetch big string
-            return fetchExistsBigString(slot, oneSlot);
-        } else {
-            var cacheDictBySeqCopyLocal = dictMap.getCacheDictBySeqCopy();
-            if (cacheDictBySeqCopyLocal.isEmpty()) {
-                return Repl.reply(slot, replPair, ReplType.exists_dict, EmptyContent.INSTANCE);
-            }
-
-            var rawBytes = new byte[4 * cacheDictBySeqCopyLocal.size()];
-            var rawBuffer = ByteBuffer.wrap(rawBytes);
-            for (var entry : cacheDictBySeqCopyLocal.entrySet()) {
-                var seq = entry.getKey();
-                rawBuffer.putInt(seq);
-            }
-
-            // continue fetch dict
-            return Repl.reply(slot, replPair, ReplType.exists_dict, new RawBytesContent(rawBytes));
-        }
+        // next step, fetch big string
+        return fetchExistsBigString(slot, oneSlot);
     }
 
     Reply exists_all_done(byte slot, byte[] contentBytes) {
@@ -640,7 +639,8 @@ public class XGroup extends BaseCommand {
 
         var skipBytesN = 0;
         var ff = oneSlot.getMetaChunkSegmentIndex().getMasterBinlogFileIndexAndOffset();
-        if (ff.fileIndex() == currentFileIndex && ff.offset() > currentMarginFileOffset) {
+        var isOffsetInLatestSegment = ff.fileIndex() == currentFileIndex && ff.offset() > currentMarginFileOffset;
+        if (isOffsetInLatestSegment) {
             skipBytesN = (int) (ff.offset() - currentMarginFileOffset);
         }
 
@@ -674,9 +674,13 @@ public class XGroup extends BaseCommand {
         var isCatchUpOffsetInLatestSegment = isCatchUpToCurrentFile && catchUpOffset >= currentMarginFileOffset;
         if (isCatchUpOffsetInLatestSegment) {
             oneSlot.getMetaChunkSegmentIndex().setMasterBinlogFileIndexAndOffset(binlogMasterUuid, currentFileIndex, currentOffset);
-            // still catch up current segment
+
+            // still catch up current segment, delay
             var content = new ToMasterCatchUpForBinlogOneSegment(binlogMasterUuid, currentFileIndex, catchUpOffset);
-            return Repl.reply(slot, replPair, ReplType.catch_up, new RawBytesContent(contentBytes));
+            oneSlot.delayRun(ConfForSlot.global.confRepl.catchUpLatestSegmentDelayMillis, () -> {
+                replPair.write(ReplType.catch_up, content);
+            });
+            return Repl.emptyReply();
         }
 
         var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;

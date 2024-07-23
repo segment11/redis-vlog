@@ -324,7 +324,8 @@ public enum ConfForSlot {
         // once read 4 segments = 1M to slave, for better latency, you can change to 1 segment = 256K
         public short binlogForReadToSlaveSegmentOnceCount = 1;
         // if slave catch up binlog offset is less than min diff, slave can service read
-        public int catchUpOffsetMinDiff = 1024;
+        public int catchUpOffsetMinDiff = 1024 * 10;
+        public int catchUpLatestSegmentDelayMillis = 100;
 
         @Override
         public String toString() {

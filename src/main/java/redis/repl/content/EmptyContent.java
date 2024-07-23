@@ -6,6 +6,9 @@ import redis.repl.ReplContent;
 public class EmptyContent implements ReplContent {
     public static final EmptyContent INSTANCE = new EmptyContent();
 
+    private EmptyContent() {
+    }
+
     public static boolean isEmpty(byte[] contentBytes) {
         return contentBytes.length == 1 && contentBytes[0] == 0;
     }

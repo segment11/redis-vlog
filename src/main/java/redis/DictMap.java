@@ -13,8 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class DictMap {
     public static int TO_COMPRESS_MIN_DATA_LENGTH = 64;
-    public static final String ANONYMOUS_DICT_KEY = "x-anonymous";
-
     // singleton
     private static final DictMap instance = new DictMap();
 

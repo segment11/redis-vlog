@@ -365,6 +365,10 @@ public class OneSlot {
         return Promise.ofFuture(netWorkerEventloop.submit(AsyncComputation.of(supplierEx)));
     }
 
+    public void delayRun(int millis, Runnable runnable) {
+        netWorkerEventloop.delay(millis, runnable);
+    }
+
     private final byte slot;
     private final String slotStr;
     private final short slotNumber;
