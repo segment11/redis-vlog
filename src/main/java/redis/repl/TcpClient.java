@@ -38,8 +38,8 @@ public class TcpClient {
         return sock != null && !sock.isClosed();
     }
 
-    private long writeErrorCount = 0;
-    private long notConnectedErrorCount = 0;
+    long writeErrorCount = 0;
+    long notConnectedErrorCount = 0;
 
     boolean write(ReplType type, ReplContent content) {
         if (isSocketConnected()) {
@@ -77,7 +77,7 @@ public class TcpClient {
         return write(ReplType.bye, new Ping(ConfForSlot.global.netListenAddresses));
     }
 
-    public void connect(String host, int port, Callable<ByteBuf> callback) {
+    public void connect(String host, int port, Callable<ByteBuf> connectedCallback) {
         TcpSocket.connect(netWorkerEventloop, new InetSocketAddress(host, port))
                 .whenResult(socket -> {
                     log.info("Connected to server at {}:{}, slot: {}", host, port, slot);
@@ -103,8 +103,8 @@ public class TcpClient {
                             })
                             .streamTo(ChannelConsumers.ofSocket(socket));
 
-                    if (callback != null) {
-                        sock.write(callback.call());
+                    if (connectedCallback != null) {
+                        sock.write(connectedCallback.call());
                     }
                 })
                 .whenException(e -> log.error("Could not connect to server, to server: " + host + ":" + port + ", slot: " + slot, e));
