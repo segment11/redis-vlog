@@ -7,6 +7,8 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class KeyBucketTest extends Specification {
+    final byte slot = 0
+
     def 'test base'() {
         given:
         def kvMeta = new KeyBucket.KVMeta(0, (short) 16, (byte) 24)
@@ -34,7 +36,7 @@ class KeyBucketTest extends Specification {
         given:
         def snowFlake = new SnowFlake(1, 1)
 
-        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake)
 
         when:
         keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
@@ -67,9 +69,9 @@ class KeyBucketTest extends Specification {
         given:
         def snowFlake = new SnowFlake(1, 1)
 
-        def k1 = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
-        def k2 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, null, snowFlake)
-        def k3 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, new byte[4096 * 2], 4096, snowFlake)
+        def k1 = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake)
+        def k2 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, null, snowFlake)
+        def k3 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, new byte[4096 * 2], 4096, snowFlake)
 
         and:
         k1.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
@@ -85,15 +87,15 @@ class KeyBucketTest extends Specification {
         System.arraycopy(k2Bytes, 0, sharedBytes, 4096, k2Bytes.length)
 
         when:
-        def k11 = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, sharedBytes, 0, snowFlake)
-        def k22 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, sharedBytes, 4096, snowFlake)
-        def k33 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, sharedBytes, sharedBytes.length, snowFlake)
-        def k333 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) -1, sharedBytes, sharedBytes.length, snowFlake)
+        def k11 = new KeyBucket(slot, 0, (byte) 0, (byte) 1, sharedBytes, 0, snowFlake)
+        def k22 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, sharedBytes, 4096, snowFlake)
+        def k33 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, sharedBytes, sharedBytes.length, snowFlake)
+        def k333 = new KeyBucket(slot, 1, (byte) 0, (byte) -1, sharedBytes, sharedBytes.length, snowFlake)
 
         def isInvalidBytes = false
         KeyBucket k44
         try {
-            k44 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, new byte[5000], 0, snowFlake)
+            k44 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, new byte[5000], 0, snowFlake)
         } catch (IllegalStateException e) {
             isInvalidBytes = true
         }
@@ -105,7 +107,7 @@ class KeyBucketTest extends Specification {
 
         KeyBucket k55
         try {
-            k55 = new KeyBucket((byte) 0, 1, (byte) 0, (byte) 1, invalidBytes2, 0, snowFlake)
+            k55 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, invalidBytes2, 0, snowFlake)
         } catch (IllegalStateException e) {
             isInvalidBytes2 = true
         }
@@ -130,7 +132,7 @@ class KeyBucketTest extends Specification {
         given:
         def snowFlake = new SnowFlake(1, 1)
 
-        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake)
 
         when:
         keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
@@ -186,7 +188,7 @@ class KeyBucketTest extends Specification {
     def 'test last update seq'() {
         given:
         def snowFlake = new SnowFlake(1, 1)
-        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake)
 
         when:
         keyBucket.updateSeq()
@@ -205,7 +207,7 @@ class KeyBucketTest extends Specification {
 
         when:
         def encoded = keyBucket.encode(true)
-        def keyBucket2 = new KeyBucket((byte) 0, 0, (byte) 0, (byte) -1, encoded, snowFlake)
+        def keyBucket2 = new KeyBucket(slot, 0, (byte) 0, (byte) -1, encoded, snowFlake)
 
         then:
         keyBucket2.splitNumber == 3
@@ -214,7 +216,7 @@ class KeyBucketTest extends Specification {
     def 'test hash conflict'() {
         given:
         def snowFlake = new SnowFlake(1, 1)
-        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake)
 
         when:
         keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
@@ -231,7 +233,7 @@ class KeyBucketTest extends Specification {
     def 'test put full'() {
         given:
         def snowFlake = new SnowFlake(1, 1)
-        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake)
 
         when:
         (1..KeyBucket.INIT_CAPACITY).each {
@@ -290,7 +292,7 @@ class KeyBucketTest extends Specification {
     def 'test put cell reuse'() {
         given:
         def snowFlake = new SnowFlake(1, 1)
-        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake)
 
         when:
         keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
@@ -334,7 +336,7 @@ class KeyBucketTest extends Specification {
     def 'test cell available check'() {
         given:
         def snowFlake = new SnowFlake(1, 1)
-        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake)
 
         expect:
         keyBucket.isCellAvailableN(0, KeyBucket.INIT_CAPACITY, false)

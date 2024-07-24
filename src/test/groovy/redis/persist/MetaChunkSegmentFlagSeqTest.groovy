@@ -7,9 +7,11 @@ import static redis.persist.Chunk.NO_NEED_MERGE_SEGMENT_INDEX
 import static redis.persist.Consts.getSlotDir
 
 class MetaChunkSegmentFlagSeqTest extends Specification {
+    final byte slot = 0
+
     def 'test for repl'() {
         given:
-        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         when:
         def oneBatchBytes = one.getOneBath(0, 1024)
@@ -50,8 +52,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
     def 'test read write seq'() {
         given:
         ConfForSlot.global.pureMemory = false
-
-        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         when:
         one.setSegmentMergeFlag(10, Chunk.Flag.merging, 1L, 0)
@@ -63,7 +64,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
 
         when:
         ConfForSlot.global.pureMemory = true
-        def one2 = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one2 = new MetaChunkSegmentFlagSeq(slot, slotDir)
         one2.setSegmentMergeFlag(10, Chunk.Flag.merging, 1L, 0)
         def segmentFlag2 = one2.getSegmentMergeFlag(10)
         then:
@@ -85,7 +86,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         given:
         ConfForSlot.global.pureMemory = true
 
-        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         when:
         one.setSegmentMergeFlag(10, Chunk.Flag.merging, 1L, 0)
@@ -113,7 +114,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
 
     def 'test read batch for repl'() {
         given:
-        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         when:
         ConfForSlot.global.pureMemory = false
@@ -151,7 +152,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         confChunk.segmentNumberPerFd = c10m.segmentNumberPerFd
         confChunk.fdPerChunk = c10m.fdPerChunk
 
-        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         when:
         new File('chunk_segment_flag.txt').withWriter { writer ->
@@ -185,12 +186,11 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         confChunk.segmentNumberPerFd = c100mConfChunk.segmentNumberPerFd
         confChunk.fdPerChunk = c100mConfChunk.fdPerChunk
 
-        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         int targetWalGroupIndex = 1
 
         and:
-        final byte slot = 0
         def chunk = new Chunk(slot, slotDir, null, null, null)
 
         when:
@@ -240,7 +240,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         given:
         ConfForSlot.global.pureMemory = true
 
-        def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
+        def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         when:
         // all init

@@ -10,6 +10,8 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class WalTest extends Specification {
+    final byte slot = 0
+
     def 'put and get'() {
         given:
         ConfForSlot.global.pureMemory = false
@@ -40,8 +42,8 @@ class WalTest extends Specification {
         def raf = new RandomAccessFile(file, 'rw')
         def rafShortValue = new RandomAccessFile(fileShortValue, 'rw')
         def snowFlake = new SnowFlake(1, 1)
-        def wal = new Wal((byte) 0, 0, raf, rafShortValue, snowFlake)
-        def wal2 = new Wal((byte) 0, 1, raf, rafShortValue, snowFlake)
+        def wal = new Wal(slot, 0, raf, rafShortValue, snowFlake)
+        def wal2 = new Wal(slot, 1, raf, rafShortValue, snowFlake)
         println 'Wal: ' + wal
         println 'Wal2: ' + wal2
 
@@ -140,7 +142,7 @@ class WalTest extends Specification {
         ConfForSlot.global.pureMemory = true
 
         def snowFlake = new SnowFlake(1, 1)
-        def wal = new Wal((byte) 0, 0, null, null, snowFlake)
+        def wal = new Wal(slot, 0, null, null, snowFlake)
 
         def key = 'test-key'
         def shortV = new Wal.V(1, 0, 0, 0, key, 'short-value'.bytes, false)

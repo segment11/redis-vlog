@@ -104,7 +104,7 @@ class TcpClientTest extends Specification {
         cleanup:
         // only for coverage
         tcpClient.close()
-        localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         localPersist.cleanUp()
         Consts.persistDir.deleteDir()
     }

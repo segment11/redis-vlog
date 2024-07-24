@@ -49,10 +49,11 @@ BenchmarkKeyBucketPut.putAndGet  100000  avgt       24.516          ms/op
 
     @Benchmark
     public void put() {
+        final byte slot = 0;
         final int capacity = KeyBucket.INIT_CAPACITY;
         final byte[] valueBytes = "value-test".getBytes();
 
-        var keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake);
+        var keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake);
         for (int i = 0; i < size; i++) {
             if (i % capacity == 0) {
                 keyBucket.clearAll();
@@ -66,13 +67,14 @@ BenchmarkKeyBucketPut.putAndGet  100000  avgt       24.516          ms/op
 
     @Benchmark
     public void putAndGet() {
+        final byte slot = 0;
         final int capacity = KeyBucket.INIT_CAPACITY;
         final byte[] valueBytes = "value-test".getBytes();
 
         KeyBucket keyBucket = null;
         for (int i = 0; i < size; i++) {
             if (i % capacity == 0) {
-                keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, snowFlake);
+                keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake);
             }
 
             var key = keys[i];

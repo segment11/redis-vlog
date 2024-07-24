@@ -8,9 +8,10 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class BinlogTest extends Specification {
+    final byte slot = 0
+
     def 'test append'() {
         given:
-        final byte slot = 0
         ConfForSlot.global.confRepl.binlogForReadCacheSegmentMaxCount = 2
 
         println Binlog.oneFileMaxSegmentCount()
@@ -151,8 +152,6 @@ class BinlogTest extends Specification {
 
     def 'test apply'() {
         given:
-        final byte slot = 0
-
         def oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
         def oneSegmentBytes = new byte[oneSegmentLength]
         def buffer = ByteBuffer.wrap(oneSegmentBytes)
@@ -168,7 +167,7 @@ class BinlogTest extends Specification {
         and:
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
-        localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         def oneSlot = localPersist.oneSlot(slot)
 
         when:

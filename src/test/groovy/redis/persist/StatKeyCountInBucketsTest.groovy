@@ -6,10 +6,12 @@ import spock.lang.Specification
 import static redis.persist.Consts.getSlotDir
 
 class StatKeyCountInBucketsTest extends Specification {
+    final byte slot = 0
+
     def 'test for repl'() {
         given:
-        def one = new StatKeyCountInBuckets((byte) 0, 4096, slotDir)
-        def two = new StatKeyCountInBuckets((byte) 0, 4096, slotDir)
+        def one = new StatKeyCountInBuckets(slot, 4096, slotDir)
+        def two = new StatKeyCountInBuckets(slot, 4096, slotDir)
 
         when:
         def allInMemoryCachedBytes = one.getInMemoryCachedBytes()
@@ -52,7 +54,7 @@ class StatKeyCountInBucketsTest extends Specification {
         given:
         ConfForSlot.global.pureMemory = false
 
-        def one = new StatKeyCountInBuckets((byte) 0, 4096, slotDir)
+        def one = new StatKeyCountInBuckets(slot, 4096, slotDir)
 
         when:
         one.setKeyCountForBucketIndex(10, (short) 10)
@@ -64,7 +66,7 @@ class StatKeyCountInBucketsTest extends Specification {
 
         when:
         ConfForSlot.global.pureMemory = true
-        def one2 = new StatKeyCountInBuckets((byte) 0, 4096, slotDir)
+        def one2 = new StatKeyCountInBuckets(slot, 4096, slotDir)
         one2.setKeyCountForBucketIndex(10, (short) 10)
         one2.setKeyCountForBucketIndex(20, (short) 20)
         then:

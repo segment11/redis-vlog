@@ -97,7 +97,7 @@ public class IterateKeyBuckets {
                 }
 
 //                System.out.println("size: " + size + ", bucket index: " + i);
-                var keyBucket = new KeyBucket((byte) 0, i, splitIndex, (byte) -1, bytes, null);
+                var keyBucket = new KeyBucket(slot, i, splitIndex, (byte) -1, bytes, null);
                 var splitNumberThisKeyBucket = keyBucket.getSplitNumber();
                 var splitIndexThisKeyBucket = keyBucket.getSplitIndex();
                 int finalI = i;

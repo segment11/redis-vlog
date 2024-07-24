@@ -89,6 +89,7 @@ class KeyLoaderTest extends Specification {
 
     def 'test some branches'() {
         given:
+        final byte slot = 0
         ConfForSlot.global.confBucket.initialSplitNumber = (byte) 1
 
         def keyLoader = prepareKeyLoader()
@@ -118,7 +119,7 @@ class KeyLoaderTest extends Specification {
 
         when:
         keyLoader.fdReadWriteArray[0] = rawFdReadWrite
-        def keyBucket = new KeyBucket((byte) 0, 0, (byte) 0, (byte) 1, null, keyLoader.snowFlake)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, keyLoader.snowFlake)
         rawFdReadWrite.writeOneInner(0, keyBucket.encode(true), false)
 
         keyLoader.putValueByKeyForTest(0, 'a'.bytes, 10L, 0L, 1L, 'a'.bytes)

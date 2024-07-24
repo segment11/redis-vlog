@@ -7,15 +7,17 @@ import spock.lang.Specification
 import static redis.persist.Consts.getSlotDir
 
 class MetaChunkSegmentIndexTest extends Specification {
+    final byte slot = 0
+
     def 'test for repl'() {
         given:
-        def one = new MetaChunkSegmentIndex((byte) 0, slotDir)
-        def one2 = new MetaChunkSegmentIndex((byte) 0, slotDir)
+        def one = new MetaChunkSegmentIndex(slot, slotDir)
+        def one2 = new MetaChunkSegmentIndex(slot, slotDir)
 
         when:
         one2.cleanUp()
         ConfForSlot.global.pureMemory = true
-        def two = new MetaChunkSegmentIndex((byte) 0, slotDir)
+        def two = new MetaChunkSegmentIndex(slot, slotDir)
         then:
         two.get() == one.get()
 
@@ -30,7 +32,7 @@ class MetaChunkSegmentIndexTest extends Specification {
     def 'test set and get'() {
         given:
         ConfForSlot.global.pureMemory = false
-        def one = new MetaChunkSegmentIndex((byte) 0, slotDir)
+        def one = new MetaChunkSegmentIndex(slot, slotDir)
 
         when:
         one.set(10)
@@ -61,7 +63,7 @@ class MetaChunkSegmentIndexTest extends Specification {
 
         when:
         ConfForSlot.global.pureMemory = true
-        def one2 = new MetaChunkSegmentIndex((byte) 0, slotDir)
+        def one2 = new MetaChunkSegmentIndex(slot, slotDir)
         one2.set(10)
         then:
         one2.get() == 10
