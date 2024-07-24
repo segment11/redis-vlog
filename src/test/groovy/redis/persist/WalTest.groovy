@@ -78,7 +78,7 @@ class WalTest extends Specification {
         when:
         boolean exception = false
         def v1Encoded = v1.encode()
-        var v1Buffer = ByteBuffer.wrap(v1Encoded)
+        def v1Buffer = ByteBuffer.wrap(v1Encoded)
         v1Buffer.putShort(32, (CompressedValue.KEY_MAX_LENGTH + 1).shortValue())
         try {
             Wal.V.decode(new DataInputStream(new ByteArrayInputStream(v1Encoded)))

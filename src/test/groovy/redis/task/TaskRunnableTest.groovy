@@ -21,7 +21,7 @@ class TaskRunnableTest extends Specification {
         def taskRunnable = new TaskRunnable((byte) 0, (byte) 1)
         taskRunnable.chargeOneSlots(oneSlots)
 
-        var eventloop = Eventloop.builder()
+        def eventloop = Eventloop.builder()
                 .withThreadName('test-task-runnable')
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()

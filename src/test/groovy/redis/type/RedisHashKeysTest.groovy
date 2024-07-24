@@ -116,7 +116,7 @@ class RedisHashKeysTest extends Specification {
         rhk.add('field2')
 
         def encoded = rhk.encode()
-        var buffer = ByteBuffer.wrap(encoded)
+        def buffer = ByteBuffer.wrap(encoded)
         buffer.putShort(6, (short) 0)
 
         boolean exception = false

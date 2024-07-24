@@ -200,8 +200,8 @@ class CompressedValueTest extends Specification {
         def encoded2 = cv2.encode()
         def cvDecode = CompressedValue.decode(Unpooled.wrappedBuffer(encoded), null, 0L)
 
-        var buf = ByteBuf.wrapForWriting(new byte[cv.encodedLength()]);
-        var buf2 = ByteBuf.wrapForWriting(new byte[cv2.encodedLength()]);
+        def buf = ByteBuf.wrapForWriting(new byte[cv.encodedLength()]);
+        def buf2 = ByteBuf.wrapForWriting(new byte[cv2.encodedLength()]);
         cv.encodeTo(buf)
         cv2.encodeTo(buf2)
 
@@ -453,7 +453,7 @@ class CompressedValueTest extends Specification {
         cv4.compressedLength < rawBytes.length
 
         when:
-        var rawBytesDecompressed = cv4.decompress(dict)
+        def rawBytesDecompressed = cv4.decompress(dict)
 
         then:
         rawBytes == rawBytesDecompressed

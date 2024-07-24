@@ -18,7 +18,7 @@ class ChunkMergeJobTest extends Specification {
         def snowFlake = new SnowFlake(1, 1)
 
         and:
-        var valueList = Mock.prepareValueList(400)
+        def valueList = Mock.prepareValueList(400)
 
         int[] nextNSegmentIndex = [0, 1, 2, 3, 4, 5, 6]
         ArrayList<PersistValueMeta> returnPvmList = []
@@ -72,12 +72,12 @@ class ChunkMergeJobTest extends Specification {
 
         oneSlot.threadIdProtectedForSafe = Thread.currentThread().threadId()
 
-        var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader)
+        def chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader)
         chunk.fdReadWriteArray = [fdReadWriteForChunkSegments]
         oneSlot.chunk = chunk
         chunk.initSegmentIndexWhenFirstStart(segmentIndex)
 
-        var chunkMergeWorker = new ChunkMergeWorker(slot, oneSlot)
+        def chunkMergeWorker = new ChunkMergeWorker(slot, oneSlot)
 
         ArrayList<Integer> needMergeSegmentIndexList = [segmentIndex, segmentIndex + 1]
         def job = new ChunkMergeJob(slot, needMergeSegmentIndexList, chunkMergeWorker, snowFlake)

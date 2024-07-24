@@ -191,7 +191,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
 
         and:
         final byte slot = 0
-        var chunk = new Chunk(slot, slotDir, null, null, null)
+        def chunk = new Chunk(slot, slotDir, null, null, null)
 
         when:
         def r = one.iterateAndFindThoseNeedToMerge(1024, 1024 * 10, targetWalGroupIndex, chunk)
@@ -249,7 +249,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         i == NO_NEED_MERGE_SEGMENT_INDEX
 
         when:
-        var maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber()
+        def maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber()
         int halfSegmentNumber = (maxSegmentNumber / 2).intValue()
         one.setSegmentMergeFlag(10, Chunk.Flag.new_write, 1L, 0)
         one.setSegmentMergeFlag(11, Chunk.Flag.new_write, 1L, 0)

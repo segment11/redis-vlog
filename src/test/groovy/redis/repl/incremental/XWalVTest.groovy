@@ -28,10 +28,10 @@ class XWalVTest extends Specification {
         def encoded2 = xWalV2.encodeWithType()
         def buffer = ByteBuffer.wrap(encoded)
         buffer.get()
-        var xWalV11 = XWalV.decodeFrom(buffer)
+        def xWalV11 = XWalV.decodeFrom(buffer)
         def buffer2 = ByteBuffer.wrap(encoded2)
         buffer2.get()
-        var xWalV22 = XWalV.decodeFrom(buffer2)
+        def xWalV22 = XWalV.decodeFrom(buffer2)
         then:
         xWalV11.encodedLength() == encoded.length
         xWalV11.v.encode() == v.encode()

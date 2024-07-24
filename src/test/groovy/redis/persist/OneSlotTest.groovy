@@ -20,7 +20,7 @@ class OneSlotTest extends Specification {
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        var oneSlot2 = new OneSlot(slot, eventloopCurrent)
+        def oneSlot2 = new OneSlot(slot, eventloopCurrent)
         oneSlot2.threadIdProtectedForSafe = Thread.currentThread().threadId()
         def call = oneSlot2.asyncCall(() -> 1)
         def run = oneSlot2.asyncRun { println 'async run' }
@@ -34,7 +34,7 @@ class OneSlotTest extends Specification {
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)
-        var oneSlot3 = new OneSlot(slot, eventloop)
+        def oneSlot3 = new OneSlot(slot, eventloop)
         Thread.start {
             eventloop.run()
         }

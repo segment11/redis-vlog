@@ -12,6 +12,9 @@ class ReplTest extends Specification {
         final byte slot = 0
         final ReplPair replPair = ReplPairTest.mockAsSlave()
 
+        Repl.ok(slot, replPair, 'ok')
+        Repl.error(slot, replPair, 'error')
+
         when:
         def ping = new Ping('localhost:6380')
         def reply = Repl.reply(slot, replPair, ReplType.ping, ping)

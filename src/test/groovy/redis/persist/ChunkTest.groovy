@@ -16,7 +16,7 @@ class ChunkTest extends Specification {
         def snowFlake = keyLoader ? keyLoader.snowFlake : new SnowFlake(1, 1)
         def oneSlot = new OneSlot(slot, Consts.slotDir, keyLoader, null)
 
-        var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader)
+        def chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader)
         oneSlot.chunk = chunk
 
         chunk

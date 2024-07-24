@@ -142,7 +142,7 @@ class KeyBucketTest extends Specification {
         when:
         // 2 + 90 + 1 + 6 = 99
         // 99 / 54 = 1, cell count = 3
-        var longKeyBytes = 'a'.padRight(90, 'a').bytes
+        def longKeyBytes = 'a'.padRight(90, 'a').bytes
         keyBucket.put(longKeyBytes, 9797L, 0L, 1L, 'long a'.bytes)
 
         then:
@@ -204,8 +204,8 @@ class KeyBucketTest extends Specification {
         lastUpdateSplitNumber == 3
 
         when:
-        var encoded = keyBucket.encode(true)
-        var keyBucket2 = new KeyBucket((byte) 0, 0, (byte) 0, (byte) -1, encoded, snowFlake)
+        def encoded = keyBucket.encode(true)
+        def keyBucket2 = new KeyBucket((byte) 0, 0, (byte) 0, (byte) -1, encoded, snowFlake)
 
         then:
         keyBucket2.splitNumber == 3

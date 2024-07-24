@@ -31,13 +31,13 @@ class ChunkMergeWorkerTest extends Specification {
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.Flag.reuse_new, 1L, walGroupIndex)
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex + 1, Chunk.Flag.reuse_new, 1L, walGroupIndex)
 
-        var chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader)
+        def chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader)
         oneSlot.chunk = chunk
         chunk.initSegmentIndexWhenFirstStart(segmentIndex)
         chunk.initFds(libC)
 
         when:
-        var chunkMergeWorker = new ChunkMergeWorker(slot, oneSlot)
+        def chunkMergeWorker = new ChunkMergeWorker(slot, oneSlot)
         chunkMergeWorker.MERGED_CV_SIZE_THRESHOLD = 1000
         def isPersisted = chunkMergeWorker.persistFIFOMergedCvListIfBatchSizeOk()
 
@@ -45,8 +45,8 @@ class ChunkMergeWorkerTest extends Specification {
         !isPersisted
 
         when:
-        var bucketIndexTarget = bucketIndex
-        var bucketIndexTarget2 = bucketIndex + ConfForSlot.global.confWal.oneChargeBucketNumber
+        def bucketIndexTarget = bucketIndex
+        def bucketIndexTarget2 = bucketIndex + ConfForSlot.global.confWal.oneChargeBucketNumber
 
         ConfForSlot.global.confBucket.bucketsPerSlot = 4096
         def keyHashByBucketIndex = Mock.prepareKeyHashIndexByKeyBucketList(3_000_000, ConfForSlot.global.confBucket.bucketsPerSlot)
@@ -150,7 +150,7 @@ class ChunkMergeWorkerTest extends Specification {
         given:
         final byte slot = 0
 
-        var chunkMergeWorker = new ChunkMergeWorker(slot, null)
+        def chunkMergeWorker = new ChunkMergeWorker(slot, null)
 
         def cvList = Mock.prepareCompressedValueList(10)
         for (cv in cvList) {

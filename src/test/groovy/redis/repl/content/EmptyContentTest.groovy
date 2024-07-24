@@ -13,7 +13,7 @@ class EmptyContentTest extends Specification {
 
         when:
         def bytes = new byte[1]
-        var buf = ByteBuf.wrapForWriting(bytes)
+        def buf = ByteBuf.wrapForWriting(bytes)
         content.encodeTo(buf)
         then:
         bytes[0] == 0

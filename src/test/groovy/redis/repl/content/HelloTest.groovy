@@ -16,7 +16,7 @@ class HelloTest extends Specification {
 
         when:
         def bytes = new byte[content.encodeLength()]
-        var buf = ByteBuf.wrapForWriting(bytes)
+        def buf = ByteBuf.wrapForWriting(bytes)
         content.encodeTo(buf)
         def buffer = ByteBuffer.wrap(bytes)
         then:

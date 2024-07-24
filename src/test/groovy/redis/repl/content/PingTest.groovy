@@ -16,7 +16,7 @@ class PingTest extends Specification {
 
         when:
         def bytes = new byte[ping.encodeLength()]
-        var buf = ByteBuf.wrapForWriting(bytes)
+        def buf = ByteBuf.wrapForWriting(bytes)
         ping.encodeTo(buf)
         then:
         bytes == address.bytes

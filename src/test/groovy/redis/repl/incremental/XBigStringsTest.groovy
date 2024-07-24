@@ -29,7 +29,7 @@ class XBigStringsTest extends Specification {
         def encoded = xBigStrings.encodeWithType()
         def buffer = ByteBuffer.wrap(encoded)
         buffer.get()
-        var xBigStrings2 = XBigStrings.decodeFrom(buffer)
+        def xBigStrings2 = XBigStrings.decodeFrom(buffer)
         then:
         xBigStrings2.encodedLength() == encoded.length
         xBigStrings2.uuid == xBigStrings.uuid

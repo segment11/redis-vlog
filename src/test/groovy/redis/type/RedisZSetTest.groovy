@@ -76,7 +76,7 @@ class RedisZSetTest extends Specification {
 
     def 'encode'() {
         given:
-        var rz = new RedisZSet()
+        def rz = new RedisZSet()
 
         when:
         rz.add(1, 'a')
@@ -102,7 +102,7 @@ class RedisZSetTest extends Specification {
 
     def 'decode crc32 not match'() {
         given:
-        var rz = new RedisZSet()
+        def rz = new RedisZSet()
 
         when:
         rz.add(1, 'a')
@@ -125,7 +125,7 @@ class RedisZSetTest extends Specification {
 
     def 'max score member'() {
         given:
-        var rz = new RedisZSet()
+        def rz = new RedisZSet()
 
         when:
         rz.add(1, 'a')

@@ -14,7 +14,7 @@ class XDictTest extends Specification {
         given:
         def keyPrefix = 'key:'
         def dictBytes = new byte[300]
-        var dict = new Dict(dictBytes)
+        def dict = new Dict(dictBytes)
 
         def xDict = new XDict(keyPrefix, dict)
 
@@ -25,7 +25,7 @@ class XDictTest extends Specification {
         def encoded = xDict.encodeWithType()
         def buffer = ByteBuffer.wrap(encoded)
         buffer.get()
-        var xDict2 = XDict.decodeFrom(buffer)
+        def xDict2 = XDict.decodeFrom(buffer)
         then:
         xDict2.encodedLength() == encoded.length
         xDict2.keyPrefix == xDict.keyPrefix

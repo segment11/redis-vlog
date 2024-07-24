@@ -35,6 +35,12 @@ class ReplPairTest extends Specification {
         replPair.masterUuid == 0L
         replPair.lastPingGetTimestamp == 0L
         !replPair.sendBye
+        !replPair.ping()
+        !replPair.bye()
+        !replPair.write(ReplType.ping, null)
+        !replPair.toFetchBigStringUuidList
+        !replPair.doFetchingBigStringUuidList
+        replPair.doingFetchBigStringUuid() == -1
 
         replPair2.slot == slot
         replPair2.hostAndPort == 'localhost:6380'
@@ -46,12 +52,18 @@ class ReplPairTest extends Specification {
         def replPair1 = mockOne(slot, true, 'localhost', 16379)
         def replPair11 = mockOne(slot, true, 'local', 6379)
 
-        replPair == replPair
-        replPair != null
-        replPair != new Object()
+        !replPair.equals(null)
+        !replPair.equals(Integer.valueOf(0))
         replPair != replPair1
         replPair != replPair11
         replPair != replPair2
+        !replPair.linkUp
+
+        when:
+        replPair.isSendBye = true
+        then:
+        !replPair.ping()
+        !replPair.write(ReplType.ping, null)
 
         when:
         replPair.lastPingGetTimestamp = System.currentTimeMillis() - 1000L
@@ -59,6 +71,18 @@ class ReplPairTest extends Specification {
         then:
         replPair.linkUp
         !replPair2.linkUp
+
+        when:
+        replPair.addToFetchBigStringUuid(1L)
+        then:
+        replPair.doingFetchBigStringUuid() == 1L
+        replPair.doFetchingBigStringUuidList[0] == 1L
+
+        when:
+        replPair.doneFetchBigStringUuid(100L)
+        replPair.doneFetchBigStringUuid(1L)
+        then:
+        replPair.doFetchingBigStringUuidList.size() == 0
 
         cleanup:
         replPair.close()

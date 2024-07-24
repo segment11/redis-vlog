@@ -237,7 +237,7 @@ class RGroupTest extends Specification {
         ((BulkReply) reply).raw == '9'.bytes
 
         when:
-        var eventloop = Eventloop.builder()
+        def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
         eventloop.keepAlive(true)

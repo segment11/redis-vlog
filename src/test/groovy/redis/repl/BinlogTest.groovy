@@ -31,8 +31,8 @@ class BinlogTest extends Specification {
         Binlog.marginFileOffset(256 * 1024 + 100) == 256 * 1024
 
         when:
-        var dynConfig = new DynConfig(slot, DynConfigTest.tmpFile)
-        var dynConfig2 = new DynConfig(slot, DynConfigTest.tmpFile2)
+        def dynConfig = new DynConfig(slot, DynConfigTest.tmpFile)
+        def dynConfig2 = new DynConfig(slot, DynConfigTest.tmpFile2)
         dynConfig.binlogOn = true
         dynConfig2.binlogOn = false
         def binlog = new Binlog(slot, Consts.slotDir, dynConfig)

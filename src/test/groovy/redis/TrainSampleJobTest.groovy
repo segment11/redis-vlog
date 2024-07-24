@@ -56,7 +56,7 @@ class TrainSampleJobTest extends Specification {
 
         when:
         def dict = result.cacheDict.get('key:')
-        var cv = CompressedValue.compress(sampleValueBytes, dict, Zstd.defaultCompressionLevel())
+        def cv = CompressedValue.compress(sampleValueBytes, dict, Zstd.defaultCompressionLevel())
         def decompressBytes = cv.decompress(dict)
 
         then:

@@ -886,7 +886,7 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[0] == NilReply.INSTANCE
 
         when:
-        var cvField = Mock.prepareCompressedValueList(1)[0]
+        def cvField = Mock.prepareCompressedValueList(1)[0]
         inMemoryGetSet.put(slot, RedisHashKeys.fieldKey('a', 'field'), 0, cvField)
         reply = hGroup.hvals()
         then:

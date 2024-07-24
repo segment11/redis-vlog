@@ -24,7 +24,7 @@ class SegmentBatchTest extends Specification {
         new SegmentBatch.ForDebugCvCallback().callback('a', new CompressedValue(), 0)
 
         and:
-        var list = Mock.prepareValueList(800)
+        def list = Mock.prepareValueList(800)
 
         int[] nextNSegmentIndex = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
         int[] nextNSegmentIndex2 = [0, 1, 2, 3, 4, 5, 6]

@@ -101,7 +101,7 @@ class KeyLoaderTest extends Specification {
         keyBucketsOverFdWriteIndex[0] == null
 
         when:
-        var rawFdReadWrite = keyLoader.fdReadWriteArray[0]
+        def rawFdReadWrite = keyLoader.fdReadWriteArray[0]
         keyLoader.fdReadWriteArray[0] = null
         def keyBuckets = keyLoader.readKeyBuckets(0)
         def valueBytesWithExpireAt0 = keyLoader.getValueByKey(0, 'a'.bytes, 10L)
@@ -147,7 +147,7 @@ class KeyLoaderTest extends Specification {
         exception
 
         when:
-        var bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot
+        def bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot
         exception = false
         try {
             keyLoader.getMetaKeyBucketSplitNumberBatch(bucketsPerSlot, 1)
@@ -264,7 +264,7 @@ class KeyLoaderTest extends Specification {
         def keyLoader = prepareKeyLoader()
 
         and:
-        var shortValueList = Mock.prepareShortValueList(10)
+        def shortValueList = Mock.prepareShortValueList(10)
 
         when:
         keyLoader.persistShortValueListBatchInOneWalGroup(0, shortValueList)
@@ -344,7 +344,7 @@ class KeyLoaderTest extends Specification {
         ConfForSlot.global.pureMemory = false
         keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes)
 
-        var k0 = keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 1, 10L, false)
+        def k0 = keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 1, 10L, false)
 
         then:
         k0.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes

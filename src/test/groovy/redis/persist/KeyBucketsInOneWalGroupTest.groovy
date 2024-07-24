@@ -55,7 +55,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
         when:
         // read again
-        var inner2 = new KeyBucketsInOneWalGroup(slot, 0, keyLoader)
+        def inner2 = new KeyBucketsInOneWalGroup(slot, 0, keyLoader)
 
         then:
         inner2.listList.size() == sharedBytesList.length
@@ -104,7 +104,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         final byte currentSplitNumber = 1
 
         inner.listList = [[null]]
-        var splitMultiStep = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
+        def splitMultiStep = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
                 bucketIndex, currentSplitNumber)
 
         then:
@@ -112,14 +112,14 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         needAddNewList.size() == 9
 
         when:
-        var keyBucket = new KeyBucket(slot, bucketIndex, (byte) 0, (byte) 1, null, snowFlake)
+        def keyBucket = new KeyBucket(slot, bucketIndex, (byte) 0, (byte) 1, null, snowFlake)
         pvmList10ThisBucket[0..<5].each {
             keyBucket.put(it.keyBytes, it.keyHash, 0L, 0L, it.extendBytes)
         }
         inner.listList = [[keyBucket]]
 
         needAddNewList.clear()
-        var splitMultiStep2 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
+        def splitMultiStep2 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
                 bucketIndex, currentSplitNumber)
 
         then:
@@ -135,7 +135,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         needUpdateList.clear()
         needDeleteList.clear()
 
-        var splitMultiStep3 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
+        def splitMultiStep3 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
                 bucketIndex, currentSplitNumber)
 
         then:
@@ -160,7 +160,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         needUpdateList.clear()
         needDeleteList.clear()
 
-        var splitMultiStep4 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
+        def splitMultiStep4 = inner.checkIfNeedSplit(pvmList10ThisBucket, needAddNewList, needUpdateList, needDeleteList,
                 bucketIndex, currentSplitNumber)
 
         then:
@@ -185,7 +185,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         needUpdateList.clear()
         needDeleteList.clear()
 
-        var splitMultiStep5 = inner2.checkIfNeedSplit(pvmList2, needAddNewList, needUpdateList, needDeleteList,
+        def splitMultiStep5 = inner2.checkIfNeedSplit(pvmList2, needAddNewList, needUpdateList, needDeleteList,
                 bucketIndex, currentSplitNumber)
 
         then:
@@ -209,7 +209,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         needUpdateList.clear()
         needDeleteList.clear()
 
-        var splitMultiStep6 = inner2.checkIfNeedSplit(pvmList3, needAddNewList, needUpdateList, needDeleteList,
+        def splitMultiStep6 = inner2.checkIfNeedSplit(pvmList3, needAddNewList, needUpdateList, needDeleteList,
                 bucketIndex, currentSplitNumber)
 
         then:
@@ -226,7 +226,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
             pvmInner.extendBytes = new byte[100]
         }
 
-        var splitMultiStep7 = inner2.checkIfNeedSplit(pvmList3, needAddNewList, needUpdateList, needDeleteList,
+        def splitMultiStep7 = inner2.checkIfNeedSplit(pvmList3, needAddNewList, needUpdateList, needDeleteList,
                 bucketIndex, currentSplitNumber)
 
         then:
@@ -260,7 +260,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
         when:
         def snowFlake = new SnowFlake(1, 1)
-        var keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 3, null, snowFlake)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 3, null, snowFlake)
         list.set(0, keyBucket)
 
         ('a'..'z').eachWithIndex { it, i ->
@@ -311,7 +311,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         given:
         final byte slot = 0
         ConfForSlot.global.confBucket.initialSplitNumber = 1
-        var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
+        def oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
 
         def keyLoader = KeyLoaderTest.prepareKeyLoader()
         def inner = new KeyBucketsInOneWalGroup(slot, 0, keyLoader)
@@ -332,9 +332,9 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         when:
         def snowFlake = new SnowFlake(1, 1)
 
-        var sharedBytes = new byte[4096 * oneChargeBucketNumber]
+        def sharedBytes = new byte[4096 * oneChargeBucketNumber]
         oneChargeBucketNumber.times { i ->
-            var keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, sharedBytes, 4096 * i, snowFlake)
+            def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, sharedBytes, 4096 * i, snowFlake)
             list.set(i, keyBucket)
         }
 
@@ -411,7 +411,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         given:
         final byte slot = 0
         ConfForSlot.global.confBucket.initialSplitNumber = 1
-        var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
+        def oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
 
         def keyLoader = KeyLoaderTest.prepareKeyLoader()
 
@@ -500,7 +500,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
         inner2.isUpdatedBySplitIndex[0]
 
         when:
-        var inner3 = new KeyBucketsInOneWalGroup(slot, 0, keyLoader)
+        def inner3 = new KeyBucketsInOneWalGroup(slot, 0, keyLoader)
 
         ArrayList<KeyBucket> list3 = []
         oneChargeBucketNumber.times {
