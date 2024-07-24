@@ -55,5 +55,5 @@ public interface BinlogContent<T> {
 
     byte[] encodeWithType();
 
-    void apply(byte slot);
+    void apply(byte slot, ReplPair replPair);
 }

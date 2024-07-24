@@ -19,6 +19,8 @@ import redis.metric.SimpleGauge;
 import redis.repl.Binlog;
 import redis.repl.GetCurrentSlaveReplPairList;
 import redis.repl.ReplPair;
+import redis.repl.ReplType;
+import redis.repl.content.RawBytesContent;
 import redis.repl.incremental.XBigStrings;
 import redis.repl.incremental.XWalV;
 import redis.task.ITask;
@@ -570,6 +572,15 @@ public class OneSlot {
                     if (!replPair.isAsMaster()) {
                         // only slave need send ping
                         replPair.ping();
+
+                        var toFetchBigStringUuids = replPair.doingFetchBigStringUuid();
+                        if (toFetchBigStringUuids != -1) {
+                            var bytes = new byte[8];
+                            ByteBuffer.wrap(bytes).putLong(toFetchBigStringUuids);
+                            replPair.write(ReplType.incremental_big_string, new RawBytesContent(bytes));
+                            log.info("Repl do fetch incremental big string, to server: {}, slot: {}, uuid: {}",
+                                    replPair.getHostAndPort(), slot, toFetchBigStringUuids);
+                        }
                     }
                 }
 
@@ -889,13 +900,13 @@ public class OneSlot {
                 throw new RuntimeException("Write big string file error, uuid: " + uuid + ", key: " + key);
             }
 
+            // encode again
+            cvEncoded = cv.encodeAsBigStringMeta(uuid);
             if (binlog != null) {
-                var xBigStrings = new XBigStrings(uuid, key);
+                var xBigStrings = new XBigStrings(uuid, key, cvEncoded);
                 binlog.append(xBigStrings);
             }
 
-            // encode again
-            cvEncoded = cv.encodeAsBigStringMeta(uuid);
             v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                     key, cvEncoded, isFromMerge);
 

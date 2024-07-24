@@ -336,7 +336,7 @@ public class Binlog {
         }
     }
 
-    public static int decodeAndApply(byte slot, byte[] oneSegmentBytes, int skipBytesN) {
+    public static int decodeAndApply(byte slot, byte[] oneSegmentBytes, int skipBytesN, ReplPair replPair) {
         var byteBuffer = ByteBuffer.wrap(oneSegmentBytes);
         byteBuffer.position(skipBytesN);
 
@@ -353,7 +353,7 @@ public class Binlog {
 
             var type = BinlogContent.Type.fromCode(code);
             var content = type.decodeFrom(byteBuffer);
-            content.apply(slot);
+            content.apply(slot, replPair);
             n++;
         }
         return n;

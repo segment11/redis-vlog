@@ -81,7 +81,11 @@ public class BigStringFiles {
         return list;
     }
 
-    public byte[] getBigStringBytesFromCache(long uuid) {
+    public byte[] getBigStringBytes(long uuid) {
+        return getBigStringBytes(uuid, false);
+    }
+
+    public byte[] getBigStringBytes(long uuid, boolean doLRUCache) {
         if (ConfForSlot.global.pureMemory) {
             return allBytesByUuid.get(uuid);
         }
@@ -92,7 +96,7 @@ public class BigStringFiles {
         }
 
         var bytes = readBigStringBytes(uuid);
-        if (bytes != null) {
+        if (bytes != null && doLRUCache) {
             bigStringBytesByUuidLRU.put(uuid, bytes);
             bigStringFilesCountGauge.labels(slotStr).set(bigStringBytesByUuidLRU.size());
         }

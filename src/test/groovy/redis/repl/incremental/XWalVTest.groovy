@@ -1,8 +1,12 @@
 package redis.repl.incremental
 
 import redis.CompressedValue
+import redis.persist.Consts
+import redis.persist.LocalPersist
+import redis.persist.LocalPersistTest
 import redis.persist.Mock
 import redis.repl.BinlogContent
+import redis.repl.ReplPairTest
 import spock.lang.Specification
 
 import java.nio.ByteBuffer
@@ -76,5 +80,19 @@ class XWalVTest extends Specification {
         }
         then:
         exception
+
+        when:
+        final byte slot = 0
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def replPair = ReplPairTest.mockAsSlave()
+        xWalV.apply(slot, replPair)
+        then:
+        localPersist.oneSlot(slot).get(v.key().bytes, v.bucketIndex(), v.keyHash()) != null
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 }

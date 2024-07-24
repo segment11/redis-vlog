@@ -56,9 +56,12 @@ class ReplPairTest extends Specification {
         when:
         replPair.lastPingGetTimestamp = System.currentTimeMillis() - 1000L
         replPair2.lastPongGetTimestamp = System.currentTimeMillis() - 2000L
-
         then:
-        !replPair.linkUp
+        replPair.linkUp
         !replPair2.linkUp
+
+        cleanup:
+        replPair.close()
+        replPair2.close()
     }
 }

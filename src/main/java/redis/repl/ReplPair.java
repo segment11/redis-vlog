@@ -7,6 +7,8 @@ import redis.ConfForSlot;
 import redis.RequestHandler;
 import redis.repl.content.Hello;
 
+import java.util.LinkedList;
+
 public class ReplPair {
     public ReplPair(byte slot, boolean asMaster, String host, int port) {
         this.slot = slot;
@@ -153,5 +155,34 @@ public class ReplPair {
         if (tcpClient != null) {
             tcpClient.close();
         }
+    }
+
+    // as slave delay pull incremental big string file from master when catch up
+    private LinkedList<Long> toFetchBigStringUuidList = new LinkedList<>();
+    private LinkedList<Long> doFetchingBigStringUuidList = new LinkedList<>();
+
+    public LinkedList<Long> getToFetchBigStringUuidList() {
+        return toFetchBigStringUuidList;
+    }
+
+    public LinkedList<Long> getDoFetchingBigStringUuidList() {
+        return doFetchingBigStringUuidList;
+    }
+
+    public void addToFetchBigStringUuid(long uuid) {
+        toFetchBigStringUuidList.add(uuid);
+    }
+
+    public long doingFetchBigStringUuid() {
+        if (toFetchBigStringUuidList.isEmpty()) {
+            return -1;
+        }
+        var first = toFetchBigStringUuidList.pollFirst();
+        doFetchingBigStringUuidList.add(first);
+        return first;
+    }
+
+    public void doneFetchBigStringUuid(long uuid) {
+        doFetchingBigStringUuidList.removeIf(e -> e == uuid);
     }
 }

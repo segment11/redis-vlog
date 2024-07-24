@@ -30,11 +30,12 @@ class BigStringFilesTest extends Specification {
         def isWriteOk = bigStringFiles1.writeBigStringBytes(1L, 'a', bigString.bytes)
         then:
         isWriteOk
-        bigStringFiles1.getBigStringBytesFromCache(1L) == bigString.bytes
-        bigStringFiles1.getBigStringBytesFromCache(1L) == bigString.bytes
+        bigStringFiles1.getBigStringBytes(1L) == bigString.bytes
+        bigStringFiles1.getBigStringBytes(1L, true) == bigString.bytes
+        bigStringFiles1.getBigStringBytes(1L, true) == bigString.bytes
         bigStringFiles1.getBigStringFileUuidList().size() == 1
         bigStringFiles11.getBigStringFileUuidList().size() == 1
-        bigStringFiles2.getBigStringBytesFromCache(1L) == null
+        bigStringFiles2.getBigStringBytes(1L) == null
 
         when:
         bigStringFiles1.deleteBigStringFileIfExist(1L)
@@ -54,7 +55,7 @@ class BigStringFilesTest extends Specification {
         def isWriteOk = bigStringFiles.writeBigStringBytes(1L, 'a', bigString.bytes)
         then:
         isWriteOk
-        bigStringFiles.getBigStringBytesFromCache(1L) == bigString.bytes
+        bigStringFiles.getBigStringBytes(1L) == bigString.bytes
         bigStringFiles.getBigStringFileUuidList().size() == 1
 
         when:
@@ -123,7 +124,7 @@ class BigStringFilesTest extends Specification {
                 'posix:permissions', PosixFilePermissions.fromString('-w--w--w-'))
 
         then:
-        bigStringFiles.getBigStringBytesFromCache(1L) == null
+        bigStringFiles.getBigStringBytes(1L) == null
 
         cleanup:
         // delete dir

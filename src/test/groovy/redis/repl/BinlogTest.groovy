@@ -169,7 +169,7 @@ class BinlogTest extends Specification {
         def oneSlot = localPersist.oneSlot(slot)
 
         when:
-        Binlog.decodeAndApply(slot, oneSegmentBytes)
+        Binlog.decodeAndApply(slot, oneSegmentBytes, null)
         then:
         oneSlot.getWalByBucketIndex(0).keyCount == 10
 

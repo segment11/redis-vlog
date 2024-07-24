@@ -412,12 +412,42 @@ public class XGroup extends BaseCommand {
 
     Reply incremental_big_string(byte slot, byte[] contentBytes) {
         // server received from client
-        return null;
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var uuid = buffer.getLong();
+
+        var oneSlot = localPersist.oneSlot(slot);
+
+        var bigStringBytes = oneSlot.getBigStringFiles().getBigStringBytes(uuid);
+        if (bigStringBytes == null) {
+            bigStringBytes = new byte[0];
+        }
+
+        var responseBytes = new byte[8 + bigStringBytes.length];
+        var responseBuffer = ByteBuffer.wrap(responseBytes);
+        responseBuffer.putLong(uuid);
+        if (bigStringBytes != null) {
+            responseBuffer.put(bigStringBytes);
+        }
+        return Repl.reply(slot, replPair, ReplType.s_incremental_big_string, new RawBytesContent(responseBytes));
     }
 
     Reply s_incremental_big_string(byte slot, byte[] contentBytes) {
         // client received from server
-        return null;
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var uuid = buffer.getLong();
+
+        // master big string file already deleted, skip
+        if (contentBytes.length != 8) {
+            var bigStringBytes = new byte[contentBytes.length - 8];
+            buffer.get(bigStringBytes);
+
+            var oneSlot = localPersist.oneSlot(slot);
+            oneSlot.getBigStringFiles().writeBigStringBytes(uuid, "ignore", bigStringBytes);
+            log.info("Repl handle s incremental big string: write big string bytes, uuid={}, slot={}", uuid, slot);
+        }
+
+        replPair.doneFetchBigStringUuid(uuid);
+        return Repl.emptyReply();
     }
 
     Reply exists_big_string(byte slot, byte[] contentBytes) {
@@ -659,7 +689,7 @@ public class XGroup extends BaseCommand {
         }
 
         try {
-            var n = Binlog.decodeAndApply(slot, oneSegmentBytes, skipBytesN);
+            var n = Binlog.decodeAndApply(slot, oneSegmentBytes, skipBytesN, replPair);
             if (catchUpOffset == 0) {
                 log.info("Repl binlog catch up success, slot={}, slave uuid={}, {}, catch up file index={}, catch up offset={}, apply n={}",
                         slot, replPair.getSlaveUuid(), replPair.getHostAndPort(), catchUpFileIndex, catchUpOffset, n);

@@ -4,6 +4,7 @@ import redis.CompressedValue;
 import redis.persist.LocalPersist;
 import redis.persist.Wal;
 import redis.repl.BinlogContent;
+import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
@@ -103,7 +104,7 @@ public class XWalV implements BinlogContent<XWalV> {
     private final LocalPersist localPersist = LocalPersist.getInstance();
 
     @Override
-    public void apply(byte slot) {
+    public void apply(byte slot, ReplPair replPair) {
         var oneSlot = localPersist.oneSlot(slot);
         var targetWal = oneSlot.getWalByBucketIndex(v.bucketIndex());
         targetWal.putFromX(v, isValueShort, offset);

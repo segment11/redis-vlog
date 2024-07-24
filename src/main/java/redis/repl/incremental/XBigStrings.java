@@ -1,7 +1,12 @@
 package redis.repl.incremental;
 
+import io.netty.buffer.Unpooled;
 import redis.CompressedValue;
+import redis.ConfForSlot;
+import redis.KeyHash;
+import redis.persist.LocalPersist;
 import redis.repl.BinlogContent;
+import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
@@ -9,6 +14,7 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
     private final long uuid;
 
     private final String key;
+    private final byte[] cvEncoded;
 
     public long getUuid() {
         return uuid;
@@ -18,9 +24,14 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
         return key;
     }
 
-    public XBigStrings(long uuid, String key) {
+    public byte[] getCvEncoded() {
+        return cvEncoded;
+    }
+
+    public XBigStrings(long uuid, String key, byte[] cvEncoded) {
         this.uuid = uuid;
         this.key = key;
+        this.cvEncoded = cvEncoded;
     }
 
     @Override
@@ -32,7 +43,8 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
     public int encodedLength() {
         // 1 byte for type, 4 bytes for encoded length for check
         // 8 bytes for uuid, 2 bytes for key length, key bytes
-        return 1 + 4 + 8 + 2 + key.length();
+        // 4 bytes for cvEncoded length, cvEncoded bytes
+        return 1 + 4 + 8 + 2 + key.length() + 4 + cvEncoded.length;
     }
 
     @Override
@@ -45,6 +57,8 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
         buffer.putLong(uuid);
         buffer.putShort((short) key.length());
         buffer.put(key.getBytes());
+        buffer.putInt(cvEncoded.length);
+        buffer.put(cvEncoded);
 
         return bytes;
     }
@@ -64,15 +78,28 @@ public class XBigStrings implements BinlogContent<XBigStrings> {
         buffer.get(keyBytes);
         var key = new String(keyBytes);
 
-        var r = new XBigStrings(uuid, key);
+        var cvEncodedLength = buffer.getInt();
+        var cvEncoded = new byte[cvEncodedLength];
+        buffer.get(cvEncoded);
+
+        var r = new XBigStrings(uuid, key, cvEncoded);
         if (encodedLength != r.encodedLength()) {
             throw new IllegalStateException("Invalid encoded length: " + encodedLength);
         }
         return r;
     }
 
+    private final LocalPersist localPersist = LocalPersist.getInstance();
+
     @Override
-    public void apply(byte slot) {
-        // add pull job to job list
+    public void apply(byte slot, ReplPair replPair) {
+        var keyHash = KeyHash.hash(key.getBytes());
+        var bucketIndex = KeyHash.bucketIndex(keyHash, ConfForSlot.global.confBucket.bucketsPerSlot);
+        var cv = CompressedValue.decode(Unpooled.wrappedBuffer(cvEncoded), key.getBytes(), keyHash);
+
+        var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.put(key, bucketIndex, cv);
+
+        replPair.addToFetchBigStringUuid(uuid);
     }
 }

@@ -1,7 +1,12 @@
 package redis.repl.incremental
 
 import redis.CompressedValue
+import redis.KeyHash
+import redis.persist.Consts
+import redis.persist.LocalPersist
+import redis.persist.LocalPersistTest
 import redis.repl.BinlogContent
+import redis.repl.ReplPairTest
 import spock.lang.Specification
 
 import java.nio.ByteBuffer
@@ -11,8 +16,11 @@ class XBigStringsTest extends Specification {
         given:
         def uuid = 1L
         def key = 'test-big-string-key'
+        def cv = new CompressedValue()
+        cv.keyHash = KeyHash.hash(key.bytes)
+        def cvEncoded = cv.encode()
 
-        def xBigStrings = new XBigStrings(uuid, key)
+        def xBigStrings = new XBigStrings(uuid, key, cvEncoded)
 
         expect:
         xBigStrings.type() == BinlogContent.Type.big_strings
@@ -26,6 +34,7 @@ class XBigStringsTest extends Specification {
         xBigStrings2.encodedLength() == encoded.length
         xBigStrings2.uuid == xBigStrings.uuid
         xBigStrings2.key == xBigStrings.key
+        xBigStrings2.cvEncoded == xBigStrings.cvEncoded
 
         when:
         boolean exception = false
@@ -65,5 +74,19 @@ class XBigStringsTest extends Specification {
         }
         then:
         exception
+
+        when:
+        final byte slot = 0
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def replPair = ReplPairTest.mockAsSlave()
+        xBigStrings.apply(slot, replPair)
+        then:
+        replPair.toFetchBigStringUuidList.size() == 1
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 }

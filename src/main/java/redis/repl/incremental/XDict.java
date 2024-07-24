@@ -4,6 +4,7 @@ import redis.CompressedValue;
 import redis.Dict;
 import redis.DictMap;
 import redis.repl.BinlogContent;
+import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
@@ -88,7 +89,7 @@ public class XDict implements BinlogContent<XDict> {
     }
 
     @Override
-    public void apply(byte slot) {
+    public void apply(byte slot, ReplPair replPair) {
         // ignore slot, need sync
         var dictMap = DictMap.getInstance();
         synchronized (dictMap) {

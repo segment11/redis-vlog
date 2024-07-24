@@ -1,6 +1,7 @@
 package redis.repl.incremental;
 
 import redis.repl.BinlogContent;
+import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
@@ -25,7 +26,7 @@ public class XKeyBuckets implements BinlogContent<XKeyBuckets> {
     }
 
     @Override
-    public void apply(byte slot) {
+    public void apply(byte slot, ReplPair replPair) {
 
     }
 }
