@@ -81,6 +81,7 @@ public class Binlog {
 
     private final Logger log = LoggerFactory.getLogger(Binlog.class);
 
+    // already sorted
     private ArrayList<File> listFiles() {
         ArrayList<File> list = new ArrayList<>();
         var files = binlogDir.listFiles();
@@ -126,6 +127,15 @@ public class Binlog {
 
     public FileIndexAndOffset currentFileIndexAndOffset() {
         return new FileIndexAndOffset(currentFileIndex, currentFileOffset);
+    }
+
+    public FileIndexAndOffset earlestFileIndexAndOffset() {
+        var files = listFiles();
+        if (files.isEmpty()) {
+            return null;
+        }
+        var file = files.get(0);
+        return new FileIndexAndOffset(fileIndex(file), 0);
     }
 
     private static final String FILE_NAME_PREFIX = "binlog-";

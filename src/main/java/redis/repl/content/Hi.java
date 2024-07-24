@@ -8,11 +8,14 @@ public class Hi implements ReplContent {
     private final long slaveUuid;
     private final long masterUuid;
     private final Binlog.FileIndexAndOffset binlogFileIndexAndOffset;
+    private final Binlog.FileIndexAndOffset earlestFileIndexAndOffset;
 
-    public Hi(long slaveUuid, long masterUuid, Binlog.FileIndexAndOffset binlogFileIndexAndOffset) {
+    public Hi(long slaveUuid, long masterUuid, Binlog.FileIndexAndOffset binlogFileIndexAndOffset,
+              Binlog.FileIndexAndOffset earlestFileIndexAndOffset) {
         this.slaveUuid = slaveUuid;
         this.masterUuid = masterUuid;
         this.binlogFileIndexAndOffset = binlogFileIndexAndOffset;
+        this.earlestFileIndexAndOffset = earlestFileIndexAndOffset;
     }
 
     @Override
@@ -21,10 +24,17 @@ public class Hi implements ReplContent {
         toBuf.writeLong(masterUuid);
         toBuf.writeInt(binlogFileIndexAndOffset.fileIndex());
         toBuf.writeLong(binlogFileIndexAndOffset.offset());
+        if (earlestFileIndexAndOffset != null) {
+            toBuf.writeInt(earlestFileIndexAndOffset.fileIndex());
+            toBuf.writeLong(earlestFileIndexAndOffset.offset());
+        } else {
+            toBuf.writeInt(-1);
+            toBuf.writeLong(-1L);
+        }
     }
 
     @Override
     public int encodeLength() {
-        return 8 + 8 + 4 + 8;
+        return 8 + 8 + 4 + 8 + 4 + 8;
     }
 }

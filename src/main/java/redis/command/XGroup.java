@@ -181,10 +181,12 @@ public class XGroup extends BaseCommand {
             log.error(errorMessage, e);
             return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
         }
-
         log.warn("Repl master handle hello: slave uuid={}, net listen addresses={}", slaveUuid, netListenAddresses);
-        var binlogFileIndexAndOffset = oneSlot.getBinlog().currentFileIndexAndOffset();
-        var content = new Hi(slaveUuid, oneSlot.getMasterUuid(), binlogFileIndexAndOffset);
+
+        var binlog = oneSlot.getBinlog();
+        var currentFileIndexAndOffset = binlog.currentFileIndexAndOffset();
+        var earlestFileIndexAndOffset = binlog.earlestFileIndexAndOffset();
+        var content = new Hi(slaveUuid, oneSlot.getMasterUuid(), currentFileIndexAndOffset, earlestFileIndexAndOffset);
         return Repl.reply(slot, replPair, hi, content);
     }
 
@@ -193,8 +195,10 @@ public class XGroup extends BaseCommand {
         var buffer = ByteBuffer.wrap(contentBytes);
         var slaveUuid = buffer.getLong();
         var masterUuid = buffer.getLong();
-        var binlogFileIndex = buffer.getInt();
-        var binlogOffset = buffer.getLong();
+        var currentFileIndex = buffer.getInt();
+        var currentOffset = buffer.getLong();
+        var earlestFileIndex = buffer.getInt();
+        var earlestOffset = buffer.getLong();
 
         // should not happen
         if (slaveUuid != replPair.getSlaveUuid()) {
@@ -207,9 +211,34 @@ public class XGroup extends BaseCommand {
         log.warn("Repl slave handle hi: slave uuid={}, master uuid={}", slaveUuid, masterUuid);
 
         var oneSlot = localPersist.oneSlot(slot);
-        oneSlot.getMetaChunkSegmentIndex().setMasterBinlogFileIndexAndOffset(masterUuid, binlogFileIndex, binlogOffset);
+        var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
+
+        var lastUpdatedMasterUuid = metaChunkSegmentIndex.getMasterUuid();
+        var lastUpdatedFileIndexAndOffset = metaChunkSegmentIndex.getMasterBinlogFileIndexAndOffset();
+        if (lastUpdatedMasterUuid == masterUuid) {
+            if (earlestFileIndex != -1) {
+                var catchUpFileIndex = lastUpdatedFileIndexAndOffset.fileIndex();
+                long catchUpOffset = lastUpdatedFileIndexAndOffset.offset();
+                if (catchUpFileIndex >= earlestFileIndex && catchUpOffset >= earlestOffset) {
+                    // need not fetch exists data from master
+                    // start fetch incremental data from master binglog
+                    log.warn("Repl slave start catch up from master binlog, slave uuid={}, master uuid={}, last updated file index={}, offset={}",
+                            slaveUuid, masterUuid, catchUpFileIndex, catchUpOffset);
+
+                    var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
+                    var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
+                    var nextCatchUpFileIndex = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? catchUpFileIndex : catchUpFileIndex + 1;
+                    var nextCatchUpOffset = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? 0 : catchUpOffset + oneSegmentLength;
+
+                    var content = new ToMasterCatchUpForBinlogOneSegment(masterUuid, nextCatchUpFileIndex, nextCatchUpOffset);
+                    return Repl.reply(slot, replPair, ReplType.catch_up, content);
+                }
+            }
+        }
+
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, currentFileIndex, currentOffset);
         log.warn("Repl set master binlog file index and offset for incremental catch up, slot: {}, master binlog file index: {}, master binlog offset: {}",
-                slot, binlogFileIndex, binlogOffset);
+                slot, currentFileIndex, currentOffset);
 
         // begin to fetch exist data from master
         // first fetch dict
