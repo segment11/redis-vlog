@@ -14,7 +14,6 @@ public class ToMasterCatchUpForBinlogOneSegment implements ReplContent {
         this.binlogOffset = binlogOffset;
     }
 
-
     @Override
     public void encodeTo(ByteBuf toBuf) {
         toBuf.writeLong(binlogMasterUuid);

@@ -14,7 +14,7 @@ public class ToSlaveExistsBigString implements ReplContent {
     private final List<Long> toSendUuidList;
     private final boolean isSendAllOnce;
 
-    private static final int ONCE_SEND_BIG_STRING_COUNT = 10;
+    static final int ONCE_SEND_BIG_STRING_COUNT = 10;
 
     public ToSlaveExistsBigString(File bigStringDir, List<Long> uuidListInMaster, List<Long> sentUuidList) {
         this.bigStringDir = bigStringDir;
@@ -35,21 +35,21 @@ public class ToSlaveExistsBigString implements ReplContent {
         this.toSendUuidList = toSendUuidList;
     }
 
-    // 2 bytes as short for send big string count, 1 byte as flag for is sent all
-    private static final int HEADER_LENGTH = 2 + 1;
+    // 4 bytes as int for send big string count, 1 byte as flag for is sent all
+    private static final int HEADER_LENGTH = 4 + 1;
 
     @Override
     public void encodeTo(ByteBuf toBuf) {
         if (toSendUuidList.isEmpty()) {
-            toBuf.writeShort((short) 0);
+            toBuf.writeInt(0);
             toBuf.writeByte((byte) 1);
             return;
         }
 
-        toBuf.writeShort((short) toSendUuidList.size());
+        toBuf.writeInt(toSendUuidList.size());
         toBuf.writeByte((byte) (isSendAllOnce ? 1 : 0));
 
-        short existCount = 0;
+        var existCount = 0;
         for (var uuid : toSendUuidList) {
             var file = new File(bigStringDir, String.valueOf(uuid));
             if (!file.exists()) {
@@ -72,7 +72,7 @@ public class ToSlaveExistsBigString implements ReplContent {
 
         if (existCount != toSendUuidList.size()) {
             toBuf.tail(0);
-            toBuf.writeShort(existCount);
+            toBuf.writeInt(existCount);
         }
     }
 
