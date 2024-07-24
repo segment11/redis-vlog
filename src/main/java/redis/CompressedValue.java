@@ -368,20 +368,12 @@ public class CompressedValue {
         buf.writeLong(expireAt);
         buf.writeInt(SP_TYPE_BIG_STRING);
         buf.writeLong(keyHash);
+        // big string raw bytes length
         buf.writeInt(uncompressedLength);
         buf.writeInt(compressedLength);
         buf.write(compressedData);
 
         return bytes;
-    }
-
-
-    public int compressedLength() {
-        return compressedLength;
-    }
-
-    public int uncompressedLength() {
-        return uncompressedLength;
     }
 
     private static final Logger log = LoggerFactory.getLogger(CompressedValue.class);
