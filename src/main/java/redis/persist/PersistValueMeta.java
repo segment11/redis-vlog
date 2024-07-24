@@ -19,7 +19,7 @@ public class PersistValueMeta {
 
     byte slot;
     byte subBlockIndex;
-    int length;
+    public int length;
     int segmentIndex;
     int segmentOffset;
     // need remove expired pvm in key loader to compress better, or reduce split

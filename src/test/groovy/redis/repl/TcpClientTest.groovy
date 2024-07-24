@@ -57,12 +57,12 @@ class TcpClientTest extends Specification {
 
         tcpClient.close()
         println 'tcp client ready to reconnect'
-        def eventloop = Eventloop.builder()
-                .withIdleInterval(Duration.ofMillis(100))
-                .build()
-        eventloop.keepAlive(true)
+//        def eventloop = Eventloop.builder()
+//                .withIdleInterval(Duration.ofMillis(100))
+//                .build()
+//        eventloop.keepAlive(true)
         def server = SimpleServer.builder(
-                eventloop,
+                eventloopCurrent,
                 socket -> {
                     println 'Client connected'
                     BinaryChannelSupplier.of(ChannelSuppliers.ofSocket(socket))
@@ -77,14 +77,15 @@ class TcpClientTest extends Specification {
                 .withListenAddress(new InetSocketAddress('localhost', 6379))
                 .withAcceptOnce()
                 .build()
-        Thread.start {
-            localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
-            eventloop.run()
-        }
-        Thread.start {
-            Thread.sleep(1000 * 2)
-            eventloop.breakEventloop()
-        }
+//        Thread.start {
+//            localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
+//            eventloop.run()
+//        }
+//        Thread.start {
+//            Thread.sleep(1000 * 2)
+//            eventloop.breakEventloop()
+//        }
+        Thread.sleep(100)
         server.listen()
         tcpClient.connect('localhost', 6379) {
             tcpClient.write(ReplType.ok, new RawBytesContent('test'.bytes))

@@ -55,9 +55,9 @@ class KeyLoaderTest extends Specification {
         valueBytesWithExpireAt.valueBytes() == 'a'.bytes
 
         when:
-        var k0 = keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 1, 10L, false)
+        def k0 = keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 1, 10L, false)
         k0.splitNumber = (byte) 2
-        var bytes = k0.encode(true)
+        def bytes = k0.encode(true)
         keyLoader.fdReadWriteArray[0].writeOneInner(0, bytes, false)
 
         keyLoader.setMetaKeyBucketSplitNumberForTest(0, (byte) 2)
@@ -351,8 +351,10 @@ class KeyLoaderTest extends Specification {
 
         when:
         ConfForSlot.global.pureMemory = true
-        var fdReadWrite = keyLoader.fdReadWriteArray[0]
-        var maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
+        def fdReadWrite = keyLoader.fdReadWriteArray[0]
+        def walGroupNumber = Wal.calcWalGroupNumber()
+        fdReadWrite.allBytesByOneWalGroupIndexForKeyBucket = new byte[walGroupNumber][]
+        def maxSegmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
         fdReadWrite.allBytesByOneInnerIndexForChunk = new byte[maxSegmentNumberPerFd][];
 
         keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes)

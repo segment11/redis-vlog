@@ -51,7 +51,6 @@ public class Chunk {
 
     final OneSlot oneSlot;
     private final KeyLoader keyLoader;
-    private final Binlog binlog;
     private final SegmentBatch segmentBatch;
 
     int[] fdLengths;
@@ -78,7 +77,6 @@ public class Chunk {
 
         this.oneSlot = oneSlot;
         this.keyLoader = keyLoader;
-        this.binlog = oneSlot.binlog;
         this.segmentBatch = new SegmentBatch(slot, snowFlake);
 
         this.initMetricsCollect();
@@ -451,7 +449,7 @@ public class Chunk {
         // update meta, segment index for next time
         oneSlot.setChunkWriteSegmentIndex(segmentIndex);
 
-        if (binlog != null) {
+        if (oneSlot.binlog != null) {
             // todo
         }
 

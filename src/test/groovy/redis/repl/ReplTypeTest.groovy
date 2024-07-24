@@ -10,7 +10,7 @@ class ReplTypeTest extends Specification {
         def types = ReplType.values()
 
         expect:
-        types.length == 25
+        types.length == 26
 
         ReplType.fromCode(ReplType.ping.code) == ReplType.ping
         ReplType.fromCode((byte) -10) == null

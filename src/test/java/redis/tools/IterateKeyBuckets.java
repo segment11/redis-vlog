@@ -15,15 +15,23 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class IterateKeyBuckets {
+    //    private static String persistDir = "/tmp/redis-vlog-test-data";
+    private static String persistDir = "/tmp/redis-vlog/persist";
+
     public static void main(String[] args) throws IOException {
         byte slot = 0;
         byte splitIndex = 0;
-        byte splitNumber = 3;
-        var bucketsPerSlot = ConfForSlot.ConfBucket.c1m.bucketsPerSlot;
+        byte splitNumber = 1;
+        var bucketsPerSlot = ConfForSlot.ConfBucket.c100m.bucketsPerSlot;
         int[] sumArray = new int[bucketsPerSlot];
 
         // change here
-        final int toCheckBucketIndex = 15602;
+        final int toCheckBucketIndex = -1;
+        // check -d 200 compressed value length is 74, filter those not match
+        // check -d 1000 compressed value length is 181, filter those not match
+//        final int cvNormalLength = 74;
+        final int cvNormalLength = 181;
+        final int overSize = 50;
 
         for (int i = 0; i < splitNumber; i++) {
             iterateOneSplitIndex(slot, (byte) i, splitNumber, sumArray);
@@ -39,29 +47,32 @@ public class IterateKeyBuckets {
         for (var entry : keyWithValueBytesByBucketIndex.entrySet()) {
             var bucketIndex = entry.getKey();
             var keyWithValueBytes = entry.getValue();
-            if (keyWithValueBytes.size() > KeyBucket.INIT_CAPACITY * 2) {
+            if (keyWithValueBytes.size() > overSize) {
                 System.out.println("bucket index: " + bucketIndex + ", size: " + keyWithValueBytes.size() + ", keys: " + keyWithValueBytes.keySet());
             }
 
-            if (bucketIndex == toCheckBucketIndex) {
+            var doLog = bucketIndex == toCheckBucketIndex;
+            if (doLog) {
                 System.out.println("bucket index: " + bucketIndex + ", size: " + keyWithValueBytes.size());
-                keyWithValueBytes.forEach((key, valueBytes) -> {
-                    if (PersistValueMeta.isPvm(valueBytes)) {
-                        var pvm = PersistValueMeta.decode(valueBytes);
-                        System.out.println("key: " + key + ", pvm: " + pvm.shortString());
-                    } else {
-                        var cv = CompressedValue.decode(Unpooled.wrappedBuffer(valueBytes), null, 0);
-                        System.out.println("key: " + key + ", value: " + cv);
-                    }
-                });
             }
+
+            keyWithValueBytes.forEach((key, valueBytes) -> {
+                if (PersistValueMeta.isPvm(valueBytes)) {
+                    var pvm = PersistValueMeta.decode(valueBytes);
+                    var isNormal = pvm.length == cvNormalLength;
+                    if (doLog || !isNormal) {
+                        System.out.println("key: " + key + ", pvm: " + pvm.shortString());
+                    }
+                } else {
+                    var cv = CompressedValue.decode(Unpooled.wrappedBuffer(valueBytes), null, 0);
+                    System.out.println("key: " + key + ", value: " + cv);
+                }
+            });
+
         }
     }
 
     private static Map<Integer, HashMap<String, byte[]>> keyWithValueBytesByBucketIndex = new HashMap<>();
-
-    //    private static String persistDir = "/tmp/redis-vlog-test-data";
-    private static String persistDir = "/tmp/redis-vlog/persist";
 
     public static void iterateOneSplitIndex(byte slot, byte splitIndex, byte splitNumber, int[] sumArray) throws IOException {
         var bucketsPerSlot = sumArray.length;

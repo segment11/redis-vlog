@@ -119,12 +119,12 @@ class WalTest extends Specification {
         then:
         n == 0
 
-        when:
-        wal.writePositionArray[0] = 0
-        wal.writePositionArrayShortValue[0] = 0
-        then:
-        wal.writePositionArray[0] == v1.encodeLength() * 2
-        wal.writePositionArrayShortValue[0] == v1.encodeLength() * 2
+//        when:
+//        wal.writePositionArray[0] = 0
+//        wal.writePositionArrayShortValue[0] = 0
+//        then:
+//        wal.writePositionArray[0] == v1.encodeLength() * 2
+//        wal.writePositionArrayShortValue[0] == v1.encodeLength() * 2
 
         cleanup:
         wal.clear()

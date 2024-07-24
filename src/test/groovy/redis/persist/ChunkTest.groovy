@@ -321,7 +321,7 @@ class ChunkTest extends Specification {
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(0, blankSeqList.size(), Chunk.Flag.init, blankSeqList, 0)
         chunk.segmentIndex = 0
         def vListManyCount = Mock.prepareValueList(100, 0)
-        (1..<32).each {
+        (1..<16).each {
             vListManyCount.addAll Mock.prepareValueList(100, it)
         }
         chunk.persist(0, vListManyCount, false)

@@ -73,7 +73,7 @@ class XDictTest extends Specification {
         when:
         def dictMap = DictMap.instance
         dictMap.initDictMap(Consts.testDir)
-        xDict.apply((byte) 0)
+        xDict.apply((byte) 0, null)
         then:
         dictMap.getDict(keyPrefix).dictBytes == dict.dictBytes
 

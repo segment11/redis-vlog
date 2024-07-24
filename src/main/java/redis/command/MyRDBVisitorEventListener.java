@@ -12,7 +12,6 @@ import com.moilioncircle.redis.replicator.rdb.datatype.ZSetEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
-import redis.tools.RadixTree;
 import redis.type.RedisHashKeys;
 import redis.type.RedisList;
 import redis.type.RedisZSet;
@@ -20,8 +19,8 @@ import redis.type.RedisZSet;
 import java.util.Iterator;
 import java.util.Map;
 
-import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 import static redis.CompressedValue.NO_EXPIRE;
+import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 public class MyRDBVisitorEventListener implements EventListener {
     boolean isRDBBegun = false;
@@ -35,8 +34,6 @@ public class MyRDBVisitorEventListener implements EventListener {
 
     private final LGroup lGroup;
     private final boolean onlyAnalysis;
-
-    final RadixTree radixTree = new RadixTree();
 
     public MyRDBVisitorEventListener(LGroup lGroup, boolean onlyAnalysis) {
         this.lGroup = lGroup;
@@ -71,6 +68,10 @@ public class MyRDBVisitorEventListener implements EventListener {
         }
     }
 
+    private void incrByBytes(byte[] keyBytes) {
+        // todo
+    }
+
     private boolean loadKv(KeyValuePair kv) {
         long expireAt = NO_EXPIRE;
 
@@ -87,7 +88,7 @@ public class MyRDBVisitorEventListener implements EventListener {
 
         var keyBytes = (byte[]) kv.getKey();
         if (onlyAnalysis) {
-            radixTree.incrByBytes(keyBytes);
+            incrByBytes(keyBytes);
             return true;
         }
 

@@ -12,11 +12,22 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
 public class IterateChunkSegments {
+    //    private static String persistDir = "/tmp/redis-vlog-test-data";
+    private static String persistDir = "/tmp/redis-vlog/persist";
+
+    private static ConfForSlot.ConfChunk confChunk;
+
+    // check -d 200 compressed value length is 20, filter those not match
+    // check -d 1000 compressed value length is 127, filter those not match
+    // todo
+//    private static final int cvNormalCompressedLength = 20;
+    private static final int cvNormalCompressedLength = 127;
+
     public static void main(String[] args) throws IOException {
-        ConfForSlot.global = ConfForSlot.c1m;
+        confChunk = ConfForSlot.c100m.confChunk;
 
         byte slot = 0;
-        int[] sumArray = new int[ConfForSlot.global.confChunk.maxSegmentNumber()];
+        int[] sumArray = new int[confChunk.maxSegmentNumber()];
 
         var slotDir = new File(persistDir + "/slot-" + slot);
         var chunkFiles = slotDir.listFiles((dir, name) -> name.startsWith("chunk-data-"));
@@ -32,16 +43,13 @@ public class IterateChunkSegments {
         System.out.println("sum total: " + sumTotal);
     }
 
-    //    private static String persistDir = "/tmp/redis-vlog-test-data";
-    private static String persistDir = "/tmp/redis-vlog/persist";
-
     public static void iterateOneChunkFile(byte slot, byte index, File chunkFile, int[] sumArray) throws IOException {
         if (chunkFile.length() == 0) {
             return;
         }
 
-        var segmentLength = ConfForSlot.global.confChunk.segmentLength;
-        var segmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
+        var segmentLength = confChunk.segmentLength;
+        var segmentNumberPerFd = confChunk.segmentNumberPerFd;
 
         var beginSegmentIndex = index * segmentNumberPerFd;
 
@@ -77,7 +85,9 @@ public class IterateChunkSegments {
             }
 
             for (var one : cvList) {
-                System.out.println(one.shortString());
+                if (cvNormalCompressedLength != 0 && one.cv.compressedLength() != cvNormalCompressedLength) {
+                    System.out.println("key: " + one.key + ", cv: " + one.cv);
+                }
             }
 
             sumArray[segmentIndex] = cvList.size();

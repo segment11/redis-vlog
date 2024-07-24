@@ -43,9 +43,9 @@ class MetaChunkSegmentIndexTest extends Specification {
         one.get() == 20
 
         when:
-        one.setMasterBinlogFileIndexAndOffset(1, 0)
+        one.setMasterBinlogFileIndexAndOffset(10L, 1, 0L)
         then:
-        one.masterBinlogFileIndexAndOffset == new Binlog.FileIndexAndOffset(1, 0)
+        one.masterBinlogFileIndexAndOffset == new Binlog.FileIndexAndOffset(1, 0L)
 
         when:
         one.setAll(30, 1L, 2, 0)

@@ -146,10 +146,10 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
     def 'test iterate'() {
         given:
         def confChunk = ConfForSlot.global.confChunk
-        def targetConfChunk = ConfForSlot.ConfChunk.c10m
+        def c10m = ConfForSlot.ConfChunk.c10m
 //        def targetConfChunk = ConfForSlot.ConfChunk.debugMode
-        confChunk.segmentNumberPerFd = targetConfChunk.segmentNumberPerFd
-        confChunk.fdPerChunk = targetConfChunk.fdPerChunk
+        confChunk.segmentNumberPerFd = c10m.segmentNumberPerFd
+        confChunk.fdPerChunk = c10m.fdPerChunk
 
         def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
@@ -168,6 +168,8 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         1 == 1
 
         cleanup:
+        confChunk.segmentNumberPerFd = ConfForSlot.c1m.confChunk.segmentNumberPerFd
+        confChunk.fdPerChunk = ConfForSlot.c1m.confChunk.fdPerChunk
         one.clear()
         one.cleanUp()
     }
@@ -176,11 +178,12 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         given:
         ConfForSlot.global.pureMemory = true
 
+        // c1m
         def confChunk = ConfForSlot.global.confChunk
-        def targetConfChunk = ConfForSlot.ConfChunk.c100m
+        def c100mConfChunk = ConfForSlot.ConfChunk.c100m
 //        def targetConfChunk = ConfForSlot.ConfChunk.debugMode
-        confChunk.segmentNumberPerFd = targetConfChunk.segmentNumberPerFd
-        confChunk.fdPerChunk = targetConfChunk.fdPerChunk
+        confChunk.segmentNumberPerFd = c100mConfChunk.segmentNumberPerFd
+        confChunk.fdPerChunk = c100mConfChunk.fdPerChunk
 
         def one = new MetaChunkSegmentFlagSeq((byte) 0, slotDir)
 
@@ -227,6 +230,8 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         r2[1] == 0
 
         cleanup:
+        confChunk.segmentNumberPerFd = ConfForSlot.c1m.confChunk.segmentNumberPerFd
+        confChunk.fdPerChunk = ConfForSlot.c1m.confChunk.fdPerChunk
         one.clear()
         one.cleanUp()
     }
