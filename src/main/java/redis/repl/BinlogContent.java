@@ -4,7 +4,7 @@ import redis.repl.incremental.*;
 
 import java.nio.ByteBuffer;
 
-public interface BinlogContent<T> {
+public interface BinlogContent {
     enum Type {
         // code need > 0
         wal((byte) 1), chunk_segments((byte) 2), key_buckets((byte) 3),
@@ -29,7 +29,7 @@ public interface BinlogContent<T> {
             throw new IllegalArgumentException("Invalid binlog type code: " + code);
         }
 
-        BinlogContent<?> decodeFrom(ByteBuffer buffer) {
+        BinlogContent decodeFrom(ByteBuffer buffer) {
             switch (this) {
                 case wal:
                     return XWalV.decodeFrom(buffer);
