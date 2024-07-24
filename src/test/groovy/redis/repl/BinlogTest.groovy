@@ -38,7 +38,7 @@ class BinlogTest extends Specification {
         dynConfig2.binlogOn = false
         def binlog = new Binlog(slot, Consts.slotDir, dynConfig)
         println binlog.currentFileIndexAndOffset()
-        println binlog.earlestFileIndexAndOffset()
+        println binlog.earliestFileIndexAndOffset()
 
         final File slotDir2 = new File('/tmp/redis-vlog/test-persist/test-slot2')
         if (!slotDir2.exists()) {

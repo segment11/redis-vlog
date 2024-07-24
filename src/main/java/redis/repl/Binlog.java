@@ -123,7 +123,7 @@ public class Binlog {
         return new FileIndexAndOffset(currentFileIndex, currentFileOffset);
     }
 
-    public FileIndexAndOffset earlestFileIndexAndOffset() {
+    public FileIndexAndOffset earliestFileIndexAndOffset() {
         // at least have one file, self created
         var files = listFiles();
         var file = files.get(0);

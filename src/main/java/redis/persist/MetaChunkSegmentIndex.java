@@ -26,9 +26,10 @@ public class MetaChunkSegmentIndex {
         // 4 bytes for chunk segment index int
         // when slave connect master, master start binlog
         // 8 bytes for master uuid long
+        // 4 bytes for target master exists data all fetched done flag int
         // 4 bytes for master binlog file index int
         // 8 bytes for master binlog offset long
-        this.inMemoryCachedBytes = new byte[4 + 8 + 4 + 8];
+        this.inMemoryCachedBytes = new byte[4 + 8 + 4 + 4 + 8];
 
         if (ConfForSlot.global.pureMemory) {
             this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
@@ -72,23 +73,27 @@ public class MetaChunkSegmentIndex {
         }
     }
 
-    public void setMasterBinlogFileIndexAndOffset(long masterUuid, int masterBinlogFileIndex, long masterBinlogOffset) {
-        setAll(get(), masterUuid, masterBinlogFileIndex, masterBinlogOffset);
+    public void setMasterBinlogFileIndexAndOffset(long masterUuid, boolean isExistsDataAllFetched,
+                                                  int masterBinlogFileIndex, long masterBinlogOffset) {
+        setAll(get(), masterUuid, isExistsDataAllFetched, masterBinlogFileIndex, masterBinlogOffset);
     }
 
-    void setAll(int segmentIndex, long masterUuid, int masterBinlogFileIndex, long masterBinlogOffset) {
+    void setAll(int segmentIndex, long masterUuid, boolean isExistsDataAllFetched,
+                int masterBinlogFileIndex, long masterBinlogOffset) {
         if (ConfForSlot.global.pureMemory) {
             this.inMemoryCachedByteBuffer.putInt(0, segmentIndex);
             this.inMemoryCachedByteBuffer.putLong(4, masterUuid);
-            this.inMemoryCachedByteBuffer.putInt(12, masterBinlogFileIndex);
-            this.inMemoryCachedByteBuffer.putLong(16, masterBinlogOffset);
+            this.inMemoryCachedByteBuffer.putInt(12, isExistsDataAllFetched ? 1 : 0);
+            this.inMemoryCachedByteBuffer.putInt(16, masterBinlogFileIndex);
+            this.inMemoryCachedByteBuffer.putLong(20, masterBinlogOffset);
             return;
         }
 
-        var updatedBytes = new byte[4 + 8 + 4 + 8];
+        var updatedBytes = new byte[4 + 8 + 4 + 4 + 8];
         ByteBuffer updatedBuffer = ByteBuffer.wrap(updatedBytes);
         updatedBuffer.putInt(segmentIndex);
         updatedBuffer.putLong(masterUuid);
+        updatedBuffer.putInt(isExistsDataAllFetched ? 1 : 0);
         updatedBuffer.putInt(masterBinlogFileIndex);
         updatedBuffer.putLong(masterBinlogOffset);
         try {
@@ -108,12 +113,16 @@ public class MetaChunkSegmentIndex {
         return inMemoryCachedByteBuffer.getLong(4);
     }
 
+    public boolean isExistsDataAllFetched() {
+        return inMemoryCachedByteBuffer.getInt(12) == 1;
+    }
+
     public Binlog.FileIndexAndOffset getMasterBinlogFileIndexAndOffset() {
-        return new Binlog.FileIndexAndOffset(inMemoryCachedByteBuffer.getInt(12), inMemoryCachedByteBuffer.getLong(16));
+        return new Binlog.FileIndexAndOffset(inMemoryCachedByteBuffer.getInt(16), inMemoryCachedByteBuffer.getLong(20));
     }
 
     void clear() {
-        setAll(0, 0L, 0, 0L);
+        setAll(0, 0L, false, 0, 0L);
         System.out.println("Meta chunk segment index clear done, set 0 from the beginning. Clear master binlog file index and offset.");
     }
 

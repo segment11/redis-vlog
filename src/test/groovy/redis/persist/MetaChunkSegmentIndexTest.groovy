@@ -45,16 +45,22 @@ class MetaChunkSegmentIndexTest extends Specification {
         one.get() == 20
 
         when:
-        one.setMasterBinlogFileIndexAndOffset(10L, 1, 0L)
+        one.setMasterBinlogFileIndexAndOffset(10L, true, 1, 0L)
         then:
         one.masterBinlogFileIndexAndOffset == new Binlog.FileIndexAndOffset(1, 0L)
 
         when:
-        one.setAll(30, 1L, 2, 0)
+        one.setAll(30, 1L, false, 2, 0)
         then:
         one.get() == 30
         one.masterUuid == 1L
+        !one.isExistsDataAllFetched()
         one.masterBinlogFileIndexAndOffset == new Binlog.FileIndexAndOffset(2, 0)
+
+        when:
+        one.setAll(30, 1L, true, 2, 0)
+        then:
+        one.isExistsDataAllFetched()
 
         when:
         one.clear()
@@ -67,6 +73,11 @@ class MetaChunkSegmentIndexTest extends Specification {
         one2.set(10)
         then:
         one2.get() == 10
+
+        when:
+        one2.setAll(10, 1L, true, 0, 0)
+        then:
+        one2.isExistsDataAllFetched()
 
         cleanup:
         ConfForSlot.global.pureMemory = false

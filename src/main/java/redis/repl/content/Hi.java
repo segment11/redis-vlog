@@ -8,14 +8,14 @@ public class Hi implements ReplContent {
     private final long slaveUuid;
     private final long masterUuid;
     private final Binlog.FileIndexAndOffset binlogFileIndexAndOffset;
-    private final Binlog.FileIndexAndOffset earlestFileIndexAndOffset;
+    private final Binlog.FileIndexAndOffset earliestFileIndexAndOffset;
 
     public Hi(long slaveUuid, long masterUuid, Binlog.FileIndexAndOffset binlogFileIndexAndOffset,
-              Binlog.FileIndexAndOffset earlestFileIndexAndOffset) {
+              Binlog.FileIndexAndOffset earliestFileIndexAndOffset) {
         this.slaveUuid = slaveUuid;
         this.masterUuid = masterUuid;
         this.binlogFileIndexAndOffset = binlogFileIndexAndOffset;
-        this.earlestFileIndexAndOffset = earlestFileIndexAndOffset;
+        this.earliestFileIndexAndOffset = earliestFileIndexAndOffset;
     }
 
     @Override
@@ -24,8 +24,8 @@ public class Hi implements ReplContent {
         toBuf.writeLong(masterUuid);
         toBuf.writeInt(binlogFileIndexAndOffset.fileIndex());
         toBuf.writeLong(binlogFileIndexAndOffset.offset());
-        toBuf.writeInt(earlestFileIndexAndOffset.fileIndex());
-        toBuf.writeLong(earlestFileIndexAndOffset.offset());
+        toBuf.writeInt(earliestFileIndexAndOffset.fileIndex());
+        toBuf.writeLong(earliestFileIndexAndOffset.offset());
     }
 
     @Override

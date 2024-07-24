@@ -185,8 +185,8 @@ public class XGroup extends BaseCommand {
 
         var binlog = oneSlot.getBinlog();
         var currentFileIndexAndOffset = binlog.currentFileIndexAndOffset();
-        var earlestFileIndexAndOffset = binlog.earlestFileIndexAndOffset();
-        var content = new Hi(slaveUuid, oneSlot.getMasterUuid(), currentFileIndexAndOffset, earlestFileIndexAndOffset);
+        var earliestFileIndexAndOffset = binlog.earliestFileIndexAndOffset();
+        var content = new Hi(slaveUuid, oneSlot.getMasterUuid(), currentFileIndexAndOffset, earliestFileIndexAndOffset);
         return Repl.reply(slot, replPair, hi, content);
     }
 
@@ -197,8 +197,8 @@ public class XGroup extends BaseCommand {
         var masterUuid = buffer.getLong();
         var currentFileIndex = buffer.getInt();
         var currentOffset = buffer.getLong();
-        var earlestFileIndex = buffer.getInt();
-        var earlestOffset = buffer.getLong();
+        var earliestFileIndex = buffer.getInt();
+        var earliestOffset = buffer.getLong();
 
         // should not happen
         if (slaveUuid != replPair.getSlaveUuid()) {
@@ -214,11 +214,13 @@ public class XGroup extends BaseCommand {
         var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
 
         var lastUpdatedMasterUuid = metaChunkSegmentIndex.getMasterUuid();
-        var lastUpdatedFileIndexAndOffset = metaChunkSegmentIndex.getMasterBinlogFileIndexAndOffset();
-        if (lastUpdatedMasterUuid == masterUuid) {
+        var isExistsDataAllFetched = metaChunkSegmentIndex.isExistsDataAllFetched();
+        if (lastUpdatedMasterUuid == masterUuid && isExistsDataAllFetched) {
+            var lastUpdatedFileIndexAndOffset = metaChunkSegmentIndex.getMasterBinlogFileIndexAndOffset();
             var catchUpFileIndex = lastUpdatedFileIndexAndOffset.fileIndex();
             long catchUpOffset = lastUpdatedFileIndexAndOffset.offset();
-            if (catchUpFileIndex >= earlestFileIndex && catchUpOffset >= earlestOffset) {
+
+            if (catchUpFileIndex >= earliestFileIndex && catchUpOffset >= earliestOffset) {
                 // need not fetch exists data from master
                 // start fetch incremental data from master binglog
                 log.warn("Repl slave start catch up from master binlog, slave uuid={}, master uuid={}, last updated file index={}, offset={}",
@@ -234,7 +236,7 @@ public class XGroup extends BaseCommand {
             }
         }
 
-        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, currentFileIndex, currentOffset);
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, false, currentFileIndex, currentOffset);
         log.warn("Repl set master binlog file index and offset for incremental catch up, slot: {}, master binlog file index: {}, master binlog offset: {}",
                 slot, currentFileIndex, currentOffset);
 
@@ -635,10 +637,16 @@ public class XGroup extends BaseCommand {
                 replPair.getSlaveUuid(), replPair.getHostAndPort());
 
         var oneSlot = localPersist.oneSlot(slot);
-        // catch up
-        var binlogMasterUuid = oneSlot.getMetaChunkSegmentIndex().getMasterUuid();
-        var fileIndexAndOffset = oneSlot.getMetaChunkSegmentIndex().getMasterBinlogFileIndexAndOffset();
+        var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
 
+        var binlogMasterUuid = metaChunkSegmentIndex.getMasterUuid();
+        var fileIndexAndOffset = metaChunkSegmentIndex.getMasterBinlogFileIndexAndOffset();
+
+        // update exists data all fetched done
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(binlogMasterUuid, true,
+                fileIndexAndOffset.fileIndex(), fileIndexAndOffset.offset());
+
+        // begin incremental data catch up
         var binlogFileIndex = fileIndexAndOffset.fileIndex();
         var marginFileOffset = Binlog.marginFileOffset(fileIndexAndOffset.offset());
         var content = new ToMasterCatchUpForBinlogOneSegment(binlogMasterUuid, binlogFileIndex, marginFileOffset);
@@ -707,9 +715,10 @@ public class XGroup extends BaseCommand {
 
         // update last catch up file index and offset
         var oneSlot = localPersist.oneSlot(slot);
+        var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
 
         var skipBytesN = 0;
-        var ff = oneSlot.getMetaChunkSegmentIndex().getMasterBinlogFileIndexAndOffset();
+        var ff = metaChunkSegmentIndex.getMasterBinlogFileIndexAndOffset();
         var isOffsetInLatestSegment = ff.fileIndex() == currentFileIndex && ff.offset() > currentMarginFileOffset;
         if (isOffsetInLatestSegment) {
             skipBytesN = (int) (ff.offset() - currentMarginFileOffset);
@@ -740,11 +749,12 @@ public class XGroup extends BaseCommand {
             }
         }
 
-        var binlogMasterUuid = oneSlot.getMetaChunkSegmentIndex().getMasterUuid();
+        var binlogMasterUuid = metaChunkSegmentIndex.getMasterUuid();
 
         var isCatchUpOffsetInLatestSegment = isCatchUpToCurrentFile && catchUpOffset >= currentMarginFileOffset;
         if (isCatchUpOffsetInLatestSegment) {
-            oneSlot.getMetaChunkSegmentIndex().setMasterBinlogFileIndexAndOffset(binlogMasterUuid, currentFileIndex, currentOffset);
+            metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(binlogMasterUuid, true,
+                    currentFileIndex, currentOffset);
 
             // still catch up current segment, delay
             var content = new ToMasterCatchUpForBinlogOneSegment(binlogMasterUuid, currentFileIndex, catchUpOffset);
@@ -758,7 +768,8 @@ public class XGroup extends BaseCommand {
         var nextCatchUpFileIndex = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? catchUpFileIndex : catchUpFileIndex + 1;
         var nextCatchUpOffset = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? 0 : catchUpOffset + oneSegmentLength;
 
-        oneSlot.getMetaChunkSegmentIndex().setMasterBinlogFileIndexAndOffset(binlogMasterUuid, nextCatchUpFileIndex, nextCatchUpOffset);
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(binlogMasterUuid, true,
+                nextCatchUpFileIndex, nextCatchUpOffset);
         if (nextCatchUpOffset == 0) {
             log.info("Repl handle catch up: catch up to next file, slot={}, slave uuid={}, {}, binlog file index={}, offset={}",
                     slot, replPair.getSlaveUuid(), replPair.getHostAndPort(), nextCatchUpFileIndex, nextCatchUpOffset);
