@@ -365,7 +365,7 @@ public class Binlog {
         // truncate
         try {
             raf.setLength(0);
-        } catch (Exception e) {
+        } catch (IOException e) {
             log.error("clear binlog error, slot: " + slot, e);
         }
 
@@ -376,7 +376,7 @@ public class Binlog {
             try {
                 prevRaf.setLength(0);
                 prevRaf.close();
-            } catch (Exception e) {
+            } catch (IOException e) {
                 log.error("clear binlog old raf error, slot: " + slot + ", file index: " + entry.getKey(), e);
             }
             it.remove();
