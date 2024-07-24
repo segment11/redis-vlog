@@ -17,7 +17,6 @@ import org.slf4j.LoggerFactory;
 import redis.*;
 import redis.metric.SimpleGauge;
 import redis.repl.Binlog;
-import redis.repl.GetCurrentSlaveReplPairList;
 import redis.repl.ReplPair;
 import redis.repl.ReplType;
 import redis.repl.content.RawBytesContent;
@@ -31,7 +30,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static io.activej.config.converter.ConfigConverters.ofBoolean;
 import static redis.persist.Chunk.*;
@@ -205,9 +203,7 @@ public class OneSlot {
 
         this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, this);
 
-        GetCurrentSlaveReplPairList inner = () -> replPairs.stream().filter(ReplPair::isAsMaster).collect(Collectors.toList());
         this.binlog = new Binlog(slot, slotDir, dynConfig);
-        this.binlog.setGetCurrentSlaveReplPairList(inner);
         // only set slot 0, binlog, if current instance do not include slot 0, need change here
         if (this.slot == 0) {
             DictMap.getInstance().setBinlog(this.binlog);

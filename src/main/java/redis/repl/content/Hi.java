@@ -24,13 +24,8 @@ public class Hi implements ReplContent {
         toBuf.writeLong(masterUuid);
         toBuf.writeInt(binlogFileIndexAndOffset.fileIndex());
         toBuf.writeLong(binlogFileIndexAndOffset.offset());
-        if (earlestFileIndexAndOffset != null) {
-            toBuf.writeInt(earlestFileIndexAndOffset.fileIndex());
-            toBuf.writeLong(earlestFileIndexAndOffset.offset());
-        } else {
-            toBuf.writeInt(-1);
-            toBuf.writeLong(-1L);
-        }
+        toBuf.writeInt(earlestFileIndexAndOffset.fileIndex());
+        toBuf.writeLong(earlestFileIndexAndOffset.offset());
     }
 
     @Override

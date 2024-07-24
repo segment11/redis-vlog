@@ -216,23 +216,21 @@ public class XGroup extends BaseCommand {
         var lastUpdatedMasterUuid = metaChunkSegmentIndex.getMasterUuid();
         var lastUpdatedFileIndexAndOffset = metaChunkSegmentIndex.getMasterBinlogFileIndexAndOffset();
         if (lastUpdatedMasterUuid == masterUuid) {
-            if (earlestFileIndex != -1) {
-                var catchUpFileIndex = lastUpdatedFileIndexAndOffset.fileIndex();
-                long catchUpOffset = lastUpdatedFileIndexAndOffset.offset();
-                if (catchUpFileIndex >= earlestFileIndex && catchUpOffset >= earlestOffset) {
-                    // need not fetch exists data from master
-                    // start fetch incremental data from master binglog
-                    log.warn("Repl slave start catch up from master binlog, slave uuid={}, master uuid={}, last updated file index={}, offset={}",
-                            slaveUuid, masterUuid, catchUpFileIndex, catchUpOffset);
+            var catchUpFileIndex = lastUpdatedFileIndexAndOffset.fileIndex();
+            long catchUpOffset = lastUpdatedFileIndexAndOffset.offset();
+            if (catchUpFileIndex >= earlestFileIndex && catchUpOffset >= earlestOffset) {
+                // need not fetch exists data from master
+                // start fetch incremental data from master binglog
+                log.warn("Repl slave start catch up from master binlog, slave uuid={}, master uuid={}, last updated file index={}, offset={}",
+                        slaveUuid, masterUuid, catchUpFileIndex, catchUpOffset);
 
-                    var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
-                    var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
-                    var nextCatchUpFileIndex = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? catchUpFileIndex : catchUpFileIndex + 1;
-                    var nextCatchUpOffset = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? 0 : catchUpOffset + oneSegmentLength;
+                var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
+                var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
+                var nextCatchUpFileIndex = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? catchUpFileIndex : catchUpFileIndex + 1;
+                var nextCatchUpOffset = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? 0 : catchUpOffset + oneSegmentLength;
 
-                    var content = new ToMasterCatchUpForBinlogOneSegment(masterUuid, nextCatchUpFileIndex, nextCatchUpOffset);
-                    return Repl.reply(slot, replPair, ReplType.catch_up, content);
-                }
+                var content = new ToMasterCatchUpForBinlogOneSegment(masterUuid, nextCatchUpFileIndex, nextCatchUpOffset);
+                return Repl.reply(slot, replPair, ReplType.catch_up, content);
             }
         }
 

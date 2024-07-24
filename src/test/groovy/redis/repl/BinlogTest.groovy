@@ -14,15 +14,17 @@ class BinlogTest extends Specification {
         ConfForSlot.global.confRepl.binlogForReadCacheSegmentMaxCount = 2
 
         println Binlog.oneFileMaxSegmentCount()
-        println new Binlog.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
+
+        def bytesWithFileIndexAndOffset = new Binlog.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
+        println bytesWithFileIndexAndOffset
         def fileIndexAndOffset = new Binlog.FileIndexAndOffset(1, 1)
 
         expect:
-        fileIndexAndOffset == fileIndexAndOffset
-        fileIndexAndOffset != null
-        fileIndexAndOffset != 1
+        !fileIndexAndOffset.equals(null)
+        fileIndexAndOffset != bytesWithFileIndexAndOffset
         fileIndexAndOffset == new Binlog.FileIndexAndOffset(1, 1)
-        fileIndexAndOffset != new Binlog.FileIndexAndOffset(1, 2)
+        fileIndexAndOffset != new Binlog.FileIndexAndOffset(1, 0)
+        fileIndexAndOffset != new Binlog.FileIndexAndOffset(0, 1)
         new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 0) > new Binlog.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
         new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 1) > new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 0)
         Binlog.marginFileOffset(100) == 0
@@ -35,6 +37,7 @@ class BinlogTest extends Specification {
         dynConfig2.binlogOn = false
         def binlog = new Binlog(slot, Consts.slotDir, dynConfig)
         println binlog.currentFileIndexAndOffset()
+        println binlog.earlestFileIndexAndOffset()
 
         final File slotDir2 = new File('/tmp/redis-vlog/test-persist/test-slot2')
         if (!slotDir2.exists()) {
@@ -169,7 +172,7 @@ class BinlogTest extends Specification {
         def oneSlot = localPersist.oneSlot(slot)
 
         when:
-        Binlog.decodeAndApply(slot, oneSegmentBytes, null)
+        Binlog.decodeAndApply(slot, oneSegmentBytes, 0, null)
         then:
         oneSlot.getWalByBucketIndex(0).keyCount == 10
 

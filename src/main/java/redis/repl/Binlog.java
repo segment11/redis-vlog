@@ -31,12 +31,6 @@ public class Binlog {
 
     private static final String BINLOG_DIR_NAME = "binlog";
 
-    private GetCurrentSlaveReplPairList getCurrentSlaveReplPairList;
-
-    public void setGetCurrentSlaveReplPairList(GetCurrentSlaveReplPairList getCurrentSlaveReplPairList) {
-        this.getCurrentSlaveReplPairList = getCurrentSlaveReplPairList;
-    }
-
     record BytesWithFileIndexAndOffset(byte[] bytes, int fileIndex,
                                        long offset) implements Comparable<BytesWithFileIndexAndOffset> {
         @Override
@@ -68,10 +62,10 @@ public class Binlog {
 
         @Override
         public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
+            if (obj == null) {
+                return false;
             }
-            if (obj == null || getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass()) {
                 return false;
             }
             FileIndexAndOffset that = (FileIndexAndOffset) obj;
@@ -130,10 +124,8 @@ public class Binlog {
     }
 
     public FileIndexAndOffset earlestFileIndexAndOffset() {
+        // at least have one file, self created
         var files = listFiles();
-        if (files.isEmpty()) {
-            return null;
-        }
         var file = files.get(0);
         return new FileIndexAndOffset(fileIndex(file), 0);
     }
