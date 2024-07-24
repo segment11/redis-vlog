@@ -34,8 +34,12 @@ public class ReplPair {
 
     @Override
     public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
+        if (obj == null) {
+            return false;
+        }
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
         ReplPair replPair = (ReplPair) obj;
         return asMaster == replPair.asMaster && port == replPair.port && host.equals(replPair.host);
     }
@@ -115,18 +119,7 @@ public class ReplPair {
         }
     }
 
-    public boolean ping() {
-        if (isSendBye) {
-            return false;
-        }
-
-        if (tcpClient != null) {
-            return tcpClient.ping();
-        }
-        return false;
-    }
-
-    private boolean isSendBye = false;
+    boolean isSendBye = false;
 
     public boolean isSendBye() {
         return isSendBye;
@@ -136,6 +129,17 @@ public class ReplPair {
         if (tcpClient != null) {
             isSendBye = true;
             return tcpClient.bye();
+        }
+        return false;
+    }
+
+    public boolean ping() {
+        if (isSendBye) {
+            return false;
+        }
+
+        if (tcpClient != null) {
+            return tcpClient.ping();
         }
         return false;
     }
