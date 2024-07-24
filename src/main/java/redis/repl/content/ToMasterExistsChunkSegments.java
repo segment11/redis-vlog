@@ -29,10 +29,6 @@ public class ToMasterExistsChunkSegments implements ReplContent {
         return 4 + 4 + metaBytes.length;
     }
 
-    // 4K one chunk segment, 1024 chunk segments means read 4M data and send to slave
-    public static final int REPL_ONCE_CHUNK_SEGMENT_COUNT = 1024;
-
-    // once compare with 1024 chunk segments
     public static boolean isSlaveSameForThisBatch(byte[] metaBytesMaster, byte[] contentBytesFromSlave) {
         // content bytes include begin segment index int, segment count int
         if (contentBytesFromSlave.length != metaBytesMaster.length + 8) {

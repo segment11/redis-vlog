@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
-import static redis.repl.content.ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT;
+import static redis.persist.FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT;
 
 public class Chunk {
     private final int segmentNumberPerFd;

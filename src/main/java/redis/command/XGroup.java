@@ -7,6 +7,7 @@ import redis.BaseCommand;
 import redis.ConfForSlot;
 import redis.Dict;
 import redis.DictMap;
+import redis.persist.FdReadWrite;
 import redis.persist.KeyLoader;
 import redis.persist.OneSlot;
 import redis.repl.Binlog;
@@ -137,6 +138,7 @@ public class XGroup extends BaseCommand {
             case meta_key_bucket_split_number -> meta_key_bucket_split_number(slot, contentBytes);
             case stat_key_count_in_buckets -> stat_key_count_in_buckets(slot, contentBytes);
             case exists_big_string -> exists_big_string(slot, contentBytes);
+            case incremental_big_string -> incremental_big_string(slot, contentBytes);
             case exists_dict -> exists_dict(slot, contentBytes);
             case exists_all_done -> exists_all_done(slot, contentBytes);
             case catch_up -> catch_up(slot, contentBytes);
@@ -145,6 +147,7 @@ public class XGroup extends BaseCommand {
             case s_meta_key_bucket_split_number -> s_meta_key_bucket_split_number(slot, contentBytes);
             case s_stat_key_count_in_buckets -> s_stat_key_count_in_buckets(slot, contentBytes);
             case s_exists_big_string -> s_exists_big_string(slot, contentBytes);
+            case s_incremental_big_string -> s_incremental_big_string(slot, contentBytes);
             case s_exists_dict -> s_exists_dict(slot, contentBytes);
             case s_exists_all_done -> s_exists_all_done(slot, contentBytes);
             case s_catch_up -> s_catch_up(slot, contentBytes);
@@ -337,7 +340,7 @@ public class XGroup extends BaseCommand {
         var oneSlot = localPersist.oneSlot(slot);
         if (EmptyContent.isEmpty(contentBytes)) {
             // next step, fetch exists chunk segments
-            var segmentCount = ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT;
+            var segmentCount = FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT;
             var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(0, segmentCount);
             var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
@@ -360,7 +363,7 @@ public class XGroup extends BaseCommand {
         var isAllReceived = splitIndex == splitNumber - 1 && isLastBatchInThisSplit;
         if (isAllReceived) {
             // next step, fetch exists chunk segments
-            var segmentCount = ToMasterExistsChunkSegments.REPL_ONCE_CHUNK_SEGMENT_COUNT;
+            var segmentCount = FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT;
             var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(0, segmentCount);
             var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
@@ -407,8 +410,19 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.stat_key_count_in_buckets, EmptyContent.INSTANCE);
     }
 
+    Reply incremental_big_string(byte slot, byte[] contentBytes) {
+        // server received from client
+        return null;
+    }
+
+    Reply s_incremental_big_string(byte slot, byte[] contentBytes) {
+        // client received from server
+        return null;
+    }
+
     Reply exists_big_string(byte slot, byte[] contentBytes) {
-        // server received from client, send back exists big string to client, with flag can do next step
+        // server received from client
+        // send back exists big string to client, with flag can do next step
         // client already persisted big string uuid, send to client exclude sent big string
         var sentUuidList = new ArrayList<Long>();
         if (contentBytes.length >= 8) {
