@@ -10,7 +10,7 @@ import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
-public class XBigStrings implements BinlogContent<XBigStrings> {
+public class XBigStrings implements BinlogContent {
     private final long uuid;
 
     private final String key;

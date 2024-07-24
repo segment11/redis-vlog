@@ -8,7 +8,7 @@ import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
-public class XWalV implements BinlogContent<XWalV> {
+public class XWalV implements BinlogContent {
     private final Wal.V v;
     private final boolean isValueShort;
     private final int offset;

@@ -5,7 +5,7 @@ import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
-public class XDynConfig implements BinlogContent<XDynConfig> {
+public class XDynConfig implements BinlogContent {
     @Override
     public Type type() {
         return null;

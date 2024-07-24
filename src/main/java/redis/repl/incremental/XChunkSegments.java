@@ -5,7 +5,7 @@ import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
-public class XChunkSegments implements BinlogContent<XChunkSegments> {
+public class XChunkSegments implements BinlogContent {
     @Override
     public Type type() {
         return null;

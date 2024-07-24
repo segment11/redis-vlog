@@ -8,7 +8,7 @@ import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
-public class XDict implements BinlogContent<XDict> {
+public class XDict implements BinlogContent {
     private final String keyPrefix;
 
     private final Dict dict;

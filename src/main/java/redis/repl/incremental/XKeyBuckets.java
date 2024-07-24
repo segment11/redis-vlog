@@ -5,7 +5,7 @@ import redis.repl.ReplPair;
 
 import java.nio.ByteBuffer;
 
-public class XKeyBuckets implements BinlogContent<XKeyBuckets> {
+public class XKeyBuckets implements BinlogContent {
     @Override
     public Type type() {
         return null;
