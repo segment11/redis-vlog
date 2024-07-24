@@ -37,7 +37,7 @@ class AGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def aGroup = new AGroup('append', data1, null)
-        aGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        aGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = aGroup.handle()
@@ -63,7 +63,7 @@ class AGroupTest extends Specification {
 
         def aGroup = new AGroup('append', data3, null)
         aGroup.byPassGetSet = inMemoryGetSet
-        aGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        aGroup.from(BaseCommand.mockAGroup())
 
         when:
         aGroup.slotWithKeyHashListParsed = AGroup.parseSlots('append', data3, aGroup.slotNumber)
@@ -81,7 +81,7 @@ class AGroupTest extends Specification {
         def data2 = new byte[2][]
         def aGroup2 = new AGroup('append', data2, null)
 //        aGroup2.byPassGetSet = inMemoryGetSet
-//        aGroup2.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+//        aGroup2.from(BaseCommand.mockAGroup())
         def reply = aGroup2.append()
         then:
         reply == ErrorReply.FORMAT

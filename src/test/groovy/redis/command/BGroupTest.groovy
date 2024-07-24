@@ -21,7 +21,7 @@ class BGroupTest extends Specification {
         given:
         def data1 = new byte[1][]
         def bGroup = new BGroup('bgsave', data1, null)
-        bGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        bGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = bGroup.handle()

@@ -24,7 +24,7 @@ class YGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def yGroup = new YGroup('incr', data1, null)
-        yGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        yGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = yGroup.handle()

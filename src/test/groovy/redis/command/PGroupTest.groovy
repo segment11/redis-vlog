@@ -82,7 +82,7 @@ class PGroupTest extends Specification {
 
         def pGroup = new PGroup('pexpire', data3, null)
         pGroup.byPassGetSet = inMemoryGetSet
-        pGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        pGroup.from(BaseCommand.mockAGroup())
 
         when:
         pGroup.slotWithKeyHashListParsed = PGroup.parseSlots('pexpire', data3, pGroup.slotNumber)

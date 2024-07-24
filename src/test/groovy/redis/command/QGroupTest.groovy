@@ -24,7 +24,7 @@ class QGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def qGroup = new QGroup('incr', data1, null)
-        qGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        qGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = qGroup.handle()

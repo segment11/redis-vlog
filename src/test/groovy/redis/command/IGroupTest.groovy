@@ -40,7 +40,7 @@ class IGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def iGroup = new IGroup('incr', data1, null)
-        iGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        iGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = iGroup.handle()
@@ -77,7 +77,7 @@ class IGroupTest extends Specification {
 
         def iGroup = new IGroup('incr', data2, null)
         iGroup.byPassGetSet = inMemoryGetSet
-        iGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        iGroup.from(BaseCommand.mockAGroup())
 
         when:
         iGroup.slotWithKeyHashListParsed = IGroup.parseSlots('incr', data2, iGroup.slotNumber)

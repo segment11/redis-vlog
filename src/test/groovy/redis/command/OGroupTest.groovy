@@ -24,7 +24,7 @@ class OGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def oGroup = new OGroup('incr', data1, null)
-        oGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        oGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = oGroup.handle()

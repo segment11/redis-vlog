@@ -74,7 +74,7 @@ class LGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def lGroup = new LGroup('lindex', data1, null)
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = lGroup.handle()
@@ -173,7 +173,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('lindex', data3, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('lindex', data3, lGroup.slotNumber)
@@ -253,7 +253,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('linsert', data5, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('linsert', data5, lGroup.slotNumber)
@@ -339,7 +339,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('llen', data2, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('llen', data2, lGroup.slotNumber)
@@ -404,7 +404,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('lmove', data5, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('lmove', data5, lGroup.slotNumber)
@@ -517,7 +517,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('lpop', data2, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('lpop', data2, lGroup.slotNumber)
@@ -599,7 +599,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('lpos', data3, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('lpos', data3, lGroup.slotNumber)
@@ -808,7 +808,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('lpush', data3, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('lpush', data3, lGroup.slotNumber)
@@ -887,7 +887,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('lrange', data4, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('lrange', data4, lGroup.slotNumber)
@@ -987,7 +987,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('lrem', data4, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('lrem', data4, lGroup.slotNumber)
@@ -1102,7 +1102,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('lset', data4, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('lset', data4, lGroup.slotNumber)
@@ -1213,7 +1213,7 @@ class LGroupTest extends Specification {
 
         def lGroup = new LGroup('ltrim', data4, null)
         lGroup.byPassGetSet = inMemoryGetSet
-        lGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        lGroup.from(BaseCommand.mockAGroup())
 
         when:
         lGroup.slotWithKeyHashListParsed = LGroup.parseSlots('ltrim', data4, lGroup.slotNumber)

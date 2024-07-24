@@ -24,7 +24,7 @@ class NGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def nGroup = new NGroup('incr', data1, null)
-        nGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        nGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = nGroup.handle()

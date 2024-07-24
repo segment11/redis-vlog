@@ -57,7 +57,7 @@ class DGroupTest extends Specification {
 
         def dGroup = new DGroup('del', data1, null)
         dGroup.byPassGetSet = inMemoryGetSet
-        dGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        dGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = dGroup.handle()
@@ -133,7 +133,7 @@ class DGroupTest extends Specification {
 
         def dGroup = new DGroup('del', data2, null)
         dGroup.byPassGetSet = inMemoryGetSet
-        dGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
+        dGroup.from(BaseCommand.mockAGroup())
 
         when:
         def data1 = new byte[1][]
@@ -206,7 +206,7 @@ class DGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def dGroup = new DGroup('dbsize', data1, null)
-        dGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
+        dGroup.from(BaseCommand.mockAGroup())
 
         when:
         def eventloop = Eventloop.builder()
@@ -244,7 +244,7 @@ class DGroupTest extends Specification {
 
         def dGroup = new DGroup('decrby', data2, null)
         dGroup.byPassGetSet = inMemoryGetSet
-        dGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
+        dGroup.from(BaseCommand.mockAGroup())
 
         when:
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decrby', data2, dGroup.slotNumber)

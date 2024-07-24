@@ -43,7 +43,7 @@ class TGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def tGroup = new TGroup('type', data1, null)
-        tGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        tGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = tGroup.handle()
@@ -74,7 +74,7 @@ class TGroupTest extends Specification {
 
         def tGroup = new TGroup('type', data2, null)
         tGroup.byPassGetSet = inMemoryGetSet
-        tGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        tGroup.from(BaseCommand.mockAGroup())
 
         when:
         tGroup.slotWithKeyHashListParsed = TGroup.parseSlots('type', data2, tGroup.slotNumber)
@@ -152,7 +152,7 @@ class TGroupTest extends Specification {
 
         def tGroup = new TGroup('ttl', data2, null)
         tGroup.byPassGetSet = inMemoryGetSet
-        tGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        tGroup.from(BaseCommand.mockAGroup())
 
         when:
         tGroup.slotWithKeyHashListParsed = TGroup.parseSlots('ttl', data2, tGroup.slotNumber)

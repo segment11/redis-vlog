@@ -112,7 +112,7 @@ class MGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def mGroup = new MGroup('mget', data1, null)
-        mGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        mGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = mGroup.handle()
@@ -150,7 +150,7 @@ class MGroupTest extends Specification {
 
         def mGroup = new MGroup('mget', data3, null)
         mGroup.byPassGetSet = inMemoryGetSet
-        mGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        mGroup.from(BaseCommand.mockAGroup())
 
         when:
         mGroup.slotWithKeyHashListParsed = MGroup.parseSlots('mget', data3, mGroup.slotNumber)
@@ -214,7 +214,7 @@ class MGroupTest extends Specification {
 
         def mGroup = new MGroup('mset', data5, null)
         mGroup.byPassGetSet = inMemoryGetSet
-        mGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        mGroup.from(BaseCommand.mockAGroup())
 
         when:
         mGroup.slotWithKeyHashListParsed = MGroup.parseSlots('mset', data5, mGroup.slotNumber)

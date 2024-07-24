@@ -45,7 +45,7 @@ class GGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def gGroup = new GGroup('getdel', data1, null)
-        gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        gGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = gGroup.handle()
@@ -88,7 +88,7 @@ class GGroupTest extends Specification {
 
         def gGroup = new GGroup('getdel', data2, null)
         gGroup.byPassGetSet = inMemoryGetSet
-        gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        gGroup.from(BaseCommand.mockAGroup())
 
         when:
         gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getdel', data2, gGroup.slotNumber)
@@ -116,7 +116,7 @@ class GGroupTest extends Specification {
 
         def gGroup = new GGroup('getex', data2, null)
         gGroup.byPassGetSet = inMemoryGetSet
-        gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        gGroup.from(BaseCommand.mockAGroup())
 
         when:
         gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getex', data2, gGroup.slotNumber)
@@ -234,7 +234,7 @@ class GGroupTest extends Specification {
 
         def gGroup = new GGroup('getrange', data4, null)
         gGroup.byPassGetSet = inMemoryGetSet
-        gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        gGroup.from(BaseCommand.mockAGroup())
 
         when:
         gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getrange', data4, gGroup.slotNumber)
@@ -325,7 +325,7 @@ class GGroupTest extends Specification {
 
         def gGroup = new GGroup('getset', data3, null)
         gGroup.byPassGetSet = inMemoryGetSet
-        gGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        gGroup.from(BaseCommand.mockAGroup())
 
         when:
         gGroup.slotWithKeyHashListParsed = GGroup.parseSlots('getset', data3, gGroup.slotNumber)

@@ -114,6 +114,10 @@ public abstract class BaseCommand {
         isCrossRequestWorker = crossRequestWorker;
     }
 
+    public static AGroup mockAGroup() {
+        return BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1);
+    }
+
     public static AGroup mockAGroup(byte workerId, byte netWorkers, short slotNumber) {
         return mockAGroup(workerId, netWorkers, slotNumber, new CompressStats("mock"),
                 Zstd.defaultCompressionLevel(), 100, new SnowFlake(1, 1),

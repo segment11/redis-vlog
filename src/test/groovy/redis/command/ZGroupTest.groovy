@@ -238,7 +238,7 @@ zunionstore
         def data1 = new byte[1][]
 
         def zGroup = new ZGroup('zadd', data1, null)
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         def allCmdList = singleKeyCmdList1 + multiKeyCmdList2 + multiKeyCmdList3 + ['zrangestore', 'zintercard']
 
@@ -280,7 +280,7 @@ zunionstore
 
         def zGroup = new ZGroup('zadd', data6, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zadd', data6, zGroup.slotNumber)
@@ -479,7 +479,7 @@ zunionstore
 
         def zGroup = new ZGroup('zcard', data2, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zcard', data2, zGroup.slotNumber)
@@ -528,7 +528,7 @@ zunionstore
 
         def zGroup = new ZGroup('zcount', data4, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zcount', data4, zGroup.slotNumber)
@@ -685,7 +685,7 @@ zunionstore
 
         def zGroup = new ZGroup('zdiff', data5, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zdiff', data5, zGroup.slotNumber)
@@ -1282,7 +1282,7 @@ zunionstore
 
         def zGroup = new ZGroup('zincrby', data4, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zincrby', data4, zGroup.slotNumber)
@@ -1347,7 +1347,7 @@ zunionstore
 
         def zGroup = new ZGroup('zintercard', data6, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zintercard', data6, zGroup.slotNumber)
@@ -1575,7 +1575,7 @@ zunionstore
 
         def zGroup = new ZGroup('zmscore', data4, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zmscore', data4, zGroup.slotNumber)
@@ -1638,7 +1638,7 @@ zunionstore
 
         def zGroup = new ZGroup('zpopmax', data3, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zpopmax', data3, zGroup.slotNumber)
@@ -1730,7 +1730,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrandmember', data4, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrandmember', data4, zGroup.slotNumber)
@@ -1880,7 +1880,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrange', data10, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrange', data10, zGroup.slotNumber)
@@ -2479,7 +2479,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrangebylex', data7, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrangebylex', data7, zGroup.slotNumber)
@@ -2522,7 +2522,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrangebyscore', data7, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrangebyscore', data7, zGroup.slotNumber)
@@ -2559,7 +2559,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrangestore', data8, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrangestore', data8, zGroup.slotNumber)
@@ -2583,7 +2583,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrevrange', data5, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrevrange', data5, zGroup.slotNumber)
@@ -2609,7 +2609,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrevrangebylex', data7, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrevrangebylex', data7, zGroup.slotNumber)
@@ -2635,7 +2635,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrevrangebyscore', data7, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrevrangebyscore', data7, zGroup.slotNumber)
@@ -2658,7 +2658,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrank', data4, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrank', data4, zGroup.slotNumber)
@@ -2757,7 +2757,7 @@ zunionstore
 
         def zGroup = new ZGroup('zrem', data4, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrem', data4, zGroup.slotNumber)
@@ -2819,7 +2819,7 @@ zunionstore
 
         def zGroup = new ZGroup('zremrangebyscore', data4, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zremrangebyscore', data4, zGroup.slotNumber)
@@ -3045,7 +3045,7 @@ zunionstore
 
         def zGroup = new ZGroup('zscore', data3, null)
         zGroup.byPassGetSet = inMemoryGetSet
-        zGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        zGroup.from(BaseCommand.mockAGroup())
 
         when:
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zscore', data3, zGroup.slotNumber)

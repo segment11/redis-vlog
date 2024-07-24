@@ -58,7 +58,7 @@ class EGroupTest extends Specification {
 
         def eGroup = new EGroup('exists', data1, null)
         eGroup.byPassGetSet = inMemoryGetSet
-        eGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        eGroup.from(BaseCommand.mockAGroup())
 
         eGroup.slotWithKeyHashListParsed = EGroup.parseSlots('exists', data1, eGroup.slotNumber)
 
@@ -118,7 +118,7 @@ class EGroupTest extends Specification {
 
         def eGroup = new EGroup('exists', data2, null)
         eGroup.byPassGetSet = inMemoryGetSet
-        eGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
+        eGroup.from(BaseCommand.mockAGroup())
 
         when:
         def data1 = new byte[1][]
@@ -195,7 +195,7 @@ class EGroupTest extends Specification {
 
         def eGroup = new EGroup('expire', data1, null)
         eGroup.byPassGetSet = inMemoryGetSet
-        eGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
+        eGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = eGroup.expire(true, true)
@@ -343,7 +343,7 @@ class EGroupTest extends Specification {
 
         def eGroup = new EGroup('decrby', data2, null)
         eGroup.byPassGetSet = inMemoryGetSet
-        eGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
+        eGroup.from(BaseCommand.mockAGroup())
 
         when:
         def data1 = new byte[1][]

@@ -24,7 +24,7 @@ class JGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def jGroup = new JGroup('incr', data1, null)
-        jGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        jGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = jGroup.handle()

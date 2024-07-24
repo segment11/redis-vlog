@@ -41,7 +41,7 @@ class CGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def cGroup = new CGroup('client', data1, null)
-        cGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        cGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = cGroup.handle()
@@ -76,7 +76,7 @@ class CGroupTest extends Specification {
                 new InetSocketAddress('localhost', 46379), null)
 
         def cGroup = new CGroup('client', data2, socket)
-        cGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        cGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = cGroup.client()
@@ -108,7 +108,7 @@ class CGroupTest extends Specification {
 
         def cGroup = new CGroup('copy', data3, null)
         cGroup.byPassGetSet = inMemoryGetSet
-        cGroup.from(BaseCommand.mockAGroup(slot, (byte) 1, (short) 1))
+        cGroup.from(BaseCommand.mockAGroup())
 
         when:
         cGroup.slotWithKeyHashListParsed = CGroup.parseSlots('copy', data3, cGroup.slotNumber)

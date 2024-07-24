@@ -31,7 +31,7 @@ class FGroupTest extends Specification {
         data2[1] = 'a'.bytes
 
         def fGroup = new FGroup('flushdb', data2, null)
-        fGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        fGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = fGroup.handle()
@@ -58,7 +58,7 @@ class FGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def fGroup = new FGroup('flushdb', data1, null)
-        fGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        fGroup.from(BaseCommand.mockAGroup())
 
         when:
         def eventloop = Eventloop.builder()

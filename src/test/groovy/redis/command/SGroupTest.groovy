@@ -107,7 +107,7 @@ sunionstore
         def data1 = new byte[1][]
 
         def sGroup = new SGroup('set', data1, null)
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         def allCmdList = singleKeyCmdList1 + multiKeyCmdList2 + ['sintercard', 'smove', 'select']
 
@@ -147,7 +147,7 @@ sunionstore
 
         def sGroup = new SGroup('set', data3, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('set', data3, sGroup.slotNumber)
@@ -336,7 +336,7 @@ sunionstore
 
         def sGroup = new SGroup('setex', data4, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('setex', data4, sGroup.slotNumber)
@@ -358,7 +358,7 @@ sunionstore
 
         def sGroup = new SGroup('setnx', data3, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('setnx', data3, sGroup.slotNumber)
@@ -392,7 +392,7 @@ sunionstore
 
         def sGroup = new SGroup('setrange', data4, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('setrange', data4, sGroup.slotNumber)
@@ -475,7 +475,7 @@ sunionstore
 
         def sGroup = new SGroup('strlen', data2, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('strlen', data2, sGroup.slotNumber)
@@ -506,7 +506,7 @@ sunionstore
 
         def sGroup = new SGroup('select', data2, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('select', data2, sGroup.slotNumber)
@@ -546,7 +546,7 @@ sunionstore
 
         def sGroup = new SGroup('sadd', data4, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('sadd', data4, sGroup.slotNumber)
@@ -636,7 +636,7 @@ sunionstore
 
         def sGroup = new SGroup('scard', data2, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('scard', data2, sGroup.slotNumber)
@@ -683,7 +683,7 @@ sunionstore
 
         def sGroup = new SGroup('sdiff', data3, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('sdiff', data3, sGroup.slotNumber)
@@ -855,7 +855,7 @@ sunionstore
 
         def sGroup = new SGroup('sdiffstore', data4, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('sdiffstore', data4, sGroup.slotNumber)
@@ -1077,7 +1077,7 @@ sunionstore
 
         def sGroup = new SGroup('sintercard', data6, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('sintercard', data6, sGroup.slotNumber)
@@ -1274,7 +1274,7 @@ sunionstore
 
         def sGroup = new SGroup('sismember', data3, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('sismember', data3, sGroup.slotNumber)
@@ -1328,7 +1328,7 @@ sunionstore
 
         def sGroup = new SGroup('smembers', data2, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('smembers', data2, sGroup.slotNumber)
@@ -1378,7 +1378,7 @@ sunionstore
 
         def sGroup = new SGroup('smismember', data4, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('smismember', data4, sGroup.slotNumber)
@@ -1437,7 +1437,7 @@ sunionstore
 
         def sGroup = new SGroup('smove', data4, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('smove', data4, sGroup.slotNumber)
@@ -1553,7 +1553,7 @@ sunionstore
 
         def sGroup = new SGroup('srandmember', data3, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('srandmember', data3, sGroup.slotNumber)
@@ -1661,7 +1661,7 @@ sunionstore
 
         def sGroup = new SGroup('srem', data4, null)
         sGroup.byPassGetSet = inMemoryGetSet
-        sGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        sGroup.from(BaseCommand.mockAGroup())
 
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('srem', data4, sGroup.slotNumber)

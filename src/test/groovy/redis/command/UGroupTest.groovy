@@ -24,7 +24,7 @@ class UGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def uGroup = new UGroup('incr', data1, null)
-        uGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        uGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = uGroup.handle()

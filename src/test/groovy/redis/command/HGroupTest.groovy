@@ -68,7 +68,7 @@ class HGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def hGroup = new HGroup('hdel', data1, null)
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = hGroup.handle()
@@ -192,7 +192,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hdel', data3, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hdel', data3, hGroup.slotNumber)
@@ -257,7 +257,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hexists', data3, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hexists', data3, hGroup.slotNumber)
@@ -299,7 +299,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hget', data3, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hget', data3, hGroup.slotNumber)
@@ -352,7 +352,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hgetall', data2, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hgetall', data2, hGroup.slotNumber)
@@ -418,7 +418,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hincrby', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hincrby', data4, hGroup.slotNumber)
@@ -468,7 +468,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hkeys', data2, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hkeys', data2, hGroup.slotNumber)
@@ -530,7 +530,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hmget', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hmget', data4, hGroup.slotNumber)
@@ -584,7 +584,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hmset', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hmset', data4, hGroup.slotNumber)
@@ -684,7 +684,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hrandfield', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hrandfield', data4, hGroup.slotNumber)
@@ -810,7 +810,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hsetnx', data4, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hsetnx', data4, hGroup.slotNumber)
@@ -856,7 +856,7 @@ class HGroupTest extends Specification {
 
         def hGroup = new HGroup('hvals', data2, null)
         hGroup.byPassGetSet = inMemoryGetSet
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hvals', data2, hGroup.slotNumber)
@@ -918,7 +918,7 @@ class HGroupTest extends Specification {
         }
 
         def hGroup = new HGroup('h_field_dict_train', data13, null)
-        hGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        hGroup.from(BaseCommand.mockAGroup())
 
         when:
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('h_field_dict_train', data13, hGroup.slotNumber)

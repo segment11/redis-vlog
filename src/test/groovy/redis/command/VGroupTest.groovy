@@ -24,7 +24,7 @@ class VGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def vGroup = new VGroup('incr', data1, null)
-        vGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        vGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = vGroup.handle()

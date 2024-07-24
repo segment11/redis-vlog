@@ -24,7 +24,7 @@ class KGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def kGroup = new KGroup('incr', data1, null)
-        kGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        kGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = kGroup.handle()

@@ -24,7 +24,7 @@ class WGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def wGroup = new WGroup('incr', data1, null)
-        wGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        wGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = wGroup.handle()

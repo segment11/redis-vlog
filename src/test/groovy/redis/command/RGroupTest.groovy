@@ -73,7 +73,7 @@ class RGroupTest extends Specification {
         def data1 = new byte[1][]
 
         def rGroup = new RGroup('rename', data1, null)
-        rGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        rGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = rGroup.handle()
@@ -111,7 +111,7 @@ class RGroupTest extends Specification {
 
         def rGroup = new RGroup('rename', data3, null)
         rGroup.byPassGetSet = inMemoryGetSet
-        rGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        rGroup.from(BaseCommand.mockAGroup())
 
         when:
         rGroup.slotWithKeyHashListParsed = RGroup.parseSlots('rename', data3, rGroup.slotNumber)
@@ -181,7 +181,7 @@ class RGroupTest extends Specification {
 
         def rGroup = new RGroup('rpop', data3, null)
         rGroup.byPassGetSet = inMemoryGetSet
-        rGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        rGroup.from(BaseCommand.mockAGroup())
 
         when:
         rGroup.slotWithKeyHashListParsed = RGroup.parseSlots('rpop', data3, rGroup.slotNumber)
@@ -203,7 +203,7 @@ class RGroupTest extends Specification {
 
         def rGroup = new RGroup('rpoplpush', data3, null)
         rGroup.byPassGetSet = inMemoryGetSet
-        rGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        rGroup.from(BaseCommand.mockAGroup())
 
         when:
         rGroup.slotWithKeyHashListParsed = RGroup.parseSlots('rpoplpush', data3, rGroup.slotNumber)
@@ -287,7 +287,7 @@ class RGroupTest extends Specification {
 
         def rGroup = new RGroup('rpush', data3, null)
         rGroup.byPassGetSet = inMemoryGetSet
-        rGroup.from(BaseCommand.mockAGroup((byte) 0, (byte) 1, (short) 1))
+        rGroup.from(BaseCommand.mockAGroup())
 
         when:
         rGroup.slotWithKeyHashListParsed = RGroup.parseSlots('rpush', data3, rGroup.slotNumber)
