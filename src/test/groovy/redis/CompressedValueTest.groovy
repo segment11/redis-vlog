@@ -16,8 +16,8 @@ class CompressedValueTest extends Specification {
         cv.compressedData = new byte[0]
         println cv
         println cv.getExpireAt()
-        println cv.compressedLength()
-        println cv.uncompressedLength()
+        println cv.compressedLength
+        println cv.uncompressedLength
 
         expect:
         CompressedValue.isTypeNumber(CompressedValue.SP_TYPE_NUM_BYTE)

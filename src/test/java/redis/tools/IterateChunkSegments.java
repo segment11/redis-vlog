@@ -85,7 +85,7 @@ public class IterateChunkSegments {
             }
 
             for (var one : cvList) {
-                if (cvNormalCompressedLength != 0 && one.cv.compressedLength() != cvNormalCompressedLength) {
+                if (cvNormalCompressedLength != 0 && one.cv.getCompressedLength() != cvNormalCompressedLength) {
                     System.out.println("key: " + one.key + ", cv: " + one.cv);
                 }
             }

@@ -101,7 +101,7 @@ class SegmentBatchTest extends Specification {
         then:
         returnPvmList.size() == list.size()
         loaded.every { one ->
-            one.compressedLength() == 10 &&
+            one.compressedLength == 10 &&
                     list.find { it.seq() == one.seq }.keyHash() == one.keyHash
         }
 

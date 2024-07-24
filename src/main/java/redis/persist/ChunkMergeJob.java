@@ -396,7 +396,7 @@ public class ChunkMergeJob {
                                 if (dict != null) {
                                     var rawBytes = cv.decompress(Dict.SELF_ZSTD_DICT);
                                     var newCompressedCv = CompressedValue.compress(rawBytes, dict, chunkMergeWorker.compressLevel);
-                                    if (!newCompressedCv.isIgnoreCompression(rawBytes) && newCompressedCv.compressedLength() < cv.compressedLength()) {
+                                    if (!newCompressedCv.isIgnoreCompression(rawBytes) && newCompressedCv.getCompressedLength() < cv.getCompressedLength()) {
                                         // replace
                                         newCompressedCv.setSeq(cv.getSeq());
                                         newCompressedCv.setDictSeqOrSpType(dict.getSeq());
