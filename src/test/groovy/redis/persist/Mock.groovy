@@ -7,9 +7,9 @@ class Mock {
     static List<Wal.V> prepareShortValueList(int n, int bucketIndex = 0) {
         List<Wal.V> shortValueList = []
         n.times {
-            def key = "key:" + it.toString().padLeft(12, '0')
+            def key = 'key:' + it.toString().padLeft(12, '0')
             def keyBytes = key.bytes
-            def valueBytes = ("value" + it).bytes
+            def valueBytes = ('value' + it).bytes
 
             def keyHash = KeyHash.hash(keyBytes)
 
@@ -24,7 +24,7 @@ class Mock {
     static ArrayList<Wal.V> prepareValueList(int n, int bucketIndex = 0) {
         ArrayList<Wal.V> valueList = []
         n.times {
-            def key = "key:" + it.toString().padLeft(12, '0')
+            def key = 'key:' + it.toString().padLeft(12, '0')
             def keyBytes = key.bytes
 
             def keyHash = KeyHash.hash(keyBytes)
