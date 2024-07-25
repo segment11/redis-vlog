@@ -429,6 +429,8 @@ class CompressedValueTest extends Specification {
 
         then:
         cv3.isIgnoreCompression(rawBytes2)
+        !cv3.isIgnoreCompression('12345'.bytes)
+        !cv3.isIgnoreCompression('1235'.bytes)
 
         when:
         def snowFlake = new SnowFlake(1, 1)

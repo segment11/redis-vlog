@@ -76,6 +76,13 @@ public abstract class BaseCommand {
 //    }
 
     public record SlotWithKeyHashWithKeyBytes(SlotWithKeyHash slotWithKeyHash, byte[] keyBytes) {
+        @Override
+        public String toString() {
+            return "SlotWithKeyHashWithKeyBytes{" +
+                    "slotWithKeyHash=" + slotWithKeyHash +
+                    ", key=" + new String(keyBytes) +
+                    '}';
+        }
     }
 
     // need final, for unit test, can change
@@ -351,9 +358,6 @@ public abstract class BaseCommand {
             var beginT = System.nanoTime();
             var decompressed = cv.decompress(dict);
             var costT = (System.nanoTime() - beginT) / 1000;
-            if (costT == 0) {
-                costT = 1;
-            }
 
             // stats
             compressStats.decompressedCount++;
@@ -449,7 +453,7 @@ public abstract class BaseCommand {
         if (cv.isTypeNumber()) {
             setNumber(keyBytes, cv.numberValue(), slotWithKeyHash);
         } else {
-            // new seq
+            // update to new seq
             cv.setSeq(snowFlake.nextId());
             // update key hash
             cv.setKeyHash(slotWithKeyHash.keyHash());
@@ -548,9 +552,6 @@ public abstract class BaseCommand {
             // dict may be null
             var cv = CompressedValue.compress(valueBytes, dict, compressLevel);
             var costT = (System.nanoTime() - beginT) / 1000;
-            if (costT == 0) {
-                costT = 1;
-            }
             cv.seq = snowFlake.nextId();
             if (cv.isIgnoreCompression(valueBytes)) {
                 cv.dictSeqOrSpType = NULL_DICT_SEQ;
@@ -643,7 +644,7 @@ public abstract class BaseCommand {
 
     public boolean remove(byte slot, int bucketIndex, String key, long keyHash) {
         if (byPassGetSet != null) {
-            return byPassGetSet.remove((byte) 0, key);
+            return byPassGetSet.remove(slot, key);
         }
 
         var oneSlot = localPersist.oneSlot(slot);
@@ -652,7 +653,7 @@ public abstract class BaseCommand {
 
     public void removeDelay(byte slot, int bucketIndex, String key, long keyHash) {
         if (byPassGetSet != null) {
-            byPassGetSet.remove((byte) 0, key);
+            byPassGetSet.remove(slot, key);
             return;
         }
 
@@ -670,7 +671,7 @@ public abstract class BaseCommand {
         return oneSlot.exists(key, bucketIndex, keyHash);
     }
 
-    private void handleTrainSampleResult(TrainSampleJob.TrainSampleResult trainSampleResult) {
+    void handleTrainSampleResult(TrainSampleJob.TrainSampleResult trainSampleResult) {
         if (trainSampleResult == null) {
             return;
         }

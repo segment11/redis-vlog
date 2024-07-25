@@ -3,6 +3,7 @@ package redis
 import com.github.luben.zstd.Zstd
 import io.activej.config.Config
 import io.activej.net.socket.tcp.ITcpSocket
+import org.apache.commons.io.FileUtils
 import redis.decode.Request
 import redis.mock.InMemoryGetSet
 import redis.persist.Consts
@@ -26,6 +27,9 @@ class BaseCommandTest extends Specification {
             return null
         }
     }
+
+    final byte slot = 0
+    final int slotNumber = 1
 
     def 'test static methods'() {
         given:
@@ -55,6 +59,8 @@ class BaseCommandTest extends Specification {
 
         def k5 = 'key5{xyz}'
         def s5 = BaseCommand.slot(k5.bytes, 1)
+
+        println new BaseCommand.SlotWithKeyHashWithKeyBytes(s5, k5.bytes)
 
         expect:
         s1.slot == 0
@@ -93,7 +99,7 @@ class BaseCommandTest extends Specification {
         c.workerId == 0
         c.netWorkers == 1
         c.slotNumber == 1
-        c.slot('key3{x}').slot() == BaseCommand.slot('key3{x}', 1).slot()
+        c.slot('key3{x}'.bytes).slot() == BaseCommand.slot('key3{x}'.bytes, 1).slot()
 
         c.compressStats != null
         c.compressLevel == Zstd.defaultCompressionLevel()
@@ -114,9 +120,6 @@ class BaseCommandTest extends Specification {
 
     def 'test get'() {
         given:
-        final byte slot = 0
-        final int slotNumber = 1
-
         def data2 = new byte[2][0]
         data2[0] = 'get'.bytes
         data2[1] = 'key'.bytes
@@ -180,6 +183,13 @@ class BaseCommandTest extends Specification {
         // cvBigString compressedData is already changed
         c.getCv(bigStringKey.bytes, sBigString).compressedData == rawData
 
+//        when:
+//        oneSlot.getBigStringDir().listFiles().each {
+//            it.delete()
+//        }
+//        then:
+//        c.getCv(bigStringKey.bytes, sBigString).compressedData == null
+
         when:
         def cvNumber = new CompressedValue()
         cvNumber.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_INT
@@ -200,7 +210,7 @@ class BaseCommandTest extends Specification {
         valueBytes == 'hello'.bytes
 
         when:
-        def longStringBytes = ('aaaaabbbbcccc' * 5).bytes
+        def longStringBytes = ('aaaaabbbbbccccc' * 10).bytes
         def cvCompressed = CompressedValue.compress(longStringBytes, Dict.SELF_ZSTD_DICT, 3)
         cvCompressed.dictSeqOrSpType = Dict.SELF_ZSTD_DICT_SEQ
         cvCompressed.keyHash = sKey.keyHash()
@@ -213,12 +223,13 @@ class BaseCommandTest extends Specification {
         inMemoryGetSet.put(slot, 'key', sKey.bucketIndex(), cv)
         valueBytes = c.get(key.bytes)
         then:
-        valueBytes.length == cv.compressedData.length
+        valueBytes.length == cv.compressedLength
 
         when:
         valueBytes = c.get(key.bytes, sKey)
         then:
-        valueBytes.length == cv.compressedData.length
+        valueBytes.length == cv.compressedLength
+        c.get('not-exist-key'.bytes, sKey) == null
 
         when:
         c.byPassGetSet = inMemoryGetSet
@@ -227,7 +238,7 @@ class BaseCommandTest extends Specification {
         def cvForTypeList = new CompressedValue()
         cvForTypeList.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST
         cvForTypeList.compressedData = new RedisList().encode()
-        cvForTypeList.compressedLength = cvForTypeList.compressedData.length
+        cvForTypeList.compressedLength = cvForTypeList.compressedLength
         cvForTypeList.uncompressedLength = cvForTypeList.compressedLength
         cvForTypeList.keyHash = sKeyForTypeList.keyHash()
         inMemoryGetSet.put(slot, keyForTypeList, sKeyForTypeList.bucketIndex(), cvForTypeList)
@@ -242,12 +253,403 @@ class BaseCommandTest extends Specification {
         exception
 
         when:
-        c.byPassGetSet = inMemoryGetSet
+        cvForTypeList.dictSeqOrSpType = 0
+        inMemoryGetSet.put(slot, keyForTypeList, sKeyForTypeList.bucketIndex(), cvForTypeList)
         then:
-        1 == 1
+        c.get(keyForTypeList.bytes, sKeyForTypeList, true) != null
 
         cleanup:
         localPersist.cleanUp()
         Consts.persistDir.deleteDir()
+    }
+
+    def 'test set'() {
+        given:
+        def snowFlake = new SnowFlake(1, 1)
+
+        def data3 = new byte[3][0]
+        data3[0] = 'set'.bytes
+        data3[1] = 'key'.bytes
+        data3[2] = 'value'.bytes
+
+        def c = new SubCommand('set', data3, null)
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, snowFlake, null, Config.create())
+        c.init(requestHandler, new Request(data3, false, false))
+
+        when:
+        def key = 'key'
+        def sKey = BaseCommand.slot(key.bytes, slotNumber)
+        c.byPassGetSet = inMemoryGetSet
+        c.setNumber(key.bytes, (short) 1, sKey)
+        then:
+        c.get(key.bytes, sKey).length == 1
+
+        when:
+        c.setNumber(key.bytes, (short) 200, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 3
+
+        when:
+        c.setNumber(key.bytes, (short) -200, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 4
+
+        when:
+        c.setNumber(key.bytes, (int) 1, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 1
+
+        when:
+        c.setNumber(key.bytes, (int) -200, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 4
+
+        when:
+        c.setNumber(key.bytes, (int) 65536, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 5
+
+        when:
+        c.setNumber(key.bytes, (int) -65537, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 6
+
+        when:
+        c.setNumber(key.bytes, (long) 1, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 1
+
+        when:
+        c.setNumber(key.bytes, (long) -200, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 4
+
+        when:
+        c.setNumber(key.bytes, (long) 65536, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 5
+
+        when:
+        c.setNumber(key.bytes, (long) -65537, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 6
+
+        when:
+        c.setNumber(key.bytes, (long) (1L + Integer.MAX_VALUE), sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 10
+
+        when:
+        c.setNumber(key.bytes, (long) (-1L + Integer.MIN_VALUE), sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 11
+
+        when:
+        c.setNumber(key.bytes, (double) 0.99, sKey, CompressedValue.NO_EXPIRE)
+        then:
+        c.get(key.bytes, sKey).length == 4
+
+        when:
+        boolean exception = false
+        try {
+            c.setNumber(key.bytes, (float) 0.99, sKey, CompressedValue.NO_EXPIRE)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+        def value = 'value'
+        c.set(key.bytes, value.bytes)
+        then:
+        c.get(key.bytes, sKey).length == 5
+
+        when:
+        c.byPassGetSet = null
+        c.set(key.bytes, value.bytes)
+        then:
+        c.get(key.bytes, sKey).length == 5
+
+        when:
+        c.byPassGetSet = inMemoryGetSet
+        c.set(key.bytes, value.bytes, sKey)
+        then:
+        c.get(key.bytes, sKey).length == 5
+
+        when:
+        c.byPassGetSet = null
+        c.set(key.bytes, value.bytes, sKey)
+        then:
+        c.get(key.bytes, sKey).length == 5
+
+        when:
+        c.byPassGetSet = inMemoryGetSet
+        c.set(key.bytes, value.bytes, sKey, CompressedValue.SP_TYPE_SHORT_STRING)
+        then:
+        c.get(key.bytes, sKey).length == 5
+
+        when:
+        c.byPassGetSet = null
+        c.set(key.bytes, value.bytes, sKey, CompressedValue.SP_TYPE_SHORT_STRING)
+        then:
+        c.get(key.bytes, sKey).length == 5
+
+        when:
+        c.byPassGetSet = inMemoryGetSet
+        def cv = new CompressedValue()
+        cv.compressedData = value.bytes
+        cv.compressedLength = value.length()
+        cv.uncompressedLength = value.length()
+        cv.keyHash = sKey.keyHash()
+        cv.expireAt = CompressedValue.NO_EXPIRE
+        c.setCv(key.bytes, cv, null)
+        c.setCv(key.bytes, cv, sKey)
+        then:
+        // cv seq is new after set
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().encodedLength() == cv.encodedLength()
+
+        when:
+        c.byPassGetSet = null
+        c.setCv(key.bytes, cv, sKey)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().encodedLength() == cv.encodedLength()
+
+        when:
+        def longValueBytes = ('aaaaabbbbbccccc' * 10).bytes
+        c.byPassGetSet = inMemoryGetSet
+        cv.dictSeqOrSpType = Dict.SELF_ZSTD_DICT_SEQ
+        cv.uncompressedLength = longValueBytes.length
+        cv.compressedData = Zstd.compress(longValueBytes, 3)
+        cv.compressedLength = cv.compressedData.length
+        c.setCv(key.bytes, cv, sKey)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().compressedLength == cv.compressedLength
+
+        when:
+        c.byPassGetSet = null
+        c.setCv(key.bytes, cv, sKey)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().compressedLength == cv.compressedLength
+
+        when:
+        c.byPassGetSet = inMemoryGetSet
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_INT
+        def intBytes = new byte[4]
+        ByteBuffer.wrap(intBytes).putInt(1)
+        cv.compressedData = intBytes
+        cv.compressedLength = intBytes.length
+        cv.uncompressedLength = intBytes.length
+        c.setCv(key.bytes, cv, sKey)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().numberValue() == 1
+
+        when:
+        c.byPassGetSet = null
+        c.setCv(key.bytes, cv, sKey)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().numberValue() == 1
+
+        when:
+        c.byPassGetSet = inMemoryGetSet
+        c.set(key.bytes, '1234'.bytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().numberValue() == 1234
+
+        when:
+        c.byPassGetSet = null
+        c.set(key.bytes, '1234'.bytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().numberValue() == 1234
+
+        when:
+        c.byPassGetSet = inMemoryGetSet
+        c.set(key.bytes, '0.99'.bytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().numberValue() == 0.99
+
+        when:
+        c.byPassGetSet = null
+        c.set(key.bytes, '0.99'.bytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().numberValue() == 0.99
+
+        when:
+        c.byPassGetSet = inMemoryGetSet
+        c.set(key.bytes, intBytes, sKey, CompressedValue.SP_TYPE_NUM_INT, CompressedValue.NO_EXPIRE)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().numberValue() == 1
+
+        when:
+        c.byPassGetSet = null
+        c.set(key.bytes, intBytes, sKey, CompressedValue.SP_TYPE_NUM_INT, CompressedValue.NO_EXPIRE)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().numberValue() == 1
+
+        when:
+        ConfForSlot.global.isValueSetUseCompression = false
+        c.byPassGetSet = inMemoryGetSet
+        c.set(key.bytes, longValueBytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().compressedLength == longValueBytes.length
+
+        when:
+        c.byPassGetSet = null
+        c.set(key.bytes, longValueBytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().compressedLength == longValueBytes.length
+
+        when:
+        ConfForSlot.global.isValueSetUseCompression = true
+        c.byPassGetSet = inMemoryGetSet
+        c.set(key.bytes, longValueBytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().compressedLength < longValueBytes.length
+        c.remove(slot, sKey.bucketIndex(), key, sKey.keyHash())
+
+        when:
+        c.byPassGetSet = null
+        c.set(key.bytes, longValueBytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        c.getCv(key.bytes, sKey).compressedLength < longValueBytes.length
+        c.remove(slot, sKey.bucketIndex(), key, sKey.keyHash())
+
+        when:
+        c.byPassGetSet = inMemoryGetSet
+        c.set(key.bytes, '1234'.bytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        c.exists(slot, sKey.bucketIndex(), key, sKey.keyHash())
+        !c.exists(slot, sKey.bucketIndex(), 'no-exist-key', sKey.keyHash())
+
+        when:
+        c.removeDelay(slot, sKey.bucketIndex(), key, sKey.keyHash())
+        then:
+        inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()) == null
+
+        when:
+        c.byPassGetSet = null
+        c.set(key.bytes, '1234'.bytes, sKey, 0, CompressedValue.NO_EXPIRE)
+        then:
+        c.exists(slot, sKey.bucketIndex(), key, sKey.keyHash())
+
+        when:
+        c.removeDelay(slot, sKey.bucketIndex(), key, sKey.keyHash())
+        then:
+        c.getCv(key.bytes, sKey) == null
+        !c.exists(slot, sKey.bucketIndex(), key, sKey.keyHash())
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test train dict'() {
+        given:
+        def snowFlake = new SnowFlake(1, 1)
+
+        def data3 = new byte[3][0]
+        data3[0] = 'set'.bytes
+        data3[1] = 'key'.bytes
+        data3[2] = 'value'.bytes
+
+        def c = new SubCommand('set', data3, null)
+        def inMemoryGetSet = new InMemoryGetSet()
+
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, snowFlake, null, Config.create())
+        c.init(requestHandler, new Request(data3, false, false))
+
+        and:
+        def dirFile = new File('/tmp/redis-vlog-test-dir')
+        FileUtils.forceMkdir(dirFile)
+
+        def dictMap = DictMap.instance
+        dictMap.initDictMap(dirFile)
+
+        expect:
+        c.handleTrainSampleResult(null) == null
+
+        when:
+        def trainSampleResult = new TrainSampleJob.TrainSampleResult(new HashMap<String, Dict>(), new ArrayList<Long>())
+        c.handleTrainSampleResult(trainSampleResult)
+        then:
+        dictMap.dictSize() == 0
+
+        when:
+        c.byPassGetSet = inMemoryGetSet
+        def longValueBytes = ('aaaaabbbbbccccc' * 10).bytes
+        List<String> keyList = []
+        1001.times {
+            def key = 'key:' + it.toString().padLeft(12, '0')
+            keyList << key
+            c.set(key.bytes, longValueBytes)
+        }
+        then:
+        dictMap.dictSize() == 1
+        dictMap.getDict('key:') != null
+
+        when:
+        def firstKey = keyList[0]
+        def sFirstKey = BaseCommand.slot(firstKey.bytes, slotNumber)
+        // use trained dict
+        c.set(firstKey.bytes, longValueBytes, sFirstKey)
+        def cvGet = inMemoryGetSet.getBuf(slot, firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash()).cv()
+        then:
+        c.getValueBytesByCv(cvGet).length == longValueBytes.length
+
+        when:
+        def trainedDict = dictMap.getDict('key:')
+        dictMap.clearAll()
+        boolean exception = false
+        try {
+            c.getValueBytesByCv(cvGet)
+        } catch (DictMissingException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        var rl = new RedisList()
+        100.times {
+            rl.addFirst(longValueBytes)
+        }
+        def encoded = rl.encode()
+        c.set(firstKey.bytes, encoded, sFirstKey, CompressedValue.SP_TYPE_LIST_COMPRESSED, CompressedValue.NO_EXPIRE)
+        cvGet = inMemoryGetSet.getBuf(slot, firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash()).cv()
+        then:
+        cvGet.dictSeqOrSpType == CompressedValue.SP_TYPE_LIST_COMPRESSED
+        RedisList.decode(c.getValueBytesByCv(cvGet)).size() == 100
+
+        when:
+        Dict.GLOBAL_ZSTD_DICT.dictBytes = trainedDict.dictBytes
+        c.set(firstKey.bytes, longValueBytes)
+        cvGet = inMemoryGetSet.getBuf(slot, firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash()).cv()
+        then:
+        cvGet.dictSeqOrSpType == Dict.GLOBAL_ZSTD_DICT_SEQ
+        c.getValueBytesByCv(cvGet).length == longValueBytes.length
+
+        when:
+        Dict.GLOBAL_ZSTD_DICT.dictBytes = null
+        exception = false
+        try {
+            c.getValueBytesByCv(cvGet)
+        } catch (DictMissingException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        cleanup:
+        dictMap.close()
+        dirFile.deleteDir()
     }
 }
