@@ -40,7 +40,7 @@ public class DictMap {
         return cacheDict.get(keyPrefix);
     }
 
-    public Dict putDict(String keyPrefix, Dict dict) {
+    public synchronized Dict putDict(String keyPrefix, Dict dict) {
         // check dict seq is already in cache
         var existDict = cacheDictBySeq.get(dict.seq);
         if (existDict != null) {
