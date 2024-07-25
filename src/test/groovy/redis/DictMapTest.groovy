@@ -1,6 +1,10 @@
 package redis
 
 import org.apache.commons.io.FileUtils
+import redis.persist.Consts
+import redis.persist.DynConfig
+import redis.persist.DynConfigTest
+import redis.repl.Binlog
 import spock.lang.Specification
 
 class DictMapTest extends Specification {
@@ -19,6 +23,12 @@ class DictMapTest extends Specification {
         dictMap.close()
         dictMap.initDictMap(dirFile)
 
+        and:
+        final byte slot = 0
+        def dynConfig = new DynConfig(slot, DynConfigTest.tmpFile)
+        def binlog = new Binlog(slot, Consts.slotDir, dynConfig)
+        dictMap.binlog = binlog
+
         def dict = new Dict()
         dict.dictBytes = 'test'.bytes
         dict.seq = 1
@@ -35,19 +45,23 @@ class DictMapTest extends Specification {
 
         when:
         dictMap.putDict('test', dict)
+        // seq conflict, will reset seq
+        dictMap.putDict('test', dict)
+        dictMap.binlog = null
         dictMap.putDict('test2', dict2)
         then:
-        dictMap.dictSize() == 2
+        dictMap.dictSize() == 3
         dictMap.getDict('test').dictBytes == 'test'.bytes
         dictMap.getDict('test2').dictBytes == 'test2'.bytes
         dictMap.getDictBySeq(1).dictBytes == 'test'.bytes
+        dictMap.getDictBySeq(dict.seq).dictBytes == 'test'.bytes
         dictMap.getDictBySeq(0).dictBytes == 'test2'.bytes
 
         when:
         // reload again
         dictMap.initDictMap(dirFile)
         then:
-        dictMap.dictSize() == 2
+        dictMap.dictSize() == 3
 
         when:
         dictMap.clearAll()
@@ -71,5 +85,10 @@ class DictMapTest extends Specification {
         }
         then:
         exception
+
+        cleanup:
+        binlog.clear()
+        binlog.close()
+        Consts.slotDir.deleteDir()
     }
 }

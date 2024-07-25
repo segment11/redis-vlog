@@ -7,6 +7,7 @@ import redis.repl.Binlog;
 import redis.repl.incremental.XDict;
 
 import java.io.*;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,6 +41,18 @@ public class DictMap {
     }
 
     public Dict putDict(String keyPrefix, Dict dict) {
+        // check dict seq is already in cache
+        var existDict = cacheDictBySeq.get(dict.seq);
+        if (existDict != null) {
+            // generate new seq
+            dict.seq = Dict.generateRandomSeq();
+            // check again
+            var existDict2 = cacheDictBySeq.get(dict.seq);
+            if (existDict2 != null) {
+                throw new RuntimeException("Dict seq conflict, dict seq: " + dict.seq);
+            }
+        }
+
         synchronized (fos) {
             try {
                 fos.write(dict.encode(keyPrefix));
@@ -113,7 +126,7 @@ public class DictMap {
         this.fos = new FileOutputStream(file, true);
 
         int n = 0;
-        int maxSeq = 0;
+        ArrayList<Integer> loadedSeqList = new ArrayList<>();
         if (file.length() > 0) {
             var is = new DataInputStream(new FileInputStream(file));
             while (true) {
@@ -126,17 +139,13 @@ public class DictMap {
                 cacheDict.put(dictWithKey.keyPrefix(), dict);
                 cacheDictBySeq.put(dict.seq, dict);
 
-                if (dict.seq > maxSeq) {
-                    maxSeq = dict.seq;
-                }
-
+                loadedSeqList.add(dict.seq);
                 n++;
             }
         }
 
-        log.info("Dict map init, map size: {}, seq map size: {}, n: {}, max seq: {}",
-                cacheDict.size(), cacheDictBySeq.size(), n, maxSeq);
-        Dict.seqGenerator.set(maxSeq + 1);
+        log.info("Dict map init, map size: {}, seq map size: {}, n: {}, loaded seq list: {}",
+                cacheDict.size(), cacheDictBySeq.size(), n, loadedSeqList);
 
         Dict.resetGlobalDictBytesByFile(new File(dirFile, Dict.GLOBAL_DICT_FILE_NAME), false);
     }

@@ -16,6 +16,8 @@ class DictTest extends Specification {
 
         def dict2 = new Dict()
         dict2.seq = 0
+        dict2.createdTime = System.currentTimeMillis()
+        println dict2.createdTime
 
         expect:
         Dict.SELF_ZSTD_DICT.seq == Dict.SELF_ZSTD_DICT_SEQ
@@ -26,6 +28,14 @@ class DictTest extends Specification {
         !dict.equals(null)
         dict != new String('xxx')
         dict != dict2
+
+        when:
+        HashSet<Long> seqSet = []
+        10000.times {
+            seqSet << Dict.generateRandomSeq()
+        }
+        then:
+        seqSet.size() == 10000
     }
 
     def 'test global dict'() {
@@ -34,6 +44,7 @@ class DictTest extends Specification {
         file.bytes = 'test'.bytes
 
         Dict.resetGlobalDictBytesByFile(file, false)
+        file.delete()
         Dict.resetGlobalDictBytesByFile(file, true)
 
         expect:

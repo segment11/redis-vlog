@@ -12,11 +12,9 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Random;
 
 public class Dict implements Serializable {
-    private static final int BEGIN_SEQ = 100;
-
     public static final int SELF_ZSTD_DICT_SEQ = 1;
     public static final int GLOBAL_ZSTD_DICT_SEQ = 10;
 
@@ -68,9 +66,6 @@ public class Dict implements Serializable {
             throw new RuntimeException(e);
         }
     }
-
-    // when master / slave failover, this seq may conflict, need change to uuid
-    static AtomicInteger seqGenerator = new AtomicInteger(BEGIN_SEQ);
 
     int seq;
 
@@ -204,13 +199,23 @@ public class Dict implements Serializable {
         this.createdTime = System.currentTimeMillis();
     }
 
+    // still may be conflict, when slave change to master, new master create new dict with same seq
+    static int generateRandomSeq() {
+        var random = new Random();
+        return random.nextInt(1000) * 1000 * 1000 +
+                random.nextInt(1000) * 1000 +
+                random.nextInt(1000) +
+                GLOBAL_ZSTD_DICT_SEQ;
+    }
+
+    // only create when train new dict by TrainSampleJob
     public Dict(byte[] dictBytes) {
         if (dictBytes.length > Short.MAX_VALUE) {
             throw new IllegalArgumentException("Dict bytes too long: " + dictBytes.length);
         }
 
         this.dictBytes = dictBytes;
-        this.seq = seqGenerator.incrementAndGet();
+        this.seq = generateRandomSeq();
         this.createdTime = System.currentTimeMillis();
     }
 }
