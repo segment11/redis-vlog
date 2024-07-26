@@ -97,6 +97,18 @@ public class FdReadWrite {
 
     private boolean isLRUOn = false;
 
+    @Override
+    public String toString() {
+        return "FdReadWrite{" +
+                "name='" + name + '\'' +
+                ", fd=" + fd +
+                ", writeIndex=" + writeIndex +
+                ", isLRUOn=" + isLRUOn +
+                ", isChunkFd=" + isChunkFd +
+                ", oneInnerLength=" + oneInnerLength +
+                '}';
+    }
+
     final static SimpleGauge fdReadWriteGauge = new SimpleGauge("fd_read_write", "chunk or key buckets file read write",
             "name");
 
@@ -623,10 +635,12 @@ public class FdReadWrite {
                 for (int i = 0; i < walGroupCount; i++) {
                     var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex + i];
                     if (sharedBytes == null) {
-                        sharedBytes = new byte[oneWalGroupSharedBytesLength];
-                        allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex] = sharedBytes;
+                        var subBytes = new byte[oneWalGroupSharedBytesLength];
+                        System.arraycopy(bytes, offset, subBytes, 0, subBytes.length);
+                        allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex + i] = subBytes;
+                    } else {
+                        System.arraycopy(bytes, offset, sharedBytes, 0, sharedBytes.length);
                     }
-                    System.arraycopy(bytes, offset, sharedBytes, 0, sharedBytes.length);
                     offset += oneWalGroupSharedBytesLength;
                 }
                 return walGroupCount * oneWalGroupSharedBytesLength;

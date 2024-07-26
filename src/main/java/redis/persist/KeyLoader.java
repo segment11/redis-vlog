@@ -38,6 +38,14 @@ public class KeyLoader {
         this.initMetricsCollect();
     }
 
+    @Override
+    public String toString() {
+        return "KeyLoader{" +
+                "slot=" + slot +
+                ", bucketsPerSlot=" + bucketsPerSlot +
+                '}';
+    }
+
     private final byte slot;
     private final String slotStr;
     final int bucketsPerSlot;
@@ -105,7 +113,7 @@ public class KeyLoader {
     // compare to KeyBucket.INIT_CAPACITY
     static final int KEY_OR_CELL_COST_TOLERANCE_COUNT_WHEN_CHECK_SPLIT = 0;
 
-    private LibC libC;
+    LibC libC;
     // index is split index
     FdReadWrite[] fdReadWriteArray;
 
@@ -160,7 +168,7 @@ public class KeyLoader {
         this.initFds(maxSplitNumber);
     }
 
-    private void initFds(byte splitNumber) {
+    void initFds(byte splitNumber) {
         for (int splitIndex = 0; splitIndex < splitNumber; splitIndex++) {
             if (fdReadWriteArray[splitIndex] != null) {
                 continue;
@@ -242,7 +250,7 @@ public class KeyLoader {
             } else {
                 var bucketCount = leftLength / KEY_BUCKET_ONE_COST_SIZE;
                 if (bucketCount != BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL) {
-                    throw new IllegalStateException("Write pure memory key buckets from master error, bucket count batch not match, slot: "
+                    throw new IllegalArgumentException("Write pure memory key buckets from master error, bucket count batch not match, slot: "
                             + slot + ", split index: " + splitIndex + ", begin bucket index: " + beginBucketIndex + ", bucket count: " + bucketCount);
                 }
 
@@ -468,16 +476,18 @@ public class KeyLoader {
         statKeyCountInBuckets.clear();
 
         for (int splitIndex = 0; splitIndex < MAX_SPLIT_NUMBER; splitIndex++) {
+            if (fdReadWriteArray.length <= splitIndex) {
+                continue;
+            }
             var fdReadWrite = fdReadWriteArray[splitIndex];
             if (fdReadWrite == null) {
                 continue;
             }
-
             fdReadWrite.truncate();
         }
     }
 
-    private final static SimpleGauge keyLoaderInnerGauge = new SimpleGauge("key_loader_inner", "key loader inner",
+    final static SimpleGauge keyLoaderInnerGauge = new SimpleGauge("key_loader_inner", "key loader inner",
             "slot");
 
     static {

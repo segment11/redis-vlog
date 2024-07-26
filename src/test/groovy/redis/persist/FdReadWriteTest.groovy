@@ -39,9 +39,11 @@ class FdReadWriteTest extends Specification {
         and:
         def fdChunk = new FdReadWrite('test', libC, oneFile1)
         fdChunk.initByteBuffers(true)
+        println fdChunk
 
         def fdKeyBucket = new FdReadWrite('test2', libC, oneFile2)
         fdKeyBucket.initByteBuffers(false)
+        println fdKeyBucket
 
         fdChunk.afterFdPreadCompressCountTotal = 1
         fdChunk.readCountTotal = 1
