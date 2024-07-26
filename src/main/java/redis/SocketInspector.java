@@ -32,7 +32,8 @@ public class SocketInspector implements TcpSocket.Inspector {
     public void onConnect(TcpSocket socket) {
         if (socketMap.size() >= maxConnections) {
             log.warn("Max connections reached: {}, close the socket", maxConnections);
-            throw new RuntimeException("Max connections reached: " + maxConnections);
+            socket.close();
+            return;
         }
 
         var remoteAddress = socket.getRemoteAddress();

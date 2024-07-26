@@ -25,14 +25,24 @@ public class DynConfig {
         void afterUpdate(String key, Object value);
     }
 
-    private final AfterUpdateCallback afterUpdateCallback = (key, value) -> {
-        if ("max_connections".equals(key)) {
-            MultiWorkerServer.staticGlobalV.socketInspector.setMaxConnections((int) value);
-            log.warn("Global config set max_connections={}", value);
+    private class AfterUpdateCallbackInner implements AfterUpdateCallback {
+        private final byte currentSlot;
+
+        public AfterUpdateCallbackInner(byte currentSlot) {
+            this.currentSlot = currentSlot;
         }
 
-        // todo
-    };
+        @Override
+        public void afterUpdate(String key, Object value) {
+            if ("max_connections".equals(key)) {
+                MultiWorkerServer.staticGlobalV.socketInspector.setMaxConnections((int) value);
+                log.warn("Global config set max_connections={}, slot: {}", value, currentSlot);
+            }
+            // todo
+        }
+    }
+
+    private final AfterUpdateCallback afterUpdateCallback;
 
     public AfterUpdateCallback getAfterUpdateCallback() {
         return afterUpdateCallback;
@@ -97,6 +107,7 @@ public class DynConfig {
     DynConfig(byte slot, File dynConfigFile) throws IOException {
         this.slot = slot;
         this.dynConfigFile = dynConfigFile;
+        this.afterUpdateCallback = new AfterUpdateCallbackInner(slot);
 
         if (!dynConfigFile.exists()) {
             FileUtils.touch(dynConfigFile);

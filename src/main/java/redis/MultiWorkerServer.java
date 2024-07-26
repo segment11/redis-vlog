@@ -392,6 +392,13 @@ public class MultiWorkerServer extends Launcher {
                 scheduleRunnable.stop();
             }
 
+            socketInspector.socketMap.values().forEach(socket -> {
+                socket.getReactor().execute(() -> {
+                    socket.close();
+                    logger.info("Close connected socket: {}", socket.getRemoteAddress());
+                });
+            });
+
             // close local persist
             LocalPersist.getInstance().cleanUp();
             DictMap.getInstance().close();

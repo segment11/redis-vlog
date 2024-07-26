@@ -7,6 +7,7 @@ import redis.BaseCommand;
 import redis.MultiWorkerServer;
 import redis.reply.*;
 
+import java.io.IOException;
 import java.util.ArrayList;
 
 public class CGroup extends BaseCommand {
@@ -98,9 +99,11 @@ public class CGroup extends BaseCommand {
                 log.warn("Global config set max_connections={}", maxConnections);
 
                 var oneSlot = localPersist.currentThreadFirstOneSlot();
-                var afterUpdateCallback = oneSlot.getDynConfig().getAfterUpdateCallback();
-                if (afterUpdateCallback != null) {
-                    afterUpdateCallback.afterUpdate(configKey, maxConnections);
+                try {
+                    oneSlot.getDynConfig().update(configKey, maxConnections);
+                } catch (IOException e) {
+                    log.error("Global config update dyn config error", e);
+                    return new ErrorReply("update dyn config error: " + e.getMessage());
                 }
                 return OKReply.INSTANCE;
             } else {
