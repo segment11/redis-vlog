@@ -36,8 +36,39 @@ class LocalPersistTest extends Specification {
         then:
         localPersist.oneSlots().length == 1
         localPersist.oneSlot((byte) 0) != null
+        localPersist.currentThreadFirstOneSlot() == localPersist.oneSlots()[0]
 
         cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test multi slot'() {
+        given:
+        def localPersist = LocalPersist.instance
+
+        when:
+        prepareLocalPersist((byte) 1, (short) 2)
+        localPersist.fixSlotThreadId((byte) 1, Thread.currentThread().threadId())
+        then:
+        localPersist.oneSlots().length == 2
+        localPersist.currentThreadFirstOneSlot() == localPersist.oneSlots()[1]
+
+        when:
+        boolean exception = false
+        localPersist.fixSlotThreadId((byte) 1, -1L)
+        try {
+            localPersist.currentThreadFirstOneSlot()
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        cleanup:
+        localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
+        localPersist.fixSlotThreadId((byte) 1, Thread.currentThread().threadId())
         localPersist.cleanUp()
         Consts.persistDir.deleteDir()
     }

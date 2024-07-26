@@ -15,18 +15,28 @@ class SocketInspectorTest extends Specification {
         when:
         inspector.onConnect(socket)
         inspector.onDisconnect(socket)
-
         inspector.onReadTimeout(socket)
         inspector.onRead(socket, null)
         inspector.onReadEndOfStream(socket)
         inspector.onReadError(socket, null)
-
         inspector.onWriteTimeout(socket)
         inspector.onWrite(socket, null, 10)
         inspector.onWriteError(socket, null)
-
         then:
         inspector.lookup(SocketInspector.class) == null
+
+        when:
+        inspector.maxConnections = 1
+        boolean exception = false
+        try {
+            inspector.onConnect(socket)
+            inspector.onConnect(socket)
+        } catch (RuntimeException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
 
         cleanup:
         inspector.clearAll()

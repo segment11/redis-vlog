@@ -1,5 +1,7 @@
 package redis.persist
 
+import redis.MultiWorkerServer
+import redis.SocketInspector
 import spock.lang.Specification
 
 class DynConfigTest extends Specification {
@@ -32,6 +34,11 @@ class DynConfigTest extends Specification {
         config.testKey == 1
 
         when:
+        config.binlogOn = false
+        then:
+        !config.binlogOn
+
+        when:
         config.binlogOn = true
         then:
         config.binlogOn
@@ -47,8 +54,11 @@ class DynConfigTest extends Specification {
 
         // reload from file
         when:
+        MultiWorkerServer.staticGlobalV.socketInspector = new SocketInspector()
         config = new DynConfig((byte) 0, tmpFile)
+        config.update('max_connections', 100)
         then:
+        config.afterUpdateCallback != null
         config.masterUuid == 1234L
         config.testKey == 1
         config.readonly
@@ -66,5 +76,6 @@ class DynConfigTest extends Specification {
 
         cleanup:
         tmpFile.delete()
+        tmpFile2.delete()
     }
 }

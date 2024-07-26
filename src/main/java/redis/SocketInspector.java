@@ -16,6 +16,12 @@ public class SocketInspector implements TcpSocket.Inspector {
 
     ConcurrentHashMap<InetSocketAddress, TcpSocket> socketMap = new ConcurrentHashMap<>();
 
+    private int maxConnections = 1000;
+
+    public synchronized void setMaxConnections(int maxConnections) {
+        this.maxConnections = maxConnections;
+    }
+
     // inject, singleton, need not static
     private final Gauge connectedCountGauge = Gauge.build()
             .name("connected_client_count")
@@ -24,6 +30,11 @@ public class SocketInspector implements TcpSocket.Inspector {
 
     @Override
     public void onConnect(TcpSocket socket) {
+        if (socketMap.size() >= maxConnections) {
+            log.warn("Max connections reached: {}, close the socket", maxConnections);
+            throw new RuntimeException("Max connections reached: " + maxConnections);
+        }
+
         var remoteAddress = socket.getRemoteAddress();
         log.info("On connect, remote address: {}", remoteAddress);
         socketMap.put(remoteAddress, socket);

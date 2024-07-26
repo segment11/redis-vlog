@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.MultiWorkerServer;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,6 +19,23 @@ public class DynConfig {
 
     private Object get(String key) {
         return data.get(key);
+    }
+
+    public interface AfterUpdateCallback {
+        void afterUpdate(String key, Object value);
+    }
+
+    private final AfterUpdateCallback afterUpdateCallback = (key, value) -> {
+        if ("max_connections".equals(key)) {
+            MultiWorkerServer.staticGlobalV.socketInspector.setMaxConnections((int) value);
+            log.warn("Global config set max_connections={}", value);
+        }
+
+        // todo
+    };
+
+    public AfterUpdateCallback getAfterUpdateCallback() {
+        return afterUpdateCallback;
     }
 
     Long getMasterUuid() {
@@ -91,15 +109,20 @@ public class DynConfig {
             var objectMapper = new ObjectMapper();
             this.data = objectMapper.readValue(dynConfigFile, HashMap.class);
             log.info("Init dyn config, data: {}, slot: {}", data, slot);
+
+            for (var entry : data.entrySet()) {
+                afterUpdateCallback.afterUpdate(entry.getKey(), entry.getValue());
+            }
         }
     }
 
-    private void update(String key, Object value) throws IOException {
+    public void update(String key, Object value) throws IOException {
         data.put(key, value);
         // write json
         var objectMapper = new ObjectMapper();
         objectMapper.writeValue(dynConfigFile, data);
-
         log.info("Update dyn config, key: {}, value: {}, slot: {}", key, value, slot);
+
+        afterUpdateCallback.afterUpdate(key, value);
     }
 }

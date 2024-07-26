@@ -96,6 +96,16 @@ public class LocalPersist {
         log.warn("Fix slot thread id, s={}, tid={}", slot, threadId);
     }
 
+    public OneSlot currentThreadFirstOneSlot() {
+        for (int i = 0; i < oneSlots.length; i++) {
+            var oneSlot = oneSlots[i];
+            if (oneSlot.threadIdProtectedForSafe == Thread.currentThread().threadId()) {
+                return oneSlot;
+            }
+        }
+        throw new IllegalStateException("No one slot for current thread");
+    }
+
     public void cleanUp() {
         for (var oneSlot : oneSlots) {
             oneSlot.asyncRun(oneSlot::cleanUp);

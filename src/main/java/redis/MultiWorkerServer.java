@@ -594,12 +594,23 @@ public class MultiWorkerServer extends Launcher {
                     }
 
                     @Provides
-                    SocketInspector socketInspector() {
-                        return new SocketInspector();
+                    SocketInspector socketInspector(Config config) {
+                        int maxConnections = config.get(toInt, "maxConnections", 1000);
+
+                        var r = new SocketInspector();
+                        r.setMaxConnections(maxConnections);
+                        MultiWorkerServer.staticGlobalV.socketInspector = r;
+                        return r;
                     }
                 };
             }
         };
         launcher.launch(args);
     }
+
+    public static class StaticGlobalV {
+        public SocketInspector socketInspector;
+    }
+
+    public static StaticGlobalV staticGlobalV = new StaticGlobalV();
 }

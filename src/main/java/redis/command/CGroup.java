@@ -4,6 +4,7 @@ package redis.command;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
+import redis.MultiWorkerServer;
 import redis.reply.*;
 
 import java.util.ArrayList;
@@ -30,10 +31,7 @@ public class CGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-//        if ("config".equals(cmd)) {
-//            // all slots
-//        }
-
+        // client / config can use any slot
         return slotWithKeyHashList;
     }
 
@@ -72,7 +70,44 @@ public class CGroup extends BaseCommand {
     }
 
     Reply config() {
-        // todo
+        if (data.length < 2) {
+            return ErrorReply.FORMAT;
+        }
+
+        var subCommand = new String(data[1]).toLowerCase();
+        if ("help".equals(subCommand)) {
+            // todo
+        }
+
+        if ("set".equals(subCommand)) {
+            if (data.length < 4) {
+                return ErrorReply.SYNTAX;
+            }
+
+            var configKey = new String(data[2]).toLowerCase();
+            var configValue = new String(data[3]);
+
+            if ("max_connections".equals(configKey)) {
+                int maxConnections;
+                try {
+                    maxConnections = Integer.parseInt(configValue);
+                } catch (NumberFormatException e) {
+                    return ErrorReply.INVALID_INTEGER;
+                }
+                MultiWorkerServer.staticGlobalV.socketInspector.setMaxConnections(maxConnections);
+                log.warn("Global config set max_connections={}", maxConnections);
+
+                var oneSlot = localPersist.currentThreadFirstOneSlot();
+                var afterUpdateCallback = oneSlot.getDynConfig().getAfterUpdateCallback();
+                if (afterUpdateCallback != null) {
+                    afterUpdateCallback.afterUpdate(configKey, maxConnections);
+                }
+                return OKReply.INSTANCE;
+            } else {
+                // todo
+            }
+        }
+
         return OKReply.INSTANCE;
     }
 
