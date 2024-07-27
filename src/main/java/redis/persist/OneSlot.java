@@ -644,7 +644,7 @@ public class OneSlot {
     }
 
     private void checkCurrentThreadId() {
-        var threadId = Thread.currentThread().getId();
+        var threadId = Thread.currentThread().threadId();
         if (threadId != threadIdProtectedForSafe) {
             throw new IllegalStateException("Thread id not match, thread id: " + threadId + ", thread id protected for safe: " + threadIdProtectedForSafe);
         }
