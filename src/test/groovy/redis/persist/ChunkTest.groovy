@@ -241,7 +241,7 @@ class ChunkTest extends Specification {
         when:
         boolean exception = false
         try {
-            bytes = chunk.preadForMerge(0, FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT + 1)
+            bytes = chunk.preadForMerge(0, FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE + 1)
         } catch (IllegalArgumentException ignored) {
             exception = true
         }

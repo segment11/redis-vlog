@@ -11,7 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
+import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
 public class ChunkMergeJob {
     private final byte slot;
@@ -61,14 +61,14 @@ public class ChunkMergeJob {
             return validCvCount1 + validCvCount2;
         }
 
-        var batchCount = needMergeSegmentIndexList.size() / MERGE_READ_ONCE_SEGMENT_COUNT;
-        if (needMergeSegmentIndexList.size() % MERGE_READ_ONCE_SEGMENT_COUNT != 0) {
+        var batchCount = needMergeSegmentIndexList.size() / BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
+        if (needMergeSegmentIndexList.size() % BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE != 0) {
             batchCount++;
         }
         try {
             for (int i = 0; i < batchCount; i++) {
-                var subList = needMergeSegmentIndexList.subList(i * MERGE_READ_ONCE_SEGMENT_COUNT,
-                        Math.min((i + 1) * MERGE_READ_ONCE_SEGMENT_COUNT, needMergeSegmentIndexList.size()));
+                var subList = needMergeSegmentIndexList.subList(i * BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE,
+                        Math.min((i + 1) * BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE, needMergeSegmentIndexList.size()));
                 mergeSegments(subList);
             }
             return validCvCountAfterRun;
@@ -158,11 +158,11 @@ public class ChunkMergeJob {
 
         // read all segments to memory, then compare with key buckets
         int chunkSegmentLength = ConfForSlot.global.confChunk.segmentLength;
-        var tmpCapacity = chunkSegmentLength / ConfForSlot.global.estimateOneValueLength * MERGE_READ_ONCE_SEGMENT_COUNT;
+        var tmpCapacity = chunkSegmentLength / ConfForSlot.global.estimateOneValueLength * BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
         ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(tmpCapacity);
 
         var beginT = System.nanoTime();
-        var segmentBytesBatchRead = oneSlot.preadForMerge(firstSegmentIndex, MERGE_READ_ONCE_SEGMENT_COUNT);
+        var segmentBytesBatchRead = oneSlot.preadForMerge(firstSegmentIndex, BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE);
 
         boolean alreadyDoLog = false;
         int i = 0;

@@ -89,7 +89,7 @@ class FdReadWriteTest extends Specification {
             array[i] = f1
             array[i + loop] = f2
         }
-        fdKeyBucket.writeOneInnerForKeyBucketsInOneWalGroup(1 * oneChargeBucketNumber, new byte[oneChargeBucketNumber * segmentLength])
+        fdKeyBucket.writeSharedBytesForKeyBucketsInOneWalGroup(1 * oneChargeBucketNumber, new byte[oneChargeBucketNumber * segmentLength])
         then:
         array.every { it == segmentLength }
         fdChunk.readOneInner(0, false).length == segmentLength
@@ -97,11 +97,11 @@ class FdReadWriteTest extends Specification {
         fdChunk.readOneInner(0, true).length == segmentLength
         fdChunk11.readOneInner(0, true).length == segmentLength
         fdChunk.readSegmentsForMerge(0, loop).length == segmentLength * loop
-        fdChunk.readOneInnerForRepl(0).length == segmentLength * loop
+        fdChunk.readBatchForRepl(0).length == segmentLength * loop
         fdKeyBucket.readOneInner(0, false).length == segmentLength
         fdKeyBucket.readOneInner(0, true).length == segmentLength
         fdKeyBucket.readOneInner(0, true).length == segmentLength
-        fdKeyBucket.readOneInnerForKeyBucketsInOneWalGroup(1 * oneChargeBucketNumber) != null
+        fdKeyBucket.readKeyBucketsSharedBytesInOneWalGroup(1 * oneChargeBucketNumber) != null
 
         when:
         fdChunk.writeSegmentsBatch(100, new byte[segmentLength * FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE], false)
@@ -200,14 +200,14 @@ class FdReadWriteTest extends Specification {
         exception
 
         when:
-        fdChunk.writeOneInnerForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT], 0)
+        fdChunk.writeBatchForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT], 0)
         then:
-        fdChunk.readOneInner(1024 + FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT - 1, false).length == segmentLength
+        fdChunk.readOneInner(1024 + FdReadWrite.REPL_ONCE_INNER_COUNT - 1, false).length == segmentLength
 
         when:
-        fdChunk.writeOneInnerForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT + 1], 1)
+        fdChunk.writeBatchForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT + 1], 1)
         then:
-        fdChunk.readOneInner(1024 + FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT - 1, false).length == segmentLength
+        fdChunk.readOneInner(1024 + FdReadWrite.REPL_ONCE_INNER_COUNT - 1, false).length == segmentLength
 
         when:
         fdChunk.truncate()
@@ -232,19 +232,19 @@ class FdReadWriteTest extends Specification {
             array[i] = f1
             array[i + loop] = f2
         }
-        fdKeyBucket.writeOneInnerForKeyBucketsInOneWalGroup(1 * oneChargeBucketNumber, new byte[oneChargeBucketNumber * segmentLength])
+        fdKeyBucket.writeSharedBytesForKeyBucketsInOneWalGroup(1 * oneChargeBucketNumber, new byte[oneChargeBucketNumber * segmentLength])
         then:
         !fdChunk.isTargetSegmentIndexNullInMemory(0)
         array.every { it == segmentLength }
         fdChunk.readOneInner(0, false).length == segmentLength
         fdChunk.readSegmentsForMerge(0, loop).length == segmentLength * loop
-        fdChunk.readOneInnerForRepl(0).length == segmentLength * FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT
+        fdChunk.readBatchForRepl(0).length == segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT
         fdKeyBucket.readOneInner(0, false).length == segmentLength * oneChargeBucketNumber
-        fdKeyBucket.readOneInnerForKeyBucketsInOneWalGroup(1 * oneChargeBucketNumber).length == segmentLength * oneChargeBucketNumber
+        fdKeyBucket.readKeyBucketsSharedBytesInOneWalGroup(1 * oneChargeBucketNumber).length == segmentLength * oneChargeBucketNumber
         fdKeyBucket.readOneInnerBatchFromMemory(1, 1).length == segmentLength * oneChargeBucketNumber
         fdKeyBucket.readOneInnerBatchFromMemory(1, oneChargeBucketNumber).length == segmentLength * oneChargeBucketNumber
-        fdKeyBucket.readOneInnerBatchFromMemory(1, FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT).length ==
-                segmentLength * FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT
+        fdKeyBucket.readOneInnerBatchFromMemory(1, FdReadWrite.REPL_ONCE_INNER_COUNT).length ==
+                segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT
 
         when:
         exception = false
@@ -271,7 +271,7 @@ class FdReadWriteTest extends Specification {
         when:
         exception = false
         try {
-            fdKeyBucket.writeOneInnerForKeyBucketsInOneWalGroup(0, new byte[10])
+            fdKeyBucket.writeSharedBytesForKeyBucketsInOneWalGroup(0, new byte[10])
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -282,7 +282,7 @@ class FdReadWriteTest extends Specification {
         when:
         exception = false
         try {
-            fdKeyBucket.writeOneInnerForRepl(0, new byte[10], 0)
+            fdKeyBucket.writeBatchForRepl(0, new byte[10], 0)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -296,9 +296,9 @@ class FdReadWriteTest extends Specification {
         fdChunk.readOneInner(100 + FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE - 1, false).length == segmentLength
 
         when:
-        fdChunk.writeOneInnerForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT], 0)
+        fdChunk.writeBatchForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT], 0)
         then:
-        fdChunk.readOneInner(1024 + FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT - 1, false).length == segmentLength
+        fdChunk.readOneInner(1024 + FdReadWrite.REPL_ONCE_INNER_COUNT - 1, false).length == segmentLength
 
         when:
         exception = false
@@ -323,16 +323,16 @@ class FdReadWriteTest extends Specification {
         exception
 
         when:
-        def n = fdKeyBucket.writeOneInnerBatchToMemory(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT + 1], 1)
+        def n = fdKeyBucket.writeOneInnerBatchToMemory(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT + 1], 1)
         then:
-        n == segmentLength * FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT
+        n == segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT
 
         when:
-        def replKeyBucketBytesOnceFromMaster = new byte[segmentLength * FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT]
+        def replKeyBucketBytesOnceFromMaster = new byte[segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT]
         Arrays.fill(replKeyBucketBytesOnceFromMaster, (byte) 1)
         n = fdKeyBucket.writeOneInnerBatchToMemory(1024, replKeyBucketBytesOnceFromMaster, 0)
         then:
-        n == segmentLength * FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT
+        n == segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT
 
         when:
         exception = false
@@ -361,7 +361,7 @@ class FdReadWriteTest extends Specification {
         when:
         fdKeyBucket.clearKeyBucketsInOneWalGroup(oneChargeBucketNumber)
         then:
-        fdKeyBucket.readOneInnerForKeyBucketsInOneWalGroup(oneChargeBucketNumber) == null
+        fdKeyBucket.readKeyBucketsSharedBytesInOneWalGroup(oneChargeBucketNumber) == null
 
         cleanup:
         fdChunk.truncate()

@@ -15,7 +15,7 @@ import java.util.List;
 
 import static redis.persist.Chunk.Flag;
 import static redis.persist.Chunk.NO_NEED_MERGE_SEGMENT_INDEX;
-import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
+import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
 public class MetaChunkSegmentFlagSeq {
     private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
@@ -135,7 +135,7 @@ public class MetaChunkSegmentFlagSeq {
             if (flag == Flag.new_write || flag == Flag.reuse_new) {
                 findSegmentIndexWithSegmentCount[0] = segmentIndex;
 
-                int segmentCount = Math.min(MERGE_READ_ONCE_SEGMENT_COUNT, chunk.maxSegmentIndex - segmentIndex + 1);
+                int segmentCount = Math.min(BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE, chunk.maxSegmentIndex - segmentIndex + 1);
                 var targetFdIndex = chunk.targetFdIndex(segmentIndex);
                 var targetFdIndexEnd = chunk.targetFdIndex(segmentIndex + segmentCount - 1);
                 // cross two files, just read one segment

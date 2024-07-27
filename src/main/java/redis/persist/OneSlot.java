@@ -33,7 +33,7 @@ import java.util.*;
 
 import static io.activej.config.converter.ConfigConverters.ofBoolean;
 import static redis.persist.Chunk.*;
-import static redis.persist.FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT;
+import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
 public class OneSlot {
     // for unit test
@@ -1127,7 +1127,7 @@ public class OneSlot {
         var segmentBytesBatchRead = preadForMerge(firstSegmentIndex, segmentCount);
 
         ArrayList<Integer> segmentIndexList = new ArrayList<>(segmentCount);
-        ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(MERGE_READ_ONCE_SEGMENT_COUNT * 10);
+        ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE * 10);
 
         for (int i = 0; i < segmentCount; i++) {
             var segmentIndex = firstSegmentIndex + i;

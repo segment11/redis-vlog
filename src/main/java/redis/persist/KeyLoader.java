@@ -217,7 +217,7 @@ public class KeyLoader {
         if (fdReadWrite == null) {
             return null;
         }
-        return fdReadWrite.readOneInnerForRepl(beginBucketIndex);
+        return fdReadWrite.readBatchForRepl(beginBucketIndex);
     }
 
     public void writeKeyBucketsBytesBatchFromMasterExists(byte[] contentBytes) {
@@ -257,7 +257,7 @@ public class KeyLoader {
                 fdReadWrite.writeOneInnerBatchToMemory(beginBucketIndex, contentBytes, position);
             }
         } else {
-            fdReadWrite.writeOneInnerForRepl(beginBucketIndex, contentBytes, position);
+            fdReadWrite.writeBatchForRepl(beginBucketIndex, contentBytes, position);
         }
         log.warn("Write key buckets from master success, slot: {}, split index: {}, begin bucket index: {}, once key bucket count: {}",
                 slot, splitIndex, beginBucketIndex, BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL);
@@ -399,7 +399,7 @@ public class KeyLoader {
         if (fdReadWrite == null) {
             return null;
         }
-        return fdReadWrite.readOneInnerForKeyBucketsInOneWalGroup(beginBucketIndex);
+        return fdReadWrite.readKeyBucketsSharedBytesInOneWalGroup(beginBucketIndex);
     }
 
     public void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList) {
@@ -449,7 +449,7 @@ public class KeyLoader {
                 fdReadWrite = fdReadWriteArray[splitIndex];
             }
 
-            fdReadWrite.writeOneInnerForKeyBucketsInOneWalGroup(beginBucketIndex, sharedBytes);
+            fdReadWrite.writeSharedBytesForKeyBucketsInOneWalGroup(beginBucketIndex, sharedBytes);
         }
     }
 

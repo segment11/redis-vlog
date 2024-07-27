@@ -7,7 +7,6 @@ import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
-import redis.repl.Binlog;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,7 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
-import static redis.persist.FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT;
+import static redis.persist.FdReadWrite.REPL_ONCE_INNER_COUNT;
 
 public class Chunk {
     private final int segmentNumberPerFd;
@@ -126,7 +125,7 @@ public class Chunk {
     }
 
     byte[] preadForMerge(int targetSegmentIndex, int segmentCount) {
-        if (segmentCount > FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT) {
+        if (segmentCount > FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE) {
             throw new IllegalArgumentException("Merge read segment count too large: " + segmentCount);
         }
 
@@ -142,7 +141,7 @@ public class Chunk {
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
-        return fdReadWrite.readOneInnerForRepl(segmentIndexTargetFd);
+        return fdReadWrite.readBatchForRepl(segmentIndexTargetFd);
     }
 
     byte[] preadOneSegment(int targetSegmentIndex) {
@@ -679,8 +678,8 @@ public class Chunk {
             fdReadWrite.writeOneInner(segmentIndexTargetFd, bytes, false);
         } else if (segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
             fdReadWrite.writeSegmentsBatch(segmentIndexTargetFd, bytes, false);
-        } else if (segmentCount == REPL_ONCE_CHUNK_SEGMENT_COUNT) {
-            fdReadWrite.writeOneInnerForRepl(segmentIndexTargetFd, bytes, 0);
+        } else if (segmentCount == REPL_ONCE_INNER_COUNT) {
+            fdReadWrite.writeBatchForRepl(segmentIndexTargetFd, bytes, 0);
         } else {
             throw new IllegalArgumentException("Write segment count not support: " + segmentCount);
         }

@@ -204,14 +204,14 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         def r2 = one.iterateAndFindThoseNeedToMerge(1024, 1024 * 10, targetWalGroupIndex, chunk)
         then:
         r2[0] == 1024
-        r2[1] == FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT
+        r2[1] == FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE
 
         when:
         one.setSegmentMergeFlag(1024, Chunk.Flag.reuse_new, 1L, targetWalGroupIndex)
         r2 = one.iterateAndFindThoseNeedToMerge(1024, 1024 * 10, targetWalGroupIndex, chunk)
         then:
         r2[0] == 1024
-        r2[1] == FdReadWrite.MERGE_READ_ONCE_SEGMENT_COUNT
+        r2[1] == FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE
 
         when:
         one.setSegmentMergeFlag(confChunk.segmentNumberPerFd - 1, Chunk.Flag.reuse_new, 1L, targetWalGroupIndex)

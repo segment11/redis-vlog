@@ -23,10 +23,11 @@ import java.util.List;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 import static redis.persist.LocalPersist.PROTECTION;
 
-// thread safe
+// need thread safe
+// need refactor to FdChunk + FdKeyBucket, todo
 public class FdReadWrite {
 
-    private final Logger log = LoggerFactory.getLogger(FdReadWrite.class);
+    protected final Logger log = LoggerFactory.getLogger(this.getClass());
 
     public FdReadWrite(String name, LibC libC, File file) throws IOException {
         this.name = name;
@@ -109,6 +110,7 @@ public class FdReadWrite {
                 '}';
     }
 
+    // for metrics
     final static SimpleGauge fdReadWriteGauge = new SimpleGauge("fd_read_write", "chunk or key buckets file read write",
             "name");
 
@@ -116,6 +118,7 @@ public class FdReadWrite {
         fdReadWriteGauge.register();
     }
 
+    // metric stats
     // avg = this time / cache hit count
     private long afterLRUReadDecompressTimeTotalUs;
 
@@ -135,23 +138,20 @@ public class FdReadWrite {
     long lruMissCounter;
 
     public static final int BATCH_ONCE_SEGMENT_COUNT_PWRITE = 4;
-    public static final int REPL_ONCE_CHUNK_SEGMENT_COUNT = 1024;
+    public static final int REPL_ONCE_INNER_COUNT = 1024;
 
-    private ByteBuffer readPageBuffer;
-    private long readPageAddress;
+    private ByteBuffer readOneInnerBuffer;
+    private long readOneInnerAddress;
 
-    // from wal
-    private ByteBuffer writePageBuffer;
-    private long writePageAddress;
-    private ByteBuffer writePageBufferB;
-    private long writePageAddressB;
+    // for wal
+    private ByteBuffer writeOneInnerBuffer;
+    private long writeOneInnerAddress;
+    private ByteBuffer writeSegmentBatchBuffer;
+    private long writeSegmentBatchAddress;
 
     // for repl
-    ByteBuffer readForReplBuffer;
-    private long readForReplAddress;
-
-    ByteBuffer writeForReplBuffer;
-    private long writeForReplAddress;
+    ByteBuffer forReplBuffer;
+    private long forReplAddress;
 
     // for chunk merge
     ByteBuffer readForMergeBatchBuffer;
@@ -166,18 +166,19 @@ public class FdReadWrite {
     private int oneInnerLength;
     boolean isChunkFd;
 
-    static final int MERGE_READ_ONCE_SEGMENT_COUNT = 10;
+    static final int BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE = 10;
 
     // for chunk
-    byte[][] allBytesByOneInnerIndexForChunk;
+    byte[][] allBytesBySegmentIndexForChunk;
     // for key bucket, compressed
     byte[][] allBytesByOneWalGroupIndexForKeyBucket;
 
-    public boolean isTargetSegmentIndexNullInMemory(int oneInnerIndex) {
-        return allBytesByOneInnerIndexForChunk[oneInnerIndex] == null;
+    public boolean isTargetSegmentIndexNullInMemory(int segmentIndex) {
+        return allBytesBySegmentIndexForChunk[segmentIndex] == null;
     }
 
-    private LRUMap<Integer, byte[]> segmentBytesByIndexLRU;
+    // chunk fd is by segment index, key bucket fd is by bucket index
+    private LRUMap<Integer, byte[]> oneInnerBytesByIndexLRU;
 
     public void initByteBuffers(boolean isChunkFd) {
         var oneInnerLength = isChunkFd ? ConfForSlot.global.confChunk.segmentLength : KeyLoader.KEY_BUCKET_ONE_COST_SIZE;
@@ -189,7 +190,7 @@ public class FdReadWrite {
         if (ConfForSlot.global.pureMemory) {
             if (isChunkFd) {
                 var segmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
-                this.allBytesByOneInnerIndexForChunk = new byte[segmentNumberPerFd][];
+                this.allBytesBySegmentIndexForChunk = new byte[segmentNumberPerFd][];
             } else {
                 var walGroupNumber = Wal.calcWalGroupNumber();
                 this.allBytesByOneWalGroupIndexForKeyBucket = new byte[walGroupNumber][];
@@ -200,34 +201,32 @@ public class FdReadWrite {
 
             var npagesOneInner = oneInnerLength / PAGE_SIZE;
 
-            this.readPageAddress = pageManager.allocatePages(npagesOneInner, PROTECTION);
-            this.readPageBuffer = m.newDirectByteBuffer(readPageAddress, oneInnerLength);
+            this.readOneInnerAddress = pageManager.allocatePages(npagesOneInner, PROTECTION);
+            this.readOneInnerBuffer = m.newDirectByteBuffer(readOneInnerAddress, oneInnerLength);
 
-            this.writePageAddress = pageManager.allocatePages(npagesOneInner, PROTECTION);
-            this.writePageBuffer = m.newDirectByteBuffer(writePageAddress, oneInnerLength);
+            this.writeOneInnerAddress = pageManager.allocatePages(npagesOneInner, PROTECTION);
+            this.writeOneInnerBuffer = m.newDirectByteBuffer(writeOneInnerAddress, oneInnerLength);
 
-            this.writePageAddressB = pageManager.allocatePages(npagesOneInner * BATCH_ONCE_SEGMENT_COUNT_PWRITE, PROTECTION);
-            this.writePageBufferB = m.newDirectByteBuffer(writePageAddressB, oneInnerLength * BATCH_ONCE_SEGMENT_COUNT_PWRITE);
-
-            var npagesRepl = npagesOneInner * REPL_ONCE_CHUNK_SEGMENT_COUNT;
-            this.readForReplAddress = pageManager.allocatePages(npagesRepl, PROTECTION);
-            this.readForReplBuffer = m.newDirectByteBuffer(readForReplAddress, npagesRepl * PAGE_SIZE);
-
-            this.writeForReplAddress = pageManager.allocatePages(npagesRepl, PROTECTION);
-            this.writeForReplBuffer = m.newDirectByteBuffer(writeForReplAddress, npagesRepl * PAGE_SIZE);
+            var npagesRepl = npagesOneInner * REPL_ONCE_INNER_COUNT;
+            this.forReplAddress = pageManager.allocatePages(npagesRepl, PROTECTION);
+            this.forReplBuffer = m.newDirectByteBuffer(forReplAddress, npagesRepl * PAGE_SIZE);
 
             if (isChunkFd) {
+                // chunk write segment batch
+                this.writeSegmentBatchAddress = pageManager.allocatePages(npagesOneInner * BATCH_ONCE_SEGMENT_COUNT_PWRITE, PROTECTION);
+                this.writeSegmentBatchBuffer = m.newDirectByteBuffer(writeSegmentBatchAddress, oneInnerLength * BATCH_ONCE_SEGMENT_COUNT_PWRITE);
+
                 // only merge worker need read for merging batch
-                int npagesMerge = npagesOneInner * MERGE_READ_ONCE_SEGMENT_COUNT;
+                int npagesMerge = npagesOneInner * BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
                 this.readForMergeBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
                 this.readForMergeBatchBuffer = m.newDirectByteBuffer(readForMergeBatchAddress, npagesMerge * PAGE_SIZE);
             } else {
-                int npagesBucket = ConfForSlot.global.confWal.oneChargeBucketNumber;
-                this.readForOneWalGroupBatchAddress = pageManager.allocatePages(npagesBucket, PROTECTION);
-                this.readForOneWalGroupBatchBuffer = m.newDirectByteBuffer(readForOneWalGroupBatchAddress, npagesBucket * PAGE_SIZE);
+                int npagesOneWalGroup = ConfForSlot.global.confWal.oneChargeBucketNumber;
+                this.readForOneWalGroupBatchAddress = pageManager.allocatePages(npagesOneWalGroup, PROTECTION);
+                this.readForOneWalGroupBatchBuffer = m.newDirectByteBuffer(readForOneWalGroupBatchAddress, npagesOneWalGroup * PAGE_SIZE);
 
-                this.writeForOneWalGroupBatchAddress = pageManager.allocatePages(npagesBucket, PROTECTION);
-                this.writeForOneWalGroupBatchBuffer = m.newDirectByteBuffer(writeForOneWalGroupBatchAddress, npagesBucket * PAGE_SIZE);
+                this.writeForOneWalGroupBatchAddress = pageManager.allocatePages(npagesOneWalGroup, PROTECTION);
+                this.writeForOneWalGroupBatchBuffer = m.newDirectByteBuffer(writeForOneWalGroupBatchAddress, npagesOneWalGroup * PAGE_SIZE);
             }
         }
     }
@@ -243,7 +242,7 @@ public class FdReadWrite {
                 LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, (int) lruMemoryRequireMB, true);
 
                 if (maxSize > 0) {
-                    this.segmentBytesByIndexLRU = new LRUMap<>(maxSize);
+                    this.oneInnerBytesByIndexLRU = new LRUMap<>(maxSize);
                     this.isLRUOn = true;
                 }
             } else {
@@ -258,7 +257,7 @@ public class FdReadWrite {
                 LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, (int) lruMemoryRequireMB, false);
 
                 if (maxSize > 0) {
-                    this.segmentBytesByIndexLRU = new LRUMap<>(maxSize);
+                    this.oneInnerBytesByIndexLRU = new LRUMap<>(maxSize);
                     this.isLRUOn = true;
                 }
             }
@@ -271,68 +270,60 @@ public class FdReadWrite {
         var npagesOneInner = oneInnerLength / PAGE_SIZE;
 
         var pageManager = PageManager.getInstance();
-        if (readPageAddress != 0) {
-            pageManager.freePages(readPageAddress, npagesOneInner);
-            System.out.println("Clean up fd read, name: " + name + ", read page address: " + readPageAddress);
+        if (readOneInnerAddress != 0) {
+            pageManager.freePages(readOneInnerAddress, npagesOneInner);
+            System.out.println("Clean up fd read, name: " + name + ", read one inner address: " + readOneInnerAddress);
 
-            readPageAddress = 0;
-            readPageBuffer = null;
+            readOneInnerAddress = 0;
+            readOneInnerBuffer = null;
         }
 
-        if (writePageAddress != 0) {
-            pageManager.freePages(writePageAddress, npagesOneInner);
-            System.out.println("Clean up fd write, name: " + name + ", write page address: " + writePageAddress);
+        if (writeOneInnerAddress != 0) {
+            pageManager.freePages(writeOneInnerAddress, npagesOneInner);
+            System.out.println("Clean up fd write, name: " + name + ", write one inner address: " + writeOneInnerAddress);
 
-            writePageAddress = 0;
-            writePageBuffer = null;
+            writeOneInnerAddress = 0;
+            writeOneInnerBuffer = null;
         }
 
-        if (writePageAddressB != 0) {
-            pageManager.freePages(writePageAddressB, npagesOneInner * BATCH_ONCE_SEGMENT_COUNT_PWRITE);
-            System.out.println("Clean up fd write batch, name: " + name + ", write page address: " + writePageAddress);
+        if (writeSegmentBatchAddress != 0) {
+            pageManager.freePages(writeSegmentBatchAddress, npagesOneInner * BATCH_ONCE_SEGMENT_COUNT_PWRITE);
+            System.out.println("Clean up fd write, name: " + name + ", write segment batch address: " + writeOneInnerAddress);
 
-            writePageAddressB = 0;
-            writePageBufferB = null;
+            writeSegmentBatchAddress = 0;
+            writeSegmentBatchBuffer = null;
         }
 
-        var npagesRepl = npagesOneInner * REPL_ONCE_CHUNK_SEGMENT_COUNT;
-        if (readForReplAddress != 0) {
-            pageManager.freePages(readForReplAddress, npagesRepl);
-            System.out.println("Clean up fd read repl, name: " + name + ", read page address: " + readForReplAddress);
+        var npagesRepl = npagesOneInner * REPL_ONCE_INNER_COUNT;
+        if (forReplAddress != 0) {
+            pageManager.freePages(forReplAddress, npagesRepl);
+            System.out.println("Clean up fd read, name: " + name + ", read for repl address: " + forReplAddress);
 
-            readForReplAddress = 0;
-            readForReplBuffer = null;
+            forReplAddress = 0;
+            forReplBuffer = null;
         }
 
-        if (writeForReplAddress != 0) {
-            pageManager.freePages(writeForReplAddress, npagesRepl);
-            System.out.println("Clean up fd write repl, name: " + name + ", write page address: " + writeForReplAddress);
-
-            writeForReplAddress = 0;
-            writeForReplBuffer = null;
-        }
-
-        int npagesMerge = npagesOneInner * MERGE_READ_ONCE_SEGMENT_COUNT;
+        int npagesMerge = npagesOneInner * BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
         if (readForMergeBatchAddress != 0) {
             pageManager.freePages(readForMergeBatchAddress, npagesMerge);
-            System.out.println("Clean up fd read merge batch, name: " + name + ", read page address: " + readForMergeBatchAddress);
+            System.out.println("Clean up fd read, name: " + name + ", read for merge batch address: " + readForMergeBatchAddress);
 
             readForMergeBatchAddress = 0;
             readForMergeBatchBuffer = null;
         }
 
-        int npagesBucket = ConfForSlot.global.confWal.oneChargeBucketNumber;
+        int npagesOneWalGroup = ConfForSlot.global.confWal.oneChargeBucketNumber;
         if (readForOneWalGroupBatchAddress != 0) {
-            pageManager.freePages(readForOneWalGroupBatchAddress, npagesBucket);
-            System.out.println("Clean up fd read for one wal group batch, name: " + name + ", read page address: " + readForOneWalGroupBatchAddress);
+            pageManager.freePages(readForOneWalGroupBatchAddress, npagesOneWalGroup);
+            System.out.println("Clean up fd read, name: " + name + ", read for one wal group address: " + readForOneWalGroupBatchAddress);
 
             readForOneWalGroupBatchAddress = 0;
             readForOneWalGroupBatchBuffer = null;
         }
 
         if (writeForOneWalGroupBatchAddress != 0) {
-            pageManager.freePages(writeForOneWalGroupBatchAddress, npagesBucket);
-            System.out.println("Clean up fd write for one wal group batch, name: " + name + ", write page address: " + writeForOneWalGroupBatchAddress);
+            pageManager.freePages(writeForOneWalGroupBatchAddress, npagesOneWalGroup);
+            System.out.println("Clean up fd write, name: " + name + ", write for one wal group address: " + writeForOneWalGroupBatchAddress);
 
             writeForOneWalGroupBatchAddress = 0;
             writeForOneWalGroupBatchBuffer = null;
@@ -341,15 +332,10 @@ public class FdReadWrite {
         if (fd != 0) {
             int r = libC.close(fd);
             if (r < 0) {
-                System.err.println("Close fd error: " + libC.strerror(r));
+                System.err.println("Close fd error: " + libC.strerror(r) + ", name: " + name);
             }
-            System.out.println("Closed fd: " + fd);
+            System.out.println("Closed fd: " + fd + ", name: " + name);
         }
-    }
-
-    // do not use cpu calculate
-    interface ReadBufferCallback {
-        byte[] readFrom(ByteBuffer buffer, int readLength);
     }
 
     interface WriteBufferPrepare {
@@ -360,24 +346,24 @@ public class FdReadWrite {
         if (isChunkFd) {
             // one inner index -> chunk segment index
             if (oneInnerIndex < 0 || oneInnerIndex >= ConfForSlot.global.confChunk.segmentNumberPerFd) {
-                throw new IllegalArgumentException("One inner index: " + oneInnerIndex + " must be in [0, " + ConfForSlot.global.confChunk.segmentNumberPerFd + ")");
+                throw new IllegalArgumentException("Segment index: " + oneInnerIndex + " must be in [0, " + ConfForSlot.global.confChunk.segmentNumberPerFd + ")");
             }
         } else {
             // one inner index -> bucket index
             if (oneInnerIndex < 0 || oneInnerIndex >= ConfForSlot.global.confBucket.bucketsPerSlot) {
-                throw new IllegalArgumentException("One inner index: " + oneInnerIndex + " must be in [0, " + ConfForSlot.global.confBucket.bucketsPerSlot + ")");
+                throw new IllegalArgumentException("Bucket index: " + oneInnerIndex + " must be in [0, " + ConfForSlot.global.confBucket.bucketsPerSlot + ")");
             }
         }
     }
 
-    private byte[] readInnerNotPureMemory(int oneInnerIndex, ByteBuffer buffer, boolean isRefreshLRUCache) {
-        return readInnerNotPureMemory(oneInnerIndex, buffer, isRefreshLRUCache, buffer.capacity());
+    private byte[] readInnerByBuffer(int oneInnerIndex, ByteBuffer buffer, boolean isRefreshLRUCache) {
+        return readInnerByBuffer(oneInnerIndex, buffer, isRefreshLRUCache, buffer.capacity());
     }
 
-    private byte[] readInnerNotPureMemory(int oneInnerIndex, ByteBuffer buffer, boolean isRefreshLRUCache, int length) {
+    private byte[] readInnerByBuffer(int oneInnerIndex, ByteBuffer buffer, boolean isRefreshLRUCache, int length) {
         checkOneInnerIndex(oneInnerIndex);
         if (length > buffer.capacity()) {
-            throw new IllegalArgumentException("Read length must be less than buffer capacity: " + buffer.capacity() + ", read length: " + length);
+            throw new IllegalArgumentException("Read length must be less than buffer capacity: " + buffer.capacity() + ", read length: " + length + ", name: " + name);
         }
 
         // for from lru cache if only read one segment
@@ -387,7 +373,7 @@ public class FdReadWrite {
             oneInnerCount = 1;
 
             if (isLRUOn) {
-                var bytesCached = segmentBytesByIndexLRU.get(oneInnerIndex);
+                var bytesCached = oneInnerBytesByIndexLRU.get(oneInnerIndex);
                 if (bytesCached != null) {
                     lruHitCounter++;
 
@@ -419,10 +405,14 @@ public class FdReadWrite {
         if (writeIndex <= lastSegmentOffset) {
             readLength = (int) (writeIndex - offset);
         }
-        if (readLength < 0 || readLength > length) {
+        if (readLength < 0) {
+            throw new IllegalArgumentException("Read length must be greater than 0, read length: " + readLength);
+        }
+        if (readLength > length) {
             throw new IllegalArgumentException("Read length must be less than given length: " + length + ", read length: " + readLength);
         }
 
+        // clear buffer before read
         buffer.clear();
 
         readCountTotal++;
@@ -444,7 +434,7 @@ public class FdReadWrite {
         if (isOnlyOneOneInner && isRefreshLRUCache) {
             if (isLRUOn) {
                 if (isChunkFd) {
-                    segmentBytesByIndexLRU.put(oneInnerIndex, bytesRead);
+                    oneInnerBytesByIndexLRU.put(oneInnerIndex, bytesRead);
                 } else {
                     // only key bucket data need compress
                     var beginT2 = System.nanoTime();
@@ -452,14 +442,14 @@ public class FdReadWrite {
                     var costT2 = (System.nanoTime() - beginT2) / 1000;
                     afterFdPreadCompressTimeTotalUs += costT2;
                     afterFdPreadCompressCountTotal++;
-                    segmentBytesByIndexLRU.put(oneInnerIndex, bytesCompressed);
+                    oneInnerBytesByIndexLRU.put(oneInnerIndex, bytesCompressed);
                 }
             }
         }
         return bytesRead;
     }
 
-    private int writeInnerNotPureMemory(int oneInnerIndex, ByteBuffer buffer, @NotNull WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
+    private int writeInnerByBuffer(int oneInnerIndex, ByteBuffer buffer, @NotNull WriteBufferPrepare prepare, boolean isRefreshLRUCache) {
         checkOneInnerIndex(oneInnerIndex);
 
         int capacity = buffer.capacity();
@@ -468,9 +458,12 @@ public class FdReadWrite {
         var isPwriteBatch = oneInnerCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 
         int offset = oneInnerIndex * oneInnerLength;
+
+        // clear buffer before write
         buffer.clear();
 
         prepare.prepare(buffer);
+        // when ?, need check, todo
         if (buffer.position() != capacity) {
             // append 0
             var bytes0 = new byte[capacity - buffer.position()];
@@ -496,21 +489,18 @@ public class FdReadWrite {
 
         // set to lru cache
         if (isLRUOn) {
-            if (isRefreshLRUCache && (isOnlyOneSegment || isPwriteBatch)) {
+            if (isRefreshLRUCache && isChunkFd && (isOnlyOneSegment || isPwriteBatch)) {
                 for (int i = 0; i < oneInnerCount; i++) {
                     var bytes = new byte[oneInnerLength];
                     buffer.position(i * oneInnerLength);
                     buffer.get(bytes);
 
                     // chunk data is already compressed
-                    // key bucket data need not compress here, compress when after read
-                    if (isChunkFd) {
-                        segmentBytesByIndexLRU.put(oneInnerIndex + i, bytes);
-                    }
+                    oneInnerBytesByIndexLRU.put(oneInnerIndex + i, bytes);
                 }
             } else {
                 for (int i = 0; i < oneInnerCount; i++) {
-                    segmentBytesByIndexLRU.remove(oneInnerIndex + i);
+                    oneInnerBytesByIndexLRU.remove(oneInnerIndex + i);
                 }
             }
         }
@@ -520,14 +510,15 @@ public class FdReadWrite {
 
     byte[] readOneInnerBatchFromMemory(int oneInnerIndex, int oneInnerCount) {
         if (!isChunkFd) {
-            // use shared bytes for one wal group
+            // read shared bytes for one wal group
+            // oneInnerIndex -> beginBucketIndex
             var walGroupIndex = Wal.calWalGroupIndex(oneInnerIndex);
             if (oneInnerCount == 1 || oneInnerCount == ConfForSlot.global.confWal.oneChargeBucketNumber) {
-                // readonly
+                // readonly, use a copy will be safe, but not necessary
                 return allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex];
-            } else if (oneInnerCount == REPL_ONCE_CHUNK_SEGMENT_COUNT) {
+            } else if (oneInnerCount == REPL_ONCE_INNER_COUNT) {
                 var oneWalGroupSharedBytesLength = ConfForSlot.global.confWal.oneChargeBucketNumber * oneInnerLength;
-                var walGroupCount = REPL_ONCE_CHUNK_SEGMENT_COUNT / ConfForSlot.global.confWal.oneChargeBucketNumber;
+                var walGroupCount = REPL_ONCE_INNER_COUNT / ConfForSlot.global.confWal.oneChargeBucketNumber;
 
                 // for repl, use copy
                 var bytesRead = new byte[oneWalGroupSharedBytesLength * walGroupCount];
@@ -543,13 +534,14 @@ public class FdReadWrite {
             }
         }
 
+        // bellow for chunk fd
         if (oneInnerCount == 1) {
-            return allBytesByOneInnerIndexForChunk[oneInnerIndex];
+            return allBytesBySegmentIndexForChunk[oneInnerIndex];
         }
 
         var bytesRead = new byte[oneInnerLength * oneInnerCount];
         for (int i = 0; i < oneInnerCount; i++) {
-            var oneInnerBytes = allBytesByOneInnerIndexForChunk[oneInnerIndex + i];
+            var oneInnerBytes = allBytesBySegmentIndexForChunk[oneInnerIndex + i];
             if (oneInnerBytes != null) {
                 System.arraycopy(oneInnerBytes, 0, bytesRead, i * oneInnerLength, oneInnerBytes.length);
             }
@@ -562,32 +554,32 @@ public class FdReadWrite {
             return readOneInnerBatchFromMemory(oneInnerIndex, 1);
         }
 
-        return readInnerNotPureMemory(oneInnerIndex, readPageBuffer, isRefreshLRUCache);
+        return readInnerByBuffer(oneInnerIndex, readOneInnerBuffer, isRefreshLRUCache);
     }
 
+    // segmentCount may < BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE, when one slot read segments in the same wal group before batch update key buckets
     public byte[] readSegmentsForMerge(int beginSegmentIndex, int segmentCount) {
         if (ConfForSlot.global.pureMemory) {
             return readOneInnerBatchFromMemory(beginSegmentIndex, segmentCount);
         }
 
-        return readInnerNotPureMemory(beginSegmentIndex, readForMergeBatchBuffer, false, segmentCount * oneInnerLength);
+        return readInnerByBuffer(beginSegmentIndex, readForMergeBatchBuffer, false, segmentCount * oneInnerLength);
     }
 
-    public byte[] readOneInnerForRepl(int oneInnerIndex) {
+    public byte[] readBatchForRepl(int oneInnerIndex) {
         if (ConfForSlot.global.pureMemory) {
-            return readOneInnerBatchFromMemory(oneInnerIndex, REPL_ONCE_CHUNK_SEGMENT_COUNT);
+            return readOneInnerBatchFromMemory(oneInnerIndex, REPL_ONCE_INNER_COUNT);
         }
 
-        return readInnerNotPureMemory(oneInnerIndex, readForReplBuffer, false);
+        return readInnerByBuffer(oneInnerIndex, forReplBuffer, false);
     }
 
-    public byte[] readOneInnerForKeyBucketsInOneWalGroup(int bucketIndex) {
-        // bucketIndex is oneInnerIndex when fd is key bucket fd, not chunk fd
+    public byte[] readKeyBucketsSharedBytesInOneWalGroup(int beginBucketIndex) {
         if (ConfForSlot.global.pureMemory) {
-            return readOneInnerBatchFromMemory(bucketIndex, ConfForSlot.global.confWal.oneChargeBucketNumber);
+            return readOneInnerBatchFromMemory(beginBucketIndex, ConfForSlot.global.confWal.oneChargeBucketNumber);
         }
 
-        return readInnerNotPureMemory(bucketIndex, readForOneWalGroupBatchBuffer, false);
+        return readInnerByBuffer(beginBucketIndex, readForOneWalGroupBatchBuffer, false);
     }
 
     public void clearOneKeyBucketToMemory(int bucketIndex) {
@@ -619,25 +611,26 @@ public class FdReadWrite {
                 throw new IllegalStateException("Write bytes smaller than one segment length to memory must be chunk fd");
             }
             // position is 0
-            allBytesByOneInnerIndexForChunk[beginOneInnerIndex] = bytes;
+            allBytesBySegmentIndexForChunk[beginOneInnerIndex] = bytes;
             return bytes.length;
         }
 
         var oneInnerCount = (bytes.length - position) / oneInnerLength;
-        if (oneInnerCount == REPL_ONCE_CHUNK_SEGMENT_COUNT) {
-            if (!isChunkFd) {
-                // set shared bytes batch
-                var walGroupIndex = Wal.calWalGroupIndex(beginOneInnerIndex);
-                var oneWalGroupSharedBytesLength = ConfForSlot.global.confWal.oneChargeBucketNumber * oneInnerLength;
-                var walGroupCount = REPL_ONCE_CHUNK_SEGMENT_COUNT / ConfForSlot.global.confWal.oneChargeBucketNumber;
+        var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber;
+        // for key bucket, memory copy one wal group by one wal group
+        if (!isChunkFd) {
+            if (oneInnerCount == REPL_ONCE_INNER_COUNT) {
+                var beginWalGroupIndex = Wal.calWalGroupIndex(beginOneInnerIndex);
+                var oneWalGroupSharedBytesLength = oneChargeBucketNumber * oneInnerLength;
+                var walGroupCount = REPL_ONCE_INNER_COUNT / oneChargeBucketNumber;
 
                 var offset = position;
                 for (int i = 0; i < walGroupCount; i++) {
-                    var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex + i];
+                    var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex + i];
                     if (sharedBytes == null) {
-                        var subBytes = new byte[oneWalGroupSharedBytesLength];
-                        System.arraycopy(bytes, offset, subBytes, 0, subBytes.length);
-                        allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex + i] = subBytes;
+                        var addedSharedBytes = new byte[oneWalGroupSharedBytesLength];
+                        System.arraycopy(bytes, offset, addedSharedBytes, 0, addedSharedBytes.length);
+                        allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex + i] = addedSharedBytes;
                     } else {
                         System.arraycopy(bytes, offset, sharedBytes, 0, sharedBytes.length);
                     }
@@ -645,14 +638,26 @@ public class FdReadWrite {
                 }
                 return walGroupCount * oneWalGroupSharedBytesLength;
             }
+//            } else if (oneInnerCount == oneChargeBucketNumber) {
+//                var beginWalGroupIndex = Wal.calWalGroupIndex(beginOneInnerIndex);
+//                var oneWalGroupSharedBytesLength = oneChargeBucketNumber * oneInnerLength;
+//                var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex];
+//                if (sharedBytes == null) {
+//                    sharedBytes = new byte[oneWalGroupSharedBytesLength];
+//                    allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex] = sharedBytes;
+//                }
+//                System.arraycopy(bytes, position, sharedBytes, 0, sharedBytes.length);
+//                return bytes.length - position;
+//            }
         }
 
+        // memory copy one segment/bucket by one segment/bucket
         var offset = position;
         for (int i = 0; i < oneInnerCount; i++) {
             var targetOneInnerIndex = beginOneInnerIndex + i;
             if (!isChunkFd) {
                 var walGroupIndex = Wal.calWalGroupIndex(targetOneInnerIndex);
-                var oneWalGroupSharedBytesLength = ConfForSlot.global.confWal.oneChargeBucketNumber * oneInnerLength;
+                var oneWalGroupSharedBytesLength = oneChargeBucketNumber * oneInnerLength;
                 var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex];
                 if (sharedBytes == null) {
                     sharedBytes = new byte[oneWalGroupSharedBytesLength];
@@ -663,7 +668,7 @@ public class FdReadWrite {
             } else {
                 var bytesOneSegment = new byte[oneInnerLength];
                 System.arraycopy(bytes, offset, bytesOneSegment, 0, oneInnerLength);
-                allBytesByOneInnerIndexForChunk[targetOneInnerIndex] = bytesOneSegment;
+                allBytesBySegmentIndexForChunk[targetOneInnerIndex] = bytesOneSegment;
             }
             offset += oneInnerLength;
         }
@@ -679,8 +684,8 @@ public class FdReadWrite {
             return writeOneInnerBatchToMemory(oneInnerIndex, bytes, 0);
         }
 
-        return writeInnerNotPureMemory(oneInnerIndex, writePageBuffer, (buffer) -> {
-            buffer.clear();
+        return writeInnerByBuffer(oneInnerIndex, writeOneInnerBuffer, (buffer) -> {
+            // buffer already clear
             buffer.put(bytes);
         }, isRefreshLRUCache);
     }
@@ -695,13 +700,13 @@ public class FdReadWrite {
             return writeOneInnerBatchToMemory(segmentIndex, bytes, 0);
         }
 
-        return writeInnerNotPureMemory(segmentIndex, writePageBufferB, (buffer) -> {
-            buffer.clear();
+        return writeInnerByBuffer(segmentIndex, writeSegmentBatchBuffer, (buffer) -> {
+            // buffer already clear
             buffer.put(bytes);
         }, isRefreshLRUCache);
     }
 
-    public int writeOneInnerForKeyBucketsInOneWalGroup(int bucketIndex, byte[] sharedBytes) {
+    public int writeSharedBytesForKeyBucketsInOneWalGroup(int bucketIndex, byte[] sharedBytes) {
         var keyBucketCount = sharedBytes.length / oneInnerLength;
         if (keyBucketCount != ConfForSlot.global.confWal.oneChargeBucketNumber) {
             throw new IllegalArgumentException("Batch write bytes length not match one charge bucket number in one wal group");
@@ -713,24 +718,22 @@ public class FdReadWrite {
             return sharedBytes.length;
         }
 
-        return writeInnerNotPureMemory(bucketIndex, writeForOneWalGroupBatchBuffer, (buffer) -> {
-            buffer.clear();
+        return writeInnerByBuffer(bucketIndex, writeForOneWalGroupBatchBuffer, (buffer) -> {
             buffer.put(sharedBytes);
         }, false);
     }
 
-    public int writeOneInnerForRepl(int oneInnerIndex, byte[] bytes, int position) {
+    public int writeBatchForRepl(int oneInnerIndex, byte[] bytes, int position) {
         var oneInnerCount = bytes.length / oneInnerLength;
-        if (oneInnerCount != REPL_ONCE_CHUNK_SEGMENT_COUNT) {
-            throw new IllegalArgumentException("Repl write bytes length not match once repl segment count");
+        if (oneInnerCount != REPL_ONCE_INNER_COUNT) {
+            throw new IllegalArgumentException("Repl write bytes length not match once repl inner count");
         }
 
         if (ConfForSlot.global.pureMemory) {
             return writeOneInnerBatchToMemory(oneInnerIndex, bytes, position);
         }
 
-        return writeInnerNotPureMemory(oneInnerIndex, writeForReplBuffer, (buffer) -> {
-            buffer.clear();
+        return writeInnerByBuffer(oneInnerIndex, forReplBuffer, (buffer) -> {
             if (position == 0) {
                 buffer.put(bytes);
             } else {
@@ -748,13 +751,13 @@ public class FdReadWrite {
             log.info("Truncate fd: {}, name: {}", fd, name);
 
             if (isLRUOn) {
-                segmentBytesByIndexLRU.clear();
+                oneInnerBytesByIndexLRU.clear();
                 log.info("LRU cache clear, name: {}", name);
             }
         } else {
             log.warn("Pure memory mode, not use fd, name: {}", name);
             if (isChunkFd) {
-                this.allBytesByOneInnerIndexForChunk = new byte[allBytesByOneInnerIndexForChunk.length][];
+                this.allBytesBySegmentIndexForChunk = new byte[allBytesBySegmentIndexForChunk.length][];
             } else {
                 this.allBytesByOneWalGroupIndexForKeyBucket = new byte[allBytesByOneWalGroupIndexForKeyBucket.length][];
             }

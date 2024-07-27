@@ -369,7 +369,7 @@ public class XGroup extends BaseCommand {
         var oneSlot = localPersist.oneSlot(slot);
         if (EmptyContent.isEmpty(contentBytes)) {
             // next step, fetch exists chunk segments
-            var segmentCount = FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT;
+            var segmentCount = FdReadWrite.REPL_ONCE_INNER_COUNT;
             var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(0, segmentCount);
             var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
@@ -392,7 +392,7 @@ public class XGroup extends BaseCommand {
         var isAllReceived = splitIndex == splitNumber - 1 && isLastBatchInThisSplit;
         if (isAllReceived) {
             // next step, fetch exists chunk segments
-            var segmentCount = FdReadWrite.REPL_ONCE_CHUNK_SEGMENT_COUNT;
+            var segmentCount = FdReadWrite.REPL_ONCE_INNER_COUNT;
             var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(0, segmentCount);
             var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
