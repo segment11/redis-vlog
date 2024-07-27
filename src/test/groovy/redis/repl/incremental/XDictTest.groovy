@@ -10,6 +10,8 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class XDictTest extends Specification {
+    final byte slot = 0
+
     def 'test encode and decode'() {
         given:
         def keyPrefix = 'key:'
@@ -73,7 +75,7 @@ class XDictTest extends Specification {
         when:
         def dictMap = DictMap.instance
         dictMap.initDictMap(Consts.testDir)
-        xDict.apply((byte) 0, null)
+        xDict.apply(slot, null)
         then:
         dictMap.getDict(keyPrefix).dictBytes == dict.dictBytes
 

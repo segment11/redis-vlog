@@ -8,10 +8,12 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class SegmentBatchTest extends Specification {
+    final byte slot = 0
+
     def 'tight segments write and read'() {
         given:
         def snowFlake = new SnowFlake(1, 1)
-        def segmentBatch = new SegmentBatch((byte) 0, snowFlake)
+        def segmentBatch = new SegmentBatch(slot, snowFlake)
 
         segmentBatch.segmentBatchGauge.collect()
         segmentBatch.segmentCompressCountTotal = 1

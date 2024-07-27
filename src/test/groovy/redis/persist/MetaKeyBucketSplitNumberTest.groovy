@@ -6,9 +6,11 @@ import spock.lang.Specification
 import static redis.persist.Consts.getSlotDir
 
 class MetaKeyBucketSplitNumberTest extends Specification {
+    final byte slot = 0
+
     def 'test for repl'() {
         given:
-        def one = new MetaKeyBucketSplitNumber((byte) 0, slotDir)
+        def one = new MetaKeyBucketSplitNumber(slot, slotDir)
 
         when:
         def allInMemoryCachedBytes = one.getInMemoryCachedBytes()
@@ -40,7 +42,7 @@ class MetaKeyBucketSplitNumberTest extends Specification {
         exception
 
         when:
-        def two = new MetaKeyBucketSplitNumber((byte) 0, slotDir)
+        def two = new MetaKeyBucketSplitNumber(slot, slotDir)
         then:
         two != null
 
@@ -56,7 +58,7 @@ class MetaKeyBucketSplitNumberTest extends Specification {
         given:
         ConfForSlot.global.pureMemory = false
 
-        def one = new MetaKeyBucketSplitNumber((byte) 0, slotDir)
+        def one = new MetaKeyBucketSplitNumber(slot, slotDir)
 //        println one.inMemoryCachedBytes
 
         when:
@@ -79,7 +81,7 @@ class MetaKeyBucketSplitNumberTest extends Specification {
 
         when:
         ConfForSlot.global.pureMemory = true
-        def one2 = new MetaKeyBucketSplitNumber((byte) 0, slotDir)
+        def one2 = new MetaKeyBucketSplitNumber(slot, slotDir)
         one2.setForTest(10, (byte) 3)
         one2.setForTest(20, (byte) 9)
         one2.setForTest(30, (byte) 27)

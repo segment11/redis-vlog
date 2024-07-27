@@ -13,6 +13,8 @@ import java.nio.channels.SocketChannel
 import java.time.Duration
 
 class CGroupTest extends Specification {
+    final byte slot = 0
+
     def 'test parse slot'() {
         given:
         def data3 = new byte[3][]
@@ -23,13 +25,13 @@ class CGroupTest extends Specification {
         data3[2] = 'b'.bytes
 
         when:
-        LocalPersist.instance.addOneSlotForTest((byte) 0, null)
+        LocalPersist.instance.addOneSlotForTest2(slot)
         def sCopyList = CGroup.parseSlots('copy', data3, slotNumber)
         def sConfigList = CGroup.parseSlots('config', data3, slotNumber)
         then:
         sCopyList.size() == 2
         sConfigList.size() == 1
-        sConfigList[0].slot() == (byte) 0
+        sConfigList[0].slot() == slot
 
         when:
         def data2 = new byte[2][]

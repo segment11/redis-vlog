@@ -78,7 +78,7 @@ class TcpClientTest extends Specification {
                 .withAcceptOnce()
                 .build()
 //        Thread.start {
-//            localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
+//            localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
 //            eventloop.run()
 //        }
 //        Thread.start {

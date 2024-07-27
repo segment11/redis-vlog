@@ -43,6 +43,8 @@ sunion
 sunionstore
 '''.readLines().collect { it.trim() }.findAll { it }
 
+    final byte slot = 0
+
     def 'test parse slot'() {
         given:
         def data4 = new byte[4][]
@@ -55,7 +57,7 @@ sunionstore
         data4[3] = 'c'.bytes
 
         when:
-        LocalPersist.instance.addOneSlotForTest((byte) 0, null)
+        LocalPersist.instance.addOneSlotForTest2(slot)
         def sSintercardList = SGroup.parseSlots('sintercard', data4, slotNumber)
         def sSmoveList = SGroup.parseSlots('smove', data4, slotNumber)
         def sSelectList = SGroup.parseSlots('select', data4, slotNumber)
@@ -523,7 +525,7 @@ sunionstore
         and:
         def localPersist = LocalPersist.instance
         localPersist.socketInspector = new SocketInspector()
-        localPersist.addOneSlotForTest((byte) 0, null)
+        localPersist.addOneSlotForTest2(slot)
         def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
                 new InetSocketAddress('localhost', 46379), null)
         sGroup.socketForTest = socket

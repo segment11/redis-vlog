@@ -233,6 +233,8 @@ zunionstore
         sZintercardList.size() == 0
     }
 
+    final byte slot = 0
+
     def 'test handle'() {
         given:
         def data1 = new byte[1][]
@@ -261,7 +263,7 @@ zunionstore
     }
 
     private RedisZSet fromMem(InMemoryGetSet inMemoryGetSet, String key) {
-        def buf = inMemoryGetSet.getBuf((byte) 0, key.bytes, 0, 0L)
+        def buf = inMemoryGetSet.getBuf(slot, key.bytes, 0, 0L)
         RedisZSet.decode(buf.cv().compressedData)
     }
 

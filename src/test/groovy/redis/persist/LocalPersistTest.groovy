@@ -17,6 +17,8 @@ class LocalPersistTest extends Specification {
         localPersist.debugMode()
     }
 
+    final byte slot = 0
+
     def 'test all'() {
         given:
         def localPersist = LocalPersist.instance
@@ -31,11 +33,11 @@ class LocalPersistTest extends Specification {
 
         when:
         prepareLocalPersist()
-        localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         localPersist.persistMergeSegmentsUndone()
         then:
         localPersist.oneSlots().length == 1
-        localPersist.oneSlot((byte) 0) != null
+        localPersist.oneSlot(slot) != null
         localPersist.currentThreadFirstOneSlot() == localPersist.oneSlots()[0]
 
         cleanup:
@@ -67,7 +69,7 @@ class LocalPersistTest extends Specification {
         exception
 
         cleanup:
-        localPersist.fixSlotThreadId((byte) 0, Thread.currentThread().threadId())
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         localPersist.fixSlotThreadId((byte) 1, Thread.currentThread().threadId())
         localPersist.cleanUp()
         Consts.persistDir.deleteDir()
@@ -84,12 +86,12 @@ class LocalPersistTest extends Specification {
         }
 
         def localPersist = LocalPersist.instance
-        localPersist.addOneSlotForTest((byte) 0, eventloop)
-        localPersist.addOneSlotForTest((byte) 0, null)
+        localPersist.addOneSlotForTest(slot, eventloop)
+        localPersist.addOneSlotForTest2(slot)
 
         expect:
         localPersist.oneSlots().length == 1
-        localPersist.firstSlot() == (byte) 0
+        localPersist.firstSlot() == slot
 
         when:
         localPersist.socketInspector = null

@@ -63,6 +63,11 @@ public class OneSlot {
         this.binlog = null;
     }
 
+    // for unit test, only for local persist one slot array
+    OneSlot(byte slot) {
+        this(slot, null);
+    }
+
     // for unit test, only for async run/call
     OneSlot(byte slot, Eventloop eventloop) {
         this.slot = slot;

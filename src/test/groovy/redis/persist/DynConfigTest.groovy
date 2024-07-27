@@ -5,6 +5,8 @@ import redis.SocketInspector
 import spock.lang.Specification
 
 class DynConfigTest extends Specification {
+    final byte slot = 0
+
     static File tmpFile = new File('/tmp/dyn-config.json')
     static File tmpFile2 = new File('/tmp/dyn-config2.json')
 
@@ -13,7 +15,7 @@ class DynConfigTest extends Specification {
         if (tmpFile.exists()) {
             tmpFile.delete()
         }
-        def config = new DynConfig((byte) 0, tmpFile)
+        def config = new DynConfig(slot, tmpFile)
 
         expect:
         config.masterUuid == null
@@ -55,7 +57,7 @@ class DynConfigTest extends Specification {
         // reload from file
         when:
         MultiWorkerServer.staticGlobalV.socketInspector = new SocketInspector()
-        config = new DynConfig((byte) 0, tmpFile)
+        config = new DynConfig(slot, tmpFile)
         config.update('max_connections', 100)
         then:
         config.afterUpdateCallback != null
