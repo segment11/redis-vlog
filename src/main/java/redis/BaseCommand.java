@@ -88,7 +88,11 @@ public abstract class BaseCommand {
     // need final, for unit test, can change
     protected String cmd;
     protected byte[][] data;
-    protected final ITcpSocket socket;
+    protected ITcpSocket socket;
+
+    public void setSocketForTest(ITcpSocket socket) {
+        this.socket = socket;
+    }
 
     public BaseCommand(String cmd, byte[][] data, ITcpSocket socket) {
         this.cmd = cmd;
@@ -100,6 +104,12 @@ public abstract class BaseCommand {
 
     protected byte workerId;
     protected byte netWorkers;
+
+    // for unit test
+    public short getSlotNumber() {
+        return slotNumber;
+    }
+
     protected short slotNumber;
     protected CompressStats compressStats;
 
@@ -115,6 +125,12 @@ public abstract class BaseCommand {
     protected ArrayList<byte[]> localTestRandomValueList;
 
     protected ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed;
+
+    // for unit test
+    public void setSlotWithKeyHashListParsed(ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed) {
+        this.slotWithKeyHashListParsed = slotWithKeyHashListParsed;
+    }
+
     protected boolean isCrossRequestWorker;
 
     public void setCrossRequestWorker(boolean crossRequestWorker) {
@@ -320,13 +336,12 @@ public abstract class BaseCommand {
             var uuid = buffer.getLong();
             var realDictSeq = buffer.getInt();
 
-            cv.dictSeqOrSpType = realDictSeq;
             cv.compressedData = oneSlot.getBigStringFiles().getBigStringBytes(uuid, true);
             if (cv.compressedData == null) {
                 return null;
             }
-
             cv.compressedLength = cv.compressedData.length;
+            cv.dictSeqOrSpType = realDictSeq;
         }
 
         return cv;

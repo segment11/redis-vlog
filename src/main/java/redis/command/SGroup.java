@@ -7,6 +7,7 @@ import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.CompressedValue;
+import redis.persist.LocalPersist;
 import redis.reply.*;
 import redis.type.RedisHashKeys;
 
@@ -75,6 +76,13 @@ public class SGroup extends BaseCommand {
             var s2 = slot(dstKeyBytes, slotNumber);
             slotWithKeyHashList.add(s1);
             slotWithKeyHashList.add(s2);
+            return slotWithKeyHashList;
+        }
+
+        if ("select".equals(cmd)) {
+            // select always use the first slot
+            var firstSlot = LocalPersist.getInstance().firstSlot();
+            slotWithKeyHashList.add(new SlotWithKeyHash(firstSlot, 0, 1L));
             return slotWithKeyHashList;
         }
 
@@ -524,8 +532,9 @@ public class SGroup extends BaseCommand {
             return ErrorReply.INVALID_INTEGER;
         }
 
-        log.warn("Select db index: {}, not support", index);
-        return ErrorReply.NOT_SUPPORT;
+        localPersist.getSocketInspector().setDBSelected(socket, (byte) index);
+        log.warn("Select db index: {}", index);
+        return OKReply.INSTANCE;
     }
 
     Reply sadd() {

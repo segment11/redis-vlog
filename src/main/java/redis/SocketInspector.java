@@ -1,6 +1,7 @@
 package redis;
 
 import io.activej.bytebuf.ByteBuf;
+import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.net.socket.tcp.TcpSocket;
 import io.prometheus.client.Gauge;
 import org.jetbrains.annotations.Nullable;
@@ -9,12 +10,35 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SocketInspector implements TcpSocket.Inspector {
     private final Logger log = LoggerFactory.getLogger(SocketInspector.class);
 
-    ConcurrentHashMap<InetSocketAddress, TcpSocket> socketMap = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<InetSocketAddress, TcpSocket> socketMap = new ConcurrentHashMap<>();
+    private final HashMap<ITcpSocket, Byte> clientDBSelected = new HashMap<>();
+
+    public Byte getDBSelected(ITcpSocket socket) {
+        return clientDBSelected.get(socket);
+    }
+
+    public void setDBSelected(ITcpSocket socket, byte db) {
+        clientDBSelected.put(socket, db);
+    }
+
+    static final String EXTEND_KEY_PREFIX = "_/";
+
+    public String addExtendKeyPrefixByDBSelected(ITcpSocket socket, String rawKey) {
+        var db = getDBSelected(socket);
+        if (db == null) {
+            return rawKey;
+        }
+        if (db == 0) {
+            return rawKey;
+        }
+        return EXTEND_KEY_PREFIX + db + "_" + rawKey;
+    }
 
     private int maxConnections = 1000;
 
@@ -84,6 +108,7 @@ public class SocketInspector implements TcpSocket.Inspector {
         log.info("On disconnect, remote address: {}", remoteAddress);
         AfterAuthFlagHolder.remove(remoteAddress);
         socketMap.remove(remoteAddress);
+        clientDBSelected.remove(socket);
 
         connectedCountGauge.dec();
     }

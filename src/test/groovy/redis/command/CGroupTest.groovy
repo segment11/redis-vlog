@@ -23,11 +23,13 @@ class CGroupTest extends Specification {
         data3[2] = 'b'.bytes
 
         when:
+        LocalPersist.instance.addOneSlotForTest((byte) 0, null)
         def sCopyList = CGroup.parseSlots('copy', data3, slotNumber)
         def sConfigList = CGroup.parseSlots('config', data3, slotNumber)
         then:
         sCopyList.size() == 2
-        sConfigList.size() == 0
+        sConfigList.size() == 1
+        sConfigList[0].slot() == (byte) 0
 
         when:
         def data2 = new byte[2][]

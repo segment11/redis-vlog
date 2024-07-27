@@ -2,8 +2,10 @@ package redis.command
 
 import com.github.luben.zstd.Zstd
 import io.activej.eventloop.Eventloop
+import io.activej.net.socket.tcp.TcpSocket
 import redis.BaseCommand
 import redis.CompressedValue
+import redis.SocketInspector
 import redis.mock.InMemoryGetSet
 import redis.persist.LocalPersist
 import redis.persist.Mock
@@ -11,6 +13,7 @@ import redis.reply.*
 import redis.type.RedisHashKeys
 import spock.lang.Specification
 
+import java.nio.channels.SocketChannel
 import java.time.Duration
 
 class SGroupTest extends Specification {
@@ -52,12 +55,15 @@ sunionstore
         data4[3] = 'c'.bytes
 
         when:
+        LocalPersist.instance.addOneSlotForTest((byte) 0, null)
         def sSintercardList = SGroup.parseSlots('sintercard', data4, slotNumber)
         def sSmoveList = SGroup.parseSlots('smove', data4, slotNumber)
+        def sSelectList = SGroup.parseSlots('select', data4, slotNumber)
         def sList = SGroup.parseSlots('sxxx', data4, slotNumber)
         then:
         sSintercardList.size() == 2
         sSmoveList.size() == 2
+        sSelectList.size() == 1
         sList.size() == 0
 
         when:
@@ -127,6 +133,12 @@ sunionstore
         def reply = sGroup.handle()
         then:
         reply == OKReply.INSTANCE
+
+        when:
+        sGroup.cmd = 'select'
+        reply = sGroup.handle()
+        then:
+        reply == ErrorReply.FORMAT
 
         when:
         sGroup.cmd = 'zzz'
@@ -508,11 +520,20 @@ sunionstore
         sGroup.byPassGetSet = inMemoryGetSet
         sGroup.from(BaseCommand.mockAGroup())
 
+        and:
+        def localPersist = LocalPersist.instance
+        localPersist.socketInspector = new SocketInspector()
+        localPersist.addOneSlotForTest((byte) 0, null)
+        def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
+                new InetSocketAddress('localhost', 46379), null)
+        sGroup.socketForTest = socket
+
         when:
         sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('select', data2, sGroup.slotNumber)
         def reply = sGroup.select()
         then:
-        reply == ErrorReply.NOT_SUPPORT
+        reply == OKReply.INSTANCE
+        localPersist.socketInspector.getDBSelected(socket) == (byte) 1
 
         when:
         data2[1] = '-1'.bytes

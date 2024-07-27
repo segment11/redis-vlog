@@ -369,6 +369,8 @@ public class MultiWorkerServer extends Launcher {
             localPersist.fixSlotThreadId((byte) slot, netWorkerThreadIds[i]);
         }
 
+        localPersist.setSocketInspector(socketInspector);
+
         // metrics
         CollectorRegistry.defaultRegistry.register(new BufferPoolsExports());
         CollectorRegistry.defaultRegistry.register(new MemoryPoolsExports());

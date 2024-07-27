@@ -85,9 +85,16 @@ class LocalPersistTest extends Specification {
 
         def localPersist = LocalPersist.instance
         localPersist.addOneSlotForTest((byte) 0, eventloop)
+        localPersist.addOneSlotForTest((byte) 0, null)
 
         expect:
         localPersist.oneSlots().length == 1
+        localPersist.firstSlot() == (byte) 0
+
+        when:
+        localPersist.socketInspector = null
+        then:
+        localPersist.socketInspector == null
 
         cleanup:
         eventloop.breakEventloop()

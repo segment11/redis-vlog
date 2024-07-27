@@ -503,10 +503,6 @@ public class OneSlot {
     }
 
     private LibC libC;
-
-
-    private byte netWorkers;
-
     Chunk chunk;
 
     MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
@@ -970,9 +966,7 @@ public class OneSlot {
         }
     }
 
-    public void initFds(LibC libC, byte netWorkers) throws IOException {
-        this.netWorkers = netWorkers;
-
+    public void initFds(LibC libC) throws IOException {
         this.libC = libC;
         this.keyLoader.initFds(libC);
 

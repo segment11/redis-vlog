@@ -24,6 +24,19 @@ class SocketInspectorTest extends Specification {
         inspector.onWriteError(socket, null)
         then:
         inspector.lookup(SocketInspector.class) == null
+        inspector.addExtendKeyPrefixByDBSelected(socket, 'key') == 'key'
+
+        when:
+        inspector.setDBSelected(socket, (byte) 1)
+        then:
+        inspector.getDBSelected(socket) == (byte) 1
+        inspector.addExtendKeyPrefixByDBSelected(socket, 'key') == SocketInspector.EXTEND_KEY_PREFIX + '1_' + 'key'
+
+        when:
+        inspector.setDBSelected(socket, (byte) 0)
+        then:
+        inspector.getDBSelected(socket) == (byte) 0
+        inspector.addExtendKeyPrefixByDBSelected(socket, 'key') == 'key'
 
         when:
         inspector.maxConnections = 1

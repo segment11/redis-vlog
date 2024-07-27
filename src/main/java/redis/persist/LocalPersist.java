@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfVolumeDirsForSlot;
 import redis.SnowFlake;
+import redis.SocketInspector;
 
 import java.io.File;
 import java.io.IOException;
@@ -46,8 +47,6 @@ public class LocalPersist {
         }
     }
 
-    private short slotNumber;
-    private File persistDir;
     private OneSlot[] oneSlots;
 
     public OneSlot[] oneSlots() {
@@ -58,6 +57,10 @@ public class LocalPersist {
         return oneSlots[slot];
     }
 
+    public byte firstSlot() {
+        return oneSlots[0].slot();
+    }
+
     public void addOneSlotForTest(byte slot, Eventloop eventloop) {
         try {
             Thread.sleep(100);
@@ -65,21 +68,21 @@ public class LocalPersist {
             throw new RuntimeException(e);
         }
         var oneSlot = new OneSlot(slot, eventloop);
-        oneSlot.threadIdProtectedForSafe = eventloop.getEventloopThread().threadId();
+        if (eventloop != null) {
+            oneSlot.threadIdProtectedForSafe = eventloop.getEventloopThread().threadId();
+        }
         this.oneSlots = new OneSlot[slot + 1];
         this.oneSlots[slot] = oneSlot;
     }
 
     public void initSlots(byte netWorkers, short slotNumber, SnowFlake[] snowFlakes, File persistDir, Config persistConfig) throws IOException {
-        this.slotNumber = slotNumber;
-        this.persistDir = persistDir;
         ConfVolumeDirsForSlot.initFromConfig(persistConfig, slotNumber);
 
         this.oneSlots = new OneSlot[slotNumber];
         for (short slot = 0; slot < slotNumber; slot++) {
             var i = slot % netWorkers;
             var oneSlot = new OneSlot((byte) slot, slotNumber, snowFlakes[i], persistDir, persistConfig);
-            oneSlot.initFds(libC, netWorkers);
+            oneSlot.initFds(libC);
 
             oneSlots[slot] = oneSlot;
         }
@@ -104,6 +107,16 @@ public class LocalPersist {
             }
         }
         throw new IllegalStateException("No one slot for current thread");
+    }
+
+    private SocketInspector socketInspector;
+
+    public SocketInspector getSocketInspector() {
+        return socketInspector;
+    }
+
+    public void setSocketInspector(SocketInspector socketInspector) {
+        this.socketInspector = socketInspector;
     }
 
     public void cleanUp() {

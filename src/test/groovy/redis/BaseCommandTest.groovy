@@ -63,11 +63,11 @@ class BaseCommandTest extends Specification {
         println new BaseCommand.SlotWithKeyHashWithKeyBytes(s5, k5.bytes)
 
         expect:
-        s1.slot == 0
-        s1.bucketIndex < 16384
-        s1.keyHash != 0
+        s1.slot() == 0
+        s1.bucketIndex() < 16384
+        s1.keyHash() != 0
 
-        s3.slot == s4.slot
+        s3.slot() == s4.slot()
     }
 
     def 'test init'() {
@@ -77,6 +77,7 @@ class BaseCommandTest extends Specification {
         data2[1] = 'key'.bytes
         def c = new SubCommand('get', data2, null)
         c.crossRequestWorker = false
+        c.slotWithKeyHashListParsed = null
 
         expect:
         c.cmd == 'get'

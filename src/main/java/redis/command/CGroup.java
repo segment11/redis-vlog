@@ -5,6 +5,7 @@ import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.MultiWorkerServer;
+import redis.persist.LocalPersist;
 import redis.reply.*;
 
 import java.io.IOException;
@@ -32,7 +33,14 @@ public class CGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-        // client / config can use any slot
+        if ("config".equals(cmd)) {
+            // config always use the first slot
+            var firstSlot = LocalPersist.getInstance().firstSlot();
+            slotWithKeyHashList.add(new SlotWithKeyHash(firstSlot, 0, 1L));
+            return slotWithKeyHashList;
+        }
+
+        // client can use any slot
         return slotWithKeyHashList;
     }
 
