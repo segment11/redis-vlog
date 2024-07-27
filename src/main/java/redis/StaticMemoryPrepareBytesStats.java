@@ -7,7 +7,7 @@ public class StaticMemoryPrepareBytesStats {
     }
 
     public enum Type {
-        wal_cache, wal_cache_init, meta_chunk_segment_flag_seq
+        wal_cache, wal_cache_init, meta_chunk_segment_flag_seq, fd_read_write_buffer
     }
 
     public record One(Type type, int staticMemoryRequireMB, boolean isExact) {

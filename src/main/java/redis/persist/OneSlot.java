@@ -180,7 +180,6 @@ public class OneSlot {
             var wal = new Wal(slot, i, raf, rafShortValue, snowFlake);
             walArray[i] = wal;
             initMemoryN += wal.initMemoryN;
-
         }
 
         int initMemoryMB = (int) (initMemoryN / 1024 / 1024);
@@ -1516,8 +1515,12 @@ public class OneSlot {
 
                 map.put("static_memory_prepare_mb_wal_cache_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.wal_cache), labelValues));
+                map.put("static_memory_prepare_mb_wal_cache_init_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.wal_cache_init), labelValues));
                 map.put("static_memory_prepare_mb_meta_chunk_segment_flag_seq_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq), labelValues));
+                map.put("static_memory_prepare_mb_fd_read_write_buffer_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer), labelValues));
             }
 
             var hitMissTotal = kvLRUHitTotal + kvLRUMissTotal;

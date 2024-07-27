@@ -11,6 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.StaticMemoryPrepareBytesStats;
 import redis.metric.SimpleGauge;
 
 import java.io.File;
@@ -140,6 +141,9 @@ public class FdReadWrite {
     public static final int BATCH_ONCE_SEGMENT_COUNT_PWRITE = 4;
     public static final int REPL_ONCE_INNER_COUNT = 1024;
 
+
+    // all buffers can be reused in the same thread, to be optimized, todo
+
     private ByteBuffer readOneInnerBuffer;
     private long readOneInnerAddress;
 
@@ -196,6 +200,8 @@ public class FdReadWrite {
                 this.allBytesByOneWalGroupIndexForKeyBucket = new byte[walGroupNumber][];
             }
         } else {
+            long initMemoryN = 0;
+
             var pageManager = PageManager.getInstance();
             var m = MemoryIO.getInstance();
 
@@ -211,6 +217,8 @@ public class FdReadWrite {
             this.forReplAddress = pageManager.allocatePages(npagesRepl, PROTECTION);
             this.forReplBuffer = m.newDirectByteBuffer(forReplAddress, npagesRepl * PAGE_SIZE);
 
+            initMemoryN += readOneInnerBuffer.capacity() + writeOneInnerBuffer.capacity() + forReplBuffer.capacity();
+
             if (isChunkFd) {
                 // chunk write segment batch
                 this.writeSegmentBatchAddress = pageManager.allocatePages(npagesOneInner * BATCH_ONCE_SEGMENT_COUNT_PWRITE, PROTECTION);
@@ -220,6 +228,8 @@ public class FdReadWrite {
                 int npagesMerge = npagesOneInner * BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
                 this.readForMergeBatchAddress = pageManager.allocatePages(npagesMerge, PROTECTION);
                 this.readForMergeBatchBuffer = m.newDirectByteBuffer(readForMergeBatchAddress, npagesMerge * PAGE_SIZE);
+
+                initMemoryN += writeSegmentBatchBuffer.capacity() + readForMergeBatchBuffer.capacity();
             } else {
                 int npagesOneWalGroup = ConfForSlot.global.confWal.oneChargeBucketNumber;
                 this.readForOneWalGroupBatchAddress = pageManager.allocatePages(npagesOneWalGroup, PROTECTION);
@@ -227,7 +237,13 @@ public class FdReadWrite {
 
                 this.writeForOneWalGroupBatchAddress = pageManager.allocatePages(npagesOneWalGroup, PROTECTION);
                 this.writeForOneWalGroupBatchBuffer = m.newDirectByteBuffer(writeForOneWalGroupBatchAddress, npagesOneWalGroup * PAGE_SIZE);
+
+                initMemoryN += readForOneWalGroupBatchBuffer.capacity() + writeForOneWalGroupBatchBuffer.capacity();
             }
+
+            int initMemoryMB = (int) (initMemoryN / 1024 / 1024);
+            log.info("Static memory init, type: {}, MB: {}, name: {}", StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer, initMemoryMB, name);
+            StaticMemoryPrepareBytesStats.add(StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer, initMemoryMB, false);
         }
     }
 
