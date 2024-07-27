@@ -40,7 +40,7 @@ public class ReplPair {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        ReplPair replPair = (ReplPair) obj;
+        var replPair = (ReplPair) obj;
         return asMaster == replPair.asMaster && port == replPair.port && host.equals(replPair.host);
     }
 
@@ -103,14 +103,19 @@ public class ReplPair {
     private TcpClient tcpClient;
 
     public void initAsSlave(Eventloop eventloop, RequestHandler requestHandler) {
+        // for unit test
+        if (eventloop == null) {
+            return;
+        }
+
         if (System.currentTimeMillis() - lastPongGetTimestamp < 1000 * 3
                 && tcpClient != null && tcpClient.isSocketConnected()) {
             log.warn("Repl pair init as slave: already connected, target host: {}, port: {}, slot: {}", host, port, slot);
         } else {
-            if (tcpClient != null) {
-                tcpClient.close();
-                log.warn("Repl pair init as slave: close old connection, target host: {}, port: {}, slot: {}", host, port, slot);
-            }
+//            if (tcpClient != null) {
+//                tcpClient.close();
+//                log.warn("Repl pair init as slave: close old connection, target host: {}, port: {}, slot: {}", host, port, slot);
+//            }
 
             var replContent = new Hello(slaveUuid, ConfForSlot.global.netListenAddresses);
 
@@ -123,6 +128,10 @@ public class ReplPair {
 
     public boolean isSendBye() {
         return isSendBye;
+    }
+
+    public void setSendByeForTest(boolean isSendBye) {
+        this.isSendBye = isSendBye;
     }
 
     public boolean bye() {
@@ -158,6 +167,7 @@ public class ReplPair {
     public void close() {
         if (tcpClient != null) {
             tcpClient.close();
+            tcpClient = null;
         }
     }
 

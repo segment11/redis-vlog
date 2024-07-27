@@ -136,9 +136,7 @@ public class OneSlot {
             dynConfig.setMasterUuid(masterUuid);
         }
 
-        if (!this.dynConfig.isBinlogOn()) {
-            this.dynConfig.setBinlogOn(persistConfig.get(ofBoolean(), "binlogOn", false));
-        }
+        this.dynConfig.setBinlogOn(persistConfig.get(ofBoolean(), "binlogOn", false));
         log.warn("Binlog on: {}", this.dynConfig.isBinlogOn());
 
         this.walGroupNumber = Wal.calcWalGroupNumber();
@@ -225,7 +223,7 @@ public class OneSlot {
 
     private final long masterUuid;
 
-    private final ArrayList<ReplPair> replPairs = new ArrayList<>();
+    final ArrayList<ReplPair> replPairs = new ArrayList<>();
 
     // slave need not top merge
     public boolean isAsSlave() {
@@ -239,17 +237,14 @@ public class OneSlot {
         return isAsSlave;
     }
 
-    private final LinkedList<ReplPair> delayNeedCloseReplPairs = new LinkedList<>();
+    final LinkedList<ReplPair> delayNeedCloseReplPairs = new LinkedList<>();
 
     public void addDelayNeedCloseReplPair(ReplPair replPair) {
         delayNeedCloseReplPairs.add(replPair);
     }
 
     // todo, both master - master, need change equal and init as master or slave
-    public void createReplPairAsSlave(String host, int port) throws IOException {
-        // remove old if exists
-        removeReplPairAsSlave();
-
+    public ReplPair createReplPairAsSlave(String host, int port) throws IOException {
         var replPair = new ReplPair(slot, false, host, port);
         replPair.setSlaveUuid(masterUuid);
         replPair.initAsSlave(netWorkerEventloop, requestHandler);
@@ -259,54 +254,68 @@ public class OneSlot {
         if (!isReadonly()) {
             setReadonly(true);
         }
-        if (canRead()) {
+        if (isCanRead()) {
             setCanRead(false);
         }
+        return replPair;
     }
 
     public void removeReplPairAsSlave() throws IOException {
         for (var replPair : replPairs) {
+            if (replPair.isAsMaster()) {
+                continue;
+            }
+
             if (replPair.isSendBye()) {
                 continue;
             }
 
-            if (!replPair.isAsMaster()) {
-                replPair.bye();
-                addDelayNeedCloseReplPair(replPair);
-                return;
-            }
+            replPair.bye();
+            addDelayNeedCloseReplPair(replPair);
         }
 
         if (isReadonly()) {
             setReadonly(false);
         }
-        if (!canRead()) {
+        if (!isCanRead()) {
             setCanRead(true);
         }
     }
 
     public ReplPair getReplPairAsMaster(long slaveUuid) {
         for (var replPair : replPairs) {
+            if (!replPair.isAsMaster()) {
+                continue;
+            }
+
             if (replPair.isSendBye()) {
                 continue;
             }
 
-            if (replPair.isAsMaster() && replPair.getSlaveUuid() == slaveUuid) {
-                return replPair;
+            if (replPair.getSlaveUuid() != slaveUuid) {
+                continue;
             }
+
+            return replPair;
         }
         return null;
     }
 
     public ReplPair getReplPairAsSlave(long slaveUuid) {
         for (var replPair : replPairs) {
+            if (replPair.isAsMaster()) {
+                continue;
+            }
+
             if (replPair.isSendBye()) {
                 continue;
             }
 
-            if (!replPair.isAsMaster() && replPair.getSlaveUuid() == slaveUuid) {
-                return replPair;
+            if (replPair.getSlaveUuid() != slaveUuid) {
+                continue;
             }
+
+            return replPair;
         }
         return null;
     }
@@ -341,7 +350,7 @@ public class OneSlot {
     private RequestHandler requestHandler;
 
     public Promise<Void> asyncRun(RunnableEx runnableEx) {
-        var threadId = Thread.currentThread().getId();
+        var threadId = Thread.currentThread().threadId();
         if (threadId == threadIdProtectedForSafe) {
             try {
                 runnableEx.run();
@@ -355,7 +364,7 @@ public class OneSlot {
     }
 
     public <T> Promise<T> asyncCall(SupplierEx<T> supplierEx) {
-        var threadId = Thread.currentThread().getId();
+        var threadId = Thread.currentThread().threadId();
         if (threadId == threadIdProtectedForSafe) {
             try {
                 return Promise.of(supplierEx.get());
@@ -461,7 +470,7 @@ public class OneSlot {
         dynConfig.setReadonly(readonly);
     }
 
-    public boolean canRead() {
+    public boolean isCanRead() {
         return dynConfig.isCanRead();
     }
 

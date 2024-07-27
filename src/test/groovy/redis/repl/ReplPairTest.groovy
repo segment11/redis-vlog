@@ -1,6 +1,21 @@
 package redis.repl
 
+import io.activej.config.Config
+import io.activej.csp.binary.BinaryChannelSupplier
+import io.activej.csp.consumer.ChannelConsumers
+import io.activej.csp.supplier.ChannelSuppliers
+import io.activej.eventloop.Eventloop
+import io.activej.net.SimpleServer
+import redis.ConfForSlot
+import redis.RequestHandler
+import redis.decode.RequestDecoder
+import redis.persist.Consts
+import redis.persist.LocalPersist
+import redis.persist.LocalPersistTest
+import redis.repl.content.RawBytesContent
 import spock.lang.Specification
+
+import java.time.Duration
 
 class ReplPairTest extends Specification {
     static ReplPair mockOne(byte slot = 0, boolean asMaster = true, String host = 'localhost', int port = 6379) {
@@ -23,69 +38,127 @@ class ReplPairTest extends Specification {
 
     def 'test base'() {
         given:
-        final byte slot = 0
+        byte slot = 0
+        ConfForSlot.global.netListenAddresses = 'localhost:6380'
 
-        def replPair = mockAsMaster()
-        def replPair2 = mockAsSlave()
+        def replPairAsMaster = mockAsMaster()
+        def replPairAsSlave = mockAsSlave()
 
         expect:
-        replPair.slot == slot
-        replPair.hostAndPort == 'localhost:6379'
-        replPair.asMaster
-        replPair.masterUuid == 0L
-        replPair.lastPingGetTimestamp == 0L
-        !replPair.sendBye
-        !replPair.ping()
-        !replPair.bye()
-        !replPair.write(ReplType.ping, null)
-        !replPair.toFetchBigStringUuidList
-        !replPair.doFetchingBigStringUuidList
-        replPair.doingFetchBigStringUuid() == -1
+        replPairAsMaster.slot == slot
+        replPairAsMaster.hostAndPort == 'localhost:6379'
+        replPairAsMaster.asMaster
+        replPairAsMaster.masterUuid == 0L
+        replPairAsMaster.lastPingGetTimestamp == 0L
+        !replPairAsMaster.sendBye
+        !replPairAsMaster.ping()
+        !replPairAsMaster.bye()
+        !replPairAsMaster.write(ReplType.ping, null)
+        !replPairAsMaster.toFetchBigStringUuidList
+        !replPairAsMaster.doFetchingBigStringUuidList
+        replPairAsMaster.doingFetchBigStringUuid() == -1
 
-        replPair2.slot == slot
-        replPair2.hostAndPort == 'localhost:6380'
-        !replPair2.asMaster
-        replPair2.masterUuid == 0L
-        replPair2.slaveUuid == 1L
-        replPair2.lastPongGetTimestamp == 0L
+        replPairAsSlave.slot == slot
+        replPairAsSlave.hostAndPort == 'localhost:6380'
+        !replPairAsSlave.asMaster
+        replPairAsSlave.masterUuid == 0L
+        replPairAsSlave.slaveUuid == 1L
+        replPairAsSlave.lastPongGetTimestamp == 0L
 
-        def replPair1 = mockOne(slot, true, 'localhost', 16379)
-        def replPair11 = mockOne(slot, true, 'local', 6379)
+        def replPairMaster1 = mockOne(slot, true, 'localhost', 16379)
+        def replPairAsMaster11 = mockOne(slot, true, 'local', 6379)
 
-        !replPair.equals(null)
-        !replPair.equals(Integer.valueOf(0))
-        replPair != replPair1
-        replPair != replPair11
-        replPair != replPair2
-        !replPair.linkUp
-
-        when:
-        replPair.isSendBye = true
-        then:
-        !replPair.ping()
-        !replPair.write(ReplType.ping, null)
+        !replPairAsMaster.equals(null)
+        !replPairAsMaster.equals(Integer.valueOf(0))
+        replPairAsMaster != replPairAsSlave
+        replPairAsMaster != replPairMaster1
+        replPairAsMaster != replPairAsMaster11
+        replPairAsMaster.equals(replPairAsMaster)
+        !replPairAsMaster.linkUp
 
         when:
-        replPair.lastPingGetTimestamp = System.currentTimeMillis() - 1000L
-        replPair2.lastPongGetTimestamp = System.currentTimeMillis() - 2000L
+        replPairAsMaster.isSendBye = true
+        replPairAsMaster.sendByeForTest = true
         then:
-        replPair.linkUp
-        !replPair2.linkUp
+        !replPairAsMaster.ping()
+        !replPairAsMaster.write(ReplType.ping, null)
 
         when:
-        replPair.addToFetchBigStringUuid(1L)
+        replPairAsMaster.lastPingGetTimestamp = System.currentTimeMillis() - 1000L
+        replPairAsSlave.lastPongGetTimestamp = System.currentTimeMillis() - 2000L
         then:
-        replPair.doingFetchBigStringUuid() == 1L
-        replPair.doFetchingBigStringUuidList[0] == 1L
+        replPairAsMaster.linkUp
+        !replPairAsSlave.linkUp
 
         when:
-        replPair.doneFetchBigStringUuid(100L)
-        replPair.doneFetchBigStringUuid(1L)
+        replPairAsMaster.addToFetchBigStringUuid(1L)
         then:
-        replPair.doFetchingBigStringUuidList.size() == 0
+        replPairAsMaster.doingFetchBigStringUuid() == 1L
+        replPairAsMaster.doFetchingBigStringUuidList[0] == 1L
+
+        when:
+        replPairAsMaster.doneFetchBigStringUuid(100L)
+        replPairAsMaster.doneFetchBigStringUuid(1L)
+        then:
+        replPairAsMaster.doFetchingBigStringUuidList.size() == 0
+
+        when:
+        replPairAsSlave.initAsSlave(null, null)
+        then:
+        !replPairAsSlave.isLinkUp()
+
+        when:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        def server = SimpleServer.builder(
+                eventloopCurrent,
+                socket -> {
+                    println 'Client connected'
+                    BinaryChannelSupplier.of(ChannelSuppliers.ofSocket(socket))
+                            .decodeStream(new RequestDecoder())
+                            .map { pipeline ->
+                                def request = pipeline[0]
+                                def data = request.getData()
+                                println 'Mock server get request from client, data.length: ' + data.length
+                                Repl.ok(slot, replPairAsSlave, 'ok').buffer()
+                            }.streamTo(ChannelConsumers.ofSocket(socket))
+                })
+                .withListenAddress(new InetSocketAddress('localhost', 6380))
+                .withAcceptOnce()
+                .build()
+        Thread.sleep(100)
+        server.listen()
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, null, Config.create())
+        replPairAsSlave.initAsSlave(eventloopCurrent, requestHandler)
+        boolean[] isLinkUpArray = [false]
+        replPairAsSlave.lastPongGetTimestamp = System.currentTimeMillis()
+        replPairAsSlave.sendByeForTest = false
+        println 'before current eventloop run'
+        eventloopCurrent.delay(2000, () -> {
+            isLinkUpArray[0] = replPairAsSlave.isLinkUp()
+            replPairAsSlave.initAsSlave(eventloopCurrent, requestHandler)
+
+            replPairAsSlave.ping()
+            replPairAsSlave.write(ReplType.ok, new RawBytesContent('test'.bytes))
+            replPairAsSlave.bye()
+            Thread.sleep(100)
+            replPairAsSlave.close()
+        })
+        eventloopCurrent.run()
+        println 'after current eventloop run'
+        then:
+        isLinkUpArray[0]
 
         cleanup:
-        replPair.close()
-        replPair2.close()
+        replPairAsMaster.close()
+        replPairAsSlave.close()
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 }
