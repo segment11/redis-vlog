@@ -10,7 +10,7 @@ public class ConfVolumeDirsForSlot {
     private ConfVolumeDirsForSlot() {
     }
 
-    private static Logger log = LoggerFactory.getLogger(ConfVolumeDirsForSlot.class);
+    private static final Logger log = LoggerFactory.getLogger(ConfVolumeDirsForSlot.class);
 
     private static String[] volumeDirsBySlot;
 
