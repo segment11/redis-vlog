@@ -29,7 +29,7 @@ public class Repl {
         return buf;
     }
 
-    record ReplReply(io.activej.bytebuf.ByteBuf buf) implements Reply {
+    public record ReplReply(io.activej.bytebuf.ByteBuf buf) implements Reply {
         @Override
         public io.activej.bytebuf.ByteBuf buffer() {
             return buf;

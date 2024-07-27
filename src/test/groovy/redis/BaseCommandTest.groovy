@@ -85,7 +85,7 @@ class BaseCommandTest extends Specification {
         c.socket == null
 
         when:
-        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, null, Config.create())
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, Config.create())
         c.init(requestHandler, new Request(data2, false, false))
 
         // overwrite
@@ -128,7 +128,7 @@ class BaseCommandTest extends Specification {
         def c = new SubCommand('get', data2, null)
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, null, Config.create())
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, Config.create())
         c.init(requestHandler, new Request(data2, false, false))
 
         LocalPersistTest.prepareLocalPersist()
@@ -276,7 +276,7 @@ class BaseCommandTest extends Specification {
         def c = new SubCommand('set', data3, null)
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, snowFlake, null, Config.create())
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, snowFlake, Config.create())
         c.init(requestHandler, new Request(data3, false, false))
 
         when:
@@ -563,7 +563,7 @@ class BaseCommandTest extends Specification {
         def c = new SubCommand('set', data3, null)
         def inMemoryGetSet = new InMemoryGetSet()
 
-        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, snowFlake, null, Config.create())
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, snowFlake, Config.create())
         c.init(requestHandler, new Request(data3, false, false))
 
         and:

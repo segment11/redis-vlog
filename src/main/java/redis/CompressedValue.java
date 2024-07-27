@@ -325,6 +325,9 @@ public class CompressedValue {
     }
 
     public boolean isShortString() {
+        if (!isTypeString()) {
+            return false;
+        }
         return compressedData != null && compressedData.length <= CompressedValue.SP_TYPE_SHORT_STRING_MIN_LEN;
     }
 

@@ -33,6 +33,7 @@ class RESPReplyTest extends Specification {
         new ErrorReply('error').message == 'error'
         new ErrorReply('error').buffer().asArray() == "-ERR error\r\n".bytes
         new ErrorReply('error').bufferAsHttp().asArray() == "error".bytes
+        new ErrorReply('error').toString().contains('error')
 
         BulkReply.numToBytes(100, true) == "100\r\n".bytes
         BulkReply.numToBytes(257, true) == "257\r\n".bytes

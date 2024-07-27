@@ -32,14 +32,13 @@ public class RequestHandler {
     private static final String SET_COMMAND = "set";
     private static final String QUIT_COMMAND = "quit";
 
-    private final String password;
-
     final byte workerId;
     final String workerIdStr;
     final byte netWorkers;
     final short slotNumber;
     final SnowFlake snowFlake;
-    private final SocketInspector socketInspector;
+    String password;
+
     final boolean localTest;
     final int localTestRandomValueListSize;
     final ArrayList<byte[]> localTestRandomValueList;
@@ -52,22 +51,32 @@ public class RequestHandler {
     final TrainSampleJob trainSampleJob;
     final List<TrainSampleJob.TrainSampleKV> sampleToTrainList = new CopyOnWriteArrayList<>();
 
-    private volatile boolean isStopped = false;
+    volatile boolean isStopped = false;
 
     void stop() {
         System.out.println("Worker " + workerId + " stopped callback");
         isStopped = true;
     }
 
-    public RequestHandler(byte workerId, byte netWorkers, short slotNumber,
-                          SnowFlake snowFlake, SocketInspector socketInspector, Config config) {
+    @Override
+    public String toString() {
+        return "RequestHandler{" +
+                "workerId=" + workerId +
+                ", netWorkers=" + netWorkers +
+                ", slotNumber=" + slotNumber +
+                ", localTest=" + localTest +
+                ", compressLevel=" + compressLevel +
+                ", sampleToTrainList.size=" + sampleToTrainList.size() +
+                ", isStopped=" + isStopped +
+                '}';
+    }
+
+    public RequestHandler(byte workerId, byte netWorkers, short slotNumber, SnowFlake snowFlake, Config config) {
         this.workerId = workerId;
         this.workerIdStr = String.valueOf(workerId);
         this.netWorkers = netWorkers;
         this.slotNumber = slotNumber;
-
         this.snowFlake = snowFlake;
-        this.socketInspector = socketInspector;
 
         this.password = config.get(ofString(), "password", null);
 
@@ -202,8 +211,11 @@ public class RequestHandler {
             }
         }
 
-        var cmd = request.cmd();
+        if (data[0] == null) {
+            return ErrorReply.FORMAT;
+        }
 
+        var cmd = request.cmd();
         if (cmd.equals(PING_COMMAND)) {
             return PongReply.INSTANCE;
         }
@@ -352,7 +364,7 @@ public class RequestHandler {
         return ErrorReply.FORMAT;
     }
 
-    private final static SimpleGauge sampleToTrainSizeGauge = new SimpleGauge("sample_to_train_size", "sample to train size",
+    final static SimpleGauge sampleToTrainSizeGauge = new SimpleGauge("sample_to_train_size", "sample to train size",
             "worker_id");
 
     static {

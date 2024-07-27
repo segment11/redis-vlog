@@ -133,7 +133,7 @@ class ReplPairTest extends Specification {
                 .build()
         Thread.sleep(100)
         server.listen()
-        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, null, Config.create())
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, Config.create())
         replPairAsSlave.initAsSlave(eventloopCurrent, requestHandler)
         boolean[] isLinkUpArray = [false]
         replPairAsSlave.lastPongGetTimestamp = System.currentTimeMillis()

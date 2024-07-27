@@ -28,7 +28,7 @@ class TcpClientTest extends Specification {
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
 
-        def requestHandler = new RequestHandler(slot, (byte) 1, (short) 1, null, null, Config.create())
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, Config.create())
         def replPair2 = ReplPairTest.mockAsSlave()
         def tcpClient = new TcpClient(slot, eventloopCurrent, requestHandler, replPair2)
 

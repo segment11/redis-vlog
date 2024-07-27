@@ -37,6 +37,13 @@ public class ErrorReply implements Reply {
         return message;
     }
 
+    @Override
+    public String toString() {
+        return "ErrorReply{" +
+                "message='" + message + '\'' +
+                '}';
+    }
+
     public ErrorReply(String message) {
         this.message = message;
     }

@@ -191,7 +191,7 @@ class OneSlotTest extends Specification {
         def oneSlot = new OneSlot(slot, slotNumber, snowFlake, Consts.persistDir, persistConfig)
 
         and:
-        def requestHandler = new RequestHandler((byte) 0, (byte) 1, slotNumber, null, null, Config.create())
+        def requestHandler = new RequestHandler((byte) 0, (byte) 1, slotNumber, null, Config.create())
         def eventloop = Eventloop.builder()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()

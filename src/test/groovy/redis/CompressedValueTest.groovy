@@ -65,13 +65,11 @@ class CompressedValueTest extends Specification {
 
         when:
         cv.compressedData = new byte[CompressedValue.SP_TYPE_SHORT_STRING_MIN_LEN]
-
         then:
         cv.isShortString()
 
         when:
         cv.compressedData = new byte[CompressedValue.SP_TYPE_SHORT_STRING_MIN_LEN + 1]
-
         then:
         !cv.isShortString()
 
@@ -85,6 +83,7 @@ class CompressedValueTest extends Specification {
         then:
         cv.isHash()
         !cv.isTypeString()
+        !cv.isShortString()
 
         when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH_COMPRESSED

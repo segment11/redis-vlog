@@ -581,13 +581,13 @@ public class MultiWorkerServer extends Launcher {
                     }
 
                     @Provides
-                    RequestHandler[] requestHandlerArray(SnowFlake[] snowFlakes, Integer beforeCreateHandler, SocketInspector socketInspector, Config config) {
+                    RequestHandler[] requestHandlerArray(SnowFlake[] snowFlakes, Integer beforeCreateHandler, Config config) {
                         int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
                         int netWorkers = config.get(toInt, "netWorkers", 1);
 
                         var list = new RequestHandler[netWorkers];
                         for (int i = 0; i < netWorkers; i++) {
-                            list[i] = new RequestHandler((byte) i, (byte) netWorkers, (short) slotNumber, snowFlakes[i], socketInspector, config);
+                            list[i] = new RequestHandler((byte) i, (byte) netWorkers, (short) slotNumber, snowFlakes[i], config);
                         }
                         return list;
                     }

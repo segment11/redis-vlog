@@ -874,6 +874,7 @@ public class OneSlot {
     public void put(String key, int bucketIndex, CompressedValue cv, boolean isFromMerge) {
         checkCurrentThreadId();
 
+        // before put check for better performance, todo
         if (isReadonly()) {
             throw new ReadonlyException();
         }
