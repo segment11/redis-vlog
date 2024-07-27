@@ -135,8 +135,12 @@ public class MultiWorkerServer extends Launcher {
     @Provides
     WorkerPool workerPool(WorkerPools workerPools, Config config) {
         int netWorkers = config.get(toInt, "netWorkers", 1);
-
         netWorkerEventloopArray = new Eventloop[netWorkers];
+
+        // for unit test coverage
+        if (workerPools == null) {
+            return null;
+        }
 
         // already checked in beforeCreateHandler
         return workerPools.createPool(netWorkers);
@@ -144,13 +148,12 @@ public class MultiWorkerServer extends Launcher {
 
     @Provides
     PrimaryServer primaryServer(NioReactor primaryReactor, WorkerPool.Instances<SimpleServer> workerServers, Config config) {
-        var ps = PrimaryServer.builder(primaryReactor, workerServers.getList())
+        return PrimaryServer.builder(primaryReactor, workerServers.getList())
                 .initialize(ofPrimaryServer(config.getChild("net")))
                 .build();
-        return ps;
     }
 
-    private ByteBuf wrapHttpResponse(Reply reply) {
+    ByteBuf wrapHttpResponse(Reply reply) {
         var buf = reply.bufferAsHttp();
         byte[] array = buf.array();
         byte[] contentLengthBytes = String.valueOf(array.length).getBytes();
@@ -167,7 +170,7 @@ public class MultiWorkerServer extends Launcher {
         return httpBuf;
     }
 
-    private Promise<ByteBuf> handleRequest(Request request, ITcpSocket socket) {
+    Promise<ByteBuf> handleRequest(Request request, ITcpSocket socket) {
         // some cmd already set cross slot flag
         if (!request.isCrossRequestWorker()) {
             var slotWithKeyHashList = request.getSlotWithKeyHashList();
@@ -239,7 +242,7 @@ public class MultiWorkerServer extends Launcher {
         return getByteBufPromiseByOtherEventloop(request, socket, targetHandler, null);
     }
 
-    private Promise<ByteBuf> handlePipeline(ArrayList<Request> pipeline, ITcpSocket socket, short slotNumber) {
+    Promise<ByteBuf> handlePipeline(ArrayList<Request> pipeline, ITcpSocket socket, short slotNumber) {
         if (pipeline == null) {
             return Promise.of(null);
         }
@@ -394,12 +397,14 @@ public class MultiWorkerServer extends Launcher {
                 scheduleRunnable.stop();
             }
 
-            socketInspector.socketMap.values().forEach(socket -> {
-                socket.getReactor().execute(() -> {
-                    socket.close();
-                    logger.info("Close connected socket: {}", socket.getRemoteAddress());
+            if (socketInspector != null) {
+                socketInspector.socketMap.values().forEach(socket -> {
+                    socket.getReactor().execute(() -> {
+                        socket.close();
+                        logger.info("Close connected socket: {}", socket.getRemoteAddress());
+                    });
                 });
-            });
+            }
 
             // close local persist
             LocalPersist.getInstance().cleanUp();
@@ -408,8 +413,6 @@ public class MultiWorkerServer extends Launcher {
             logger.error("Stop error", e);
             throw e;
         }
-
-        socketInspector.clearAll();
     }
 
     public static void main(String[] args) throws Exception {
