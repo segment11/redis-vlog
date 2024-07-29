@@ -14,7 +14,31 @@ public class KeyHash {
     private static final long seed = 0x9747b28c;
     private static final int seed32 = 0x9747b28c;
 
+    private static final byte[] fixedPrefixKeyBytesForTest = "xh!".getBytes();
+
     public static long hash(byte[] keyBytes) {
+        // for unit test, mock some keys always in the same bucket index
+        if (keyBytes.length > fixedPrefixKeyBytesForTest.length) {
+            if (keyBytes[0] == fixedPrefixKeyBytesForTest[0]
+                    && keyBytes[1] == fixedPrefixKeyBytesForTest[1]
+                    && keyBytes[2] == fixedPrefixKeyBytesForTest[2]) {
+                var bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
+
+                // eg. xh!123_key1, xh!123_key2, xh!123_key3 means different key hash but in bucket index 123
+                var key = new String(keyBytes);
+                var index_ = key.indexOf("_");
+                var rawKey = key.substring(index_ + 1);
+                var rawKeyHash = xxHash64Java.hash(rawKey.getBytes(), 0, rawKey.length(), seed);
+
+                var expectedBucketIndex = Integer.valueOf(key.substring(fixedPrefixKeyBytesForTest.length, index_));
+                var mod = rawKeyHash % bucketsPerSlot;
+                if (mod == expectedBucketIndex) {
+                    return rawKeyHash;
+                }
+                return rawKeyHash + (expectedBucketIndex - mod);
+            }
+        }
+
         return xxHash64Java.hash(keyBytes, 0, keyBytes.length, seed);
     }
 

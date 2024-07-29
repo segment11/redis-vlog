@@ -69,24 +69,21 @@ class TaskChainTest extends Specification {
         taskChain.add(task1)
         taskChain.add(task1)
         taskChain.add(task2)
-
+        println taskChain
         then:
         taskChain.list.size() == 2
 
         when:
         taskChain.remove('task2')
-
         10.times {
             taskChain.doTask(it)
         }
-
         then:
         task1.loopCount == 8
 
         when:
         taskChain.remove('task1')
         taskChain.remove('task1')
-
         then:
         taskChain.list.size() == 0
     }

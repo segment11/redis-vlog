@@ -15,6 +15,14 @@ public class TaskChain {
         return list;
     }
 
+    @Override
+    public String toString() {
+        return "TaskChain{" +
+                "list.size=" + list.size() +
+                ", list.names=" + list.stream().map(ITask::name).reduce((a, b) -> a + "," + b).orElse("") +
+                '}';
+    }
+
     public void doTask(int loopCount) {
         for (var t : list) {
             if (loopCount % t.executeOnceAfterLoopCount() == 0) {

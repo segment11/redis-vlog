@@ -45,7 +45,6 @@ public class OneSlot {
 
         this.keyLoader = keyLoader;
         this.snowFlake = new SnowFlake(1, 1);
-        this.persistConfig = Config.create();
         this.chunkSegmentLength = 4096;
 
         this.bigStringFiles = null;
@@ -77,7 +76,6 @@ public class OneSlot {
 
         this.keyLoader = null;
         this.snowFlake = null;
-        this.persistConfig = null;
         this.chunkSegmentLength = 4096;
 
         this.bigStringFiles = null;
@@ -104,7 +102,6 @@ public class OneSlot {
         this.slotStr = String.valueOf(slot);
         this.slotNumber = slotNumber;
         this.snowFlake = snowFlake;
-        this.persistConfig = persistConfig;
 
         var volumeDirPath = ConfVolumeDirsForSlot.getVolumeDirBySlot(slot);
         if (volumeDirPath != null) {
@@ -213,6 +210,15 @@ public class OneSlot {
 
         this.initTasks();
         this.initMetricsCollect();
+    }
+
+    @Override
+    public String toString() {
+        return "OneSlot{" +
+                "slot=" + slot +
+                ", slotNumber=" + slotNumber +
+                ", slotDir=" + slotDir +
+                '}';
     }
 
     private final Logger log = LoggerFactory.getLogger(OneSlot.class);
@@ -390,13 +396,16 @@ public class OneSlot {
 
     private final int chunkSegmentLength;
     private final SnowFlake snowFlake;
-    private final Config persistConfig;
     final File slotDir;
 
     private final BigStringFiles bigStringFiles;
 
     public BigStringFiles getBigStringFiles() {
         return bigStringFiles;
+    }
+
+    public File getBigStringDir() {
+        return bigStringFiles.bigStringDir;
     }
 
     private final Map<Integer, LRUMap<String, byte[]>> kvByWalGroupIndexLRU = new HashMap<>();
@@ -409,22 +418,22 @@ public class OneSlot {
         return n;
     }
 
-    private int lruClearedCount = 0;
+    int lruClearedCount = 0;
 
-    void clearKvLRUByWalGroupIndex(int walGroupIndex) {
+    int clearKvLRUByWalGroupIndex(int walGroupIndex) {
         var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
-        if (lru != null) {
-            lru.clear();
-            if (walGroupIndex == 0) {
-                lruClearedCount++;
-                if (lruClearedCount % 10 == 0) {
-                    log.info("KV LRU cleared for wal group index: {}, I am alive, act normal", walGroupIndex);
-                }
+        int n = lru.size();
+        lru.clear();
+        if (walGroupIndex == 0) {
+            lruClearedCount++;
+            if (lruClearedCount % 10 == 0) {
+                log.info("KV LRU cleared for wal group index: {}, I am alive, act normal", walGroupIndex);
             }
         }
+        return n;
     }
 
-    private long kvLRUHitTotal = 0;
+    long kvLRUHitTotal = 0;
     private long kvLRUMissTotal = 0;
     private long kvLRUCvEncodedLengthTotal = 0;
 
@@ -441,8 +450,9 @@ public class OneSlot {
     private static final ArrayList<String> dynConfigKeyWhiteList = new ArrayList<>();
 
     static {
-        // add white list here
+        // add white list here, todo, refer command config in CGroup
         dynConfigKeyWhiteList.add("testKey");
+        dynConfigKeyWhiteList.add("testKey2");
     }
 
     public boolean updateDynConfig(String key, byte[] configValueBytes) throws IOException {
@@ -478,10 +488,6 @@ public class OneSlot {
         dynConfig.setCanRead(canRead);
     }
 
-    public File getBigStringDir() {
-        return bigStringFiles.bigStringDir;
-    }
-
     private final int walGroupNumber;
     // index is group index
     private final Wal[] walArray;
@@ -509,6 +515,7 @@ public class OneSlot {
     }
 
     public long getAllKeyCount() {
+        // for unit test
         if (keyLoader == null) {
             return 0;
         }
@@ -536,7 +543,7 @@ public class OneSlot {
 
     public void setChunkWriteSegmentIndex(int segmentIndex) {
         if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
-            throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
+            throw new IllegalArgumentException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
         }
 
         metaChunkSegmentIndex.set(segmentIndex);
@@ -1461,10 +1468,10 @@ public class OneSlot {
     }
 
     // metrics
-    private final static SimpleGauge walDelaySizeGauge = new SimpleGauge("wal_delay_size", "wal delay size",
+    final static SimpleGauge walDelaySizeGauge = new SimpleGauge("wal_delay_size", "wal delay size",
             "slot", "group_index");
 
-    private final static SimpleGauge slotInnerGauge = new SimpleGauge("slot_inner", "slot inner",
+    final static SimpleGauge slotInnerGauge = new SimpleGauge("slot_inner", "slot inner",
             "slot");
 
     static {
@@ -1472,8 +1479,8 @@ public class OneSlot {
         slotInnerGauge.register();
     }
 
-    private long segmentDecompressTimeTotalUs = 0;
-    private long segmentDecompressCountTotal = 0;
+    long segmentDecompressTimeTotalUs = 0;
+    long segmentDecompressCountTotal = 0;
 
     private void initMetricsCollect() {
         walDelaySizeGauge.addRawGetter(() -> {

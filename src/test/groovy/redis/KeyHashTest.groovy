@@ -12,12 +12,10 @@ class KeyHashTest extends Specification {
         when:
         Set<String> hash32Set = []
         Set<String> hash64Set = []
-
         keyList.each {
             hash32Set.add(KeyHash.hash32(it.bytes))
             hash64Set.add(KeyHash.hash(it.bytes))
         }
-
         then:
         hash32Set.size() == keyList.size()
         hash64Set.size() == keyList.size()
@@ -25,7 +23,6 @@ class KeyHashTest extends Specification {
         when:
         def h0 = KeyHash.hashOffset(keyList[0].bytes, 0, keyList[0].length() - 10)
         def h00 = KeyHash.hash32Offset(keyList[0].bytes, 0, keyList[0].length() - 10)
-
         then:
         h0 != h00
     }
@@ -53,5 +50,32 @@ class KeyHashTest extends Specification {
 
         expect:
         1 == 1
+
+        when:
+        def key = 'x'
+        def keyHash = KeyHash.hash(key.bytes)
+        then:
+        keyHash != 0
+
+        when:
+        key = 'xxxx'
+        keyHash = KeyHash.hash(key.bytes)
+        then:
+        keyHash != 0
+
+        when:
+        key = 'xhxx'
+        keyHash = KeyHash.hash(key.bytes)
+        then:
+        keyHash != 0
+
+        when:
+        def inBucket0KeyList = (0..<10).collect {
+            'xh!0_key:' + it.toString().padLeft(12, '0')
+        }
+        then:
+        inBucket0KeyList.collect {
+            KeyHash.bucketIndex(KeyHash.hash(it.bytes), ConfForSlot.global.confBucket.bucketsPerSlot)
+        }.unique().size() == 1
     }
 }

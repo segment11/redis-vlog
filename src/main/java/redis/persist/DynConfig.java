@@ -91,8 +91,8 @@ public class DynConfig {
         return obj == null ? 10 : (int) obj;
     }
 
-    void setTestKey(int testKey) throws IOException {
-        update("testKey", testKey);
+    void setTestKey(int testValueInt) throws IOException {
+        update("testKey", testValueInt);
     }
 
     public boolean isBinlogOn() {

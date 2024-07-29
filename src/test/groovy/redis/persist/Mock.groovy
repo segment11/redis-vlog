@@ -4,6 +4,15 @@ import redis.CompressedValue
 import redis.KeyHash
 
 class Mock {
+    static List<String> prepareTargetBucketIndexKeyList(int n, int bucketIndex = 0) {
+        List<String> targetBucketIndexKeyList = []
+        n.times {
+            def rawKey = 'key:' + it.toString().padLeft(12, '0')
+            targetBucketIndexKeyList << ('xh!' + bucketIndex + '_' + rawKey)
+        }
+        targetBucketIndexKeyList
+    }
+
     static List<Wal.V> prepareShortValueList(int n, int bucketIndex = 0) {
         List<Wal.V> shortValueList = []
         n.times {

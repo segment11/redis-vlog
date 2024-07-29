@@ -3,9 +3,7 @@ package redis.persist
 import io.activej.common.function.RunnableEx
 import io.activej.config.Config
 import io.activej.eventloop.Eventloop
-import redis.ConfVolumeDirsForSlot
-import redis.RequestHandler
-import redis.SnowFlake
+import redis.*
 import redis.repl.ReplPairTest
 import spock.lang.Specification
 
@@ -18,6 +16,9 @@ class OneSlotTest extends Specification {
     def 'test mock'() {
         given:
         def oneSlot = new OneSlot(slot, Consts.slotDir, null, null)
+
+        expect:
+        oneSlot.allKeyCount == 0
 
         when:
         oneSlot.metaChunkSegmentFlagSeq.cleanUp()
@@ -71,6 +72,8 @@ class OneSlotTest extends Specification {
         def snowFlake = new SnowFlake(1, 1)
         def oneSlot = new OneSlot(slot, slotNumber, snowFlake, Consts.persistDir, persistConfig)
         def oneSlot1 = new OneSlot(slot, slotNumber, snowFlake, Consts.persistDir, persistConfig)
+        println oneSlot.toString()
+        println oneSlot1.toString()
 
         expect:
         oneSlot.slot() == slot
@@ -82,6 +85,10 @@ class OneSlotTest extends Specification {
         when:
         def persistConfig2 = Config.create().with('volumeDirsBySlot',
                 '/tmp/data0:0-31,/tmp/data1:32-63,/tmp/data2:64-95,/tmp/data3:96-127')
+        new File('/tmp/data0').mkdirs()
+        new File('/tmp/data1').mkdirs()
+        new File('/tmp/data2').mkdirs()
+        new File('/tmp/data3').mkdirs()
         def tmpTestSlotNumber = (short) 128
         ConfVolumeDirsForSlot.initFromConfig(persistConfig2, tmpTestSlotNumber)
         def oneSlot0 = new OneSlot(slot, slotNumber, snowFlake, Consts.persistDir, persistConfig2)
@@ -102,10 +109,13 @@ class OneSlotTest extends Specification {
         replPairAsMaster1.slaveUuid = 12L
         // add 12L first
         oneSlot.replPairs.add(replPairAsMaster1)
+        oneSlot.doTask(0)
         oneSlot.replPairs.add(replPairAsMaster0)
+        oneSlot.doTask(0)
         def replPairAsSlave0 = oneSlot.createReplPairAsSlave('localhost', 6379)
         def replPairAsSlave1 = oneSlot.createReplPairAsSlave('localhost', 6379)
         replPairAsSlave0.sendByeForTest = true
+        oneSlot.doTask(0)
         then:
         oneSlot.replPairs.size() == 4
         oneSlot.delayNeedCloseReplPairs.size() == 0
@@ -121,18 +131,32 @@ class OneSlotTest extends Specification {
         oneSlot.delayNeedCloseReplPairs.size() == 1
 
         when:
+        oneSlot.doTask(0)
+        then:
+        oneSlot.delayNeedCloseReplPairs.size() == 0
+
+        when:
         // clear all
         oneSlot.replPairs.clear()
         oneSlot.delayNeedCloseReplPairs.clear()
+        oneSlot.doTask(0)
         // add 2 as slaves
         oneSlot.replPairs.add(replPairAsSlave0)
         oneSlot.replPairs.add(replPairAsSlave1)
+        replPairAsSlave0.addToFetchBigStringUuid(1L)
+        oneSlot.doTask(0)
+        oneSlot.doTask(1)
         replPairAsSlave0.sendByeForTest = false
         replPairAsSlave1.sendByeForTest = false
         oneSlot.removeReplPairAsSlave()
         then:
         oneSlot.replPairs.size() == 2
         oneSlot.delayNeedCloseReplPairs.size() == 2
+
+        when:
+        oneSlot.doTask(0)
+        then:
+        oneSlot.delayNeedCloseReplPairs.size() == 1
 
         when:
         // clear all
@@ -263,5 +287,184 @@ class OneSlotTest extends Specification {
 
         cleanup:
         eventloop.breakEventloop()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test dyn config and big string files and kv lru'() {
+        given:
+        LocalPersistTest.prepareLocalPersist((byte) 1, (short) 2)
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        localPersist.fixSlotThreadId((byte) 1, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+        def oneSlot2 = localPersist.oneSlot((byte) 1)
+
+        and:
+        oneSlot.walDelaySizeGauge.collect()
+        oneSlot.slotInnerGauge.collect()
+        oneSlot.kvLRUHitTotal = 1
+        oneSlot.segmentDecompressCountTotal = 1
+        oneSlot.segmentDecompressTimeTotalUs = 10
+        oneSlot.walDelaySizeGauge.collect()
+        oneSlot.slotInnerGauge.collect()
+        oneSlot2.slotInnerGauge.collect()
+
+        expect:
+        oneSlot.bigStringFiles != null
+        oneSlot.bigStringDir != null
+        oneSlot.clearKvLRUByWalGroupIndex(0) == 0
+        oneSlot.clearKvLRUByWalGroupIndex(1) == 0
+        oneSlot.dynConfig != null
+        !oneSlot.readonly
+        oneSlot.canRead
+        !oneSlot.updateDynConfig('xxx', 'xxx'.bytes)
+        oneSlot.updateDynConfig('testKey', '1'.bytes)
+        !oneSlot.updateDynConfig('testKey2', '1'.bytes)
+
+        when:
+        oneSlot.readonly = true
+        oneSlot.canRead = false
+        then:
+        oneSlot.readonly
+        !oneSlot.canRead
+
+        when:
+        // just for log
+        oneSlot.lruClearedCount = 9
+        then:
+        oneSlot.clearKvLRUByWalGroupIndex(0) == 0
+
+        when:
+        oneSlot.readonly = false
+        oneSlot.canRead = true
+        // refer KeyHashTest
+        // mock key list and bucket index is 0
+        // 300 keys will cause wal refresh to key buckets file
+        ConfForSlot.global.confWal.shortValueSizeTrigger = 100
+        def bucketIndex0KeyList = Mock.prepareTargetBucketIndexKeyList(300, 0)
+        for (key in bucketIndex0KeyList) {
+            def s = BaseCommand.slot(key.bytes, slotNumber)
+            def cv = new CompressedValue()
+            cv.keyHash = s.keyHash()
+            cv.compressedData = new byte[10]
+            cv.compressedLength = 10
+            cv.uncompressedLength = 10
+            oneSlot.put(key, s.bucketIndex(), cv)
+        }
+        // so read must be from key buckets file
+        oneSlot.getWalByBucketIndex(0).clear()
+        oneSlot.getWalByBucketIndex(1).clear()
+        for (key in bucketIndex0KeyList) {
+            def s = BaseCommand.slot(key.bytes, slotNumber)
+            oneSlot.get(key.bytes, s.bucketIndex(), s.keyHash())
+        }
+        then:
+        oneSlot.kvByWalGroupIndexCountTotal() > 0
+        oneSlot.clearKvLRUByWalGroupIndex(0) > 0
+
+        when:
+        def bigStringKey = 'kerry-test-big-string-key'
+        def sBigString = BaseCommand.slot(bigStringKey.bytes, slotNumber)
+        def cvBigString = Mock.prepareCompressedValueList(1)[0]
+        cvBigString.keyHash = sBigString.keyHash()
+        def rBigString = oneSlot.get(bigStringKey.bytes, sBigString.bucketIndex(), sBigString.keyHash())
+        then:
+        rBigString == null
+
+        when:
+        oneSlot.put(bigStringKey, sBigString.bucketIndex(), cvBigString)
+        rBigString = oneSlot.get(bigStringKey.bytes, sBigString.bucketIndex(), sBigString.keyHash())
+        then:
+        rBigString != null
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test meta and key loader and task'() {
+        given:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        println oneSlot.taskChain
+
+        expect:
+        oneSlot.metaChunkSegmentFlagSeq != null
+        oneSlot.metaChunkSegmentIndex != null
+        oneSlot.keyLoader != null
+        oneSlot.taskChain != null
+        oneSlot.walKeyCount == 0
+        oneSlot.allKeyCount == 0
+        oneSlot.chunkWriteSegmentIndex == 0
+
+        when:
+        boolean exception = false
+        try {
+            oneSlot.setChunkWriteSegmentIndex(-1)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        try {
+            oneSlot.setChunkWriteSegmentIndex(oneSlot.chunk.maxSegmentIndex + 1)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        oneSlot.doTask(0)
+        oneSlot.taskChain.doTask(1)
+        then:
+        1 == 1
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test put and get'() {
+        given:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+//        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        and:
+        def key = 'key'
+        def sKey = BaseCommand.slot(key.bytes, slotNumber)
+
+        expect:
+        oneSlot.binlog != null
+
+        when:
+        boolean exception = false
+        try {
+            oneSlot.getExpireAt(key.bytes, sKey.bucketIndex(), sKey.keyHash())
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        then:
+        oneSlot.getExpireAt(key.bytes, sKey.bucketIndex(), sKey.keyHash()) == null
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 }
