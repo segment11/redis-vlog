@@ -245,7 +245,7 @@ public class KeyLoader {
                 var walGroupNumber = BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL / ConfForSlot.global.confWal.oneChargeBucketNumber;
                 for (int i = 0; i < walGroupNumber; i++) {
                     var toClearBeginBucketIndex = beginBucketIndex + i * ConfForSlot.global.confWal.oneChargeBucketNumber;
-                    fdReadWrite.clearKeyBucketsInOneWalGroup(toClearBeginBucketIndex);
+                    fdReadWrite.clearKeyBucketsInOneWalGroupToMemory(toClearBeginBucketIndex);
                 }
             } else {
                 var bucketCount = leftLength / KEY_BUCKET_ONE_COST_SIZE;

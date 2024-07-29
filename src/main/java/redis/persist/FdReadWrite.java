@@ -58,7 +58,26 @@ public class FdReadWrite {
             if (afterFdPreadCompressCountTotal > 0) {
                 map.put("after_fd_pread_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) afterFdPreadCompressTimeTotalUs, labelValues));
                 map.put("after_fd_pread_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) afterFdPreadCompressCountTotal, labelValues));
-                map.put("after_fd_pread_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) afterFdPreadCompressTimeTotalUs / afterFdPreadCompressCountTotal, labelValues));
+                double avgUs = (double) afterFdPreadCompressTimeTotalUs / afterFdPreadCompressCountTotal;
+                map.put("after_fd_pread_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
+            }
+
+            if (keyBucketSharedBytesCompressCountTotal > 0) {
+                map.put("key_bucket_shared_bytes_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesCompressTimeTotalUs, labelValues));
+                map.put("key_bucket_shared_bytes_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesCompressCountTotal, labelValues));
+                double avgUs = (double) keyBucketSharedBytesCompressTimeTotalUs / keyBucketSharedBytesCompressCountTotal;
+                map.put("key_bucket_shared_bytes_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
+
+                // compress ratio
+                double compressRatio = (double) keyBucketSharedBytesAfterCompressedBytesTotal / keyBucketSharedBytesBeforeCompressedBytesTotal;
+                map.put("key_bucket_shared_bytes_compress_ratio", new SimpleGauge.ValueWithLabelValues(compressRatio, labelValues));
+            }
+
+            if (keyBucketSharedBytesDecompressCountTotal > 0) {
+                map.put("key_bucket_shared_bytes_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesDecompressTimeTotalUs, labelValues));
+                map.put("key_bucket_shared_bytes_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesDecompressCountTotal, labelValues));
+                double avgUs = (double) keyBucketSharedBytesDecompressTimeTotalUs / keyBucketSharedBytesDecompressCountTotal;
+                map.put("key_bucket_shared_bytes_decompress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
             }
 
             if (readCountTotal > 0) {
@@ -138,6 +157,16 @@ public class FdReadWrite {
     long lruHitCounter;
     long lruMissCounter;
 
+    // only for pure memory mode stats
+    private long keyBucketSharedBytesCompressTimeTotalUs;
+    long keyBucketSharedBytesCompressCountTotal;
+    long keyBucketSharedBytesBeforeCompressedBytesTotal;
+    long keyBucketSharedBytesAfterCompressedBytesTotal;
+
+
+    private long keyBucketSharedBytesDecompressTimeTotalUs;
+    long keyBucketSharedBytesDecompressCountTotal;
+
     public static final int BATCH_ONCE_SEGMENT_COUNT_PWRITE = 4;
     public static final int REPL_ONCE_INNER_COUNT = 1024;
 
@@ -173,9 +202,48 @@ public class FdReadWrite {
     static final int BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE = 10;
 
     // for chunk
-    byte[][] allBytesBySegmentIndexForChunk;
+    private byte[][] allBytesBySegmentIndexForChunk;
     // for key bucket, compressed
-    byte[][] allBytesByOneWalGroupIndexForKeyBucket;
+    private byte[][] allBytesByOneWalGroupIndexForKeyBucket;
+
+    void resetAllBytesByOneWalGroupIndexForKeyBucketForTest(int walGroupNumber) {
+        this.allBytesByOneWalGroupIndexForKeyBucket = new byte[walGroupNumber][];
+    }
+
+    private void setSharedBytesCompressToMemory(byte[] sharedBytes, int walGroupIndex) {
+        if (sharedBytes == null) {
+            allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex] = null;
+            return;
+        }
+
+        // tips: one wal group may charge 32 key buckets, = 32 * 4K = 128K, compress cost may take 500us
+        // one wal group charge 16 key buckets will perform better
+        var beginT = System.nanoTime();
+        var sharedBytesCompressed = Zstd.compress(sharedBytes);
+        var costT = (System.nanoTime() - beginT) / 1000;
+        keyBucketSharedBytesCompressTimeTotalUs += costT;
+        keyBucketSharedBytesCompressCountTotal++;
+        keyBucketSharedBytesBeforeCompressedBytesTotal += sharedBytes.length;
+        keyBucketSharedBytesAfterCompressedBytesTotal += sharedBytesCompressed.length;
+        allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex] = sharedBytesCompressed;
+    }
+
+    private byte[] getSharedBytesDecompressFromMemory(int walGroupIndex) {
+        var compressedSharedBytes = allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex];
+        if (compressedSharedBytes == null) {
+            return null;
+        }
+
+        // tips: one wal group may charge 32 key buckets, = 32 * 4K = 128K, decompress cost may take 200-300us
+        // one wal group charge 16 key buckets will perform better
+        var sharedBytes = new byte[ConfForSlot.global.confWal.oneChargeBucketNumber * oneInnerLength];
+        var beginT = System.nanoTime();
+        Zstd.decompress(sharedBytes, compressedSharedBytes);
+        var costT = (System.nanoTime() - beginT) / 1000;
+        keyBucketSharedBytesDecompressTimeTotalUs += costT;
+        keyBucketSharedBytesDecompressCountTotal++;
+        return sharedBytes;
+    }
 
     public boolean isTargetSegmentIndexNullInMemory(int segmentIndex) {
         return allBytesBySegmentIndexForChunk[segmentIndex] == null;
@@ -531,7 +599,7 @@ public class FdReadWrite {
             var walGroupIndex = Wal.calWalGroupIndex(oneInnerIndex);
             if (oneInnerCount == 1 || oneInnerCount == ConfForSlot.global.confWal.oneChargeBucketNumber) {
                 // readonly, use a copy will be safe, but not necessary
-                return allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex];
+                return getSharedBytesDecompressFromMemory(walGroupIndex);
             } else if (oneInnerCount == REPL_ONCE_INNER_COUNT) {
                 var oneWalGroupSharedBytesLength = ConfForSlot.global.confWal.oneChargeBucketNumber * oneInnerLength;
                 var walGroupCount = REPL_ONCE_INNER_COUNT / ConfForSlot.global.confWal.oneChargeBucketNumber;
@@ -539,7 +607,7 @@ public class FdReadWrite {
                 // for repl, use copy
                 var bytesRead = new byte[oneWalGroupSharedBytesLength * walGroupCount];
                 for (int i = 0; i < walGroupCount; i++) {
-                    var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex + i];
+                    var sharedBytes = getSharedBytesDecompressFromMemory(walGroupIndex + i);
                     if (sharedBytes != null) {
                         System.arraycopy(sharedBytes, 0, bytesRead, i * oneWalGroupSharedBytesLength, sharedBytes.length);
                     }
@@ -598,9 +666,9 @@ public class FdReadWrite {
         return readInnerByBuffer(beginBucketIndex, readForOneWalGroupBatchBuffer, false);
     }
 
-    public void clearOneKeyBucketToMemory(int bucketIndex) {
+    public void clearOneKeyBucketToMemoryForTest(int bucketIndex) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-        var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex];
+        var sharedBytes = getSharedBytesDecompressFromMemory(walGroupIndex);
         if (sharedBytes == null) {
             return;
         }
@@ -608,11 +676,17 @@ public class FdReadWrite {
         var position = KeyLoader.getPositionInSharedBytes(bucketIndex);
         // set 0
         Arrays.fill(sharedBytes, position, position + oneInnerLength, (byte) 0);
+        // compress and set back
+        setSharedBytesCompressToMemory(sharedBytes, walGroupIndex);
     }
 
-    public void clearKeyBucketsInOneWalGroup(int bucketIndex) {
+    public void clearKeyBucketsInOneWalGroupToMemory(int bucketIndex) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-        allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex] = null;
+        setSharedBytesCompressToMemory(null, walGroupIndex);
+    }
+
+    public void clearOneWalGroupToMemoryForTest(int walGroupIndex) {
+        setSharedBytesCompressToMemory(null, walGroupIndex);
     }
 
     int writeOneInnerBatchToMemory(int beginOneInnerIndex, byte[] bytes, int position) {
@@ -642,29 +716,24 @@ public class FdReadWrite {
 
                 var offset = position;
                 for (int i = 0; i < walGroupCount; i++) {
-                    var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex + i];
-                    if (sharedBytes == null) {
+                    // only for check if shared bytes is null
+                    var sharedBytesCompressed = allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex + i];
+                    if (sharedBytesCompressed == null) {
                         var addedSharedBytes = new byte[oneWalGroupSharedBytesLength];
                         System.arraycopy(bytes, offset, addedSharedBytes, 0, addedSharedBytes.length);
-                        allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex + i] = addedSharedBytes;
+                        setSharedBytesCompressToMemory(addedSharedBytes, beginWalGroupIndex + i);
                     } else {
-                        System.arraycopy(bytes, offset, sharedBytes, 0, sharedBytes.length);
+                        var subBytes = new byte[oneWalGroupSharedBytesLength];
+                        System.arraycopy(bytes, offset, subBytes, 0, subBytes.length);
+                        setSharedBytesCompressToMemory(subBytes, beginWalGroupIndex + i);
                     }
                     offset += oneWalGroupSharedBytesLength;
                 }
                 return walGroupCount * oneWalGroupSharedBytesLength;
+            } else if (oneInnerCount != 1) {
+                // oneInnerCount == oenChargeBucketNumber, is in another method
+                throw new IllegalArgumentException("Write key bucket once by one wal group or only one key bucket");
             }
-//            } else if (oneInnerCount == oneChargeBucketNumber) {
-//                var beginWalGroupIndex = Wal.calWalGroupIndex(beginOneInnerIndex);
-//                var oneWalGroupSharedBytesLength = oneChargeBucketNumber * oneInnerLength;
-//                var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex];
-//                if (sharedBytes == null) {
-//                    sharedBytes = new byte[oneWalGroupSharedBytesLength];
-//                    allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex] = sharedBytes;
-//                }
-//                System.arraycopy(bytes, position, sharedBytes, 0, sharedBytes.length);
-//                return bytes.length - position;
-//            }
         }
 
         // memory copy one segment/bucket by one segment/bucket
@@ -674,13 +743,13 @@ public class FdReadWrite {
             if (!isChunkFd) {
                 var walGroupIndex = Wal.calWalGroupIndex(targetOneInnerIndex);
                 var oneWalGroupSharedBytesLength = oneChargeBucketNumber * oneInnerLength;
-                var sharedBytes = allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex];
+                var sharedBytes = getSharedBytesDecompressFromMemory(walGroupIndex);
                 if (sharedBytes == null) {
                     sharedBytes = new byte[oneWalGroupSharedBytesLength];
-                    allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex] = sharedBytes;
                 }
                 var targetBucketIndexPosition = KeyLoader.getPositionInSharedBytes(targetOneInnerIndex);
                 System.arraycopy(bytes, offset, sharedBytes, targetBucketIndexPosition, oneInnerLength);
+                setSharedBytesCompressToMemory(sharedBytes, walGroupIndex);
             } else {
                 var bytesOneSegment = new byte[oneInnerLength];
                 System.arraycopy(bytes, offset, bytesOneSegment, 0, oneInnerLength);
@@ -730,7 +799,7 @@ public class FdReadWrite {
 
         if (ConfForSlot.global.pureMemory) {
             var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-            allBytesByOneWalGroupIndexForKeyBucket[walGroupIndex] = sharedBytes;
+            setSharedBytesCompressToMemory(sharedBytes, walGroupIndex);
             return sharedBytes.length;
         }
 

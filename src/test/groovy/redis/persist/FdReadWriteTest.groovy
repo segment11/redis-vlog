@@ -43,6 +43,9 @@ class FdReadWriteTest extends Specification {
 
         def fdKeyBucket = new FdReadWrite('test2', libC, oneFile2)
         fdKeyBucket.initByteBuffers(false)
+        def walGroupNumber = Wal.calcWalGroupNumber()
+        fdKeyBucket.resetAllBytesByOneWalGroupIndexForKeyBucketForTest(walGroupNumber)
+        fdKeyBucket.clearOneWalGroupToMemoryForTest(0)
         println fdKeyBucket
 
         fdChunk.afterFdPreadCompressCountTotal = 1
@@ -50,6 +53,10 @@ class FdReadWriteTest extends Specification {
         fdChunk.writeCountTotal = 1
         fdChunk.lruHitCounter = 1
         fdChunk.lruMissCounter = 1
+        fdKeyBucket.keyBucketSharedBytesCompressCountTotal = 1
+        fdKeyBucket.keyBucketSharedBytesDecompressCountTotal = 1
+        fdKeyBucket.keyBucketSharedBytesBeforeCompressedBytesTotal = 1000
+        fdKeyBucket.keyBucketSharedBytesAfterCompressedBytesTotal = 100
         FdReadWrite.fdReadWriteGauge.collect()
 
         def segmentLength = ConfForSlot.global.confChunk.segmentLength
@@ -323,6 +330,17 @@ class FdReadWriteTest extends Specification {
         exception
 
         when:
+        exception = false
+        try {
+            fdKeyBucket.writeOneInnerBatchToMemory(0, new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE * 2], 0)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
         def n = fdKeyBucket.writeOneInnerBatchToMemory(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT + 1], 1)
         then:
         n == segmentLength * FdReadWrite.REPL_ONCE_INNER_COUNT
@@ -351,15 +369,15 @@ class FdReadWriteTest extends Specification {
         fdChunk.readOneInner(200, false).length == 10
 
         when:
-        fdKeyBucket.clearOneKeyBucketToMemory(oneChargeBucketNumber * 2)
-        fdKeyBucket.clearOneKeyBucketToMemory(1)
+        fdKeyBucket.clearOneKeyBucketToMemoryForTest(oneChargeBucketNumber * 2)
+        fdKeyBucket.clearOneKeyBucketToMemoryForTest(1)
         def keyBucket1BytesRead = new byte[segmentLength]
         ByteBuffer.wrap(fdKeyBucket.readOneInner(1, false)).get(segmentLength, keyBucket1BytesRead)
         then:
         keyBucket1BytesRead == new byte[segmentLength]
 
         when:
-        fdKeyBucket.clearKeyBucketsInOneWalGroup(oneChargeBucketNumber)
+        fdKeyBucket.clearKeyBucketsInOneWalGroupToMemory(oneChargeBucketNumber)
         then:
         fdKeyBucket.readKeyBucketsSharedBytesInOneWalGroup(oneChargeBucketNumber) == null
 

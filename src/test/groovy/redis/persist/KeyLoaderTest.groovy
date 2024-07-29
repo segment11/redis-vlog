@@ -246,7 +246,7 @@ class KeyLoaderTest extends Specification {
         ConfForSlot.global.pureMemory = true
         def rawFdReadWrite = keyLoader.fdReadWriteArray[0]
         def walGroupNumber = Wal.calcWalGroupNumber()
-        rawFdReadWrite.allBytesByOneWalGroupIndexForKeyBucket = new byte[walGroupNumber][]
+        rawFdReadWrite.resetAllBytesByOneWalGroupIndexForKeyBucketForTest(walGroupNumber)
         keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes)
         k0 = keyLoader.readKeyBucketForSingleKey(0, splitIndex, (byte) 1, 10L, false)
         def k1 = keyLoader.readKeyBucketForSingleKey(1, splitIndex, (byte) 1, 10L, false)
@@ -266,14 +266,14 @@ class KeyLoaderTest extends Specification {
         buffer2.put(0, (byte) 1)
         keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes2)
         then:
-        keyLoader.fdReadWriteArray[1].allBytesByOneWalGroupIndexForKeyBucket[0] == null
+        keyLoader.fdReadWriteArray[1].clearOneWalGroupToMemoryForTest(0)
 
         when:
         // update split index to 2
         buffer2.put(0, (byte) 2)
         keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes2)
         then:
-        keyLoader.fdReadWriteArray[2].allBytesByOneWalGroupIndexForKeyBucket[0] == null
+        keyLoader.fdReadWriteArray[2].clearOneWalGroupToMemoryForTest(0)
 
         when:
         boolean exception = false
@@ -400,9 +400,9 @@ class KeyLoaderTest extends Specification {
         def splitNumberArray = new byte[oneChargeBucketNumber]
         splitNumberArray[0] = (byte) 3
         keyLoader.metaKeyBucketSplitNumber.setBatch(0, splitNumberArray)
-        keyLoader.fdReadWriteArray[0].allBytesByOneWalGroupIndexForKeyBucket = new byte[walGroupNumber][]
-        keyLoader.fdReadWriteArray[1].allBytesByOneWalGroupIndexForKeyBucket = new byte[walGroupNumber][]
-        keyLoader.fdReadWriteArray[2].allBytesByOneWalGroupIndexForKeyBucket = new byte[walGroupNumber][]
+        keyLoader.fdReadWriteArray[0].resetAllBytesByOneWalGroupIndexForKeyBucketForTest(walGroupNumber)
+        keyLoader.fdReadWriteArray[1].resetAllBytesByOneWalGroupIndexForKeyBucketForTest(walGroupNumber)
+        keyLoader.fdReadWriteArray[2].resetAllBytesByOneWalGroupIndexForKeyBucketForTest(walGroupNumber)
         keyLoader.writeSharedBytesList(sharedBytesListBySplitIndex, 0)
         def keyBucketListFromMemory = keyLoader.readKeyBuckets(0)
         then:
