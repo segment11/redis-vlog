@@ -452,7 +452,7 @@ public class KeyBucket {
         return true;
     }
 
-    record ValueBytesWithExpireAtAndSeq(byte[] valueBytes, long expireAt, long seq) {
+    public record ValueBytesWithExpireAtAndSeq(byte[] valueBytes, long expireAt, long seq) {
         boolean isExpired() {
             return expireAt != NO_EXPIRE && expireAt < System.currentTimeMillis();
         }
