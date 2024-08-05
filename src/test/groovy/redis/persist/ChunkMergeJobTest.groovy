@@ -1,102 +1,112 @@
 package redis.persist
 
-import jnr.ffi.LibraryLoader
-import jnr.posix.LibC
-import redis.ConfForSlot
-import redis.SnowFlake
+import redis.BaseCommand
+import redis.CompressedValue
 import spock.lang.Specification
 
 class ChunkMergeJobTest extends Specification {
+    final byte slot = 0
+    final byte slotNumber = 1
+
     def 'merge segments'() {
         given:
-        ConfForSlot.global.confBucket.initialSplitNumber = (byte) 1
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+        def chunkMergeWorker = oneSlot.chunkMergeWorker
 
-        final byte slot = 0
-        final int bucketIndex = 0
-        final int segmentIndex = 0
-        final int walGroupIndex = 0
-        def snowFlake = new SnowFlake(1, 1)
-
-        and:
-        def valueList = Mock.prepareValueList(400)
-
-        int[] nextNSegmentIndex = [0, 1, 2, 3, 4, 5, 6]
-        ArrayList<PersistValueMeta> returnPvmList = []
-
-        def segmentBatch = new SegmentBatch(slot, snowFlake)
-        def r = segmentBatch.splitAndTight(valueList, nextNSegmentIndex, returnPvmList)
-        println 'split and tight: ' + r.size() + ' segments, ' + returnPvmList.size() + ' pvm list'
-        ArrayList<PersistValueMeta> somePvmList = returnPvmList[0..<10]
+        def cv = new CompressedValue()
+        def cvWithKeyAndSegmentOffset = new ChunkMergeJob.CvWithKeyAndSegmentOffset(cv, 'key', 0, 0, (byte) 0)
+        println cvWithKeyAndSegmentOffset.shortString()
+        println cvWithKeyAndSegmentOffset
 
         and:
-        System.setProperty('jnr.ffi.asm.enabled', 'false')
-        def libC = LibraryLoader.create(LibC.class).load('c')
-
-        def chunkDataFile = new File(Consts.slotDir, 'chunk-data-0')
-        if (chunkDataFile.exists()) {
-            chunkDataFile.delete()
+        int segmentIndex = 0
+        ArrayList<Integer> needMergeSegmentIndexList = []
+        10.times {
+            needMergeSegmentIndexList << (segmentIndex + it)
         }
-
-        def fdReadWriteForChunkSegments = new FdReadWrite('chunk_data_index_0', libC, chunkDataFile)
-        fdReadWriteForChunkSegments.initByteBuffers(true)
-
-        fdReadWriteForChunkSegments.writeOneInner(segmentIndex, r[0].tightBytesWithLength, false)
-        fdReadWriteForChunkSegments.writeOneInner(segmentIndex + 1, r[1].tightBytesWithLength, false)
-        println 'write segment ' + segmentIndex + ', ' + (segmentIndex + 1)
-
-        def keyBucketsDataFile = new File(Consts.slotDir, 'key-bucket-split-0.dat')
-        def fdReadWriteForKeyLoader = new FdReadWrite('key_loader_data', libC, keyBucketsDataFile)
-        fdReadWriteForKeyLoader.initByteBuffers(false)
-        // clear old data
-        // segment index -> bucket index
-        fdReadWriteForKeyLoader.writeOneInner(bucketIndex, new byte[4096], false)
-
-        and:
-        def keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir, snowFlake)
-        keyLoader.fdReadWriteArray = [fdReadWriteForKeyLoader]
-
-        keyLoader.metaKeyBucketSplitNumber = new MetaKeyBucketSplitNumber(slot, Consts.slotDir)
-        keyLoader.metaKeyBucketSplitNumber.clear()
-        keyLoader.metaKeyBucketSplitNumber.setForTest(bucketIndex, (byte) 1)
-        keyLoader.statKeyCountInBuckets = new StatKeyCountInBuckets(slot, keyLoader.bucketsPerSlot, Consts.slotDir)
-
-        keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, somePvmList)
-        println 'bucket ' + bucketIndex + ' key count: ' + keyLoader.getKeyCountInBucketIndex(bucketIndex)
+        oneSlot.setSegmentMergeFlag(segmentIndex, Chunk.Flag.new_write, 1L, 0)
+        oneSlot.setSegmentMergeFlag(segmentIndex + 1, Chunk.Flag.init, 1L, 0)
+        def job = new ChunkMergeJob(slot, needMergeSegmentIndexList, chunkMergeWorker, oneSlot.snowFlake)
 
         when:
-
-        def wal = new Wal(slot, walGroupIndex, null, null, snowFlake)
-        def oneSlot = new OneSlot(slot, Consts.slotDir, keyLoader, wal)
-        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, Chunk.Flag.reuse_new, 1L, 0)
-        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex + 1, Chunk.Flag.reuse_new, 1L, 0)
-
-        oneSlot.threadIdProtectedForSafe = Thread.currentThread().threadId()
-
-        def chunk = new Chunk(slot, Consts.slotDir, oneSlot, snowFlake, keyLoader)
-        chunk.fdReadWriteArray = [fdReadWriteForChunkSegments]
-        oneSlot.chunk = chunk
-        chunk.initSegmentIndexWhenFirstStart(segmentIndex)
-
-        def chunkMergeWorker = new ChunkMergeWorker(slot, oneSlot)
-
-        ArrayList<Integer> needMergeSegmentIndexList = [segmentIndex, segmentIndex + 1]
-        def job = new ChunkMergeJob(slot, needMergeSegmentIndexList, chunkMergeWorker, snowFlake)
-        job.testTargetBucketIndex = bucketIndex
+        // chunk segments not write yet, in wal
+        OneSlotTest.batchPut(oneSlot, 300)
         job.mergeSegments(needMergeSegmentIndexList)
-
         then:
-        job.validCvCountAfterRun == somePvmList.size()
-        job.invalidCvCountAfterRun == valueList.size() - job.validCvCountAfterRun
+        1 == 1
+
+        when:
+        def bucketIndex0KeyList = OneSlotTest.batchPut(oneSlot, 300, 100, 0, slotNumber)
+        def bucketIndex1KeyList = OneSlotTest.batchPut(oneSlot, 300, 100, 1, slotNumber)
+        def testRemovedByWalKey0 = bucketIndex0KeyList[0]
+        def testUpdatedByWalKey1 = bucketIndex0KeyList[1]
+        def testRemovedByWalKey2 = bucketIndex0KeyList[2]
+        def testUpdatedByKeyLoaderKey3 = bucketIndex0KeyList[3]
+        def sTest0 = BaseCommand.slot(testRemovedByWalKey0.bytes, slotNumber)
+        def sTest1 = BaseCommand.slot(testUpdatedByWalKey1.bytes, slotNumber)
+        def sTest2 = BaseCommand.slot(testRemovedByWalKey2.bytes, slotNumber)
+        def sTest3 = BaseCommand.slot(testUpdatedByKeyLoaderKey3.bytes, slotNumber)
+
+        oneSlot.removeDelay(testRemovedByWalKey0, 0, sTest0.keyHash())
+        oneSlot.keyLoader.removeSingleKeyForTest(0, testRemovedByWalKey2.bytes, sTest2.keyHash())
+        oneSlot.keyLoader.putValueByKeyForTest(0, testUpdatedByKeyLoaderKey3.bytes, sTest3.keyHash(), 0, 0L, new byte[10])
+        def cv2 = new CompressedValue()
+        cv2.keyHash = sTest1.keyHash()
+        cv2.seq = oneSlot.snowFlake.nextId()
+        oneSlot.put(testUpdatedByWalKey1, 0, cv2)
+        job.mergeSegments(needMergeSegmentIndexList)
+        then:
+        1 == 1
+
+        when:
+        10.times {
+            OneSlotTest.batchPut(oneSlot, 100, 100, 0, slotNumber)
+        }
+        List<Long> seqList = []
+        10.times {
+            seqList << 1L
+        }
+        oneSlot.setSegmentMergeFlagBatch(segmentIndex, 10, Chunk.Flag.new_write, seqList, 0)
+        job.mergeSegments(needMergeSegmentIndexList)
+        then:
+        1 == 1
+
+        when:
+        boolean exception = false
+        needMergeSegmentIndexList[-1] = segmentIndex + 2
+        try {
+            job.mergeSegments(needMergeSegmentIndexList)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        def needMergeSegmentIndexList2 = [0, 1, oneSlot.chunk.maxSegmentIndex - 1, oneSlot.chunk.maxSegmentIndex]
+        def job2 = new ChunkMergeJob(slot, needMergeSegmentIndexList2, chunkMergeWorker, oneSlot.snowFlake)
+        job2.run()
+        then:
+        1 == 1
+
+        when:
+        needMergeSegmentIndexList2[0] = 1
+        exception = false
+        try {
+            job2.run()
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
 
         cleanup:
-        oneSlot.metaChunkSegmentFlagSeq.cleanUp()
-        keyLoader.metaKeyBucketSplitNumber.clear()
-        keyLoader.metaKeyBucketSplitNumber.cleanUp()
-        keyLoader.statKeyCountInBuckets.cleanUp()
-
-        fdReadWriteForChunkSegments.cleanUp()
-        fdReadWriteForKeyLoader.cleanUp()
-
-        Consts.slotDir.deleteDir()
+        oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 }

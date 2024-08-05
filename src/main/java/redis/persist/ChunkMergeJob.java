@@ -22,9 +22,6 @@ public class ChunkMergeJob {
     int validCvCountAfterRun = 0;
     int invalidCvCountAfterRun = 0;
 
-    // for unit test
-    int testTargetBucketIndex = -1;
-
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     public ChunkMergeJob(byte slot, ArrayList<Integer> needMergeSegmentIndexList, ChunkMergeWorker chunkMergeWorker, SnowFlake snowFlake) {
@@ -38,7 +35,9 @@ public class ChunkMergeJob {
     public int run() {
         // recycle, need spit to two part
         if (needMergeSegmentIndexList.getLast() - needMergeSegmentIndexList.getFirst() > oneSlot.chunk.halfSegmentNumber) {
-            assert needMergeSegmentIndexList.contains(0);
+            if (!needMergeSegmentIndexList.contains(0)) {
+                throw new IllegalStateException("Recycle merge chunk, s=" + slot + ", segment index need include 0, but: " + needMergeSegmentIndexList);
+            }
 
             var onePart = new ArrayList<Integer>();
             var anotherPart = new ArrayList<Integer>();
@@ -129,13 +128,15 @@ public class ChunkMergeJob {
 
         var firstSegmentIndex = needMergeSegmentIndexList.getFirst();
         var lastSegmentIndex = needMergeSegmentIndexList.getLast();
-        assert needMergeSegmentIndexList.size() == lastSegmentIndex - firstSegmentIndex + 1;
+        if (needMergeSegmentIndexList.size() != lastSegmentIndex - firstSegmentIndex + 1) {
+            throw new IllegalStateException("Merge segments index need be continuous, but: " + needMergeSegmentIndexList);
+        }
 
         HashSet<Integer> skipSegmentIndexSet = new HashSet<>();
         for (var segmentIndex : needMergeSegmentIndexList) {
             var segmentFlag = oneSlot.getSegmentMergeFlag(segmentIndex);
             // not write yet, skip
-            if (segmentFlag == null || segmentFlag.flag() == Chunk.Flag.init) {
+            if (segmentFlag.flag() == Chunk.Flag.init) {
                 skipSegmentIndexSet.add(segmentIndex);
                 continue;
             }
@@ -200,13 +201,10 @@ public class ChunkMergeJob {
             validCvCountRecordList.add(new ValidCvCountRecord(segmentIndex));
         }
 
+//        assert oneSlot.keyLoader != null;
         // calc bucket index and wal group index
         for (var one : cvList) {
-            if (testTargetBucketIndex != -1) {
-                one.bucketIndex = testTargetBucketIndex;
-            } else {
-                one.bucketIndex = KeyHash.bucketIndex(one.cv.getKeyHash(), oneSlot.keyLoader.bucketsPerSlot);
-            }
+            one.bucketIndex = KeyHash.bucketIndex(one.cv.getKeyHash(), oneSlot.keyLoader.bucketsPerSlot);
             one.walGroupIndex = Wal.calWalGroupIndex(one.bucketIndex);
         }
         // compare to current wal or persist value meta in key buckets, remove those deleted or expired
@@ -249,9 +247,6 @@ public class ChunkMergeJob {
         chunkMergeWorker.persistFIFOMergedCvListIfBatchSizeOk();
 
         var costT = (System.nanoTime() - beginT) / 1000;
-        if (costT == 0) {
-            costT = 1;
-        }
         chunkMergeWorker.mergedSegmentCostTimeTotalUs += costT;
 
         chunkMergeWorker.validCvCountTotal += validCvCountAfterRun;
@@ -364,7 +359,7 @@ public class ChunkMergeJob {
                     }
                 } else {
                     var pvmCurrent = PersistValueMeta.decode(valueBytesCurrent);
-                    if (pvmCurrent.segmentIndex != segmentIndex || pvmCurrent.subBlockIndex != subBlockIndex || pvmCurrent.segmentOffset != segmentOffset) {
+                    if (!pvmCurrent.isTargetSegment(segmentIndex, subBlockIndex, segmentOffset)) {
                         // cv is old， discard
                         validCvCountRecord.invalidCvCount++;
                         toRemoveCvList.add(one);
@@ -372,21 +367,6 @@ public class ChunkMergeJob {
                         if (cv.isExpired()) {
                             validCvCountRecord.invalidCvCount++;
                             toRemoveCvList.add(one);
-
-                            if (cv.isBigString()) {
-                                // need remove file
-                                var buffer = ByteBuffer.wrap(cv.getCompressedData());
-                                var uuid = buffer.getLong();
-
-                                var isDeleted = oneSlot.getBigStringFiles().deleteBigStringFileIfExist(uuid);
-                                if (!isDeleted) {
-                                    throw new RuntimeException("Delete big string file error, s=" + slot +
-                                            ", i=" + segmentIndex + ", key=" + key + ", uuid=" + uuid);
-                                } else {
-                                    log.warn("Delete big string file, s={}, i={}, key={}, uuid={}",
-                                            slot, segmentIndex, key, uuid);
-                                }
-                            }
                         } else {
                             validCvCountRecord.validCvCount++;
 
@@ -413,6 +393,22 @@ public class ChunkMergeJob {
             }
         }
 
+        for (CvWithKeyAndSegmentOffset one : toRemoveCvList) {
+            var cv = one.cv;
+            if (cv.isBigString()) {
+                var key = one.key;
+                // need remove file
+                var buffer = ByteBuffer.wrap(cv.getCompressedData());
+                var uuid = buffer.getLong();
+
+                var isDeleted = oneSlot.getBigStringFiles().deleteBigStringFileIfExist(uuid);
+                if (!isDeleted) {
+                    throw new RuntimeException("Delete big string file error, s=" + slot + ", key=" + key + ", uuid=" + uuid);
+                } else {
+                    log.warn("Delete big string file, s={}, key={}, uuid={}", slot, key, uuid);
+                }
+            }
+        }
         cvList.removeAll(toRemoveCvList);
     }
 }

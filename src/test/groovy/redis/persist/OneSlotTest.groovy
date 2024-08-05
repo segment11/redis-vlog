@@ -7,6 +7,7 @@ import redis.*
 import redis.repl.ReplPairTest
 import spock.lang.Specification
 
+import java.nio.ByteBuffer
 import java.time.Duration
 
 class OneSlotTest extends Specification {
@@ -294,19 +295,31 @@ class OneSlotTest extends Specification {
         Consts.persistDir.deleteDir()
     }
 
-    private List<String> batchPut(OneSlot oneSlot) {
+    static List<String> batchPut(OneSlot oneSlot, int n = 300, int length = 10, int bucketIndex = 0, int slotNumber = 1) {
         // refer KeyHashTest
         // mock key list and bucket index is 0
         // 300 keys will cause wal refresh to key buckets file
         ConfForSlot.global.confWal.shortValueSizeTrigger = 100
-        def bucketIndex0KeyList = Mock.prepareTargetBucketIndexKeyList(300, 0)
+        def bucketIndex0KeyList = Mock.prepareTargetBucketIndexKeyList(n, bucketIndex)
+        def random = new Random()
         for (key in bucketIndex0KeyList) {
             def s = BaseCommand.slot(key.bytes, slotNumber)
             def cv = new CompressedValue()
             cv.keyHash = s.keyHash()
-            cv.compressedData = new byte[10]
-            cv.compressedLength = 10
-            cv.uncompressedLength = 10
+            cv.compressedData = new byte[length]
+            cv.compressedLength = length
+            cv.uncompressedLength = length
+            cv.seq = oneSlot.snowFlake.nextId()
+
+            if (random.nextInt(10) == 1) {
+                cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_INT
+                def bytes = new byte[4]
+                ByteBuffer.wrap(bytes).putInt(random.nextInt(10000))
+                cv.compressedData = bytes
+            }
+
+            // 10% expired
+            cv.expireAt = random.nextInt(10) == 1 ? CompressedValue.EXPIRE_NOW : CompressedValue.NO_EXPIRE
             oneSlot.put(key, s.bucketIndex(), cv)
         }
         bucketIndex0KeyList

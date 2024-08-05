@@ -395,7 +395,7 @@ public class OneSlot {
     }
 
     private final int chunkSegmentLength;
-    private final SnowFlake snowFlake;
+    final SnowFlake snowFlake;
     final File slotDir;
 
     private final BigStringFiles bigStringFiles;
@@ -1075,6 +1075,9 @@ public class OneSlot {
 
     record BeforePersistWalExtFromMerge(ArrayList<Integer> segmentIndexList,
                                         ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList) {
+        boolean isEmpty() {
+            return segmentIndexList.isEmpty();
+        }
     }
 
     record BeforePersistWalExt2FromMerge(ArrayList<Integer> segmentIndexList,
@@ -1207,7 +1210,7 @@ public class OneSlot {
                 throw new IllegalStateException("Persist error, need merge segment index list is null, slot: " + slot);
             }
 
-            if (ext != null) {
+            if (ext != null && !ext.isEmpty()) {
                 var segmentIndexList = ext.segmentIndexList;
                 // continuous segment index
                 if (segmentIndexList.getLast() - segmentIndexList.getFirst() == segmentIndexList.size() - 1) {

@@ -36,6 +36,10 @@ class PersistValueMetaTest extends Specification {
         then:
         PersistValueMeta.isPvm(encoded)
         PersistValueMeta.decode(encoded).toString() == one.toString()
+        one.isTargetSegment(10, (byte) 0, 10)
+        !one.isTargetSegment(11, (byte) 0, 10)
+        !one.isTargetSegment(10, (byte) 1, 10)
+        !one.isTargetSegment(10, (byte) 0, 11)
     }
 
     def 'test some branches'() {

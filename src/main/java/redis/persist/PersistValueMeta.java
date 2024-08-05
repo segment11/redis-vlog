@@ -43,6 +43,10 @@ public class PersistValueMeta {
         return KeyBucket.KVMeta.calcCellCount((short) keyBytes.length, (byte) valueLength);
     }
 
+    boolean isTargetSegment(int segmentIndex, byte subBlockIndex, int segmentOffset) {
+        return this.segmentIndex == segmentIndex && this.subBlockIndex == subBlockIndex && this.segmentOffset == segmentOffset;
+    }
+
     public String shortString() {
         return "l=" + length + ", si=" + segmentIndex + ", sbi=" + subBlockIndex + ", so=" + segmentOffset;
     }
