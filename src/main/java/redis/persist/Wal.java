@@ -284,25 +284,25 @@ public class Wal {
     }
 
     byte[] get(String key) {
-        var v = delayToKeyBucketShortValues.get(key);
-        var v2 = delayToKeyBucketValues.get(key);
-        if (v == null && v2 == null) {
+        var vShort = delayToKeyBucketShortValues.get(key);
+        var v = delayToKeyBucketValues.get(key);
+        if (vShort == null && v == null) {
             return null;
         }
 
-        if (v != null) {
-            if (v2 == null) {
-                return v.cvEncoded;
+        if (vShort != null) {
+            if (v == null) {
+                return vShort.cvEncoded;
             } else {
-                if (v.seq > v2.seq) {
-                    return v.cvEncoded;
+                if (vShort.seq > v.seq) {
+                    return vShort.cvEncoded;
                 } else {
-                    return v2.cvEncoded;
+                    return v.cvEncoded;
                 }
             }
         }
 
-        return v2.cvEncoded;
+        return v.cvEncoded;
     }
 
     PutResult removeDelay(String key, int bucketIndex, long keyHash) {
@@ -310,6 +310,20 @@ public class Wal {
         var v = new V(snowFlake.nextId(), bucketIndex, keyHash, EXPIRE_NOW, key, encoded, false);
 
         return put(true, key, v);
+    }
+
+    boolean exists(String key) {
+        var vShort = delayToKeyBucketShortValues.get(key);
+        if (vShort != null) {
+            // already removed
+            if (vShort.isRemove()) {
+                return false;
+            } else {
+                return true;
+            }
+        } else {
+            return delayToKeyBucketValues.get(key) != null;
+        }
     }
 
     boolean remove(String key) {

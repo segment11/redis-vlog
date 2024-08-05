@@ -183,18 +183,18 @@ class WalTest extends Specification {
         def cvEncoded = wal.get(key)
         then:
         cvEncoded != null && cvEncoded.length == 1
-        !wal.remove(key)
+        !wal.exists(key)
 
         when:
         wal.put(true, key, v)
         then:
-        wal.remove(key)
+        wal.exists(key)
 
         when:
         wal.put(false, key, v)
         then:
-        wal.remove(key)
-        !wal.remove(key)
+        wal.exists(key)
+        !wal.exists(key + '-not-exist')
 
         when:
         def longV = new Wal.V(4, 0, 0, 0, key, ('long-value' * 100).bytes, false)
