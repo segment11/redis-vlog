@@ -410,7 +410,7 @@ public class OneSlot {
 
     private final Map<Integer, LRUMap<String, byte[]>> kvByWalGroupIndexLRU = new HashMap<>();
 
-    private int kvByWalGroupIndexCountTotal() {
+    int kvByWalGroupIndexCountTotal() {
         int n = 0;
         for (var lru : kvByWalGroupIndexLRU.values()) {
             n += lru.size();
@@ -537,7 +537,7 @@ public class OneSlot {
         return metaChunkSegmentIndex;
     }
 
-    private int getChunkWriteSegmentIndex() {
+    int getChunkWriteSegmentIndex() {
         return metaChunkSegmentIndex.get();
     }
 
@@ -793,9 +793,6 @@ public class OneSlot {
         var d = Zstd.decompressByteArray(decompressedBytes, 0, chunkSegmentLength,
                 tightBytesWithLength, subBlockOffset, subBlockLength);
         var costT = (System.nanoTime() - beginT) / 1000;
-        if (costT == 0) {
-            costT = 1;
-        }
         segmentDecompressTimeTotalUs += costT;
         segmentDecompressCountTotal++;
 
@@ -805,50 +802,6 @@ public class OneSlot {
         }
 
         return decompressedBytes;
-    }
-
-    public boolean remove(String key, int bucketIndex, long keyHash) {
-        checkCurrentThreadId();
-
-        var isRemovedFromWal = removeFromWal(bucketIndex, key, keyHash);
-        if (isRemovedFromWal) {
-            return true;
-        }
-
-        var valueBytesWithExpireAtAndSeq = keyLoader.getValueByKey(bucketIndex, key.getBytes(), keyHash);
-        if (valueBytesWithExpireAtAndSeq == null || valueBytesWithExpireAtAndSeq.isExpired()) {
-            return false;
-        }
-
-        removeDelay(key, bucketIndex, keyHash);
-        return true;
-    }
-
-    public void removeDelay(String key, int bucketIndex, long keyHash) {
-        checkCurrentThreadId();
-
-        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-        var targetWal = walArray[walGroupIndex];
-        var putResult = targetWal.removeDelay(key, bucketIndex, keyHash);
-
-        if (putResult.needPersist()) {
-            doPersist(walGroupIndex, key, putResult);
-        } else {
-            if (binlog != null) {
-                var xWalV = new XWalV(putResult.needPutV(), putResult.isValueShort(), putResult.offset());
-                binlog.append(xWalV);
-            }
-        }
-    }
-
-    private boolean removeFromWal(int bucketIndex, String key, long keyHash) {
-        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-        var targetWal = walArray[walGroupIndex];
-        boolean isRemoved = targetWal.remove(key);
-        if (isRemoved) {
-            removeDelay(key, bucketIndex, keyHash);
-        }
-        return isRemoved;
     }
 
     public boolean exists(String key, int bucketIndex, long keyHash) {
@@ -869,6 +822,34 @@ public class OneSlot {
         }
 
         return true;
+    }
+
+    public boolean remove(String key, int bucketIndex, long keyHash) {
+        checkCurrentThreadId();
+
+        if (exists(key, bucketIndex, keyHash)) {
+            removeDelay(key, bucketIndex, keyHash);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public void removeDelay(String key, int bucketIndex, long keyHash) {
+        checkCurrentThreadId();
+
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
+        var targetWal = walArray[walGroupIndex];
+        var putResult = targetWal.removeDelay(key, bucketIndex, keyHash);
+
+        if (putResult.needPersist()) {
+            doPersist(walGroupIndex, key, putResult);
+        } else {
+            if (binlog != null) {
+                var xWalV = new XWalV(putResult.needPutV(), putResult.isValueShort(), putResult.offset());
+                binlog.append(xWalV);
+            }
+        }
     }
 
     long threadIdProtectedForSafe = -1;
@@ -1061,14 +1042,16 @@ public class OneSlot {
         checkCurrentThreadId();
 
         // close wal raf
-        try {
-            raf.close();
-            System.out.println("Close wal raf success, slot: " + slot);
+        if (raf != null) {
+            try {
+                raf.close();
+                System.out.println("Close wal raf success, slot: " + slot);
 
-            rafShortValue.close();
-            System.out.println("Close wal short value raf success, slot: " + slot);
-        } catch (IOException e) {
-            System.err.println("Close wal raf / wal short raf error, slot: " + slot);
+                rafShortValue.close();
+                System.out.println("Close wal short value raf success, slot: " + slot);
+            } catch (IOException e) {
+                System.err.println("Close wal raf / wal short raf error, slot: " + slot);
+            }
         }
 
         if (metaChunkSegmentFlagSeq != null) {
@@ -1079,7 +1062,9 @@ public class OneSlot {
             metaChunkSegmentIndex.cleanUp();
         }
 
-        chunk.cleanUp();
+        if (chunk != null) {
+            chunk.cleanUp();
+        }
 
         for (var replPair : replPairs) {
             replPair.bye();
@@ -1097,7 +1082,7 @@ public class OneSlot {
     }
 
     // for performance, before persist wal, read some segment in same wal group and  merge immediately
-    private BeforePersistWalExtFromMerge readSomeSegmentsBeforePersistWal(int walGroupIndex) {
+    BeforePersistWalExtFromMerge readSomeSegmentsBeforePersistWal(int walGroupIndex) {
         var currentSegmentIndex = chunk.currentSegmentIndex();
         var needMergeSegmentIndex = chunk.needMergeSegmentIndex(false, currentSegmentIndex);
         if (needMergeSegmentIndex == NO_NEED_MERGE_SEGMENT_INDEX) {
@@ -1177,7 +1162,7 @@ public class OneSlot {
 
     private long logMergeCount = 0;
 
-    private void persistWal(boolean isShortValue, Wal targetWal) {
+    void persistWal(boolean isShortValue, Wal targetWal) {
         var walGroupIndex = targetWal.groupIndex;
         if (isShortValue) {
             keyLoader.persistShortValueListBatchInOneWalGroup(walGroupIndex, targetWal.delayToKeyBucketShortValues.values());
@@ -1340,30 +1325,33 @@ public class OneSlot {
         }
     }
 
-    SegmentFlag getSegmentMergeFlag(int segmentIndex) {
+    private void checkSegmentIndex(int segmentIndex) {
         if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
             throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
         }
+    }
 
+    private void checkBeginSegmentIndex(int beginSegmentIndex, int segmentCount) {
+        if (beginSegmentIndex < 0 || beginSegmentIndex + segmentCount > chunk.maxSegmentIndex) {
+            throw new IllegalStateException("Begin segment index out of bound, s=" + slot + ", i=" + beginSegmentIndex + ", c=" + segmentCount);
+        }
+    }
+
+    SegmentFlag getSegmentMergeFlag(int segmentIndex) {
+        checkSegmentIndex(segmentIndex);
         return metaChunkSegmentFlagSeq.getSegmentMergeFlag(segmentIndex);
     }
 
     ArrayList<SegmentFlag> getSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount) {
-        if (beginSegmentIndex < 0 || beginSegmentIndex + segmentCount > chunk.maxSegmentIndex) {
-            throw new IllegalStateException("Begin segment index out of bound, s=" + slot + ", i=" + beginSegmentIndex);
-        }
-
+        checkBeginSegmentIndex(beginSegmentIndex, segmentCount);
         return metaChunkSegmentFlagSeq.getSegmentMergeFlagBatch(beginSegmentIndex, segmentCount);
     }
 
-    public List<Long> getSegmentMergeFlagListBatchForRepl(int segmentIndex, int segmentCount) {
+    public List<Long> getSegmentSeqListBatchForRepl(int beginSegmentIndex, int segmentCount) {
         checkCurrentThreadId();
 
-        if (segmentIndex < 0 || segmentIndex + segmentCount > chunk.maxSegmentIndex) {
-            throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
-        }
-
-        return metaChunkSegmentFlagSeq.getSegmentSeqListBatchForRepl(segmentIndex, segmentCount);
+        checkBeginSegmentIndex(beginSegmentIndex, segmentCount);
+        return metaChunkSegmentFlagSeq.getSegmentSeqListBatchForRepl(beginSegmentIndex, segmentCount);
     }
 
     void updateSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq) {
@@ -1372,18 +1360,12 @@ public class OneSlot {
     }
 
     void setSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex) {
-        if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
-            throw new IllegalStateException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
-        }
-
+        checkSegmentIndex(segmentIndex);
         metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, flag, segmentSeq, walGroupIndex);
     }
 
     void setSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount, Flag flag, List<Long> segmentSeqList, int walGroupIndex) {
-        if (beginSegmentIndex < 0 || beginSegmentIndex + segmentCount > chunk.maxSegmentIndex) {
-            throw new IllegalStateException("Begin segment index out of bound, s=" + slot + ", i=" + beginSegmentIndex);
-        }
-
+        checkBeginSegmentIndex(beginSegmentIndex, segmentCount);
         metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(beginSegmentIndex, segmentCount, flag, segmentSeqList, walGroupIndex);
     }
 
@@ -1500,8 +1482,11 @@ public class OneSlot {
             map.put("dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
             map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
             map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
-            map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.currentSegmentIndex(), labelValues));
-            map.put("chunk_max_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.maxSegmentIndex, labelValues));
+
+            if (chunk != null) {
+                map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.currentSegmentIndex(), labelValues));
+                map.put("chunk_max_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.maxSegmentIndex, labelValues));
+            }
 
             var firstWalGroup = walArray[0];
             map.put("first_wal_group_delay_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketValues.size(), labelValues));

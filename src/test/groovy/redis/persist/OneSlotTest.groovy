@@ -59,6 +59,8 @@ class OneSlotTest extends Specification {
         oneSlot4.slot() == slot
 
         cleanup:
+        oneSlot2.flush()
+        oneSlot2.cleanUp()
         eventloop.breakEventloop()
     }
 
@@ -203,6 +205,8 @@ class OneSlotTest extends Specification {
         oneSlot.replPairs.size() == 2
 
         cleanup:
+        oneSlot.threadIdProtectedForSafe = Thread.currentThread().threadId()
+        oneSlot.cleanUp()
         Consts.persistDir.deleteDir()
     }
 
@@ -290,6 +294,24 @@ class OneSlotTest extends Specification {
         Consts.persistDir.deleteDir()
     }
 
+    private List<String> batchPut(OneSlot oneSlot) {
+        // refer KeyHashTest
+        // mock key list and bucket index is 0
+        // 300 keys will cause wal refresh to key buckets file
+        ConfForSlot.global.confWal.shortValueSizeTrigger = 100
+        def bucketIndex0KeyList = Mock.prepareTargetBucketIndexKeyList(300, 0)
+        for (key in bucketIndex0KeyList) {
+            def s = BaseCommand.slot(key.bytes, slotNumber)
+            def cv = new CompressedValue()
+            cv.keyHash = s.keyHash()
+            cv.compressedData = new byte[10]
+            cv.compressedLength = 10
+            cv.uncompressedLength = 10
+            oneSlot.put(key, s.bucketIndex(), cv)
+        }
+        bucketIndex0KeyList
+    }
+
     def 'test dyn config and big string files and kv lru'() {
         given:
         LocalPersistTest.prepareLocalPersist((byte) 1, (short) 2)
@@ -337,20 +359,7 @@ class OneSlotTest extends Specification {
         when:
         oneSlot.readonly = false
         oneSlot.canRead = true
-        // refer KeyHashTest
-        // mock key list and bucket index is 0
-        // 300 keys will cause wal refresh to key buckets file
-        ConfForSlot.global.confWal.shortValueSizeTrigger = 100
-        def bucketIndex0KeyList = Mock.prepareTargetBucketIndexKeyList(300, 0)
-        for (key in bucketIndex0KeyList) {
-            def s = BaseCommand.slot(key.bytes, slotNumber)
-            def cv = new CompressedValue()
-            cv.keyHash = s.keyHash()
-            cv.compressedData = new byte[10]
-            cv.compressedLength = 10
-            cv.uncompressedLength = 10
-            oneSlot.put(key, s.bucketIndex(), cv)
-        }
+        def bucketIndex0KeyList = batchPut(oneSlot)
         // so read must be from key buckets file
         oneSlot.getWalByBucketIndex(0).clear()
         oneSlot.getWalByBucketIndex(1).clear()
@@ -433,7 +442,7 @@ class OneSlotTest extends Specification {
         Consts.persistDir.deleteDir()
     }
 
-    def 'test put and get'() {
+    def 'test put and get and remove'() {
         given:
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
@@ -463,8 +472,239 @@ class OneSlotTest extends Specification {
         then:
         oneSlot.getExpireAt(key.bytes, sKey.bucketIndex(), sKey.keyHash()) == null
 
+        when:
+        def cv = new CompressedValue()
+        cv.keyHash = sKey.keyHash()
+        cv.compressedData = new byte[10]
+        cv.compressedLength = 10
+        cv.uncompressedLength = 10
+        cv.expireAt = System.currentTimeMillis()
+        oneSlot.put(key, sKey.bucketIndex(), cv)
+        then:
+        oneSlot.getExpireAt(key.bytes, sKey.bucketIndex(), sKey.keyHash()) == cv.expireAt
+        oneSlot.get(key.bytes, sKey.bucketIndex(), sKey.keyHash()) != null
+
+        when:
+        oneSlot.removeDelay(key, sKey.bucketIndex(), sKey.keyHash())
+        then:
+        oneSlot.getExpireAt(key.bytes, sKey.bucketIndex(), sKey.keyHash()) == null
+        oneSlot.get(key.bytes, sKey.bucketIndex(), sKey.keyHash()) == null
+
+        when:
+        def bucketIndex0KeyList = batchPut(oneSlot)
+        oneSlot.getWalByBucketIndex(0).clear()
+        // get to lru
+        def firstKey = bucketIndex0KeyList[0]
+        def sFirstKey = BaseCommand.slot(firstKey.bytes, slotNumber)
+        2.times {
+            oneSlot.get(firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash())
+        }
+        then:
+        oneSlot.getExpireAt(firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash()) != null
+
+        when:
+        oneSlot.clearKvLRUByWalGroupIndex(0)
+        then:
+        oneSlot.getExpireAt(firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash()) != null
+
+        when:
+        def notExistKey = 'not-exist-key'
+        def sNotExistKey = BaseCommand.slot(notExistKey.bytes, slotNumber)
+        then:
+        oneSlot.get(notExistKey.bytes, sNotExistKey.bucketIndex(), sNotExistKey.keyHash()) == null
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.NULL_DICT_SEQ
+        cv.compressedData = new byte[CompressedValue.SP_TYPE_SHORT_STRING_MIN_LEN * 100]
+        cv.compressedLength = cv.compressedData.length
+        cv.uncompressedLength = cv.compressedData.length
+        cv.expireAt = CompressedValue.NO_EXPIRE
+        // make sure do persist
+        100.times {
+            oneSlot.put(key, sKey.bucketIndex(), cv)
+        }
+        oneSlot.getWalByBucketIndex(sKey.bucketIndex()).clear()
+        then:
+        oneSlot.get(key.bytes, sKey.bucketIndex(), sKey.keyHash()) != null
+
+        when:
+        oneSlot.readonly = true
+        exception = false
+        try {
+            oneSlot.put(key, sKey.bucketIndex(), cv)
+        } catch (ReadonlyException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        oneSlot.readonly = false
+        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_NUM_INT
+        cv.compressedData = new byte[4]
+        oneSlot.put(key, sKey.bucketIndex(), cv)
+        def buf = oneSlot.get(key.bytes, sKey.bucketIndex(), sKey.keyHash())
+        then:
+        buf != null
+        CompressedValue.decode(buf.buf(), key.bytes, sKey.keyHash()).compressedData.length == 4
+
+        when:
+        2000.times {
+            oneSlot.removeDelay(key, sKey.bucketIndex(), sKey.keyHash())
+        }
+        then:
+        oneSlot.get(key.bytes, sKey.bucketIndex(), sKey.keyHash()) == null
+        !oneSlot.exists(key, sKey.bucketIndex(), sKey.keyHash())
+        !oneSlot.remove(key, sKey.bucketIndex(), sKey.keyHash())
+
+        when:
+        // cv is int -> short string
+        oneSlot.put(key, sKey.bucketIndex(), cv)
+        then:
+        oneSlot.exists(key, sKey.bucketIndex(), sKey.keyHash())
+        oneSlot.remove(key, sKey.bucketIndex(), sKey.keyHash())
+
+        when:
+        cv.dictSeqOrSpType = CompressedValue.NULL_DICT_SEQ
+        cv.compressedData = new byte[CompressedValue.SP_TYPE_SHORT_STRING_MIN_LEN * 100]
+        cv.compressedLength = cv.compressedData.length
+        cv.uncompressedLength = cv.compressedData.length
+        cv.expireAt = CompressedValue.NO_EXPIRE
+        oneSlot.put(key, sKey.bucketIndex(), cv)
+        then:
+        oneSlot.exists(key, sKey.bucketIndex(), sKey.keyHash())
+        oneSlot.remove(key, sKey.bucketIndex(), sKey.keyHash())
+
+        when:
+        cv.expireAt = System.currentTimeMillis() + 1000
+        100.times {
+            oneSlot.put(key, sKey.bucketIndex(), cv)
+        }
+        oneSlot.getWalByBucketIndex(sKey.bucketIndex()).clear()
+        Thread.sleep(1000 + 1)
+        then:
+        // remove from key loader, already expired
+        !oneSlot.exists(key, sKey.bucketIndex(), sKey.keyHash())
+        !oneSlot.remove(key, sKey.bucketIndex(), sKey.keyHash())
+        !oneSlot.exists(key + 'not-exist', sKey.bucketIndex(), sKey.keyHash())
+        !oneSlot.remove(key + 'not-exist', sKey.bucketIndex(), sKey.keyHash())
+
+        when:
+        cv.expireAt = CompressedValue.NO_EXPIRE
+        100.times {
+            oneSlot.put(key, sKey.bucketIndex(), cv)
+        }
+        oneSlot.getWalByBucketIndex(sKey.bucketIndex()).clear()
+        then:
+        oneSlot.exists(key, sKey.bucketIndex(), sKey.keyHash())
+        oneSlot.remove(key, sKey.bucketIndex(), sKey.keyHash())
+
         cleanup:
-        localPersist.cleanUp()
+        oneSlot.flush()
+        oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test direct methods call'() {
+        given:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        when:
+        def bytesForMerge = oneSlot.preadForMerge(0, 10)
+        def bytesForRepl = oneSlot.preadForRepl(0)
+        then:
+        bytesForMerge == null
+        bytesForRepl == null
+
+        when:
+        def mockBytesFromMaster = new byte[oneSlot.chunk.chunkSegmentLength]
+        Arrays.fill(mockBytesFromMaster, (byte) 1)
+        oneSlot.writeChunkSegmentsFromMasterExists(mockBytesFromMaster, 0, 1)
+        def bytesOneSegment = oneSlot.preadForMerge(0, 1)
+        then:
+        bytesOneSegment == mockBytesFromMaster
+
+        when:
+        boolean exception = false
+        mockBytesFromMaster = new byte[oneSlot.chunk.chunkSegmentLength + 1]
+        try {
+            oneSlot.writeChunkSegmentsFromMasterExists(mockBytesFromMaster, 0, 1)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        oneSlot.getSegmentMergeFlag(0)
+        oneSlot.getSegmentMergeFlagBatch(0, 1)
+        exception = false
+        try {
+            oneSlot.getSegmentMergeFlag(-1)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        try {
+            oneSlot.getSegmentMergeFlagBatch(-1, 1)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        try {
+            oneSlot.getSegmentMergeFlag(oneSlot.chunk.maxSegmentIndex + 1)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        try {
+            oneSlot.getSegmentMergeFlagBatch(0, oneSlot.chunk.maxSegmentIndex + 1)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        oneSlot.getSegmentSeqListBatchForRepl(0, 1)
+        oneSlot.updateSegmentMergeFlag(0, Chunk.Flag.merged, 1L)
+        List<Long> segmentSeqList = [1L]
+        oneSlot.setSegmentMergeFlagBatch(0, 1, Chunk.Flag.merged, segmentSeqList, 0)
+        then:
+        1 == 1
+
+        when:
+        ArrayList<Integer> needMergeSegmentIndexList = [0]
+        oneSlot.doMergeJob(needMergeSegmentIndexList)
+        oneSlot.doMergeJobWhenServerStart(needMergeSegmentIndexList)
+        oneSlot.persistMergingOrMergedSegmentsButNotPersisted()
+        oneSlot.getMergedSegmentIndexEndLastTime()
+        then:
+        1 == 1
+
+        cleanup:
+        oneSlot.cleanUp()
         Consts.persistDir.deleteDir()
     }
 }
