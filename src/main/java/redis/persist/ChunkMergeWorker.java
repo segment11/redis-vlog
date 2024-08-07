@@ -28,9 +28,6 @@ public class ChunkMergeWorker {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    // just for config parameter
-    int compressLevel;
-
     record CvWithKeyAndBucketIndexAndSegmentIndex(CompressedValue cv, String key, int bucketIndex, int segmentIndex) {
     }
 
@@ -224,7 +221,7 @@ public class ChunkMergeWorker {
         this.initMetricsCollect();
     }
 
-    private final static SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
+    final static SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
             "slot");
 
     static {

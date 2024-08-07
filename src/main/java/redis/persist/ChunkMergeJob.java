@@ -377,7 +377,7 @@ public class ChunkMergeJob {
                             var dict = dictMap.getDict(TrainSampleJob.keyPrefix(key));
                             if (dict != null) {
                                 var rawBytes = cv.decompress(Dict.SELF_ZSTD_DICT);
-                                var newCompressedCv = CompressedValue.compress(rawBytes, dict, chunkMergeWorker.compressLevel);
+                                var newCompressedCv = CompressedValue.compress(rawBytes, dict, Zstd.defaultCompressionLevel());
                                 if (!newCompressedCv.isIgnoreCompression(rawBytes) && newCompressedCv.getCompressedLength() < cv.getCompressedLength()) {
                                     // replace
                                     newCompressedCv.setSeq(cv.getSeq());
