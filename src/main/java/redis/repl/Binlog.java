@@ -361,7 +361,7 @@ public class Binlog {
         return n;
     }
 
-    void clear() {
+    public void clear() {
         // truncate
         try {
             raf.setLength(0);
@@ -396,7 +396,7 @@ public class Binlog {
         }
     }
 
-    void close() {
+    public void close() {
         try {
             raf.close();
             System.out.println("Close binlog current raf success, slot: " + slot);
