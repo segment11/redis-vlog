@@ -386,6 +386,10 @@ public class CompressedValue {
         return bytes;
     }
 
+    public long getBigStringMetaUuid() {
+        return ByteBuffer.wrap(compressedData).getLong();
+    }
+
     private static final Logger log = LoggerFactory.getLogger(CompressedValue.class);
 
     // no memory copy when iterate decode many compressed values

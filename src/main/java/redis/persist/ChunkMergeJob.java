@@ -301,18 +301,23 @@ public class ChunkMergeJob {
                 var bucketIndex = one.bucketIndex;
 
                 var validCvCountRecord = validCvCountRecordList.get(segmentIndex - firstSegmentIndex);
+                if (cv.isExpired()) {
+                    validCvCountRecord.invalidCvCount++;
+                    toRemoveCvList.add(one);
+                    continue;
+                }
 
                 byte[] valueBytesCurrent;
                 var tmpWalValueBytes = oneSlot.getFromWal(key, bucketIndex);
                 if (tmpWalValueBytes != null) {
-                    // wal kv is the newest
-                    // need not thread safe, because newest seq must > cv seq
+                    // from wal, is the newest
                     if (CompressedValue.isDeleted(tmpWalValueBytes)) {
                         valueBytesCurrent = null;
                     } else {
                         valueBytesCurrent = tmpWalValueBytes;
                     }
                 } else {
+                    // from key buckets
                     var valueBytesWithExpireAtAndSeq = keyBucketsInOneWalGroup.getValue(bucketIndex, key.getBytes(), cv.getKeyHash());
                     if (valueBytesWithExpireAtAndSeq == null || valueBytesWithExpireAtAndSeq.isExpired()) {
                         valueBytesCurrent = null;
@@ -330,14 +335,14 @@ public class ChunkMergeJob {
                     continue;
                 }
 
-                // if not meta
+                // if not meta, short value encoded or from wal cv encoded
                 if (!PersistValueMeta.isPvm(valueBytesCurrent)) {
                     // compare seq
                     var buffer = ByteBuffer.wrap(valueBytesCurrent);
 
                     long valueSeqCurrent;
+                    // refer to CompressedValue decode
                     var firstByte = buffer.get(0);
-                    // from write batch, maybe short value
                     if (firstByte < 0) {
                         valueSeqCurrent = buffer.position(1).getLong();
                     } else {
@@ -364,27 +369,22 @@ public class ChunkMergeJob {
                         validCvCountRecord.invalidCvCount++;
                         toRemoveCvList.add(one);
                     } else {
-                        if (cv.isExpired()) {
-                            validCvCountRecord.invalidCvCount++;
-                            toRemoveCvList.add(one);
-                        } else {
-                            validCvCountRecord.validCvCount++;
+                        validCvCountRecord.validCvCount++;
 
-                            // if there is a new dict, compress use new dict and replace
-                            if (cv.isUseDict() && cv.getDictSeqOrSpType() == Dict.SELF_ZSTD_DICT_SEQ) {
-                                var dict = dictMap.getDict(TrainSampleJob.keyPrefix(key));
-                                if (dict != null) {
-                                    var rawBytes = cv.decompress(Dict.SELF_ZSTD_DICT);
-                                    var newCompressedCv = CompressedValue.compress(rawBytes, dict, chunkMergeWorker.compressLevel);
-                                    if (!newCompressedCv.isIgnoreCompression(rawBytes) && newCompressedCv.getCompressedLength() < cv.getCompressedLength()) {
-                                        // replace
-                                        newCompressedCv.setSeq(cv.getSeq());
-                                        newCompressedCv.setDictSeqOrSpType(dict.getSeq());
-                                        newCompressedCv.setKeyHash(cv.getKeyHash());
-                                        newCompressedCv.setExpireAt(cv.getExpireAt());
+                        // if there is a new dict, compress use new dict and replace if compressed length is smaller
+                        if (cv.isUseDict() && cv.getDictSeqOrSpType() == Dict.SELF_ZSTD_DICT_SEQ) {
+                            var dict = dictMap.getDict(TrainSampleJob.keyPrefix(key));
+                            if (dict != null) {
+                                var rawBytes = cv.decompress(Dict.SELF_ZSTD_DICT);
+                                var newCompressedCv = CompressedValue.compress(rawBytes, dict, chunkMergeWorker.compressLevel);
+                                if (!newCompressedCv.isIgnoreCompression(rawBytes) && newCompressedCv.getCompressedLength() < cv.getCompressedLength()) {
+                                    // replace
+                                    newCompressedCv.setSeq(cv.getSeq());
+                                    newCompressedCv.setDictSeqOrSpType(dict.getSeq());
+                                    newCompressedCv.setKeyHash(cv.getKeyHash());
+                                    newCompressedCv.setExpireAt(cv.getExpireAt());
 
-                                        one.cv = newCompressedCv;
-                                    }
+                                    one.cv = newCompressedCv;
                                 }
                             }
                         }
@@ -394,13 +394,11 @@ public class ChunkMergeJob {
         }
 
         for (CvWithKeyAndSegmentOffset one : toRemoveCvList) {
+            var key = one.key;
             var cv = one.cv;
             if (cv.isBigString()) {
-                var key = one.key;
                 // need remove file
-                var buffer = ByteBuffer.wrap(cv.getCompressedData());
-                var uuid = buffer.getLong();
-
+                var uuid = cv.getBigStringMetaUuid();
                 var isDeleted = oneSlot.getBigStringFiles().deleteBigStringFileIfExist(uuid);
                 if (!isDeleted) {
                     throw new RuntimeException("Delete big string file error, s=" + slot + ", key=" + key + ", uuid=" + uuid);
@@ -409,6 +407,7 @@ public class ChunkMergeJob {
                 }
             }
         }
+
         cvList.removeAll(toRemoveCvList);
     }
 }

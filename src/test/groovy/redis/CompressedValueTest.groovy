@@ -336,6 +336,7 @@ class CompressedValueTest extends Specification {
 
         then:
         cv.isUseDict()
+        cv.getBigStringMetaUuid() == 890L
         cvDecodeBigStringMeta.isBigString()
         bufferBigStringMeta.getLong() == 890L
         bufferBigStringMeta.getInt() == 100
