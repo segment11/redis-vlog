@@ -135,13 +135,14 @@ public class ChunkMergeJob {
         HashSet<Integer> skipSegmentIndexSet = new HashSet<>();
         for (var segmentIndex : needMergeSegmentIndexList) {
             var segmentFlag = oneSlot.getSegmentMergeFlag(segmentIndex);
+            var flag = segmentFlag.flag();
+
             // not write yet, skip
-            if (segmentFlag.flag() == Chunk.Flag.init) {
+            if (flag == Chunk.Flag.init) {
                 skipSegmentIndexSet.add(segmentIndex);
                 continue;
             }
 
-            var flag = segmentFlag.flag();
             if (flag == Chunk.Flag.merged_and_persisted) {
                 skipSegmentIndexSet.add(segmentIndex);
                 continue;

@@ -1,7 +1,7 @@
 package redis.persist
 
-import redis.BaseCommand
-import redis.CompressedValue
+import com.github.luben.zstd.Zstd
+import redis.*
 import spock.lang.Specification
 
 class ChunkMergeJobTest extends Specification {
@@ -107,6 +107,91 @@ class ChunkMergeJobTest extends Specification {
 
         cleanup:
         oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test some branches'() {
+        given:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+        def chunkMergeWorker = oneSlot.chunkMergeWorker
+
+        and:
+        int walGroupIndex = 0
+        int bucketIndex = 0
+        int segmentIndex = 0
+        ArrayList<Integer> needMergeSegmentIndexList = []
+        10.times {
+            needMergeSegmentIndexList << (segmentIndex + it)
+            oneSlot.setSegmentMergeFlag(segmentIndex + it, Chunk.Flag.new_write, 1L, 0)
+        }
+        def job = new ChunkMergeJob(slot, needMergeSegmentIndexList, chunkMergeWorker, oneSlot.snowFlake)
+
+        and:
+        Debug.instance.logMerge = true
+        chunkMergeWorker.logMergeCount = 999
+
+        and:
+        ArrayList<Wal.V> valueList = []
+        Mock.prepareTargetBucketIndexKeyList(400, bucketIndex).eachWithIndex { key, it ->
+            def keyBytes = key.bytes
+            def keyHash = KeyHash.hash(keyBytes)
+
+            def cv = new CompressedValue()
+            cv.seq = it
+            cv.dictSeqOrSpType = CompressedValue.NULL_DICT_SEQ
+            cv.keyHash = keyHash
+            cv.compressedData = new byte[10]
+            cv.compressedLength = 10
+            cv.uncompressedLength = 10
+            if (it % 10 == 0) {
+                cv.expireAt = System.currentTimeMillis() - 1
+            }
+
+            if (it % 55 == 0) {
+                // when merge need check if need compress use new dict
+                cv.dictSeqOrSpType = Dict.SELF_ZSTD_DICT_SEQ
+                cv.compressedData = Zstd.compress(new byte[100])
+                cv.compressedLength = cv.compressedData.length
+                cv.uncompressedLength = 100
+            }
+
+            def encoded = it % 20 == 0 ? cv.encodeAsBigStringMeta(it) : cv.encode()
+            def v = new Wal.V(it, bucketIndex, keyHash, cv.expireAt, key, encoded, false)
+            valueList << v
+        }
+
+        def dictMap = DictMap.instance
+        dictMap.initDictMap(Consts.persistDir)
+        TrainSampleJob.keyPrefixGroupList = ['xh!']
+        dictMap.putDict('xh!', Dict.SELF_ZSTD_DICT)
+
+        int[] nextNSegmentIndex = [0, 1, 2, 3, 4, 5, 6]
+        ArrayList<PersistValueMeta> returnPvmList = []
+
+        def segmentBatch = new SegmentBatch(slot, oneSlot.snowFlake)
+        def r = segmentBatch.splitAndTight(valueList, nextNSegmentIndex, returnPvmList)
+        println 'split and tight: ' + r.size() + ' segments, ' + returnPvmList.size() + ' pvm list'
+
+        def fdChunk = oneSlot.chunk.fdReadWriteArray[0]
+        fdChunk.writeOneInner(segmentIndex, r[0].tightBytesWithLength(), false)
+        fdChunk.writeOneInner(segmentIndex + 1, r[1].tightBytesWithLength(), false)
+        println 'write segment ' + segmentIndex + ', ' + (segmentIndex + 1)
+
+        oneSlot.keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, returnPvmList)
+        println 'bucket ' + bucketIndex + ' key count: ' + oneSlot.keyLoader.getKeyCountInBucketIndex(bucketIndex)
+
+        when:
+        job.mergeSegments(needMergeSegmentIndexList)
+        println 'after merge segments, valid cv count: ' + job.validCvCountAfterRun + ', invalid cv count: ' + job.invalidCvCountAfterRun
+        then:
+        job.invalidCvCountAfterRun == 40
+
+        cleanup:
+        oneSlot.cleanUp()
+        dictMap.close()
         Consts.persistDir.deleteDir()
     }
 }

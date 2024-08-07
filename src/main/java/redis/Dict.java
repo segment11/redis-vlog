@@ -194,7 +194,7 @@ public class Dict implements Serializable {
     }
 
     public Dict() {
-        this.dictBytes = null;
+        this.dictBytes = new byte[1];
         this.seq = SELF_ZSTD_DICT_SEQ;
         this.createdTime = System.currentTimeMillis();
     }
