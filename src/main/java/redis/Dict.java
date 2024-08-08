@@ -95,7 +95,8 @@ public class Dict implements Serializable {
     }
 
     public boolean hasDictBytes() {
-        return dictBytes != null;
+        // global / self dict, dict bytes length is 1
+        return dictBytes != null && dictBytes.length > 1;
     }
 
     public void setDictBytes(byte[] dictBytes) {
