@@ -5,6 +5,7 @@ import jnr.posix.LibC
 import redis.ConfForSlot
 import redis.KeyHash
 import redis.SnowFlake
+import redis.repl.incremental.XOneWalGroupPersist
 import spock.lang.Specification
 
 import java.nio.ByteBuffer
@@ -72,6 +73,7 @@ class KeyLoaderTest extends Specification {
         try {
             keyLoader.getKeyCountInBucketIndex(-1)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:
@@ -82,6 +84,7 @@ class KeyLoaderTest extends Specification {
         try {
             keyLoader.getKeyCountInBucketIndex(bucketsPerSlot)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:
@@ -97,6 +100,7 @@ class KeyLoaderTest extends Specification {
         try {
             keyLoader.getMetaKeyBucketSplitNumberBatch(-1, 1)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:
@@ -107,6 +111,7 @@ class KeyLoaderTest extends Specification {
         try {
             keyLoader.getMetaKeyBucketSplitNumberBatch(bucketsPerSlot, 1)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:
@@ -124,6 +129,7 @@ class KeyLoaderTest extends Specification {
         try {
             keyLoader.updateMetaKeyBucketSplitNumberBatchIfChanged(-1, new byte[0])
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:
@@ -134,6 +140,7 @@ class KeyLoaderTest extends Specification {
         try {
             keyLoader.updateMetaKeyBucketSplitNumberBatchIfChanged(bucketsPerSlot, new byte[0])
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:
@@ -178,7 +185,7 @@ class KeyLoaderTest extends Specification {
         int[] keyCountArray = new int[2]
         keyCountArray[0] = 1
         keyCountArray[1] = 2
-        keyLoader.updateKeyCountBatchCached(keyCountArray, 0)
+        keyLoader.updateKeyCountBatchCached(0, keyCountArray)
         then:
         keyLoader.getKeyCountInBucketIndex(0) == 1
         keyLoader.getKeyCountInBucketIndex(1) == 2
@@ -186,8 +193,9 @@ class KeyLoaderTest extends Specification {
         when:
         exception = false
         try {
-            keyLoader.updateKeyCountBatchCached(new int[1], -1)
+            keyLoader.updateKeyCountBatchCached(-1, new int[1])
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:
@@ -196,8 +204,9 @@ class KeyLoaderTest extends Specification {
         when:
         exception = false
         try {
-            keyLoader.updateKeyCountBatchCached(new int[1], bucketsPerSlot)
+            keyLoader.updateKeyCountBatchCached(bucketsPerSlot, new int[1])
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:
@@ -425,10 +434,11 @@ class KeyLoaderTest extends Specification {
         def shortValueList = Mock.prepareShortValueList(10)
 
         when:
-        keyLoader.persistShortValueListBatchInOneWalGroup(0, shortValueList)
+        def xForBinlog = new XOneWalGroupPersist(true, 0)
+        keyLoader.persistShortValueListBatchInOneWalGroup(0, shortValueList, xForBinlog)
         then:
         shortValueList.every {
-            keyLoader.getValueByKey(0, it.key.bytes, it.keyHash).valueBytes() == it.cvEncoded()
+            keyLoader.getValueByKey(0, it.key().bytes, it.keyHash()).valueBytes() == it.cvEncoded()
         }
 
         when:
@@ -437,7 +447,7 @@ class KeyLoaderTest extends Specification {
         def keyLoader2 = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir2, keyLoader.snowFlake, oneSlot)
         keyLoader2.initFds(keyLoader.libC)
         keyLoader2.initFds((byte) 1)
-        keyLoader2.persistShortValueListBatchInOneWalGroup(0, shortValueList)
+        keyLoader2.persistShortValueListBatchInOneWalGroup(0, shortValueList, xForBinlog)
         then:
         1 == 1
 
