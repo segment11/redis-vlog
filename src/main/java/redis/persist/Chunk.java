@@ -355,13 +355,14 @@ public class Chunk {
         var fdIndex = targetFdIndex(firstSegmentIndex);
         var segmentIndexTargetFd = targetSegmentIndexTargetFd(firstSegmentIndex);
 
+        // never cross fd files because prepare batch segments to write
         var fdReadWrite = fdReadWriteArray[fdIndex];
 
         if (ConfForSlot.global.pureMemory) {
             isNewAppendAfterBatch = fdReadWrite.isTargetSegmentIndexNullInMemory(segmentIndexTargetFd);
             for (var segment : segments) {
                 var bytes = segment.tightBytesWithLength();
-                fdReadWrite.writeOneInner(targetFdIndex(segment.segmentIndex()), bytes, false);
+                fdReadWrite.writeOneInner(targetSegmentIndexTargetFd(segment.segmentIndex()), bytes, false);
 
                 xForBinlog.putUpdatedChunkSegmentBytes(segment.segmentIndex(), bytes);
                 xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segment.segmentIndex(),
