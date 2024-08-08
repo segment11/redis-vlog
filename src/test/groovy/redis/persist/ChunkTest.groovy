@@ -4,6 +4,7 @@ import jnr.ffi.LibraryLoader
 import jnr.posix.LibC
 import redis.ConfForSlot
 import redis.SnowFlake
+import redis.repl.incremental.XOneWalGroupPersist
 import spock.lang.Specification
 
 class ChunkTest extends Specification {
@@ -22,10 +23,13 @@ class ChunkTest extends Specification {
         chunk
     }
 
+    final byte slot = 0
+
     def 'test base'() {
         given:
         def flagInit = Chunk.Flag.init
         println flagInit
+        println flagInit.flagByte()
         println new Chunk.SegmentFlag(flagInit, 1L, 0)
 
         expect:
@@ -48,7 +52,6 @@ class ChunkTest extends Specification {
 
     def 'test segment index'() {
         given:
-        final byte slot = 0
         def chunk = prepareOne(slot)
         def oneSlot = chunk.oneSlot
         def confChunk = ConfForSlot.global.confChunk
@@ -173,7 +176,6 @@ class ChunkTest extends Specification {
 
     def 'test reuse segments'() {
         given:
-        final byte slot = 0
         def chunk = prepareOne(slot)
         def oneSlot = chunk.oneSlot
 
@@ -224,7 +226,6 @@ class ChunkTest extends Specification {
 
     def 'test pread'() {
         given:
-        final byte slot = 0
         def chunk = prepareOne(slot)
         def oneSlot = chunk.oneSlot
 
@@ -266,7 +267,6 @@ class ChunkTest extends Specification {
 
     def 'test persist'() {
         given:
-        final byte slot = 0
         def chunk = prepareOne(slot, true)
         def oneSlot = chunk.oneSlot
         def confChunk = ConfForSlot.global.confChunk
@@ -276,10 +276,12 @@ class ChunkTest extends Specification {
         def libC = LibraryLoader.create(LibC.class).load('c')
         chunk.initFds(libC)
 
+        def xForBinlog = new XOneWalGroupPersist(true, 0)
+
         when:
         def vList = Mock.prepareValueList(100)
         chunk.segmentIndex = 0
-        def r = chunk.persist(0, vList, false)
+        def r = chunk.persist(0, vList, false, xForBinlog)
         then:
         chunk.segmentIndex == 1
         r.size() == 0
@@ -291,7 +293,7 @@ class ChunkTest extends Specification {
         }
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(0, blankSeqList.size(), Chunk.Flag.init, blankSeqList, 0)
         chunk.segmentIndex = 0
-        r = chunk.persist(0, vList, true)
+        r = chunk.persist(0, vList, true, xForBinlog)
         then:
         chunk.segmentIndex == 1
         r.size() == 0
@@ -300,7 +302,7 @@ class ChunkTest extends Specification {
         chunk.segmentIndex = confChunk.maxSegmentNumber() - 10
         boolean exception = false
         try {
-            chunk.persist(0, vList, false)
+            chunk.persist(0, vList, false, xForBinlog)
         } catch (SegmentOverflowException ignore) {
             exception = true
         }
@@ -310,7 +312,7 @@ class ChunkTest extends Specification {
         when:
         exception = false
         try {
-            chunk.persist(0, vList, true)
+            chunk.persist(0, vList, true, xForBinlog)
         } catch (SegmentOverflowException ignore) {
             exception = true
         }
@@ -324,7 +326,7 @@ class ChunkTest extends Specification {
         (1..<16).each {
             vListManyCount.addAll Mock.prepareValueList(100, it)
         }
-        chunk.persist(0, vListManyCount, false)
+        chunk.persist(0, vListManyCount, false, xForBinlog)
         then:
         chunk.segmentIndex > FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE
 
@@ -334,7 +336,7 @@ class ChunkTest extends Specification {
         chunk.mergedSegmentIndexEndLastTime = halfSegmentNumber - 1
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(0, blankSeqList.size(), Chunk.Flag.merged_and_persisted, blankSeqList, 0)
         chunk.segmentIndex = 0
-        r = chunk.persist(0, vListManyCount, false)
+        r = chunk.persist(0, vListManyCount, false, xForBinlog)
         then:
         chunk.segmentIndex > FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE
         r.size() == chunk.segmentIndex
@@ -343,7 +345,7 @@ class ChunkTest extends Specification {
         chunk.fdLengths[0] = 0
         chunk.mergedSegmentIndexEndLastTime = Chunk.NO_NEED_MERGE_SEGMENT_INDEX
         chunk.segmentIndex = halfSegmentNumber
-        r = chunk.persist(0, vList, false)
+        r = chunk.persist(0, vList, false, xForBinlog)
         then:
         r.size() > 0
 
@@ -364,9 +366,14 @@ class ChunkTest extends Specification {
         }
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(0, blankSeqListMany.size(), Chunk.Flag.init, blankSeqListMany, 0)
         chunk.segmentIndex = 0
-        chunk.persist(0, vListManyCount, false)
+        chunk.persist(0, vListManyCount, false, xForBinlog)
         then:
         chunk.segmentIndex > FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE
+
+        when:
+        chunk.writeSegmentToTargetSegmentIndex(new byte[4096], 0)
+        then:
+        chunk.segmentIndex == 0
 
         cleanup:
         ConfForSlot.global.pureMemory = false
@@ -376,5 +383,38 @@ class ChunkTest extends Specification {
         oneSlot.metaChunkSegmentFlagSeq.clear()
         oneSlot.metaChunkSegmentFlagSeq.cleanUp()
         Consts.slotDir.deleteDir()
+    }
+
+    def 'test repl'() {
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+        def chunk = oneSlot.chunk
+
+        when:
+        def replBytes = new byte[4096]
+        chunk.writeSegmentsFromMasterExists(replBytes, 0, 1)
+        then:
+        1 == 1
+
+        when:
+        ConfForSlot.global.pureMemory = true
+        for (fdReadWrite in chunk.fdReadWriteArray) {
+            fdReadWrite.initByteBuffers(true)
+        }
+        chunk.writeSegmentsFromMasterExists(replBytes, 0, 1)
+        then:
+        1 == 1
+
+        when:
+        def replBytes2 = new byte[4096 * 2]
+        chunk.writeSegmentsFromMasterExists(replBytes2, 0, 2)
+        then:
+        1 == 1
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 }
