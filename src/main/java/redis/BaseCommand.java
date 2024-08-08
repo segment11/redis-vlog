@@ -598,7 +598,7 @@ public abstract class BaseCommand {
             compressStats.compressedCostTimeTotalUs += costT;
 
             if (ConfForSlot.global.isOnDynTrainDictForCompression) {
-                if (dict != null && dict == Dict.SELF_ZSTD_DICT) {
+                if (dict == Dict.SELF_ZSTD_DICT) {
                     // add train sample list
                     if (sampleToTrainList.size() < trainSampleListMaxSize) {
                         var kv = new TrainSampleJob.TrainSampleKV(key, null, cv.seq, valueBytes);
