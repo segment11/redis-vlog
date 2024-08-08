@@ -1099,17 +1099,17 @@ public class OneSlot {
 
         // find continuous segments those wal group index is same from need merge segment index
         // * 4 make sure to find one
-        int untilSegmentCount = Math.min(Math.max(walGroupNumber * 4, (chunk.maxSegmentIndex + 1) / 4), 16384);
+        int nextSegmentCount = Math.min(Math.max(walGroupNumber * 4, (chunk.maxSegmentIndex + 1) / 4), 16384);
         final int[] firstSegmentIndexWithReadSegmentCountArray = metaChunkSegmentFlagSeq.iterateAndFindThoseNeedToMerge(
-                needMergeSegmentIndex, untilSegmentCount, walGroupIndex, chunk);
+                needMergeSegmentIndex, nextSegmentCount, walGroupIndex, chunk);
 
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;
 
-        // always consider first / last segments
+        // always consider first 10 and last 10 segments
         if (firstSegmentIndexWithReadSegmentCountArray[0] == NO_NEED_MERGE_SEGMENT_INDEX) {
             final int[] arrayLastN = metaChunkSegmentFlagSeq.iterateAndFindThoseNeedToMerge(
-                    chunk.maxSegmentIndex - ONCE_PREPARE_SEGMENT_COUNT, chunk.maxSegmentIndex, walGroupIndex, chunk);
+                    chunk.maxSegmentIndex - ONCE_PREPARE_SEGMENT_COUNT, ONCE_PREPARE_SEGMENT_COUNT, walGroupIndex, chunk);
             if (arrayLastN[0] != NO_NEED_MERGE_SEGMENT_INDEX) {
                 firstSegmentIndexWithReadSegmentCountArray[0] = arrayLastN[0];
                 firstSegmentIndexWithReadSegmentCountArray[1] = arrayLastN[1];
@@ -1134,13 +1134,13 @@ public class OneSlot {
         var segmentCount = firstSegmentIndexWithReadSegmentCountArray[1];
         var segmentBytesBatchRead = preadForMerge(firstSegmentIndex, segmentCount);
 
-        ArrayList<Integer> segmentIndexList = new ArrayList<>(segmentCount);
+        ArrayList<Integer> segmentIndexList = new ArrayList<>();
         ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE * 10);
 
         for (int i = 0; i < segmentCount; i++) {
             var segmentIndex = firstSegmentIndex + i;
             var segmentFlag = getSegmentMergeFlag(segmentIndex);
-            // need check again ?
+            // need check again, because batch read, only check first segment wal group index
             if (segmentFlag.walGroupIndex() != walGroupIndex) {
                 continue;
             }
@@ -1194,6 +1194,10 @@ public class OneSlot {
                 for (var one : cvList) {
                     var cv = one.cv;
                     var bucketIndex = KeyHash.bucketIndex(cv.getKeyHash(), keyLoader.bucketsPerSlot);
+                    var extWalGroupIndex = Wal.calWalGroupIndex(bucketIndex);
+                    if (extWalGroupIndex != walGroupIndex) {
+                        throw new IllegalStateException("Wal group index not match, s=" + slot + ", wal group index=" + walGroupIndex + ", ext wal group index=" + extWalGroupIndex);
+                    }
                     list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                             one.key, cv.encode(), true));
                 }
