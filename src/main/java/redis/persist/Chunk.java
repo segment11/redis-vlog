@@ -7,6 +7,7 @@ import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
+import redis.repl.incremental.XOneWalGroupPersist;
 
 import java.io.File;
 import java.io.IOException;
@@ -251,11 +252,15 @@ public class Chunk {
 
         final byte flagByte;
 
+        public byte flagByte() {
+            return flagByte;
+        }
+
         Flag(byte flagByte) {
             this.flagByte = flagByte;
         }
 
-        static Flag fromFlagByte(byte flagByte) {
+        public static Flag fromFlagByte(byte flagByte) {
             for (var f : values()) {
                 if (f.flagByte == flagByte) {
                     return f;
@@ -311,11 +316,11 @@ public class Chunk {
     public static int ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 16;
 
     // return need merge segment index array
-    public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge) {
+    public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge, XOneWalGroupPersist xForBinlog) {
         logMergeCount++;
         var doLog = (Debug.getInstance().logMerge && logMergeCount % 1000 == 0);
 
-        moveIndexForPrepare();
+        moveSegmentIndexForPrepare();
         if (isMerge) {
             boolean canWrite = reuseSegments(false, ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE, false);
             if (!canWrite) {
@@ -355,20 +360,23 @@ public class Chunk {
         if (ConfForSlot.global.pureMemory) {
             isNewAppendAfterBatch = fdReadWrite.isTargetSegmentIndexNullInMemory(segmentIndexTargetFd);
             for (var segment : segments) {
-                byte[] bytes = segment.tightBytesWithLength();
+                var bytes = segment.tightBytesWithLength();
                 fdReadWrite.writeOneInner(targetFdIndex(segment.segmentIndex()), bytes, false);
+
+                xForBinlog.putUpdatedChunkSegmentBytes(segment.segmentIndex(), bytes);
+                xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segment.segmentIndex(),
+                        isNewAppendAfterBatch ? Flag.new_write : Flag.reuse_new, segment.segmentSeq());
             }
 
             oneSlot.setSegmentMergeFlagBatch(segmentIndex, segments.size(),
                     isNewAppendAfterBatch ? Flag.new_write : Flag.reuse_new, segmentSeqListAll, walGroupIndex);
+
             moveSegmentIndexNext(segments.size());
         } else {
             if (segments.size() < BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
                 for (var segment : segments) {
-                    List<Long> segmentSeqListSubBatch = new ArrayList<>();
-                    segmentSeqListSubBatch.add(segment.segmentSeq());
-
-                    boolean isNewAppend = writeSegments(segment.tightBytesWithLength(), 1);
+                    var bytes = segment.tightBytesWithLength();
+                    boolean isNewAppend = writeSegments(bytes, 1);
                     isNewAppendAfterBatch = isNewAppend;
 
                     // need set segment flag so that merge worker can merge
@@ -376,6 +384,10 @@ public class Chunk {
                             isNewAppend ? Flag.new_write : Flag.reuse_new, segment.segmentSeq(), walGroupIndex);
 
                     moveSegmentIndexNext(1);
+
+                    xForBinlog.putUpdatedChunkSegmentBytes(segment.segmentIndex(), bytes);
+                    xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segment.segmentIndex(),
+                            isNewAppend ? Flag.new_write : Flag.reuse_new, segment.segmentSeq());
                 }
             } else {
                 // batch write
@@ -394,15 +406,17 @@ public class Chunk {
                     List<Long> segmentSeqListSubBatch = new ArrayList<>();
                     for (int j = 0; j < BATCH_ONCE_SEGMENT_COUNT_PWRITE; j++) {
                         var segment = segments.get(i * BATCH_ONCE_SEGMENT_COUNT_PWRITE + j);
-                        var tightBytesWithLength = segment.tightBytesWithLength();
-                        buffer.put(tightBytesWithLength);
+                        var bytes = segment.tightBytesWithLength();
+                        buffer.put(bytes);
 
                         // padding to segment length
-                        if (tightBytesWithLength.length < chunkSegmentLength) {
-                            buffer.position(buffer.position() + chunkSegmentLength - tightBytesWithLength.length);
+                        if (bytes.length < chunkSegmentLength) {
+                            buffer.position(buffer.position() + chunkSegmentLength - bytes.length);
                         }
 
                         segmentSeqListSubBatch.add(segment.segmentSeq());
+
+                        xForBinlog.putUpdatedChunkSegmentBytes(segment.segmentIndex(), bytes);
                     }
 
                     boolean isNewAppend = writeSegments(tmpBatchBytes, BATCH_ONCE_SEGMENT_COUNT_PWRITE);
@@ -412,17 +426,25 @@ public class Chunk {
                     oneSlot.setSegmentMergeFlagBatch(segmentIndex, BATCH_ONCE_SEGMENT_COUNT_PWRITE,
                             isNewAppend ? Flag.new_write : Flag.reuse_new, segmentSeqListSubBatch, walGroupIndex);
 
+                    for (int j = 0; j < BATCH_ONCE_SEGMENT_COUNT_PWRITE; j++) {
+                        var segment = segments.get(i * BATCH_ONCE_SEGMENT_COUNT_PWRITE + j);
+
+                        xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segment.segmentIndex(),
+                                isNewAppend ? Flag.new_write : Flag.reuse_new, segment.segmentSeq());
+                    }
+
                     moveSegmentIndexNext(BATCH_ONCE_SEGMENT_COUNT_PWRITE);
                 }
 
                 for (int i = 0; i < remainCount; i++) {
                     var segment = segments.get(batchCount * BATCH_ONCE_SEGMENT_COUNT_PWRITE + i);
-
-                    List<Long> segmentSeqListSubBatch = new ArrayList<>();
-                    segmentSeqListSubBatch.add(segment.segmentSeq());
-
-                    boolean isNewAppend = writeSegments(segment.tightBytesWithLength(), 1);
+                    var bytes = segment.tightBytesWithLength();
+                    boolean isNewAppend = writeSegments(bytes, 1);
                     isNewAppendAfterBatch = isNewAppend;
+
+                    xForBinlog.putUpdatedChunkSegmentBytes(segment.segmentIndex(), bytes);
+                    xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segment.segmentIndex(),
+                            isNewAppend ? Flag.new_write : Flag.reuse_new, segment.segmentSeq());
 
                     // need set segment flag so that merge worker can merge
                     oneSlot.setSegmentMergeFlag(segment.segmentIndex(),
@@ -438,19 +460,13 @@ public class Chunk {
         persistCvCountTotal += list.size();
 
         var beginT = System.nanoTime();
-        keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, pvmList);
+        keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, pvmList, xForBinlog);
         var costT = (System.nanoTime() - beginT) / 1000;
-        if (costT == 0) {
-            costT = 1;
-        }
         updatePvmBatchCostTimeTotalUsTotal += costT;
 
         // update meta, segment index for next time
         oneSlot.setChunkWriteSegmentIndex(segmentIndex);
-
-        if (oneSlot.binlog != null) {
-            // todo
-        }
+        xForBinlog.setChunkSegmentIndexAfterPersist(segmentIndex);
 
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
         if (isMerge) {
@@ -590,7 +606,7 @@ public class Chunk {
 
     private long logMergeCount = 0;
 
-    private void moveIndexForPrepare() {
+    private void moveSegmentIndexForPrepare() {
         int leftSegmentCountThisFd = segmentNumberPerFd - segmentIndex % segmentNumberPerFd;
         if (leftSegmentCountThisFd < ONCE_PREPARE_SEGMENT_COUNT) {
             // begin with next fd
@@ -667,6 +683,11 @@ public class Chunk {
             this.segmentIndex = segmentIndex;
             return writeSegments(bytes, segmentCount);
         }
+    }
+
+    public boolean writeSegmentToTargetSegmentIndex(byte[] bytes, int targetSegmentIndex) {
+        this.segmentIndex = targetSegmentIndex;
+        return writeSegments(bytes, 1);
     }
 
     private boolean writeSegments(byte[] bytes, int segmentCount) {

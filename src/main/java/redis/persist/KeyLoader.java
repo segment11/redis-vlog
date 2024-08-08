@@ -6,6 +6,7 @@ import redis.ConfForSlot;
 import redis.KeyHash;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
+import redis.repl.incremental.XOneWalGroupPersist;
 
 import java.io.File;
 import java.io.IOException;
@@ -64,7 +65,7 @@ public class KeyLoader {
         return metaKeyBucketSplitNumber.getBatch(beginBucketIndex, bucketCount);
     }
 
-    boolean updateMetaKeyBucketSplitNumberBatchIfChanged(int beginBucketIndex, byte[] splitNumberArray) {
+    public boolean updateMetaKeyBucketSplitNumberBatchIfChanged(int beginBucketIndex, byte[] splitNumberArray) {
         if (beginBucketIndex < 0 || beginBucketIndex >= bucketsPerSlot) {
             throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
         }
@@ -144,7 +145,7 @@ public class KeyLoader {
         log.warn("Repl overwrite stat key count in buckets bytes from master exists, slot: {}", slot);
     }
 
-    void updateKeyCountBatchCached(int[] keyCountTmp, int beginBucketIndex) {
+    public void updateKeyCountBatchCached(int beginBucketIndex, int[] keyCountTmp) {
         if (beginBucketIndex < 0 || beginBucketIndex + keyCountTmp.length > bucketsPerSlot) {
             throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
         }
@@ -402,35 +403,39 @@ public class KeyLoader {
         return fdReadWrite.readKeyBucketsSharedBytesInOneWalGroup(beginBucketIndex);
     }
 
-    public void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList) {
+    private void doAfterPutAll(int walGroupIndex, XOneWalGroupPersist xForBinlog, KeyBucketsInOneWalGroup inner) {
+        updateKeyCountBatchCached(inner.beginBucketIndex, inner.keyCountForStatsTmp);
+        xForBinlog.setKeyCountForStatsTmp(inner.keyCountForStatsTmp);
+
+        var sharedBytesList = inner.writeAfterPutBatch();
+        writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
+        xForBinlog.setSharedBytesListBySplitIndex(sharedBytesList);
+
+        updateMetaKeyBucketSplitNumberBatchIfChanged(inner.beginBucketIndex, inner.splitNumberTmp);
+        xForBinlog.setSplitNumberAfterPut(inner.splitNumberTmp);
+
+        if (oneSlot != null) {
+            oneSlot.clearKvLRUByWalGroupIndex(walGroupIndex);
+        }
+    }
+
+    public void updatePvmListBatchAfterWriteSegments(int walGroupIndex, ArrayList<PersistValueMeta> pvmList, XOneWalGroupPersist xForBinlog) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
+        xForBinlog.setBeginBucketIndex(inner.beginBucketIndex);
+
         inner.putAllPvmList(pvmList);
-        updateKeyCountBatchCached(inner.keyCountForStatsTmp, inner.beginBucketIndex);
-
-        var sharedBytesList = inner.writeAfterPutBatch();
-        writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
-        updateMetaKeyBucketSplitNumberBatchIfChanged(inner.beginBucketIndex, inner.splitNumberTmp);
-
-        if (oneSlot != null) {
-            oneSlot.clearKvLRUByWalGroupIndex(walGroupIndex);
-        }
+        doAfterPutAll(walGroupIndex, xForBinlog, inner);
     }
 
-    public void persistShortValueListBatchInOneWalGroup(int walGroupIndex, Collection<Wal.V> shortValueList) {
+    public void persistShortValueListBatchInOneWalGroup(int walGroupIndex, Collection<Wal.V> shortValueList, XOneWalGroupPersist xForBinlog) {
         var inner = new KeyBucketsInOneWalGroup(slot, walGroupIndex, this);
+        xForBinlog.setBeginBucketIndex(inner.beginBucketIndex);
+
         inner.putAll(shortValueList);
-        updateKeyCountBatchCached(inner.keyCountForStatsTmp, inner.beginBucketIndex);
-
-        var sharedBytesList = inner.writeAfterPutBatch();
-        writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
-        updateMetaKeyBucketSplitNumberBatchIfChanged(inner.beginBucketIndex, inner.splitNumberTmp);
-
-        if (oneSlot != null) {
-            oneSlot.clearKvLRUByWalGroupIndex(walGroupIndex);
-        }
+        doAfterPutAll(walGroupIndex, xForBinlog, inner);
     }
 
-    void writeSharedBytesList(byte[][] sharedBytesListBySplitIndex, int beginBucketIndex) {
+    public void writeSharedBytesList(byte[][] sharedBytesListBySplitIndex, int beginBucketIndex) {
         for (int splitIndex = 0; splitIndex < sharedBytesListBySplitIndex.length; splitIndex++) {
             var sharedBytes = sharedBytesListBySplitIndex[splitIndex];
             if (sharedBytes == null) {

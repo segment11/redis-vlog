@@ -263,7 +263,7 @@ public class Wal {
     long clearShortValuesCount = 0;
     long clearValuesCount = 0;
 
-    void clearShortValues() {
+    public void clearShortValues() {
         delayToKeyBucketShortValues.clear();
         resetWal(true);
 
@@ -273,7 +273,7 @@ public class Wal {
         }
     }
 
-    void clearValues() {
+    public void clearValues() {
         delayToKeyBucketValues.clear();
         resetWal(false);
 

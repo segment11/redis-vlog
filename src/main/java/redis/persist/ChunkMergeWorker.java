@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.Debug;
 import redis.metric.SimpleGauge;
+import redis.repl.incremental.XOneWalGroupPersist;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -168,9 +169,10 @@ public class ChunkMergeWorker {
                         key, cv.encode(), true));
             }
 
+            var xForBinlog = new XOneWalGroupPersist(false, walGroupIndex);
             // refer Chunk.ONCE_PREPARE_SEGMENT_COUNT
             // list size is not large, need not multi batch persist
-            oneSlot.chunk.persist(walGroupIndex, list, true);
+            oneSlot.chunk.persist(walGroupIndex, list, true, xForBinlog);
         }
 
         if (doLog) {

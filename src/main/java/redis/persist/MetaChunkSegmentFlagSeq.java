@@ -231,7 +231,7 @@ public class MetaChunkSegmentFlagSeq {
         return list;
     }
 
-    void setSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex) {
+    public void setSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex) {
         var offset = segmentIndex * ONE_LENGTH;
         var bytes = new byte[ONE_LENGTH];
         ByteBuffer wrap = ByteBuffer.wrap(bytes);
@@ -253,7 +253,7 @@ public class MetaChunkSegmentFlagSeq {
         }
     }
 
-    void setSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount, Flag flag, List<Long> segmentSeqList, int walGroupIndex) {
+    public void setSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount, Flag flag, List<Long> segmentSeqList, int walGroupIndex) {
         var bytes = new byte[segmentCount * ONE_LENGTH];
         var wrap = ByteBuffer.wrap(bytes);
         for (int i = 0; i < segmentCount; i++) {

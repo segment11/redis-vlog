@@ -21,6 +21,7 @@ import redis.repl.ReplPair;
 import redis.repl.ReplType;
 import redis.repl.content.RawBytesContent;
 import redis.repl.incremental.XBigStrings;
+import redis.repl.incremental.XOneWalGroupPersist;
 import redis.repl.incremental.XWalV;
 import redis.task.ITask;
 import redis.task.TaskChain;
@@ -524,6 +525,10 @@ public class OneSlot {
 
     private LibC libC;
     Chunk chunk;
+
+    public Chunk getChunk() {
+        return chunk;
+    }
 
     MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
 
@@ -1167,85 +1172,97 @@ public class OneSlot {
 
     void persistWal(boolean isShortValue, Wal targetWal) {
         var walGroupIndex = targetWal.groupIndex;
+        var xForBinlog = new XOneWalGroupPersist(isShortValue, walGroupIndex);
         if (isShortValue) {
-            keyLoader.persistShortValueListBatchInOneWalGroup(walGroupIndex, targetWal.delayToKeyBucketShortValues.values());
-        } else {
-            var delayToKeyBucketValues = targetWal.delayToKeyBucketValues;
-            var list = new ArrayList<>(delayToKeyBucketValues.values());
-            // sort by bucket index for future merge better
-            list.sort(Comparator.comparingInt(Wal.V::bucketIndex));
+            keyLoader.persistShortValueListBatchInOneWalGroup(walGroupIndex, targetWal.delayToKeyBucketShortValues.values(), xForBinlog);
+            return;
+        }
 
-            var ext = readSomeSegmentsBeforePersistWal(walGroupIndex);
-            var ext2 = chunkMergeWorker.getMergedButNotPersistedBeforePersistWal(walGroupIndex);
+        var delayToKeyBucketValues = targetWal.delayToKeyBucketValues;
+        var list = new ArrayList<>(delayToKeyBucketValues.values());
+        // sort by bucket index for future merge better
+        list.sort(Comparator.comparingInt(Wal.V::bucketIndex));
 
-            // remove those wal exist
-            if (ext != null) {
-                var cvList = ext.cvList;
-                cvList.removeIf(one -> delayToKeyBucketValues.containsKey(one.key));
-                if (!cvList.isEmpty()) {
-                    for (var one : cvList) {
-                        var cv = one.cv;
-                        var bucketIndex = KeyHash.bucketIndex(cv.getKeyHash(), keyLoader.bucketsPerSlot);
-                        list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
-                                one.key, cv.encode(), true));
-                    }
+        var ext = readSomeSegmentsBeforePersistWal(walGroupIndex);
+        var ext2 = chunkMergeWorker.getMergedButNotPersistedBeforePersistWal(walGroupIndex);
+
+        // remove those wal exist
+        if (ext != null) {
+            var cvList = ext.cvList;
+            cvList.removeIf(one -> delayToKeyBucketValues.containsKey(one.key));
+            if (!cvList.isEmpty()) {
+                for (var one : cvList) {
+                    var cv = one.cv;
+                    var bucketIndex = KeyHash.bucketIndex(cv.getKeyHash(), keyLoader.bucketsPerSlot);
+                    list.add(new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
+                            one.key, cv.encode(), true));
                 }
             }
+        }
 
-            if (ext2 != null) {
-                var vList = ext2.vList;
-                vList.removeIf(one -> delayToKeyBucketValues.containsKey(one.key()));
-                if (!vList.isEmpty()) {
-                    list.addAll(vList);
+        if (ext2 != null) {
+            var vList = ext2.vList;
+            vList.removeIf(one -> delayToKeyBucketValues.containsKey(one.key()));
+            if (!vList.isEmpty()) {
+                list.addAll(vList);
+            }
+        }
+
+        if (list.size() > 1000 * 4) {
+            log.warn("Ready to persist wal with merged valid cv list, too large, s={}, wal group index={}, list size={}",
+                    slot, walGroupIndex, list.size());
+        }
+
+        var needMergeSegmentIndexList = chunk.persist(walGroupIndex, list, false, xForBinlog);
+        if (needMergeSegmentIndexList == null) {
+            throw new IllegalStateException("Persist error, need merge segment index list is null, slot: " + slot);
+        }
+
+        if (ext != null && !ext.isEmpty()) {
+            var segmentIndexList = ext.segmentIndexList;
+            // continuous segment index
+            if (segmentIndexList.getLast() - segmentIndexList.getFirst() == segmentIndexList.size() - 1) {
+                List<Long> seq0List = new ArrayList<>(segmentIndexList.size());
+                for (var ignored : segmentIndexList) {
+                    seq0List.add(0L);
                 }
-            }
+                setSegmentMergeFlagBatch(segmentIndexList.getFirst(), segmentIndexList.size(), Flag.merged_and_persisted, seq0List, walGroupIndex);
 
-            if (list.size() > 1000 * 4) {
-                log.warn("Ready to persist wal with merged valid cv list, too large, s={}, wal group index={}, list size={}",
-                        slot, walGroupIndex, list.size());
-            }
-
-            var needMergeSegmentIndexList = chunk.persist(walGroupIndex, list, false);
-            if (needMergeSegmentIndexList == null) {
-                throw new IllegalStateException("Persist error, need merge segment index list is null, slot: " + slot);
-            }
-
-            if (ext != null && !ext.isEmpty()) {
-                var segmentIndexList = ext.segmentIndexList;
-                // continuous segment index
-                if (segmentIndexList.getLast() - segmentIndexList.getFirst() == segmentIndexList.size() - 1) {
-                    List<Long> seq0List = new ArrayList<>(segmentIndexList.size());
-                    for (var ignored : segmentIndexList) {
-                        seq0List.add(0L);
-                    }
-                    setSegmentMergeFlagBatch(segmentIndexList.getFirst(), segmentIndexList.size(), Flag.merged_and_persisted, seq0List, walGroupIndex);
-                } else {
-                    for (var segmentIndex : segmentIndexList) {
-                        setSegmentMergeFlag(segmentIndex, Flag.merged_and_persisted, 0L, walGroupIndex);
-                    }
+                for (var segmentIndex : segmentIndexList) {
+                    xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segmentIndex, Flag.merged_and_persisted, 0L);
                 }
-
-                // do not remove, keep segment index continuous, chunk merge job will skip as flag is merged and persisted
-//                needMergeSegmentIndexList.removeIf(segmentIndexList::contains);
-            }
-
-            if (ext2 != null) {
-                var segmentIndexList = ext2.segmentIndexList;
-                // usually not continuous
+            } else {
                 for (var segmentIndex : segmentIndexList) {
                     setSegmentMergeFlag(segmentIndex, Flag.merged_and_persisted, 0L, walGroupIndex);
+                    xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segmentIndex, Flag.merged_and_persisted, 0L);
                 }
-
-                chunkMergeWorker.removeMergedButNotPersistedAfterPersistWal(segmentIndexList, walGroupIndex);
             }
 
-            if (!needMergeSegmentIndexList.isEmpty()) {
-                doMergeJob(needMergeSegmentIndexList);
-                checkFirstMergedButNotPersistedSegmentIndexTooNear();
-            }
-
-            checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
+            // do not remove, keep segment index continuous, chunk merge job will skip as flag is merged and persisted
+//                needMergeSegmentIndexList.removeIf(segmentIndexList::contains);
         }
+
+        if (ext2 != null) {
+            var segmentIndexList = ext2.segmentIndexList;
+            // usually not continuous
+            for (var segmentIndex : segmentIndexList) {
+                setSegmentMergeFlag(segmentIndex, Flag.merged_and_persisted, 0L, walGroupIndex);
+                xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segmentIndex, Flag.merged_and_persisted, 0L);
+            }
+
+            chunkMergeWorker.removeMergedButNotPersistedAfterPersistWal(segmentIndexList, walGroupIndex);
+        }
+
+        if (binlog != null) {
+            binlog.append(xForBinlog);
+        }
+
+        if (!needMergeSegmentIndexList.isEmpty()) {
+            doMergeJob(needMergeSegmentIndexList);
+            checkFirstMergedButNotPersistedSegmentIndexTooNear();
+        }
+
+        checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
     }
 
     private void checkFirstMergedButNotPersistedSegmentIndexTooNear() {

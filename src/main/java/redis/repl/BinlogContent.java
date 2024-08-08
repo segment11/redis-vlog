@@ -7,8 +7,8 @@ import java.nio.ByteBuffer;
 public interface BinlogContent {
     enum Type {
         // code need > 0
-        wal((byte) 1), chunk_segments((byte) 2), key_buckets((byte) 3),
-        big_strings((byte) 4), dict((byte) 100), dyn_config(Byte.MAX_VALUE);
+        wal((byte) 1), one_wal_group_persist((byte) 2),
+        big_strings((byte) 10), dict((byte) 100), dyn_config(Byte.MAX_VALUE);
 
         private final byte code;
 
@@ -33,10 +33,8 @@ public interface BinlogContent {
             switch (this) {
                 case wal:
                     return XWalV.decodeFrom(buffer);
-                case chunk_segments:
-                    return XChunkSegments.decodeFrom(buffer);
-                case key_buckets:
-                    return XKeyBuckets.decodeFrom(buffer);
+                case one_wal_group_persist:
+                    return XOneWalGroupPersist.decodeFrom(buffer);
                 case big_strings:
                     return XBigStrings.decodeFrom(buffer);
                 case dict:
