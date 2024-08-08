@@ -5,6 +5,7 @@ import spock.lang.Specification
 
 import static redis.persist.Chunk.NO_NEED_MERGE_SEGMENT_INDEX
 import static redis.persist.Consts.getSlotDir
+import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE
 
 class MetaChunkSegmentFlagSeqTest extends Specification {
     final byte slot = 0
@@ -204,16 +205,26 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         def r2 = one.iterateAndFindThoseNeedToMerge(1024, 1024 * 10, targetWalGroupIndex, chunk)
         then:
         r2[0] == 1024
-        r2[1] == FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE
+        r2[1] == 1
 
         when:
         one.setSegmentMergeFlag(1024, Chunk.Flag.reuse_new, 1L, targetWalGroupIndex)
         r2 = one.iterateAndFindThoseNeedToMerge(1024, 1024 * 10, targetWalGroupIndex, chunk)
         then:
         r2[0] == 1024
-        r2[1] == FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE
+        r2[1] == 1
 
         when:
+        (BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE + 1).times {
+            one.setSegmentMergeFlag(1024 + it, Chunk.Flag.reuse_new, 1L, targetWalGroupIndex)
+        }
+        r2 = one.iterateAndFindThoseNeedToMerge(1024, 1024 * 10, targetWalGroupIndex, chunk)
+        then:
+        r2[0] == 1024
+        r2[1] == BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE
+
+        when:
+        // cross fd
         one.setSegmentMergeFlag(confChunk.segmentNumberPerFd - 1, Chunk.Flag.reuse_new, 1L, targetWalGroupIndex)
         one.setSegmentMergeFlag(confChunk.segmentNumberPerFd, Chunk.Flag.reuse_new, 1L, targetWalGroupIndex)
         r2 = one.iterateAndFindThoseNeedToMerge(confChunk.segmentNumberPerFd - 1, 1024 * 10, targetWalGroupIndex, chunk)

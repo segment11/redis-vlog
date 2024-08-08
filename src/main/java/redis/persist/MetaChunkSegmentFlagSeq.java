@@ -22,17 +22,24 @@ public class MetaChunkSegmentFlagSeq {
     // flag byte + seq long + wal group index int
     public static final int ONE_LENGTH = 1 + 8 + 4;
 
+    private static final int INIT_WAL_GROUP_INDEX = -1;
+
     private final byte slot;
     private final int maxSegmentNumber;
     final int allCapacity;
     private RandomAccessFile raf;
 
     private static void fillSegmentFlagInit(byte[] innerBytes) {
-        var innerBuffer = ByteBuffer.wrap(innerBytes);
+        var initBytes = new byte[ONE_LENGTH];
+        var initBuffer = ByteBuffer.wrap(initBytes);
+        initBuffer.put(Flag.init.flagByte);
+        initBuffer.putLong(0L);
+        initBuffer.putInt(INIT_WAL_GROUP_INDEX);
+
         var times = innerBytes.length / ONE_LENGTH;
+        var innerBuffer = ByteBuffer.wrap(innerBytes);
         for (int i = 0; i < times; i++) {
-            innerBuffer.put(Flag.init.flagByte);
-            innerBuffer.position(innerBuffer.position() + 8 + 4);
+            innerBuffer.put(initBytes);
         }
     }
 
@@ -116,12 +123,9 @@ public class MetaChunkSegmentFlagSeq {
     int[] iterateAndFindThoseNeedToMerge(int beginSegmentIndex, int nextSegmentCount, int targetWalGroupIndex, Chunk chunk) {
         var findSegmentIndexWithSegmentCount = new int[]{NO_NEED_MERGE_SEGMENT_INDEX, 0};
 
+        int segmentCount = 0;
         var end = Math.min(beginSegmentIndex + nextSegmentCount, maxSegmentNumber);
         for (int segmentIndex = beginSegmentIndex; segmentIndex < end; segmentIndex++) {
-            if (findSegmentIndexWithSegmentCount[0] != NO_NEED_MERGE_SEGMENT_INDEX) {
-                break;
-            }
-
             var offset = segmentIndex * ONE_LENGTH;
 
             var flagByte = inMemoryCachedByteBuffer.get(offset);
@@ -129,24 +133,36 @@ public class MetaChunkSegmentFlagSeq {
 //            var segmentSeq = inMemoryCachedByteBuffer.getLong(offset + 1);
             var walGroupIndex = inMemoryCachedByteBuffer.getInt(offset + 1 + 8);
             if (walGroupIndex != targetWalGroupIndex) {
+                // already find at least one segment with the same wal group index
+                if (findSegmentIndexWithSegmentCount[0] != NO_NEED_MERGE_SEGMENT_INDEX) {
+                    break;
+                }
                 continue;
             }
 
             if (flag == Flag.new_write || flag == Flag.reuse_new) {
-                findSegmentIndexWithSegmentCount[0] = segmentIndex;
+                // only set first segment index
+                if (findSegmentIndexWithSegmentCount[0] == NO_NEED_MERGE_SEGMENT_INDEX) {
+                    findSegmentIndexWithSegmentCount[0] = segmentIndex;
+                }
+                segmentCount++;
 
-                int segmentCount = Math.min(BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE, chunk.maxSegmentIndex - segmentIndex + 1);
-                var targetFdIndex = chunk.targetFdIndex(segmentIndex);
-                var targetFdIndexEnd = chunk.targetFdIndex(segmentIndex + segmentCount - 1);
-                // cross two files, just read one segment
-                if (targetFdIndexEnd != targetFdIndex) {
-                    segmentCount = 1;
+                int segmentCountMax = Math.min(BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE, chunk.maxSegmentIndex - segmentIndex + 1);
+                if (segmentCount >= segmentCountMax) {
+                    break;
                 }
 
-                findSegmentIndexWithSegmentCount[1] = segmentCount;
+                var targetFdIndexFirstFind = chunk.targetFdIndex(findSegmentIndexWithSegmentCount[0]);
+                var targetFdIndexThisFind = chunk.targetFdIndex(segmentIndex);
+                // cross two files, exclude this find segment
+                if (targetFdIndexThisFind != targetFdIndexFirstFind) {
+                    segmentCount--;
+                    break;
+                }
             }
         }
 
+        findSegmentIndexWithSegmentCount[1] = segmentCount;
         return findSegmentIndexWithSegmentCount;
     }
 
