@@ -255,7 +255,7 @@ public class ChunkMergeJob {
     }
 
     static void readToCvList(ArrayList<CvWithKeyAndSegmentOffset> cvList, byte[] segmentBytesBatchRead, int relativeOffsetInBatchBytes, int chunkSegmentLength, int segmentIndex, byte slot) {
-        var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength).slice();
+        var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, Math.min(segmentBytesBatchRead.length, chunkSegmentLength)).slice();
         // sub blocks
         // refer to SegmentBatch tight HEADER_LENGTH
         for (int subBlockIndex = 0; subBlockIndex < SegmentBatch.MAX_BLOCK_NUMBER; subBlockIndex++) {
