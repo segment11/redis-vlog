@@ -103,6 +103,18 @@ public class KeyLoader {
         metaKeyBucketSplitNumber.setForTest(bucketIndex, splitNumber);
     }
 
+    MetaOneWalGroupSeq metaOneWalGroupSeq;
+
+    public long getMetaOneWalGroupSeq(byte splitIndex, int bucketIndex) {
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
+        return metaOneWalGroupSeq.get(walGroupIndex, splitIndex);
+    }
+
+    public void setMetaOneWalGroupSeq(byte splitIndex, int bucketIndex, long seq) {
+        var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
+        metaOneWalGroupSeq.set(walGroupIndex, splitIndex, seq);
+    }
+
     // split 2 times, 1 * 3 * 3 = 9
     // when get bigger, batch persist pvm, will slot stall and read all 9 files, read and write perf will be bad
     // end to end read perf ok, because only read one key bucket and lru cache
@@ -159,10 +171,10 @@ public class KeyLoader {
 
     public void initFds(LibC libC) throws IOException {
         this.metaKeyBucketSplitNumber = new MetaKeyBucketSplitNumber(slot, slotDir);
+        this.metaOneWalGroupSeq = new MetaOneWalGroupSeq(slot, slotDir);
         this.statKeyCountInBuckets = new StatKeyCountInBuckets(slot, bucketsPerSlot, slotDir);
 
         this.libC = libC;
-
         this.fdReadWriteArray = new FdReadWrite[MAX_SPLIT_NUMBER];
 
         var maxSplitNumber = metaKeyBucketSplitNumber.maxSplitNumber();
@@ -206,62 +218,15 @@ public class KeyLoader {
             System.out.println("Cleaned up bucket split number");
         }
 
+        if (metaOneWalGroupSeq != null) {
+            metaOneWalGroupSeq.cleanUp();
+            System.out.println("Cleaned up one wal group seq");
+        }
+
         if (statKeyCountInBuckets != null) {
             statKeyCountInBuckets.cleanUp();
             System.out.println("Cleaned up key count in buckets");
         }
-    }
-
-    // for repl
-    public byte[] readKeyBucketBytesBatchToSlaveExists(byte splitIndex, int beginBucketIndex) {
-        var fdReadWrite = fdReadWriteArray[splitIndex];
-        if (fdReadWrite == null) {
-            return null;
-        }
-        return fdReadWrite.readBatchForRepl(beginBucketIndex);
-    }
-
-    public void writeKeyBucketsBytesBatchFromMasterExists(byte[] contentBytes) {
-        var splitIndex = contentBytes[0];
-//            var splitNumber = contentBytes[1];
-        var beginBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
-        int position = 1 + 1 + 4;
-        // left length may be 0
-        var leftLength = contentBytes.length - position;
-
-        if (fdReadWriteArray.length <= splitIndex) {
-            var oldFdReadWriteArray = fdReadWriteArray;
-            fdReadWriteArray = new FdReadWrite[splitIndex + 1];
-            System.arraycopy(oldFdReadWriteArray, 0, fdReadWriteArray, 0, oldFdReadWriteArray.length);
-        }
-
-        var fdReadWrite = fdReadWriteArray[splitIndex];
-        if (fdReadWrite == null) {
-            initFds((byte) (splitIndex + 1));
-            fdReadWrite = fdReadWriteArray[splitIndex];
-        }
-
-        if (ConfForSlot.global.pureMemory) {
-            if (leftLength == 0) {
-                var walGroupNumber = BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL / ConfForSlot.global.confWal.oneChargeBucketNumber;
-                for (int i = 0; i < walGroupNumber; i++) {
-                    var toClearBeginBucketIndex = beginBucketIndex + i * ConfForSlot.global.confWal.oneChargeBucketNumber;
-                    fdReadWrite.clearKeyBucketsInOneWalGroupToMemory(toClearBeginBucketIndex);
-                }
-            } else {
-                var bucketCount = leftLength / KEY_BUCKET_ONE_COST_SIZE;
-                if (bucketCount != BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL) {
-                    throw new IllegalArgumentException("Write pure memory key buckets from master error, bucket count batch not match, slot: "
-                            + slot + ", split index: " + splitIndex + ", begin bucket index: " + beginBucketIndex + ", bucket count: " + bucketCount);
-                }
-
-                fdReadWrite.writeOneInnerBatchToMemory(beginBucketIndex, contentBytes, position);
-            }
-        } else {
-            fdReadWrite.writeBatchForRepl(beginBucketIndex, contentBytes, position);
-        }
-        log.warn("Write key buckets from master success, slot: {}, split index: {}, begin bucket index: {}, once key bucket count: {}",
-                slot, splitIndex, beginBucketIndex, BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL);
     }
 
     boolean isBytesValidAsKeyBucket(byte[] bytes, int position) {
@@ -395,7 +360,7 @@ public class KeyLoader {
         fdReadWrite.writeOneInner(bucketIndex, bytes, isRefreshLRUCache);
     }
 
-    byte[] readBatchInOneWalGroup(byte splitIndex, int beginBucketIndex) {
+    public byte[] readBatchInOneWalGroup(byte splitIndex, int beginBucketIndex) {
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
             return null;
@@ -436,6 +401,7 @@ public class KeyLoader {
     }
 
     public void writeSharedBytesList(byte[][] sharedBytesListBySplitIndex, int beginBucketIndex) {
+        var walGroupIndex = Wal.calWalGroupIndex(beginBucketIndex);
         for (int splitIndex = 0; splitIndex < sharedBytesListBySplitIndex.length; splitIndex++) {
             var sharedBytes = sharedBytesListBySplitIndex[splitIndex];
             if (sharedBytes == null) {
@@ -455,6 +421,7 @@ public class KeyLoader {
             }
 
             fdReadWrite.writeSharedBytesForKeyBucketsInOneWalGroup(beginBucketIndex, sharedBytes);
+            metaOneWalGroupSeq.set(walGroupIndex, (byte) splitIndex, snowFlake.nextId());
         }
     }
 
@@ -478,6 +445,7 @@ public class KeyLoader {
 
     public void flush() {
         metaKeyBucketSplitNumber.clear();
+        metaOneWalGroupSeq.clear();
         statKeyCountInBuckets.clear();
 
         for (int splitIndex = 0; splitIndex < MAX_SPLIT_NUMBER; splitIndex++) {

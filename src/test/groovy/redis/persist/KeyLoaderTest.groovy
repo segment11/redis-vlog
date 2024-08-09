@@ -119,9 +119,11 @@ class KeyLoaderTest extends Specification {
 
         when:
         def metaSplitNumberBytes = keyLoader.getMetaKeyBucketSplitNumberBytesToSlaveExists()
+        keyLoader.setMetaOneWalGroupSeq((byte) 0, 0, 1L)
         keyLoader.overwriteMetaKeyBucketSplitNumberBytesFromMasterExists(metaSplitNumberBytes)
         then:
         metaSplitNumberBytes != null
+        keyLoader.getMetaOneWalGroupSeq((byte) 0, 0) == 1L
         metaSplitNumberBytes == keyLoader.getMetaKeyBucketSplitNumberBytesToSlaveExists()
 
         when:
@@ -234,68 +236,6 @@ class KeyLoaderTest extends Specification {
         metaSplitNumberBytes != null
         metaSplitNumberBytes == keyLoader.getMetaKeyBucketSplitNumberBytesToSlaveExists()
 
-        when:
-        ConfForSlot.global.pureMemory = false
-        // split index byte + split number byte + begin bucket index int + key buckets encoded bytes
-        def position = 6
-        def contentBytes = new byte[KeyLoader.BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL * KeyLoader.KEY_BUCKET_ONE_COST_SIZE + position]
-        // begin bucket index 0
-        def buffer = ByteBuffer.wrap(contentBytes)
-        // begin bucket index 0
-        buffer.putInt(2, 0)
-        def keyBucket = new KeyBucket(slot, 0, splitIndex, (byte) 1, null, keyLoader.snowFlake)
-        keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
-        buffer.put(position, keyBucket.encode(true))
-        keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes)
-        def k0 = keyLoader.readKeyBucketForSingleKey(0, splitIndex, (byte) 1, 10L, false)
-        then:
-        k0.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
-
-        when:
-        ConfForSlot.global.pureMemory = true
-        def rawFdReadWrite = keyLoader.fdReadWriteArray[0]
-        def walGroupNumber = Wal.calcWalGroupNumber()
-        rawFdReadWrite.resetAllBytesByOneWalGroupIndexForKeyBucketForTest(walGroupNumber)
-        keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes)
-        k0 = keyLoader.readKeyBucketForSingleKey(0, splitIndex, (byte) 1, 10L, false)
-        def k1 = keyLoader.readKeyBucketForSingleKey(1, splitIndex, (byte) 1, 10L, false)
-        then:
-        k0.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
-        k1 == null
-
-        when:
-        keyLoader.fdReadWriteArray = new FdReadWrite[2]
-        keyLoader.fdReadWriteArray[0] = rawFdReadWrite
-        def splitNumberArray = new byte[oneChargeBucketNumber]
-        splitNumberArray[0] = (byte) 3
-        keyLoader.metaKeyBucketSplitNumber.setBatch(0, splitNumberArray)
-        def contentBytes2 = new byte[position]
-        def buffer2 = ByteBuffer.wrap(contentBytes2)
-        // update split index to 1
-        buffer2.put(0, (byte) 1)
-        keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes2)
-        then:
-        keyLoader.fdReadWriteArray[1].clearOneWalGroupToMemoryForTest(0)
-
-        when:
-        // update split index to 2
-        buffer2.put(0, (byte) 2)
-        keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes2)
-        then:
-        keyLoader.fdReadWriteArray[2].clearOneWalGroupToMemoryForTest(0)
-
-        when:
-        boolean exception = false
-        def contentBytes3 = new byte[position + 1]
-        try {
-            keyLoader.writeKeyBucketsBytesBatchFromMasterExists(contentBytes3)
-        } catch (IllegalArgumentException e) {
-            println e.message
-            exception = true
-        }
-        then:
-        exception
-
         cleanup:
         ConfForSlot.global.pureMemory = false
         keyLoader.flush()
@@ -361,13 +301,11 @@ class KeyLoaderTest extends Specification {
         keyLoader.fdReadWriteArray[0] = null
         def keyBuckets = keyLoader.readKeyBuckets(0)
         def valueBytesWithExpireAt0 = keyLoader.getValueByKey(0, 'a'.bytes, 10L)
-        def bytesToSlaveExists0 = keyLoader.readKeyBucketBytesBatchToSlaveExists(splitIndex, 0)
         def bytesBatch0 = keyLoader.readBatchInOneWalGroup(splitIndex, 0)
         def isRemoved0 = keyLoader.removeSingleKeyForTest(0, 'a'.bytes, 10L)
         then:
         keyBuckets[0] == null
         valueBytesWithExpireAt0 == null
-        bytesToSlaveExists0 == null
         bytesBatch0 == null
         !isRemoved0
 
@@ -377,13 +315,11 @@ class KeyLoaderTest extends Specification {
         rawFdReadWrite.writeOneInner(0, keyBucket.encode(true), false)
         keyLoader.putValueByKeyForTest(0, 'a'.bytes, 10L, 0L, 1L, 'a'.bytes)
         def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 10L)
-        def bytesToSlaveExists = keyLoader.readKeyBucketBytesBatchToSlaveExists(splitIndex, 0)
         def bytesBatch = keyLoader.readBatchInOneWalGroup(splitIndex, 0)
         def isRemoved = keyLoader.removeSingleKeyForTest(0, 'a'.bytes, 10L)
         def isRemoved2 = keyLoader.removeSingleKeyForTest(0, 'b'.bytes, 11L)
         then:
         valueBytesWithExpireAt.valueBytes() == 'a'.bytes
-        bytesToSlaveExists.length == oneKeyBucketLength
         bytesBatch != null
         isRemoved
         !isRemoved2
@@ -479,7 +415,8 @@ class KeyLoaderTest extends Specification {
         }
 
         when:
-        keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList)
+        def xForBinlog = new XOneWalGroupPersist(true, 0)
+        keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList, xForBinlog)
         then:
         pvmList.every {
             keyLoader.getValueByKey(0, it.keyBytes, it.keyHash).valueBytes() == it.encode()
@@ -491,7 +428,7 @@ class KeyLoaderTest extends Specification {
         def keyLoader2 = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir2, keyLoader.snowFlake, oneSlot)
         keyLoader2.initFds(keyLoader.libC)
         keyLoader2.initFds((byte) 1)
-        keyLoader2.updatePvmListBatchAfterWriteSegments(0, pvmList)
+        keyLoader2.updatePvmListBatchAfterWriteSegments(0, pvmList, xForBinlog)
         then:
         1 == 1
 

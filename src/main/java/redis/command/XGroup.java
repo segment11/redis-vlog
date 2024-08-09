@@ -75,7 +75,7 @@ public class XGroup extends BaseCommand {
         }
 
         if (!replType.newly && !replType.isSlaveSend) {
-            log.warn("Repl slave fetch date from master, slave uuid={}, repl type={}, content length={}",
+            log.warn("Repl slave fetch data from master, slave uuid={}, repl type={}, content length={}",
                     slaveUuid, replType, contentBytes.length);
         }
 
@@ -265,7 +265,7 @@ public class XGroup extends BaseCommand {
         var segmentCount = buffer.getInt();
 
         var oneSlot = localPersist.oneSlot(slot);
-        var masterMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(beginSegmentIndex, segmentCount);
+        var masterMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(beginSegmentIndex, segmentCount);
         if (ToMasterExistsChunkSegments.isSlaveSameForThisBatch(masterMetaBytes, contentBytes)) {
             var responseBytes = new byte[4 + 4];
             var responseBuffer = ByteBuffer.wrap(responseBytes);
@@ -325,7 +325,7 @@ public class XGroup extends BaseCommand {
             return Repl.reply(slot, replPair, ReplType.exists_all_done, EmptyContent.INSTANCE);
         } else {
             var nextBatchBeginSegmentIndex = beginSegmentIndex + segmentCount;
-            var nextBatchMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(nextBatchBeginSegmentIndex, segmentCount);
+            var nextBatchMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(nextBatchBeginSegmentIndex, segmentCount);
             var content = new ToMasterExistsChunkSegments(0, segmentCount, nextBatchMetaBytes);
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
         }
@@ -333,29 +333,32 @@ public class XGroup extends BaseCommand {
 
     Reply exists_key_buckets(byte slot, byte[] contentBytes) {
         // server received from client
-        var splitIndex = contentBytes[0];
-        var beginBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
+        var requestBuffer = ByteBuffer.wrap(contentBytes);
+        var splitIndex = requestBuffer.get();
+        var beginBucketIndex = requestBuffer.getInt();
+        var oneWalGroupSeq = requestBuffer.getLong();
 
         var oneSlot = localPersist.oneSlot(slot);
-        byte splitNumber = oneSlot.getKeyLoader().maxSplitNumberForRepl();
+        var splitNumber = oneSlot.getKeyLoader().maxSplitNumberForRepl();
+
         byte[] bytes = null;
-        try {
-            bytes = oneSlot.getKeyLoader().readKeyBucketBytesBatchToSlaveExists(splitIndex, beginBucketIndex);
-        } catch (Exception e) {
-            var errorMessage = "Repl key loader read key buckets bytes to slave error";
-            log.error(errorMessage, e);
-            return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
+        var masterOneWalGroupSeq = oneSlot.getKeyLoader().getMetaOneWalGroupSeq(splitIndex, beginBucketIndex);
+        var isSkip = masterOneWalGroupSeq == oneWalGroupSeq;
+        if (!isSkip) {
+            bytes = oneSlot.getKeyLoader().readBatchInOneWalGroup(splitIndex, beginBucketIndex);
         }
 
         if (bytes == null) {
             bytes = new byte[0];
         }
 
-        var responseBytes = new byte[1 + 1 + 4 + bytes.length];
+        var responseBytes = new byte[1 + 1 + 4 + 1 + 8 + bytes.length];
         var buffer = ByteBuffer.wrap(responseBytes);
         buffer.put(splitIndex);
         buffer.put(splitNumber);
         buffer.putInt(beginBucketIndex);
+        buffer.put(isSkip ? (byte) 1 : (byte) 0);
+        buffer.putLong(masterOneWalGroupSeq);
         if (bytes.length != 0) {
             buffer.put(bytes);
         }
@@ -370,39 +373,56 @@ public class XGroup extends BaseCommand {
         if (EmptyContent.isEmpty(contentBytes)) {
             // next step, fetch exists chunk segments
             var segmentCount = FdReadWrite.REPL_ONCE_INNER_COUNT;
-            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(0, segmentCount);
+            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(0, segmentCount);
             var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
         }
 
-        try {
-            oneSlot.getKeyLoader().writeKeyBucketsBytesBatchFromMasterExists(contentBytes);
-        } catch (Exception e) {
-            var errorMessage = "Repl key loader write bytes from master error";
-            log.error(errorMessage, e);
-            return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
+        var responseBuffer = ByteBuffer.wrap(contentBytes);
+        var splitIndex = responseBuffer.get();
+        var splitNumber = responseBuffer.get();
+        var beginBucketIndex = responseBuffer.getInt();
+        var isSkip = responseBuffer.get() == 1;
+        var masterOneWalGroupSeq = responseBuffer.getLong();
+        var leftLength = responseBuffer.remaining();
+
+        if (!isSkip) {
+            // overwrite key buckets
+            var sharedBytes = new byte[leftLength];
+            responseBuffer.get(sharedBytes);
+
+            var sharedBytesList = new byte[splitIndex + 1][];
+            sharedBytesList[splitIndex] = sharedBytes;
+
+            oneSlot.getKeyLoader().writeSharedBytesList(sharedBytesList, beginBucketIndex);
+            oneSlot.getKeyLoader().setMetaOneWalGroupSeq(splitIndex, beginBucketIndex, masterOneWalGroupSeq);
+        } else {
+            if (leftLength == 0) {
+                // clear local key buckets
+                var sharedBytesList = new byte[splitIndex + 1][];
+                sharedBytesList[splitIndex] = new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE * ConfForSlot.global.confWal.oneChargeBucketNumber];
+                oneSlot.getKeyLoader().writeSharedBytesList(sharedBytesList, beginBucketIndex);
+            }
         }
 
-        var splitIndex = contentBytes[0];
-        var splitNumber = contentBytes[1];
-        var prevBucketIndex = ByteBuffer.wrap(contentBytes, 2, 4).getInt();
-        var bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
-
-        boolean isLastBatchInThisSplit = prevBucketIndex == bucketsPerSlot - KeyLoader.BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL;
+        boolean isLastBatchInThisSplit = beginBucketIndex == ConfForSlot.global.confBucket.bucketsPerSlot - ConfForSlot.global.confWal.oneChargeBucketNumber;
         var isAllReceived = splitIndex == splitNumber - 1 && isLastBatchInThisSplit;
         if (isAllReceived) {
             // next step, fetch exists chunk segments
             var segmentCount = FdReadWrite.REPL_ONCE_INNER_COUNT;
-            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBath(0, segmentCount);
+            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(0, segmentCount);
             var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
         } else {
             var nextSplitIndex = isLastBatchInThisSplit ? splitIndex + 1 : splitIndex;
-            var nextBeginBucketIndex = isLastBatchInThisSplit ? 0 : prevBucketIndex + KeyLoader.BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL;
-            var requestBytes = new byte[1 + 1 + 4];
-            requestBytes[0] = (byte) nextSplitIndex;
-            requestBytes[1] = 0;
-            ByteBuffer.wrap(requestBytes, 2, 4).putInt(nextBeginBucketIndex);
+            var nextBeginBucketIndex = isLastBatchInThisSplit ? 0 : beginBucketIndex + ConfForSlot.global.confWal.oneChargeBucketNumber;
+
+            var requestBytes = new byte[1 + 4 + 8];
+            var requestBuffer = ByteBuffer.wrap(requestBytes);
+            requestBuffer.put((byte) nextSplitIndex);
+            requestBuffer.putInt(nextBeginBucketIndex);
+            var slaveOneWalGroupSeq = oneSlot.getKeyLoader().getMetaOneWalGroupSeq((byte) nextSplitIndex, nextBeginBucketIndex);
+            requestBuffer.putLong(slaveOneWalGroupSeq);
             return Repl.reply(slot, replPair, ReplType.exists_key_buckets, new RawBytesContent(requestBytes));
         }
     }
