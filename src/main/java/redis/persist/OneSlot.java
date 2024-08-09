@@ -423,6 +423,10 @@ public class OneSlot {
 
     int clearKvLRUByWalGroupIndex(int walGroupIndex) {
         var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
+        if (lru == null) {
+            return 0;
+        }
+
         int n = lru.size();
         lru.clear();
         if (walGroupIndex == 0) {
