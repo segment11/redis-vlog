@@ -1,12 +1,15 @@
 
 package redis.command;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.CompressedValue;
+import redis.ConfForSlot;
+import redis.clients.jedis.Jedis;
 import redis.persist.LocalPersist;
 import redis.reply.*;
 import redis.type.RedisHashKeys;
@@ -14,6 +17,7 @@ import redis.type.RedisHashKeys;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Random;
+import java.util.regex.Pattern;
 
 import static redis.CompressedValue.NO_EXPIRE;
 import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
@@ -204,14 +208,13 @@ public class SGroup extends BaseCommand {
             return sdiffstore(false, true);
         }
 
-//        if ("slaveof".equals(cmd)) {
-//            return slaveof();
-//        }
+        if ("slaveof".equals(cmd)) {
+            return slaveof();
+        }
 
         return NilReply.INSTANCE;
     }
 
-      /*
     private static final String IPV4_REGEX =
             "^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\." +
                     "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\." +
@@ -274,6 +277,15 @@ public class SGroup extends BaseCommand {
             jedis = new Jedis(host, port);
             var pong = jedis.ping();
             log.info("Slave of {}:{} pong: {}", host, port, pong);
+            var jsonStr = jedis.get(XGroup.CONF_FOR_SLOT_KEY);
+
+            var map = ConfForSlot.global.slaveCanMatchCheckValues();
+            var objectMapper = new ObjectMapper();
+            var jsonStrLocal = objectMapper.writeValueAsString(map);
+
+            if (!jsonStr.equals(jsonStrLocal)) {
+                return new ErrorReply("slave can not match check values");
+            }
         } catch (Exception e) {
             return new ErrorReply("connect failed");
         } finally {
@@ -301,7 +313,6 @@ public class SGroup extends BaseCommand {
 
         return asyncReply;
     }
-    */
 
     Reply set(byte[][] dd) {
         if (dd.length < 3) {

@@ -42,6 +42,8 @@ public class XGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    public static final String CONF_FOR_SLOT_KEY = "x_conf_for_slot";
+
     public void setReplPair(ReplPair replPair) {
         this.replPair = replPair;
     }

@@ -3,6 +3,7 @@ package redis
 import io.activej.config.Config
 import io.activej.eventloop.Eventloop
 import io.activej.net.socket.tcp.TcpSocket
+import redis.command.XGroup
 import redis.decode.Request
 import redis.persist.Consts
 import redis.persist.LocalPersist
@@ -201,6 +202,12 @@ class RequestHandlerTest extends Specification {
         reply = requestHandler.handle(getRequest2, socket)
         then:
         reply instanceof ErrorReply
+
+        when:
+        getData2[1] = XGroup.CONF_FOR_SLOT_KEY.bytes
+        reply = requestHandler.handle(getRequest2, socket)
+        then:
+        reply instanceof BulkReply
 
         when:
         def setData3 = new byte[3][]

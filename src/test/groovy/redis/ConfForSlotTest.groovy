@@ -9,6 +9,7 @@ class ConfForSlotTest extends Specification {
         given:
         ConfForSlot.global = ConfForSlot.from(1_000_000)
         def c = ConfForSlot.global
+        println c.slaveCanMatchCheckValues()
 
         expect:
         c.estimateKeyNumber == 1_000_000

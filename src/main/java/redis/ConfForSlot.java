@@ -6,6 +6,8 @@ import redis.persist.Chunk;
 import redis.persist.KeyBucket;
 import redis.persist.Wal;
 
+import java.util.HashMap;
+
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
 public enum ConfForSlot {
@@ -46,6 +48,19 @@ public enum ConfForSlot {
         } else {
             return c100m;
         }
+    }
+
+    public HashMap<String, Object> slaveCanMatchCheckValues() {
+        var map = new HashMap<String, Object>();
+        map.put("estimateKeyNumber", estimateKeyNumber);
+        map.put("estimateOneValueLength", estimateOneValueLength);
+        map.put("slotNumber", slotNumber);
+        map.put("bucket.bucketsPerSlot", confBucket.bucketsPerSlot);
+        map.put("chunk.segmentNumberPerFd", confChunk.segmentNumberPerFd);
+        map.put("chunk.fdPerChunk", confChunk.fdPerChunk);
+        map.put("chunk.segmentLength", confChunk.segmentLength);
+        map.put("wal.oneChargeBucketNumber", confWal.oneChargeBucketNumber);
+        return map;
     }
 
     public static ConfForSlot global = c1m;

@@ -1,5 +1,7 @@
 package redis;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.luben.zstd.Zstd;
 import io.activej.config.Config;
 import io.activej.net.socket.tcp.ITcpSocket;
@@ -254,6 +256,19 @@ public class RequestHandler {
             var keyBytes = data[1];
             if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
                 return ErrorReply.KEY_TOO_LONG;
+            }
+
+            // for slave can connect to master, check values
+            var key = new String(keyBytes);
+            if (key.equals(XGroup.CONF_FOR_SLOT_KEY)) {
+                var map = ConfForSlot.global.slaveCanMatchCheckValues();
+                var objectMapper = new ObjectMapper();
+                try {
+                    var jsonStr = objectMapper.writeValueAsString(map);
+                    return new BulkReply(jsonStr.getBytes());
+                } catch (JsonProcessingException e) {
+                    return new ErrorReply(e.getMessage());
+                }
             }
 
             var gGroup = new GGroup(cmd, data, socket).init(this, request);
