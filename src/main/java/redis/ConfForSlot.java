@@ -107,12 +107,13 @@ public enum ConfForSlot {
         public byte initialSplitNumber;
 
         // 4KB one segment, 25 * 1000 * 4KB = 100MB
-        public ConfLru lruPerFd = new ConfLru(0);
+        public final ConfLru lruPerFd = new ConfLru(0);
 
         @Override
         public String toString() {
             return "ConfBucket{" +
                     "bucketsPerSlot=" + bucketsPerSlot +
+                    ", initialSplitNumber=" + initialSplitNumber +
                     '}';
         }
     }
@@ -146,7 +147,7 @@ public enum ConfForSlot {
         public int segmentLength;
 
         // 4KB one segment, 25 * 1000 * 4KB = 100MB
-        public ConfLru lruPerFd = new ConfLru(0);
+        public final ConfLru lruPerFd = new ConfLru(0);
 
         public int maxSegmentNumber() {
             return segmentNumberPerFd * fdPerChunk;
@@ -257,7 +258,7 @@ public enum ConfForSlot {
             this.shortValueSizeTrigger = this.shortValueSizeTriggerOld;
         }
 
-        private void resetWalStaticValues(int oneGroupBufferSize) {
+        public void resetWalStaticValues(int oneGroupBufferSize) {
             if (Wal.ONE_GROUP_BUFFER_SIZE != oneGroupBufferSize) {
                 Wal.ONE_GROUP_BUFFER_SIZE = oneGroupBufferSize;
                 Wal.EMPTY_BYTES_FOR_ONE_GROUP = new byte[Wal.ONE_GROUP_BUFFER_SIZE];
@@ -276,7 +277,7 @@ public enum ConfForSlot {
 
         public void resetByOneValueLength(int estimateOneValueLength) {
             if (ConfForSlot.global.pureMemory) {
-                // save memory in wal batch cache
+                // save memory in wal batch cache, todo, change here
                 this.valueSizeTrigger = 50;
                 this.shortValueSizeTrigger = 50;
                 this.oneChargeBucketNumber = 16;
