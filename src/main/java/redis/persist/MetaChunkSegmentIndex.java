@@ -13,7 +13,6 @@ import java.nio.ByteBuffer;
 
 public class MetaChunkSegmentIndex {
     private static final String META_CHUNK_SEGMENT_INDEX_FILE = "meta_chunk_segment_index.dat";
-    private final byte slot;
     private RandomAccessFile raf;
 
     private final byte[] inMemoryCachedBytes;
@@ -22,7 +21,6 @@ public class MetaChunkSegmentIndex {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     public MetaChunkSegmentIndex(byte slot, File slotDir) throws IOException {
-        this.slot = slot;
         // 4 bytes for chunk segment index int
         // when slave connect master, master start binlog
         // 8 bytes for master uuid long

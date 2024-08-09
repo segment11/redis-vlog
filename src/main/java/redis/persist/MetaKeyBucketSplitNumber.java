@@ -14,7 +14,6 @@ import java.util.Arrays;
 public class MetaKeyBucketSplitNumber {
     private static final String META_KEY_BUCKET_SPLIT_NUMBER_FILE = "meta_key_bucket_split_number.dat";
 
-    private final byte slot;
     final int allCapacity;
     private final byte initialSplitNumber;
     private RandomAccessFile raf;
@@ -51,8 +50,6 @@ public class MetaKeyBucketSplitNumber {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     public MetaKeyBucketSplitNumber(byte slot, File slotDir) throws IOException {
-        this.slot = slot;
-
         this.allCapacity = ConfForSlot.global.confBucket.bucketsPerSlot;
         this.initialSplitNumber = ConfForSlot.global.confBucket.initialSplitNumber;
         log.info("Meta key bucket initial split number: {}", initialSplitNumber);
