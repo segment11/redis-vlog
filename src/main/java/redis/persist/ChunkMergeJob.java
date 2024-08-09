@@ -22,7 +22,7 @@ public class ChunkMergeJob {
     int validCvCountAfterRun = 0;
     int invalidCvCountAfterRun = 0;
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger log = LoggerFactory.getLogger(ChunkMergeJob.class);
 
     public ChunkMergeJob(byte slot, ArrayList<Integer> needMergeSegmentIndexList, ChunkMergeWorker chunkMergeWorker, SnowFlake snowFlake) {
         this.slot = slot;
@@ -193,7 +193,7 @@ public class ChunkMergeJob {
                 alreadyDoLog = true;
             }
 
-            readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, slot, true);
+            readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, oneSlot, true);
             i++;
         }
 
@@ -255,7 +255,7 @@ public class ChunkMergeJob {
     }
 
     static void readToCvList(ArrayList<CvWithKeyAndSegmentOffset> cvList, byte[] segmentBytesBatchRead, int relativeOffsetInBatchBytes,
-                             int chunkSegmentLength, int segmentIndex, byte slot, boolean includeExpired) {
+                             int chunkSegmentLength, int segmentIndex, OneSlot oneSlot, boolean includeExpired) {
         var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, Math.min(segmentBytesBatchRead.length, chunkSegmentLength)).slice();
         // sub blocks
         // refer to SegmentBatch tight HEADER_LENGTH
@@ -272,13 +272,16 @@ public class ChunkMergeJob {
             var d = Zstd.decompressByteArray(decompressedBytes, 0, chunkSegmentLength,
                     segmentBytesBatchRead, relativeOffsetInBatchBytes + subBlockOffset, subBlockLength);
             if (d != chunkSegmentLength) {
-                throw new IllegalStateException("Decompress error, s=" + slot
+                throw new IllegalStateException("Decompress error, s=" + oneSlot.slot()
                         + ", i=" + segmentIndex + ", sbi=" + subBlockIndex + ", d=" + d + ", chunkSegmentLength=" + chunkSegmentLength);
             }
 
             int finalSubBlockIndex = subBlockIndex;
             SegmentBatch.iterateFromSegmentBytes(decompressedBytes, (key, cv, offsetInThisSegment) -> {
                 if (!includeExpired && cv.isExpired()) {
+                    if (cv.isBigString()) {
+                        removeExpiredBigString(key, cv, oneSlot);
+                    }
                     return;
                 }
                 cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetInThisSegment, segmentIndex, (byte) finalSubBlockIndex));
@@ -402,17 +405,21 @@ public class ChunkMergeJob {
             var key = one.key;
             var cv = one.cv;
             if (cv.isBigString()) {
-                // need remove file
-                var uuid = cv.getBigStringMetaUuid();
-                var isDeleted = oneSlot.getBigStringFiles().deleteBigStringFileIfExist(uuid);
-                if (!isDeleted) {
-                    throw new RuntimeException("Delete big string file error, s=" + slot + ", key=" + key + ", uuid=" + uuid);
-                } else {
-                    log.warn("Delete big string file, s={}, key={}, uuid={}", slot, key, uuid);
-                }
+                removeExpiredBigString(key, cv, oneSlot);
             }
         }
 
         cvList.removeAll(toRemoveCvList);
+    }
+
+    private static void removeExpiredBigString(String key, CompressedValue cv, OneSlot oneSlot) {
+        // need remove file
+        var uuid = cv.getBigStringMetaUuid();
+        var isDeleted = oneSlot.getBigStringFiles().deleteBigStringFileIfExist(uuid);
+        if (!isDeleted) {
+            throw new RuntimeException("Delete big string file error, s=" + oneSlot.slot() + ", key=" + key + ", uuid=" + uuid);
+        } else {
+            log.warn("Delete big string file, s={}, key={}, uuid={}", oneSlot.slot(), key, uuid);
+        }
     }
 }
