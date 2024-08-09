@@ -193,7 +193,7 @@ public class ChunkMergeJob {
                 alreadyDoLog = true;
             }
 
-            readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, slot);
+            readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, slot, true);
             i++;
         }
 
@@ -254,7 +254,8 @@ public class ChunkMergeJob {
         chunkMergeWorker.invalidCvCountTotal += invalidCvCountAfterRun;
     }
 
-    static void readToCvList(ArrayList<CvWithKeyAndSegmentOffset> cvList, byte[] segmentBytesBatchRead, int relativeOffsetInBatchBytes, int chunkSegmentLength, int segmentIndex, byte slot) {
+    static void readToCvList(ArrayList<CvWithKeyAndSegmentOffset> cvList, byte[] segmentBytesBatchRead, int relativeOffsetInBatchBytes,
+                             int chunkSegmentLength, int segmentIndex, byte slot, boolean includeExpired) {
         var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, Math.min(segmentBytesBatchRead.length, chunkSegmentLength)).slice();
         // sub blocks
         // refer to SegmentBatch tight HEADER_LENGTH
@@ -277,6 +278,9 @@ public class ChunkMergeJob {
 
             int finalSubBlockIndex = subBlockIndex;
             SegmentBatch.iterateFromSegmentBytes(decompressedBytes, (key, cv, offsetInThisSegment) -> {
+                if (!includeExpired && cv.isExpired()) {
+                    return;
+                }
                 cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetInThisSegment, segmentIndex, (byte) finalSubBlockIndex));
             });
         }

@@ -720,4 +720,177 @@ class OneSlotTest extends Specification {
         oneSlot.cleanUp()
         Consts.persistDir.deleteDir()
     }
+
+    def 'test before persist wal read for merge'() {
+        given:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+        def chunk = oneSlot.chunk
+
+        def ext = new OneSlot.BeforePersistWalExtFromMerge([], [])
+//        def ext2 = new OneSlot.BeforePersistWalExt2FromMerge([], [])
+        expect:
+        ext.isEmpty()
+
+        when:
+        final int walGroupIndex = 0
+        chunk.initSegmentIndexWhenFirstStart(0)
+        def e = oneSlot.readSomeSegmentsBeforePersistWal(walGroupIndex)
+        then:
+        e == null
+
+        when:
+        Debug.instance.logMerge = true
+        oneSlot.logMergeCount = 999
+        e = oneSlot.readSomeSegmentsBeforePersistWal(walGroupIndex)
+        then:
+        e == null
+
+        when:
+        chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
+        oneSlot.setSegmentMergeFlag(0, Chunk.Flag.new_write, 1L, walGroupIndex)
+        oneSlot.logMergeCount = 999
+        e = oneSlot.readSomeSegmentsBeforePersistWal(walGroupIndex)
+        then:
+        // no segment bytes read
+        e.isEmpty()
+
+        when:
+        // last N
+        oneSlot.setSegmentMergeFlag(chunk.maxSegmentIndex - 10, Chunk.Flag.new_write, 1L, walGroupIndex)
+        oneSlot.setSegmentMergeFlag(chunk.maxSegmentIndex - 9, Chunk.Flag.new_write, 1L, walGroupIndex)
+        e = oneSlot.readSomeSegmentsBeforePersistWal(walGroupIndex)
+        then:
+        e.isEmpty()
+
+        when:
+        def cv = new CompressedValue()
+        oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
+        oneSlot.chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, 'test-merged-key', 0, 0))
+        chunk.initSegmentIndexWhenFirstStart(0)
+        10.times {
+            batchPut(oneSlot, 100, 100, 0, slotNumber)
+        }
+        chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
+        oneSlot.logMergeCount = 999
+        e = oneSlot.readSomeSegmentsBeforePersistWal(walGroupIndex)
+        then:
+        !e.isEmpty()
+
+
+        cleanup:
+        oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test check merged but not persist'() {
+        given:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+        def chunk = oneSlot.chunk
+
+        when:
+        final int walGroupIndex = 0
+        chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 10)
+        oneSlot.setSegmentMergeFlag(chunk.maxSegmentIndex - 10, Chunk.Flag.reuse, 1L, walGroupIndex)
+        oneSlot.setSegmentMergeFlag(chunk.maxSegmentIndex - 9, Chunk.Flag.merged_and_persisted, 1L, walGroupIndex)
+        oneSlot.checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(true)
+        then:
+        1 == 1
+
+        when:
+        oneSlot.checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false)
+        then:
+        1 == 1
+
+        when:
+        oneSlot.setSegmentMergeFlag(chunk.maxSegmentIndex - 8, Chunk.Flag.new_write, 1L, walGroupIndex)
+        oneSlot.checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(true)
+        then:
+        1 == 1
+
+        when:
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        when:
+        oneSlot.chunkMergeWorker.addMergedSegment(1, 1)
+        chunk.initSegmentIndexWhenFirstStart(0)
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        when:
+        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.addMergedSegment(100, 1)
+        chunk.initSegmentIndexWhenFirstStart(0)
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        when:
+        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
+        chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        when:
+        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 1, 1)
+        chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        when:
+        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 100, 1)
+        chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        when:
+        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber - 1, 1)
+        chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        when:
+        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
+        chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 1)
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        when:
+        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.addMergedSegment(100, 1)
+        chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 1)
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        when:
+        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
+        chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 100)
+        oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
+        then:
+        1 == 1
+
+        cleanup:
+        oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
 }

@@ -1093,9 +1093,6 @@ public class OneSlot {
     BeforePersistWalExtFromMerge readSomeSegmentsBeforePersistWal(int walGroupIndex) {
         var currentSegmentIndex = chunk.currentSegmentIndex();
         var needMergeSegmentIndex = chunk.needMergeSegmentIndex(false, currentSegmentIndex);
-        if (needMergeSegmentIndex == NO_NEED_MERGE_SEGMENT_INDEX) {
-            return null;
-        }
 
         // find continuous segments those wal group index is same from need merge segment index
         // * 4 make sure to find one
@@ -1139,16 +1136,16 @@ public class OneSlot {
 
         for (int i = 0; i < segmentCount; i++) {
             var segmentIndex = firstSegmentIndex + i;
-            var segmentFlag = getSegmentMergeFlag(segmentIndex);
-            // need check again, because batch read, only check first segment wal group index
-            if (segmentFlag.walGroupIndex() != walGroupIndex) {
-                continue;
-            }
-
-            var flag = segmentFlag.flag();
-            if (flag != Flag.new_write && segmentFlag.flag() != Flag.reuse_new) {
-                continue;
-            }
+//            var segmentFlag = getSegmentMergeFlag(segmentIndex);
+//            // need not check again, because only get target wal index segment
+//            if (segmentFlag.walGroupIndex() != walGroupIndex) {
+//                continue;
+//            }
+//
+//            var flag = segmentFlag.flag();
+//            if (flag != Flag.new_write && flag != Flag.reuse_new) {
+//                continue;
+//            }
 
             int relativeOffsetInBatchBytes = i * chunkSegmentLength;
             // refer to Chunk.ONCE_PREPARE_SEGMENT_COUNT
@@ -1161,14 +1158,14 @@ public class OneSlot {
                 continue;
             }
 
-            ChunkMergeJob.readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, slot);
+            ChunkMergeJob.readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, slot, false);
             segmentIndexList.add(segmentIndex);
         }
 
         return new BeforePersistWalExtFromMerge(segmentIndexList, cvList);
     }
 
-    private long logMergeCount = 0;
+    long logMergeCount = 0;
 
     void persistWal(boolean isShortValue, Wal targetWal) {
         var walGroupIndex = targetWal.groupIndex;
@@ -1269,7 +1266,7 @@ public class OneSlot {
         checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
     }
 
-    private void checkFirstMergedButNotPersistedSegmentIndexTooNear() {
+    void checkFirstMergedButNotPersistedSegmentIndexTooNear() {
         if (chunkMergeWorker.mergedSegmentSet.isEmpty()) {
             return;
         }
@@ -1298,6 +1295,7 @@ public class OneSlot {
                 needPersistMergedButNotPersisted = true;
             }
 
+            // recycle
             if (firstMergedButNotPersisted < currentSegmentIndex &&
                     chunk.maxSegmentIndex - currentSegmentIndex <= ONCE_PREPARE_SEGMENT_COUNT &&
                     firstMergedButNotPersisted <= ONCE_PREPARE_SEGMENT_COUNT) {
