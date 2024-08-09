@@ -338,6 +338,7 @@ class KeyLoaderTest extends Specification {
         keyLoader.writeSharedBytesList(sharedBytesListBySplitIndex, 0)
         then:
         keyLoader.fdReadWriteArray[1] != null
+        keyLoader.readKeyBucketForSingleKey(0, (byte) 1, (byte) 3, 1L, false) == null
 
         when:
         ConfForSlot.global.pureMemory = true
@@ -355,6 +356,8 @@ class KeyLoaderTest extends Specification {
         keyBucketListFromMemory[0] == null
         keyBucketListFromMemory[1] == null
         keyBucketListFromMemory[2] != null
+        keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 3, 1L, false) == null
+        keyLoader.readKeyBucketForSingleKey(0, (byte) 2, (byte) 3, 1L, false) != null
 
         cleanup:
         ConfForSlot.global.pureMemory = false
