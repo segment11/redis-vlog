@@ -15,7 +15,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         when:
-        def oneBatchBytes = one.getOneBath(0, 1024)
+        def oneBatchBytes = one.getOneBatch(0, 1024)
         then:
         oneBatchBytes.length == one.ONE_LENGTH * 1024
 
@@ -23,13 +23,13 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         Arrays.fill(oneBatchBytes, (byte) 1)
         one.overwriteOneBatch(oneBatchBytes, 0, 1024)
         then:
-        one.getOneBath(0, 1024) == oneBatchBytes
+        one.getOneBatch(0, 1024) == oneBatchBytes
 
         when:
         ConfForSlot.global.pureMemory = true
         one.overwriteOneBatch(oneBatchBytes, 0, 1024)
         then:
-        one.getOneBath(0, 1024) == oneBatchBytes
+        one.getOneBatch(0, 1024) == oneBatchBytes
 
         when:
         boolean exception = false

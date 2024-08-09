@@ -46,7 +46,7 @@ public class MetaChunkSegmentFlagSeq {
     final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
-    public byte[] getOneBath(int beginBucketIndex, int bucketCount) {
+    public byte[] getOneBatch(int beginBucketIndex, int bucketCount) {
         var dst = new byte[bucketCount * ONE_LENGTH];
         var offset = beginBucketIndex * ONE_LENGTH;
         inMemoryCachedByteBuffer.position(offset).get(dst);
