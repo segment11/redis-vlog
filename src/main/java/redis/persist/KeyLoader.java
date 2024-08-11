@@ -346,10 +346,6 @@ public class KeyLoader {
     private void updateKeyBucketInnerForTest(int bucketIndex, KeyBucket keyBucket, boolean isRefreshLRUCache) {
         var bytes = keyBucket.encode(true);
         var splitIndex = keyBucket.splitIndex;
-//        if (bytes.length > KEY_BUCKET_ONE_COST_SIZE) {
-//            throw new IllegalStateException("Key bucket bytes size too large, slot: " + slot +
-//                    ", bucket index: " + bucketIndex + ", split index: " + splitIndex + ", size: " + bytes.length);
-//        }
 
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
@@ -373,8 +369,16 @@ public class KeyLoader {
         xForBinlog.setKeyCountForStatsTmp(inner.keyCountForStatsTmp);
 
         var sharedBytesList = inner.writeAfterPutBatch();
-        writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
+        var seqArray = writeSharedBytesList(sharedBytesList, inner.beginBucketIndex);
         xForBinlog.setSharedBytesListBySplitIndex(sharedBytesList);
+
+        for (int splitIndex = 0; splitIndex < seqArray.length; splitIndex++) {
+            var seq = seqArray[splitIndex];
+            if (seq != 0L) {
+                metaOneWalGroupSeq.set(walGroupIndex, (byte) splitIndex, seq);
+            }
+        }
+        xForBinlog.setOneWalGroupSeqArrayBySplitIndex(seqArray);
 
         updateMetaKeyBucketSplitNumberBatchIfChanged(inner.beginBucketIndex, inner.splitNumberTmp);
         xForBinlog.setSplitNumberAfterPut(inner.splitNumberTmp);
@@ -400,8 +404,8 @@ public class KeyLoader {
         doAfterPutAll(walGroupIndex, xForBinlog, inner);
     }
 
-    public void writeSharedBytesList(byte[][] sharedBytesListBySplitIndex, int beginBucketIndex) {
-        var walGroupIndex = Wal.calWalGroupIndex(beginBucketIndex);
+    public long[] writeSharedBytesList(byte[][] sharedBytesListBySplitIndex, int beginBucketIndex) {
+        var seqArray = new long[sharedBytesListBySplitIndex.length];
         for (int splitIndex = 0; splitIndex < sharedBytesListBySplitIndex.length; splitIndex++) {
             var sharedBytes = sharedBytesListBySplitIndex[splitIndex];
             if (sharedBytes == null) {
@@ -421,8 +425,9 @@ public class KeyLoader {
             }
 
             fdReadWrite.writeSharedBytesForKeyBucketsInOneWalGroup(beginBucketIndex, sharedBytes);
-            metaOneWalGroupSeq.set(walGroupIndex, (byte) splitIndex, snowFlake.nextId());
+            seqArray[splitIndex] = snowFlake.nextId();
         }
+        return seqArray;
     }
 
     // use wal delay remove instead of remove immediately

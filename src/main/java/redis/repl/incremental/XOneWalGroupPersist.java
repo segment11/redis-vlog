@@ -35,6 +35,12 @@ public class XOneWalGroupPersist implements BinlogContent {
         this.sharedBytesListBySplitIndex = sharedBytesListBySplitIndex;
     }
 
+    private long[] oneWalGroupSeqArrayBySplitIndex;
+
+    public void setOneWalGroupSeqArrayBySplitIndex(long[] oneWalGroupSeqArrayBySplitIndex) {
+        this.oneWalGroupSeqArrayBySplitIndex = oneWalGroupSeqArrayBySplitIndex;
+    }
+
     private byte[] splitNumberAfterPut;
 
     public void setSplitNumberAfterPut(byte[] splitNumberAfterPut) {
@@ -86,6 +92,10 @@ public class XOneWalGroupPersist implements BinlogContent {
                 n += bytes.length;
             }
         }
+        // 4 bytes for one wal group seq array
+        n += 4;
+        n += oneWalGroupSeqArrayBySplitIndex.length * 8;
+
         // 4 bytes for split number after put length, split number after put
         n += 4 + splitNumberAfterPut.length;
         // 4 bytes for updated chunk segment flag with seq map size
@@ -130,6 +140,11 @@ public class XOneWalGroupPersist implements BinlogContent {
                 buffer.putInt(sharedBytes.length);
                 buffer.put(sharedBytes);
             }
+        }
+
+        buffer.putInt(oneWalGroupSeqArrayBySplitIndex.length);
+        for (var seq : oneWalGroupSeqArrayBySplitIndex) {
+            buffer.putLong(seq);
         }
 
         buffer.putInt(splitNumberAfterPut.length);
@@ -180,6 +195,13 @@ public class XOneWalGroupPersist implements BinlogContent {
         }
         x.setSharedBytesListBySplitIndex(sharedBytesListBySplitIndex);
 
+        var oneWalGroupSeqArrayBySplitIndexSize = buffer.getInt();
+        var oneWalGroupSeqArrayBySplitIndex = new long[oneWalGroupSeqArrayBySplitIndexSize];
+        for (var i = 0; i < oneWalGroupSeqArrayBySplitIndexSize; i++) {
+            oneWalGroupSeqArrayBySplitIndex[i] = buffer.getLong();
+        }
+        x.setOneWalGroupSeqArrayBySplitIndex(oneWalGroupSeqArrayBySplitIndex);
+
         var splitNumberAfterPutLength = buffer.getInt();
         var splitNumberAfterPut = new byte[splitNumberAfterPutLength];
         buffer.get(splitNumberAfterPut);
@@ -212,9 +234,16 @@ public class XOneWalGroupPersist implements BinlogContent {
     public void apply(byte slot, ReplPair replPair) {
         var oneSlot = localPersist.oneSlot(slot);
 
-        oneSlot.getKeyLoader().updateKeyCountBatchCached(beginBucketIndex, keyCountForStatsTmp);
-        oneSlot.getKeyLoader().writeSharedBytesList(sharedBytesListBySplitIndex, beginBucketIndex);
-        oneSlot.getKeyLoader().updateMetaKeyBucketSplitNumberBatchIfChanged(beginBucketIndex, splitNumberAfterPut);
+        var keyLoader = oneSlot.getKeyLoader();
+        keyLoader.updateKeyCountBatchCached(beginBucketIndex, keyCountForStatsTmp);
+        keyLoader.writeSharedBytesList(sharedBytesListBySplitIndex, beginBucketIndex);
+        keyLoader.updateMetaKeyBucketSplitNumberBatchIfChanged(beginBucketIndex, splitNumberAfterPut);
+        for (int splitIndex = 0; splitIndex < oneWalGroupSeqArrayBySplitIndex.length; splitIndex++) {
+            var seq = oneWalGroupSeqArrayBySplitIndex[splitIndex];
+            if (seq != 0L) {
+                keyLoader.setMetaOneWalGroupSeq((byte) splitIndex, beginBucketIndex, seq);
+            }
+        }
 
         // perf, change to batch
 //        if (updatedChunkSegmentFlagWithSeqMap.size() == updatedChunkSegmentFlagWithSeqMap.lastKey() - updatedChunkSegmentFlagWithSeqMap.firstKey() + 1) {

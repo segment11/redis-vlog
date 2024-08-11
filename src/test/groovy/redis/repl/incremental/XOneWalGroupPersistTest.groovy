@@ -25,6 +25,7 @@ class XOneWalGroupPersistTest extends Specification {
         def sharedBytesList = new byte[3][]
         sharedBytesList[0] = new byte[ConfForSlot.global.confWal.oneChargeBucketNumber * 4096]
         x.sharedBytesListBySplitIndex = sharedBytesList
+        x.oneWalGroupSeqArrayBySplitIndex = [0L, 1L, 2L]
         byte[] splitNumberAfterPut = [3, 3, 3]
         x.splitNumberAfterPut = splitNumberAfterPut
         x.putUpdatedChunkSegmentFlagWithSeq(0, Chunk.Flag.new_write, 0L)
