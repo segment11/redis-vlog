@@ -466,7 +466,7 @@ public class Chunk {
         updatePvmBatchCostTimeTotalUsTotal += costT;
 
         // update meta, segment index for next time
-        oneSlot.setChunkWriteSegmentIndex(segmentIndex);
+        oneSlot.setMetaChunkSegmentIndex(segmentIndex);
         xForBinlog.setChunkSegmentIndexAfterPersist(segmentIndex);
 
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();

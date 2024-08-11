@@ -425,7 +425,7 @@ class OneSlotTest extends Specification {
         when:
         boolean exception = false
         try {
-            oneSlot.setChunkWriteSegmentIndex(-1)
+            oneSlot.setMetaChunkSegmentIndex(-1)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -436,7 +436,7 @@ class OneSlotTest extends Specification {
         when:
         exception = false
         try {
-            oneSlot.setChunkWriteSegmentIndex(oneSlot.chunk.maxSegmentIndex + 1)
+            oneSlot.setMetaChunkSegmentIndex(oneSlot.chunk.maxSegmentIndex + 1)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true

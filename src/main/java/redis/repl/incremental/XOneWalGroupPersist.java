@@ -237,18 +237,14 @@ public class XOneWalGroupPersist implements BinlogContent {
         var keyLoader = oneSlot.getKeyLoader();
         keyLoader.updateKeyCountBatchCached(beginBucketIndex, keyCountForStatsTmp);
         keyLoader.writeSharedBytesList(sharedBytesListBySplitIndex, beginBucketIndex);
-        keyLoader.updateMetaKeyBucketSplitNumberBatchIfChanged(beginBucketIndex, splitNumberAfterPut);
         for (int splitIndex = 0; splitIndex < oneWalGroupSeqArrayBySplitIndex.length; splitIndex++) {
             var seq = oneWalGroupSeqArrayBySplitIndex[splitIndex];
             if (seq != 0L) {
                 keyLoader.setMetaOneWalGroupSeq((byte) splitIndex, beginBucketIndex, seq);
             }
         }
+        keyLoader.updateMetaKeyBucketSplitNumberBatchIfChanged(beginBucketIndex, splitNumberAfterPut);
 
-        // perf, change to batch
-//        if (updatedChunkSegmentFlagWithSeqMap.size() == updatedChunkSegmentFlagWithSeqMap.lastKey() - updatedChunkSegmentFlagWithSeqMap.firstKey() + 1) {
-//
-//        }
         for (var entry : updatedChunkSegmentFlagWithSeqMap.entrySet()) {
             var segmentIndex = entry.getKey();
             var flag = entry.getValue().flag;
@@ -264,7 +260,8 @@ public class XOneWalGroupPersist implements BinlogContent {
             chunk.writeSegmentToTargetSegmentIndex(bytes, segmentIndex);
         }
 
-        oneSlot.setChunkWriteSegmentIndex(chunkSegmentIndexAfterPersist);
+        oneSlot.setMetaChunkSegmentIndex(chunkSegmentIndexAfterPersist);
+        oneSlot.getChunk().initSegmentIndexWhenFirstStart(chunkSegmentIndexAfterPersist);
 
         var targetWal = oneSlot.getWalByBucketIndex(beginBucketIndex);
         if (isShortValue) {

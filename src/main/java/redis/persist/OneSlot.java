@@ -550,7 +550,7 @@ public class OneSlot {
         return metaChunkSegmentIndex.get();
     }
 
-    public void setChunkWriteSegmentIndex(int segmentIndex) {
+    public void setMetaChunkSegmentIndex(int segmentIndex) {
         if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
             throw new IllegalArgumentException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
         }
@@ -1010,9 +1010,9 @@ public class OneSlot {
                 updateSegmentMergeFlag(currentSegmentIndex, Flag.reuse_new, snowFlake.nextId());
                 log.warn("Reset segment persisted when init");
 
-                setChunkWriteSegmentIndex(currentSegmentIndex);
+                setMetaChunkSegmentIndex(currentSegmentIndex);
             } else {
-                setChunkWriteSegmentIndex(currentSegmentIndex);
+                setMetaChunkSegmentIndex(currentSegmentIndex);
                 isBreak = true;
                 break;
             }
