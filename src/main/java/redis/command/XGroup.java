@@ -224,7 +224,7 @@ public class XGroup extends BaseCommand {
 
             if (catchUpFileIndex >= earliestFileIndex && catchUpOffset >= earliestOffset) {
                 // need not fetch exists data from master
-                // start fetch incremental data from master binglog
+                // start fetch incremental data from master binlog
                 log.warn("Repl slave start catch up from master binlog, slave uuid={}, master uuid={}, last updated file index={}, offset={}",
                         slaveUuid, masterUuid, catchUpFileIndex, catchUpOffset);
 
@@ -594,33 +594,22 @@ public class XGroup extends BaseCommand {
             }
         }
 
-        // server received from client, send back exists dict to client, with flag can do next step
         var dictMap = DictMap.getInstance();
         var cacheDictCopy = dictMap.getCacheDictCopy();
         var cacheDictBySeqCopy = dictMap.getCacheDictBySeqCopy();
+        // master always send global zstd dict to slave
+        cacheDictCopy.put(Dict.GLOBAL_ZSTD_DICT_KEY, Dict.GLOBAL_ZSTD_DICT);
+        cacheDictBySeqCopy.put(Dict.GLOBAL_ZSTD_DICT_SEQ, Dict.GLOBAL_ZSTD_DICT);
 
-        if (cacheDictBySeqCopy.isEmpty()) {
-            return Repl.reply(slot, replPair, ReplType.s_exists_dict, EmptyContent.INSTANCE);
-        } else {
-            var content = new ToSlaveExistsDict(cacheDictCopy, cacheDictBySeqCopy, sentDictSeqList);
-            return Repl.reply(slot, replPair, ReplType.s_exists_dict, content);
-        }
+        var content = new ToSlaveExistsDict(cacheDictCopy, cacheDictBySeqCopy, sentDictSeqList);
+        return Repl.reply(slot, replPair, ReplType.s_exists_dict, content);
     }
 
     Reply s_exists_dict(byte slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
-        // empty content means no dict, next step
-        if (EmptyContent.isEmpty(contentBytes)) {
-            return fetchExistsBigString(slot, oneSlot);
-        }
-
         var buffer = ByteBuffer.wrap(contentBytes);
         var dictCount = buffer.getInt();
-        if (dictCount == 0) {
-            // next step, fetch big string
-            return fetchExistsBigString(slot, oneSlot);
-        }
 
         var dictMap = DictMap.getInstance();
         // decode
@@ -631,12 +620,16 @@ public class XGroup extends BaseCommand {
                 buffer.get(encodeBytes);
 
                 var is = new DataInputStream(new ByteArrayInputStream(encodeBytes));
-                var dictWithKey = Dict.decode(is);
+                var dictWithKeyPrefix = Dict.decode(is);
 
-                var dict = dictWithKey.dict();
-                dictMap.putDict(dictWithKey.keyPrefix(), dict);
-
-                log.warn("Repl handle s exists dict: dict with key={}", dictWithKey);
+                var dict = dictWithKeyPrefix.dict();
+                var keyPrefix = dictWithKeyPrefix.keyPrefix();
+                if (keyPrefix.equals(Dict.GLOBAL_ZSTD_DICT_KEY)) {
+                    Dict.GLOBAL_ZSTD_DICT.setDictBytes(dict.getDictBytes());
+                } else {
+                    dictMap.putDict(keyPrefix, dict);
+                }
+                log.warn("Repl handle s exists dict: dict with key={}", dictWithKeyPrefix);
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
