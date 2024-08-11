@@ -35,6 +35,22 @@ public class KeyLoader {
         this.slotDir = slotDir;
         this.snowFlake = snowFlake;
         this.oneSlot = oneSlot;
+        this.shortValueCvExpiredCallBack = (key, cvExpired) -> {
+            if (oneSlot == null) {
+                log.warn("Short value cv expired, slot: {}", slot);
+                return;
+            }
+
+            if (cvExpired.isBigString()) {
+                var uuid = cvExpired.getBigStringMetaUuid();
+                var isDeleted = oneSlot.getBigStringFiles().deleteBigStringFileIfExist(uuid);
+                if (!isDeleted) {
+                    throw new RuntimeException("Delete big string file error, s=" + slot + ", key=" + key + ", uuid=" + uuid);
+                } else {
+                    log.warn("Delete big string file, s={}, key={}, uuid={}", slot, key, uuid);
+                }
+            }
+        };
 
         this.initMetricsCollect();
     }
@@ -54,6 +70,8 @@ public class KeyLoader {
     final SnowFlake snowFlake;
 
     private final OneSlot oneSlot;
+
+    final KeyBucket.ShortValueCvExpiredCallBack shortValueCvExpiredCallBack;
 
     MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
 
@@ -264,13 +282,17 @@ public class KeyLoader {
             if (!isBytesValidAsKeyBucket(bytes, position)) {
                 return null;
             }
-            return new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, bytes, position, snowFlake);
+            var r = new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, bytes, position, snowFlake);
+            r.shortValueCvExpiredCallBack = shortValueCvExpiredCallBack;
+            return r;
         }
 
         if (!isBytesValidAsKeyBucket(bytes, 0)) {
             return null;
         }
-        return new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, bytes, snowFlake);
+        var r = new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, bytes, snowFlake);
+        r.shortValueCvExpiredCallBack = shortValueCvExpiredCallBack;
+        return r;
     }
 
     KeyBucket.ValueBytesWithExpireAtAndSeq getValueByKey(int bucketIndex, byte[] keyBytes, long keyHash) {

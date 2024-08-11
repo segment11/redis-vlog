@@ -366,6 +366,7 @@ public class CompressedValue {
         }
     }
 
+    // encoded length = 8 + 8 + 4 + 8 + 4 + 4 + 12 = 48
     public byte[] encodeAsBigStringMeta(long uuid) {
         // uuid + dict int
         compressedLength = 8 + 4;

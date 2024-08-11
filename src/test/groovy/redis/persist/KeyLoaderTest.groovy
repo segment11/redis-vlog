@@ -370,7 +370,16 @@ class KeyLoaderTest extends Specification {
         def keyLoader = prepareKeyLoader()
 
         and:
-        def shortValueList = Mock.prepareShortValueList(10)
+        def shortValueList = Mock.prepareShortValueList(10, 0, { v ->
+            if (v.seq() != 9) {
+                return v
+            } else {
+                // last one expired
+                def v2 = new Wal.V(v.seq(), 0, v.keyHash(), System.currentTimeMillis() - 1,
+                        v.key(), v.cvEncoded(), false)
+                return v2
+            }
+        })
 
         when:
         def xForBinlog = new XOneWalGroupPersist(true, 0)
@@ -386,6 +395,9 @@ class KeyLoaderTest extends Specification {
         def keyLoader2 = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir2, keyLoader.snowFlake, oneSlot)
         keyLoader2.initFds(keyLoader.libC)
         keyLoader2.initFds((byte) 1)
+        // need fix, todo
+        keyLoader2.persistShortValueListBatchInOneWalGroup(0, shortValueList, xForBinlog)
+        // put again
         keyLoader2.persistShortValueListBatchInOneWalGroup(0, shortValueList, xForBinlog)
         then:
         1 == 1

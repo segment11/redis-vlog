@@ -3,6 +3,8 @@ package redis.persist
 import redis.CompressedValue
 import redis.KeyHash
 
+import java.util.function.Function
+
 class Mock {
     static List<String> prepareTargetBucketIndexKeyList(int n, int bucketIndex = 0) {
         List<String> targetBucketIndexKeyList = []
@@ -13,17 +15,22 @@ class Mock {
         targetBucketIndexKeyList
     }
 
-    static List<Wal.V> prepareShortValueList(int n, int bucketIndex = 0) {
+    static List<Wal.V> prepareShortValueList(int n, int bucketIndex = 0, Function<Wal.V, Wal.V> transfer = null) {
         List<Wal.V> shortValueList = []
         n.times {
             def key = 'key:' + it.toString().padLeft(12, '0')
             def keyBytes = key.bytes
-            def valueBytes = ('value' + it).bytes
+            def cv = new CompressedValue()
+            cv.compressedData = ('value' + it).bytes
+            def cvEncoded = cv.encodeAsShortString()
 
             def keyHash = KeyHash.hash(keyBytes)
 
             def v = new Wal.V(it, bucketIndex, keyHash, CompressedValue.NO_EXPIRE,
-                    key, valueBytes, false)
+                    key, cvEncoded, false)
+            if (transfer != null) {
+                v = transfer.apply(v)
+            }
 
             shortValueList << v
         }

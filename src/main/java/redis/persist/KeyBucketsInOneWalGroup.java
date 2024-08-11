@@ -81,10 +81,11 @@ public class KeyBucketsInOneWalGroup {
             for (int i = 0; i < oneChargeBucketNumber; i++) {
                 var bucketIndex = beginBucketIndex + i;
                 var currentSplitNumber = splitNumberTmp[i];
-                var bucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, currentSplitNumber, sharedBytes,
+                var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, currentSplitNumber, sharedBytes,
                         KeyLoader.KEY_BUCKET_ONE_COST_SIZE * i, keyLoader.snowFlake);
-                keyCountForStatsTmp[i] += bucket.size;
-                list.set(i, bucket);
+                keyBucket.shortValueCvExpiredCallBack = keyLoader.shortValueCvExpiredCallBack;
+                keyCountForStatsTmp[i] += keyBucket.size;
+                list.set(i, keyBucket);
             }
         }
     }
@@ -184,6 +185,7 @@ public class KeyBucketsInOneWalGroup {
             var keyBucket = list.get(relativeBucketIndex);
             if (keyBucket == null) {
                 keyBucket = new KeyBucket(slot, bucketIndex, splitIndex, currentSplitNumber, null, 0, keyLoader.snowFlake);
+                keyBucket.shortValueCvExpiredCallBack = keyLoader.shortValueCvExpiredCallBack;
                 list.set(relativeBucketIndex, keyBucket);
             }
 

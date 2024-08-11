@@ -1,5 +1,6 @@
 package redis.persist;
 
+import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
@@ -21,6 +22,7 @@ public class KeyBucket {
 
     // key length short 2 + key length <= 32 + value length byte 1 + (pvm length 14 or short value case encoded number 17 / string 25 ) <= 60
     // if key length > 32, refer CompressedValue.KEY_MAX_LENGTH, one key may cost 2 cells
+    // for example, big string cv is short value, encoded length = 48, if key length = 16, will cost 2 cells
     private static final int ONE_CELL_LENGTH = 60;
     private static final int HASH_VALUE_LENGTH = 8;
     private static final int EXPIRE_AT_VALUE_LENGTH = 8;
@@ -173,27 +175,35 @@ public class KeyBucket {
 
             var expireAt = buffer.getLong(metaIndex + HASH_VALUE_LENGTH);
             var seq = buffer.getLong(metaIndex + HASH_VALUE_LENGTH + EXPIRE_AT_VALUE_LENGTH);
+            var kvBytes = getFromOneCell(cellIndex);
 
-            buffer.position(oneCellOffset(cellIndex));
-
-            var keyLength = buffer.getShort();
-            // data error, need recover
-            if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength <= 0) {
-                throw new IllegalStateException("Key length error, key length: " + keyLength);
-            }
-            var keyBytes = new byte[keyLength];
-            buffer.get(keyBytes);
-
-            var valueLength = buffer.get();
-            // data error, need recover
-            if (valueLength > CompressedValue.VALUE_MAX_LENGTH || valueLength < 0) {
-                throw new IllegalStateException("Value length error, value length: " + valueLength);
-            }
-            var valueBytes = new byte[valueLength];
-            buffer.get(valueBytes);
-
-            callBack.call(cellHashValue, expireAt, seq, keyBytes, valueBytes);
+            callBack.call(cellHashValue, expireAt, seq, kvBytes.keyBytes, kvBytes.valueBytes);
         }
+    }
+
+    private record KeyBytesAndValueBytes(byte[] keyBytes, byte[] valueBytes) {
+    }
+
+    private KeyBytesAndValueBytes getFromOneCell(int cellIndex) {
+        buffer.position(oneCellOffset(cellIndex));
+
+        var keyLength = buffer.getShort();
+        // data error, need recover
+        if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength <= 0) {
+            throw new IllegalStateException("Key length error, key length: " + keyLength);
+        }
+        var keyBytes = new byte[keyLength];
+        buffer.get(keyBytes);
+
+        var valueLength = buffer.get();
+        // data error, need recover
+        if (valueLength > CompressedValue.VALUE_MAX_LENGTH || valueLength < 0) {
+            throw new IllegalStateException("Value length error, value length: " + valueLength);
+        }
+        var valueBytes = new byte[valueLength];
+        buffer.get(valueBytes);
+
+        return new KeyBytesAndValueBytes(keyBytes, valueBytes);
     }
 
     record KVMeta(int offset, short keyLength, byte valueLength) {
@@ -251,9 +261,23 @@ public class KeyBucket {
         }
     }
 
+    public interface ShortValueCvExpiredCallBack {
+        void handle(String key, CompressedValue cvExpired);
+    }
+
+    ShortValueCvExpiredCallBack shortValueCvExpiredCallBack;
+
     void clearOneExpired(int i) {
         if (i >= capacity) {
             throw new IllegalArgumentException("i >= capacity");
+        }
+
+        if (shortValueCvExpiredCallBack != null) {
+            var kvBytes = getFromOneCell(i);
+            if (!PersistValueMeta.isPvm(kvBytes.valueBytes)) {
+                var cv = CompressedValue.decode(Unpooled.wrappedBuffer(kvBytes.valueBytes), kvBytes.keyBytes, 0L);
+                shortValueCvExpiredCallBack.handle(new String(kvBytes.keyBytes), cv);
+            }
         }
 
         int cellCount = 1;

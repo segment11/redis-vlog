@@ -279,9 +279,6 @@ public class ChunkMergeJob {
             int finalSubBlockIndex = subBlockIndex;
             SegmentBatch.iterateFromSegmentBytes(decompressedBytes, (key, cv, offsetInThisSegment) -> {
                 if (!includeExpired && cv.isExpired()) {
-                    if (cv.isBigString()) {
-                        removeExpiredBigString(key, cv, oneSlot);
-                    }
                     return;
                 }
                 cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetInThisSegment, segmentIndex, (byte) finalSubBlockIndex));
@@ -401,25 +398,6 @@ public class ChunkMergeJob {
             }
         }
 
-        for (CvWithKeyAndSegmentOffset one : toRemoveCvList) {
-            var key = one.key;
-            var cv = one.cv;
-            if (cv.isBigString()) {
-                removeExpiredBigString(key, cv, oneSlot);
-            }
-        }
-
         cvList.removeAll(toRemoveCvList);
-    }
-
-    private static void removeExpiredBigString(String key, CompressedValue cv, OneSlot oneSlot) {
-        // need remove file
-        var uuid = cv.getBigStringMetaUuid();
-        var isDeleted = oneSlot.getBigStringFiles().deleteBigStringFileIfExist(uuid);
-        if (!isDeleted) {
-            throw new RuntimeException("Delete big string file error, s=" + oneSlot.slot() + ", key=" + key + ", uuid=" + uuid);
-        } else {
-            log.warn("Delete big string file, s={}, key={}, uuid={}", oneSlot.slot(), key, uuid);
-        }
     }
 }

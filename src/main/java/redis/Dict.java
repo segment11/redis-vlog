@@ -20,6 +20,7 @@ public class Dict implements Serializable {
 
     public static final Dict SELF_ZSTD_DICT = new Dict();
     public static final Dict GLOBAL_ZSTD_DICT = new Dict();
+    public static final String GLOBAL_ZSTD_DICT_KEY = "dict-x-global";
 
     static final String GLOBAL_DICT_FILE_NAME = "dict-global-raw.dat";
     // for latency
