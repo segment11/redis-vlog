@@ -2,6 +2,7 @@ package redis.persist
 
 import jnr.ffi.LibraryLoader
 import jnr.posix.LibC
+import redis.CompressedValue
 import redis.ConfForSlot
 import redis.KeyHash
 import redis.SnowFlake
@@ -374,9 +375,18 @@ class KeyLoaderTest extends Specification {
             if (v.seq() != 9) {
                 return v
             } else {
-                // last one expired
-                def v2 = new Wal.V(v.seq(), 0, v.keyHash(), System.currentTimeMillis() - 1,
-                        v.key(), v.cvEncoded(), false)
+                // last one expired, and set type big string, so can callback
+                def uuid = keyLoader.snowFlake.nextId()
+                // skip write to file
+
+                def bigStringCv = new CompressedValue()
+                bigStringCv.seq = v.seq()
+                bigStringCv.keyHash = v.keyHash()
+                bigStringCv.expireAt = System.currentTimeMillis() - 1
+                def bigStringCvEncoded = bigStringCv.encodeAsBigStringMeta(uuid)
+
+                def v2 = new Wal.V(v.seq(), 0, v.keyHash(), bigStringCv.expireAt,
+                        v.key(), bigStringCvEncoded, false)
                 return v2
             }
         })
@@ -395,7 +405,6 @@ class KeyLoaderTest extends Specification {
         def keyLoader2 = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir2, keyLoader.snowFlake, oneSlot)
         keyLoader2.initFds(keyLoader.libC)
         keyLoader2.initFds((byte) 1)
-        // need fix, todo
         keyLoader2.persistShortValueListBatchInOneWalGroup(0, shortValueList, xForBinlog)
         // put again
         keyLoader2.persistShortValueListBatchInOneWalGroup(0, shortValueList, xForBinlog)

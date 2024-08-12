@@ -48,7 +48,7 @@ public class OneSlot {
         this.snowFlake = new SnowFlake(1, 1);
         this.chunkSegmentLength = 4096;
 
-        this.bigStringFiles = null;
+        this.bigStringFiles = new BigStringFiles(slot, slotDir);
         this.chunkMergeWorker = null;
         this.dynConfig = null;
         this.walGroupNumber = 1;
