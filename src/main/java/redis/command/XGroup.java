@@ -192,6 +192,15 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, hi, content);
     }
 
+    private byte[] toMasterCatchUp(long binlogMasterUuid, int binlogFileIndex, long binlogOffset) {
+        var requestBytes = new byte[8 + 4 + 8];
+        var requestBuffer = ByteBuffer.wrap(requestBytes);
+        requestBuffer.putLong(binlogMasterUuid);
+        requestBuffer.putInt(binlogFileIndex);
+        requestBuffer.putLong(binlogOffset);
+        return requestBytes;
+    }
+
     private Reply hi(byte slot, byte[] contentBytes) {
         // client received hi from server
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -233,7 +242,7 @@ public class XGroup extends BaseCommand {
                 var nextCatchUpFileIndex = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? catchUpFileIndex : catchUpFileIndex + 1;
                 var nextCatchUpOffset = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? 0 : catchUpOffset + oneSegmentLength;
 
-                var content = new ToMasterCatchUpForBinlogOneSegment(masterUuid, nextCatchUpFileIndex, nextCatchUpOffset);
+                var content = new RawBytesContent(toMasterCatchUp(masterUuid, nextCatchUpFileIndex, nextCatchUpOffset));
                 return Repl.reply(slot, replPair, ReplType.catch_up, content);
             }
         }
@@ -664,7 +673,8 @@ public class XGroup extends BaseCommand {
         // begin incremental data catch up
         var binlogFileIndex = fileIndexAndOffset.fileIndex();
         var marginFileOffset = Binlog.marginFileOffset(fileIndexAndOffset.offset());
-        var content = new ToMasterCatchUpForBinlogOneSegment(binlogMasterUuid, binlogFileIndex, marginFileOffset);
+
+        var content = new RawBytesContent(toMasterCatchUp(binlogMasterUuid, binlogFileIndex, marginFileOffset));
         return Repl.reply(slot, replPair, ReplType.catch_up, content);
     }
 
@@ -772,7 +782,7 @@ public class XGroup extends BaseCommand {
                     currentFileIndex, currentOffset);
 
             // still catch up current segment, delay
-            var content = new ToMasterCatchUpForBinlogOneSegment(binlogMasterUuid, currentFileIndex, catchUpOffset);
+            var content = new RawBytesContent(toMasterCatchUp(binlogMasterUuid, currentFileIndex, catchUpOffset));
             oneSlot.delayRun(ConfForSlot.global.confRepl.catchUpLatestSegmentDelayMillis, () -> {
                 replPair.write(ReplType.catch_up, content);
             });
@@ -789,7 +799,8 @@ public class XGroup extends BaseCommand {
             log.info("Repl handle catch up: catch up to next file, slot={}, slave uuid={}, {}, binlog file index={}, offset={}",
                     slot, replPair.getSlaveUuid(), replPair.getHostAndPort(), nextCatchUpFileIndex, nextCatchUpOffset);
         }
-        var content = new ToMasterCatchUpForBinlogOneSegment(binlogMasterUuid, nextCatchUpFileIndex, nextCatchUpOffset);
+
+        var content = new RawBytesContent(toMasterCatchUp(binlogMasterUuid, nextCatchUpFileIndex, nextCatchUpOffset));
         return Repl.reply(slot, replPair, ReplType.catch_up, content);
     }
 }
