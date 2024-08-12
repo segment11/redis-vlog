@@ -56,7 +56,7 @@ public class XGroup extends BaseCommand {
         var slot = data[1][0];
         var replType = ReplType.fromCode(data[2][0]);
         if (replType == null) {
-            log.error("Repl handle error: unknown repl type: {}", replType);
+            log.error("Repl handle error: unknown repl type code: {}", data[2][0]);
             return null;
         }
         var contentBytes = data[3];
@@ -156,7 +156,7 @@ public class XGroup extends BaseCommand {
         };
     }
 
-    private Reply hello(byte slot, byte[] contentBytes) {
+    Reply hello(byte slot, byte[] contentBytes) {
         // server received hello from client
         var buffer = ByteBuffer.wrap(contentBytes);
         var slaveUuid = buffer.getLong();
@@ -201,7 +201,7 @@ public class XGroup extends BaseCommand {
         return requestBytes;
     }
 
-    private Reply hi(byte slot, byte[] contentBytes) {
+    Reply hi(byte slot, byte[] contentBytes) {
         // client received hi from server
         var buffer = ByteBuffer.wrap(contentBytes);
         var slaveUuid = buffer.getLong();
@@ -239,8 +239,10 @@ public class XGroup extends BaseCommand {
 
                 var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
                 var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
-                var nextCatchUpFileIndex = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? catchUpFileIndex : catchUpFileIndex + 1;
-                var nextCatchUpOffset = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? 0 : catchUpOffset + oneSegmentLength;
+
+                var isCatchUpEndInOneSegment = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength);
+                var nextCatchUpFileIndex = isCatchUpEndInOneSegment ? catchUpFileIndex + 1 : catchUpFileIndex;
+                var nextCatchUpOffset = isCatchUpEndInOneSegment ? 0 : catchUpOffset + oneSegmentLength;
 
                 var content = new RawBytesContent(toMasterCatchUp(masterUuid, nextCatchUpFileIndex, nextCatchUpOffset));
                 return Repl.reply(slot, replPair, ReplType.catch_up, content);
@@ -344,10 +346,10 @@ public class XGroup extends BaseCommand {
 
     Reply exists_key_buckets(byte slot, byte[] contentBytes) {
         // server received from client
-        var requestBuffer = ByteBuffer.wrap(contentBytes);
-        var splitIndex = requestBuffer.get();
-        var beginBucketIndex = requestBuffer.getInt();
-        var oneWalGroupSeq = requestBuffer.getLong();
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var splitIndex = buffer.get();
+        var beginBucketIndex = buffer.getInt();
+        var oneWalGroupSeq = buffer.getLong();
 
         var oneSlot = localPersist.oneSlot(slot);
         var splitNumber = oneSlot.getKeyLoader().maxSplitNumberForRepl();
@@ -364,14 +366,14 @@ public class XGroup extends BaseCommand {
         }
 
         var responseBytes = new byte[1 + 1 + 4 + 1 + 8 + bytes.length];
-        var buffer = ByteBuffer.wrap(responseBytes);
-        buffer.put(splitIndex);
-        buffer.put(splitNumber);
-        buffer.putInt(beginBucketIndex);
-        buffer.put(isSkip ? (byte) 1 : (byte) 0);
-        buffer.putLong(masterOneWalGroupSeq);
+        var responseBuffer = ByteBuffer.wrap(responseBytes);
+        responseBuffer.put(splitIndex);
+        responseBuffer.put(splitNumber);
+        responseBuffer.putInt(beginBucketIndex);
+        responseBuffer.put(isSkip ? (byte) 1 : (byte) 0);
+        responseBuffer.putLong(masterOneWalGroupSeq);
         if (bytes.length != 0) {
-            buffer.put(bytes);
+            responseBuffer.put(bytes);
         }
 
         return Repl.reply(slot, replPair, ReplType.s_exists_key_buckets, new RawBytesContent(responseBytes));
@@ -389,18 +391,18 @@ public class XGroup extends BaseCommand {
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
         }
 
-        var responseBuffer = ByteBuffer.wrap(contentBytes);
-        var splitIndex = responseBuffer.get();
-        var splitNumber = responseBuffer.get();
-        var beginBucketIndex = responseBuffer.getInt();
-        var isSkip = responseBuffer.get() == 1;
-        var masterOneWalGroupSeq = responseBuffer.getLong();
-        var leftLength = responseBuffer.remaining();
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var splitIndex = buffer.get();
+        var splitNumber = buffer.get();
+        var beginBucketIndex = buffer.getInt();
+        var isSkip = buffer.get() == 1;
+        var masterOneWalGroupSeq = buffer.getLong();
+        var leftLength = buffer.remaining();
 
         if (!isSkip) {
             // overwrite key buckets
             var sharedBytes = new byte[leftLength];
-            responseBuffer.get(sharedBytes);
+            buffer.get(sharedBytes);
 
             var sharedBytesList = new byte[splitIndex + 1][];
             sharedBytesList[splitIndex] = sharedBytes;
@@ -485,7 +487,7 @@ public class XGroup extends BaseCommand {
         var responseBytes = new byte[8 + bigStringBytes.length];
         var responseBuffer = ByteBuffer.wrap(responseBytes);
         responseBuffer.putLong(uuid);
-        if (bigStringBytes != null) {
+        if (bigStringBytes.length > 0) {
             responseBuffer.put(bigStringBytes);
         }
         return Repl.reply(slot, replPair, ReplType.s_incremental_big_string, new RawBytesContent(responseBytes));

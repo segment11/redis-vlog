@@ -20,6 +20,8 @@ class ReplTest extends Specification {
         def reply = Repl.reply(slot, replPair, ReplType.ping, ping)
         then:
         reply instanceof Repl.ReplReply
+        ((Repl.ReplReply) reply).isReplType(ReplType.ping)
+        !((Repl.ReplReply) reply).isReplType(ReplType.pong)
         ((Repl.ReplReply) reply).buffer().limit() == Repl.HEADER_LENGTH + ping.encodeLength()
 
         when:

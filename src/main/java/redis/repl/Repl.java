@@ -34,6 +34,11 @@ public class Repl {
         public io.activej.bytebuf.ByteBuf buffer() {
             return buf;
         }
+
+        public boolean isReplType(ReplType type) {
+            var b = buf.at(PROTOCOL_KEYWORD_BYTES.length + 8 + 1);
+            return ReplType.fromCode(b) == type;
+        }
     }
 
     public static Reply reply(byte slot, ReplPair replPair, ReplType type, ReplContent content) {
