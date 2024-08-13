@@ -72,8 +72,8 @@ public class MetaChunkSegmentIndex {
     }
 
     public void setMasterBinlogFileIndexAndOffset(long masterUuid, boolean isExistsDataAllFetched,
-                                                  int masterBinlogFileIndex, long masterBinlogOffset) {
-        setAll(get(), masterUuid, isExistsDataAllFetched, masterBinlogFileIndex, masterBinlogOffset);
+                                                  int masterBinlogFileIndexNextTimeToFetch, long masterBinlogOffsetNextTimeToFetch) {
+        setAll(get(), masterUuid, isExistsDataAllFetched, masterBinlogFileIndexNextTimeToFetch, masterBinlogOffsetNextTimeToFetch);
     }
 
     void setAll(int segmentIndex, long masterUuid, boolean isExistsDataAllFetched,

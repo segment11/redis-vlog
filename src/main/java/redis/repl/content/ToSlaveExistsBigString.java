@@ -59,8 +59,8 @@ public class ToSlaveExistsBigString implements ReplContent {
             existCount++;
 
             toBuf.writeLong(uuid);
-            var encodeLength = (int) file.length();
-            toBuf.writeInt(encodeLength);
+            var bigStringBytesLength = (int) file.length();
+            toBuf.writeInt(bigStringBytesLength);
 
             try {
                 byte[] bytes = FileUtils.readFileToByteArray(file);
@@ -89,8 +89,8 @@ public class ToSlaveExistsBigString implements ReplContent {
                 continue;
             }
 
-            var encodeLength = (int) file.length();
-            length += 8 + 4 + encodeLength;
+            var bigStringBytesLength = (int) file.length();
+            length += 8 + 4 + bigStringBytesLength;
         }
         return length;
     }
