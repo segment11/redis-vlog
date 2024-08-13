@@ -116,8 +116,10 @@ public class DictMap {
     }
 
     private static final String FILE_NAME = "dict-map.dat";
+    private File dirFile;
 
     public void initDictMap(File dirFile) throws IOException {
+        this.dirFile = dirFile;
         var file = new File(dirFile, FILE_NAME);
         if (!file.exists()) {
             FileUtils.touch(file);
@@ -148,5 +150,11 @@ public class DictMap {
                 cacheDict.size(), cacheDictBySeq.size(), n, loadedSeqList);
 
         Dict.resetGlobalDictBytesByFile(new File(dirFile, Dict.GLOBAL_DICT_FILE_NAME), false);
+    }
+
+    public void updateGlobalDictBytes(byte[] dictBytes) {
+        Dict.GLOBAL_ZSTD_DICT.setDictBytes(dictBytes);
+        log.warn("Dict global dict bytes updated, dict bytes length: {}", dictBytes.length);
+        Dict.saveGlobalDictBytesToFile(new File(dirFile, Dict.GLOBAL_DICT_FILE_NAME));
     }
 }

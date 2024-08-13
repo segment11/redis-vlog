@@ -20,6 +20,7 @@ public class Dict implements Serializable {
 
     public static final Dict SELF_ZSTD_DICT = new Dict();
     public static final Dict GLOBAL_ZSTD_DICT = new Dict();
+    // warning: this key can not be other dict key prefix
     public static final String GLOBAL_ZSTD_DICT_KEY = "dict-x-global";
 
     static final String GLOBAL_DICT_FILE_NAME = "dict-global-raw.dat";
@@ -42,7 +43,7 @@ public class Dict implements Serializable {
             GLOBAL_ZSTD_DICT.dictBytes = dictBytes;
             log.warn("Dict global dict bytes overwritten, dict bytes length: {}", dictBytes.length);
         } else {
-            if (GLOBAL_ZSTD_DICT.dictBytes != null) {
+            if (GLOBAL_ZSTD_DICT.hasDictBytes()) {
                 if (!Arrays.equals(GLOBAL_ZSTD_DICT.dictBytes, dictBytes)) {
                     throw new IllegalStateException("Dict global dict bytes already set and not equal to new bytes");
                 }
@@ -63,6 +64,14 @@ public class Dict implements Serializable {
         try {
             dictBytes = Files.readAllBytes(targetFile.toPath());
             resetGlobalDictBytes(dictBytes, isOverwrite);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void saveGlobalDictBytesToFile(File targetFile) {
+        try {
+            Files.write(targetFile.toPath(), GLOBAL_ZSTD_DICT.dictBytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

@@ -134,7 +134,7 @@ public class BigStringFiles {
         }
     }
 
-    boolean deleteBigStringFileIfExist(long uuid) {
+    public boolean deleteBigStringFileIfExist(long uuid) {
         if (ConfForSlot.global.pureMemory) {
             allBytesByUuid.remove(uuid);
             return true;

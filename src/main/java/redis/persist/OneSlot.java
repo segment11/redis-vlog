@@ -384,6 +384,11 @@ public class OneSlot {
     }
 
     public void delayRun(int millis, Runnable runnable) {
+        // for unit test
+        if (netWorkerEventloop == null) {
+            return;
+        }
+
         netWorkerEventloop.delay(millis, runnable);
     }
 

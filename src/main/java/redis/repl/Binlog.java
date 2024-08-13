@@ -286,8 +286,13 @@ public class Binlog {
         var bytes = new byte[oneSegmentLength];
         prevRaf.seek(offset);
         var n = prevRaf.read(bytes);
-        if (n != oneSegmentLength) {
+        if (n < 0) {
             throw new RuntimeException("Read binlog one segment error, file index: " + fileIndex + ", offset: " + offset + ", slot: " + slot);
+        }
+        if (n < oneSegmentLength) {
+            var readBytes = new byte[n];
+            System.arraycopy(bytes, 0, readBytes, 0, n);
+            return readBytes;
         }
         return bytes;
     }

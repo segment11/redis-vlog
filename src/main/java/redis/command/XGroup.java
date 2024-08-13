@@ -349,7 +349,7 @@ public class XGroup extends BaseCommand {
         var oneWalGroupSeq = buffer.getLong();
 
         var oneSlot = localPersist.oneSlot(slot);
-        var splitNumber = oneSlot.getKeyLoader().maxSplitNumberForRepl();
+        var maxSplitNumber = oneSlot.getKeyLoader().maxSplitNumberForRepl();
 
         byte[] bytes = null;
         var masterOneWalGroupSeq = oneSlot.getKeyLoader().getMetaOneWalGroupSeq(splitIndex, beginBucketIndex);
@@ -365,7 +365,7 @@ public class XGroup extends BaseCommand {
         var responseBytes = new byte[1 + 1 + 4 + 1 + 8 + bytes.length];
         var responseBuffer = ByteBuffer.wrap(responseBytes);
         responseBuffer.put(splitIndex);
-        responseBuffer.put(splitNumber);
+        responseBuffer.put(maxSplitNumber);
         responseBuffer.putInt(beginBucketIndex);
         responseBuffer.put(isSkip ? (byte) 1 : (byte) 0);
         responseBuffer.putLong(masterOneWalGroupSeq);
@@ -378,45 +378,33 @@ public class XGroup extends BaseCommand {
 
     Repl.ReplReply s_exists_key_buckets(byte slot, byte[] contentBytes) {
         // client received from server
-        // empty content means no exist key buckets, next step, fetch exists chunk segments
         var oneSlot = localPersist.oneSlot(slot);
-        if (EmptyContent.isEmpty(contentBytes)) {
-            // next step, fetch exists chunk segments
-            var segmentCount = FdReadWrite.REPL_ONCE_INNER_COUNT;
-            var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(0, segmentCount);
-            var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
-            return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
-        }
 
         var buffer = ByteBuffer.wrap(contentBytes);
         var splitIndex = buffer.get();
-        var splitNumber = buffer.get();
+        var maxSplitNumber = buffer.get();
         var beginBucketIndex = buffer.getInt();
         var isSkip = buffer.get() == 1;
         var masterOneWalGroupSeq = buffer.getLong();
         var leftLength = buffer.remaining();
 
         if (!isSkip) {
-            // overwrite key buckets
-            var sharedBytes = new byte[leftLength];
-            buffer.get(sharedBytes);
-
             var sharedBytesList = new byte[splitIndex + 1][];
-            sharedBytesList[splitIndex] = sharedBytes;
-
-            oneSlot.getKeyLoader().writeSharedBytesList(sharedBytesList, beginBucketIndex);
-            oneSlot.getKeyLoader().setMetaOneWalGroupSeq(splitIndex, beginBucketIndex, masterOneWalGroupSeq);
-        } else {
             if (leftLength == 0) {
                 // clear local key buckets
-                var sharedBytesList = new byte[splitIndex + 1][];
                 sharedBytesList[splitIndex] = new byte[KeyLoader.KEY_BUCKET_ONE_COST_SIZE * ConfForSlot.global.confWal.oneChargeBucketNumber];
-                oneSlot.getKeyLoader().writeSharedBytesList(sharedBytesList, beginBucketIndex);
+            } else {
+                // overwrite key buckets
+                var sharedBytes = new byte[leftLength];
+                buffer.get(sharedBytes);
+                sharedBytesList[splitIndex] = sharedBytes;
             }
+            oneSlot.getKeyLoader().writeSharedBytesList(sharedBytesList, beginBucketIndex);
+            oneSlot.getKeyLoader().setMetaOneWalGroupSeq(splitIndex, beginBucketIndex, masterOneWalGroupSeq);
         }
 
         boolean isLastBatchInThisSplit = beginBucketIndex == ConfForSlot.global.confBucket.bucketsPerSlot - ConfForSlot.global.confWal.oneChargeBucketNumber;
-        var isAllReceived = splitIndex == splitNumber - 1 && isLastBatchInThisSplit;
+        var isAllReceived = splitIndex == maxSplitNumber - 1 && isLastBatchInThisSplit;
         if (isAllReceived) {
             // next step, fetch exists chunk segments
             var segmentCount = FdReadWrite.REPL_ONCE_INNER_COUNT;
@@ -555,13 +543,13 @@ public class XGroup extends BaseCommand {
         try {
             for (int i = 0; i < bigStringCount; i++) {
                 var uuid = buffer.getLong();
-                var encodeLength = buffer.getInt();
-                var encodeBytes = new byte[encodeLength];
-                buffer.get(encodeBytes);
+                var bigStringBytesLength = buffer.getInt();
+                var bigStringBytes = new byte[bigStringBytesLength];
+                buffer.get(bigStringBytes);
 
                 var uuidAsFileName = String.valueOf(uuid);
                 var file = new File(bigStringDir, uuidAsFileName);
-                FileUtils.writeByteArrayToFile(file, encodeBytes);
+                FileUtils.writeByteArrayToFile(file, bigStringBytes);
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -633,7 +621,7 @@ public class XGroup extends BaseCommand {
                 var dict = dictWithKeyPrefix.dict();
                 var keyPrefix = dictWithKeyPrefix.keyPrefix();
                 if (keyPrefix.equals(Dict.GLOBAL_ZSTD_DICT_KEY)) {
-                    Dict.GLOBAL_ZSTD_DICT.setDictBytes(dict.getDictBytes());
+                    dictMap.updateGlobalDictBytes(dict.getDictBytes());
                 } else {
                     dictMap.putDict(keyPrefix, dict);
                 }
@@ -789,8 +777,9 @@ public class XGroup extends BaseCommand {
         }
 
         var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
-        var nextCatchUpFileIndex = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? catchUpFileIndex : catchUpFileIndex + 1;
-        var nextCatchUpOffset = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength) ? 0 : catchUpOffset + oneSegmentLength;
+        var isCatchUpLastSegmentInOneFile = catchUpOffset == (binlogOneFileMaxLength - oneSegmentLength);
+        var nextCatchUpFileIndex = isCatchUpLastSegmentInOneFile ? catchUpFileIndex + 1 : catchUpFileIndex;
+        var nextCatchUpOffset = isCatchUpLastSegmentInOneFile ? 0 : catchUpOffset + oneSegmentLength;
 
         metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(binlogMasterUuid, true,
                 nextCatchUpFileIndex, nextCatchUpOffset);

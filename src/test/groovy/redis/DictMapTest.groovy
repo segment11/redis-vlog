@@ -58,6 +58,11 @@ class DictMapTest extends Specification {
         dictMap.getDictBySeq(0).dictBytes == 'test2'.bytes
 
         when:
+        dictMap.updateGlobalDictBytes(new byte[10])
+        then:
+        Dict.GLOBAL_ZSTD_DICT.hasDictBytes()
+
+        when:
         // reload again
         dictMap.initDictMap(dirFile)
         then:
