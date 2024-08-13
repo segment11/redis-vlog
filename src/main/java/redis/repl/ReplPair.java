@@ -88,14 +88,35 @@ public class ReplPair {
     // server side send pong, client side update timestamp
     private long lastPongGetTimestamp;
 
+    // change 3 -> 5 or 10
+    private final boolean[] linkUpFlagArray = new boolean[3];
+
+    private void addLinkUpFlag(boolean flag) {
+        for (int i = 1; i < linkUpFlagArray.length; i++) {
+            linkUpFlagArray[i - 1] = linkUpFlagArray[i];
+        }
+        linkUpFlagArray[linkUpFlagArray.length - 1] = flag;
+    }
+
+    private boolean isLinkUpAnyOk() {
+        for (var flag : linkUpFlagArray) {
+            if (flag) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean isLinkUp() {
         if (asMaster) {
             var isPingReceivedOk = System.currentTimeMillis() - lastPingGetTimestamp < 1000 * 3;
-            return isPingReceivedOk;
+            addLinkUpFlag(isPingReceivedOk);
+            return isLinkUpAnyOk();
         } else {
             var isPongReceivedOk = System.currentTimeMillis() - lastPongGetTimestamp < 1000 * 3
                     && tcpClient != null && tcpClient.isSocketConnected();
-            return isPongReceivedOk;
+            addLinkUpFlag(isPongReceivedOk);
+            return isLinkUpAnyOk();
         }
     }
 
