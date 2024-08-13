@@ -580,11 +580,15 @@ public class OneSlot {
 
             @Override
             public String name() {
-                return "repl pair client ping/server flush wal append batch";
+                return "repl pair slave ping";
             }
 
             @Override
             public void run() {
+                if (loopCount % 1000 == 0) {
+                    log.info("Task {} run, slot: {}, loop count: {}", name(), slot, loopCount);
+                }
+
                 for (var replPair : replPairs) {
                     if (replPair.isSendBye()) {
                         continue;
@@ -624,11 +628,6 @@ public class OneSlot {
             @Override
             public void setLoopCount(int loopCount) {
                 this.loopCount = loopCount;
-            }
-
-            @Override
-            public int executeOnceAfterLoopCount() {
-                return 1;
             }
         });
     }
