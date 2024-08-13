@@ -179,7 +179,7 @@ class DGroupTest extends Specification {
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        dGroup.isCrossRequestWorker = true
+        dGroup.crossRequestWorker = true
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = 'b'.bytes

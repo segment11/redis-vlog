@@ -170,8 +170,8 @@ sunionstore
         def slotWithKeyHash = sGroup.slotWithKeyHashListParsed[0]
         then:
         reply == OKReply.INSTANCE
-        inMemoryGetSet.getBuf(slot, 'a'.bytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.compressedData == 'value'.bytes
+        inMemoryGetSet.getBuf(slot, 'a'.bytes, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().compressedData == 'value'.bytes
 
         when:
         sGroup.localTest = true
@@ -188,8 +188,8 @@ sunionstore
         reply = sGroup.set(data3)
         then:
         reply == OKReply.INSTANCE
-        inMemoryGetSet.getBuf(slot, data3[1], slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.compressedData[-16..-1] == data3[1]
+        inMemoryGetSet.getBuf(slot, data3[1], slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().compressedData[-16..-1] == data3[1]
 
         when:
         sGroup.localTest = false
@@ -266,8 +266,8 @@ sunionstore
         reply = sGroup.set(data5)
         then:
         reply == OKReply.INSTANCE
-        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.expireAt > System.currentTimeMillis() + 9000
+        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().expireAt > System.currentTimeMillis() + 9000
 
         when:
         data5[3] = 'px'.bytes
@@ -275,8 +275,8 @@ sunionstore
         reply = sGroup.set(data5)
         then:
         reply == OKReply.INSTANCE
-        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.expireAt > System.currentTimeMillis() + 9000
+        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().expireAt > System.currentTimeMillis() + 9000
 
         when:
         data5[3] = 'exat'.bytes
@@ -284,8 +284,8 @@ sunionstore
         reply = sGroup.set(data5)
         then:
         reply == OKReply.INSTANCE
-        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.expireAt > System.currentTimeMillis() + 9000
+        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().expireAt > System.currentTimeMillis() + 9000
 
         when:
         data5[3] = 'pxat'.bytes
@@ -293,16 +293,16 @@ sunionstore
         reply = sGroup.set(data5)
         then:
         reply == OKReply.INSTANCE
-        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.expireAt > System.currentTimeMillis() + 9000
+        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().expireAt > System.currentTimeMillis() + 9000
 
         when:
         data5[4] = '-1'.bytes
         reply = sGroup.set(data5)
         then:
         reply == OKReply.INSTANCE
-        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.expireAt == CompressedValue.NO_EXPIRE
+        inMemoryGetSet.getBuf(slot, data5[1], slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().expireAt == CompressedValue.NO_EXPIRE
 
         when:
         data5[4] = 'a'.bytes
@@ -418,8 +418,8 @@ sunionstore
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 6
-        inMemoryGetSet.getBuf(slot, 'a'.bytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.compressedData[1..-1] == 'value'.bytes
+        inMemoryGetSet.getBuf(slot, 'a'.bytes, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().compressedData[1..-1] == 'value'.bytes
 
         when:
         reply = sGroup.setrange()
@@ -437,8 +437,8 @@ sunionstore
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 10
-        inMemoryGetSet.getBuf(slot, 'a'.bytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.compressedData == '1value7890'.bytes
+        inMemoryGetSet.getBuf(slot, 'a'.bytes, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().compressedData == '1value7890'.bytes
 
         when:
         inMemoryGetSet.put(slot, 'a', 0, cv)
@@ -448,8 +448,8 @@ sunionstore
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 10
-        inMemoryGetSet.getBuf(slot, 'a'.bytes, slotWithKeyHash.bucketIndex, slotWithKeyHash.keyHash)
-                .cv.compressedData == 'value67890'.bytes
+        inMemoryGetSet.getBuf(slot, 'a'.bytes, slotWithKeyHash.bucketIndex(), slotWithKeyHash.keyHash())
+                .cv().compressedData == 'value67890'.bytes
 
         when:
         data4[2] = '-1'.bytes
@@ -585,8 +585,9 @@ sunionstore
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
         inMemoryGetSet.put(slot, 'a', 0, cv)
         try {
-            reply = sGroup.sadd()
+            sGroup.sadd()
         } catch (IllegalStateException e) {
+            println e.message
             wrongTypeException = true
         }
         then:
@@ -723,8 +724,9 @@ sunionstore
         cvA.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
         inMemoryGetSet.put(slot, 'a', 0, cvA)
         try {
-            reply = sGroup.sdiff(false, false)
+            sGroup.sdiff(false, false)
         } catch (IllegalStateException e) {
+            println e.message
             wrongTypeException = true
         }
         then:
@@ -837,7 +839,7 @@ sunionstore
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        sGroup.isCrossRequestWorker = true
+        sGroup.crossRequestWorker = true
         reply = sGroup.sdiff(true, false)
         eventloopCurrent.run()
         then:
@@ -898,6 +900,7 @@ sunionstore
         try {
             reply = sGroup.sdiffstore(false, false)
         } catch (IllegalStateException e) {
+            println e.message
             wrongTypeException = true
         }
         then:
@@ -978,14 +981,14 @@ sunionstore
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 1
-        RedisHashKeys.decode(inMemoryGetSet.getBuf(slot, 'dst'.bytes, 0, 0L).cv.compressedData).contains('2')
+        RedisHashKeys.decode(inMemoryGetSet.getBuf(slot, 'dst'.bytes, 0, 0L).cv().compressedData).contains('2')
 
         when:
         reply = sGroup.sdiffstore(true, false)
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 1
-        RedisHashKeys.decode(inMemoryGetSet.getBuf(slot, 'dst'.bytes, 0, 0L).cv.compressedData).contains('1')
+        RedisHashKeys.decode(inMemoryGetSet.getBuf(slot, 'dst'.bytes, 0, 0L).cv().compressedData).contains('1')
 
         when:
         rhkB.remove('1')
@@ -1009,7 +1012,7 @@ sunionstore
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        sGroup.isCrossRequestWorker = true
+        sGroup.crossRequestWorker = true
         reply = sGroup.sdiffstore(true, false)
         eventloopCurrent.run()
         then:
@@ -1175,7 +1178,7 @@ sunionstore
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        sGroup.isCrossRequestWorker = true
+        sGroup.crossRequestWorker = true
         reply = sGroup.sintercard()
         eventloopCurrent.run()
         then:
@@ -1512,7 +1515,7 @@ sunionstore
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        sGroup.isCrossRequestWorker = true
+        sGroup.crossRequestWorker = true
         rhkA.remove('2')
         rhkA.add('1')
         cvA.compressedData = rhkA.encode()

@@ -33,14 +33,14 @@ class MGroupTest extends Specification {
 
         when:
         def data4 = new byte[4][]
-        data4[1] = 'view-persist-key-count'
+        data4[1] = 'view-persist-key-count'.bytes
         data4[2] = '0'.bytes
         def sManageList = MGroup.parseSlots('manage', data4, slotNumber)
         then:
         sManageList.size() == 1
 
         when:
-        data4[1] = 'view-slot-bucket-keys'
+        data4[1] = 'view-slot-bucket-keys'.bytes
         data4[2] = '0'.bytes
         sManageList = MGroup.parseSlots('manage', data4, slotNumber)
         then:
@@ -53,7 +53,7 @@ class MGroupTest extends Specification {
         sManageList.size() == 0
 
         when:
-        data4[1] = 'output-dict-bytes'
+        data4[1] = 'output-dict-bytes'.bytes
         data4[2] = '100'.bytes
         data4[3] = 'key:000000000001'.bytes
         sManageList = MGroup.parseSlots('manage', data4, slotNumber)
@@ -82,26 +82,26 @@ class MGroupTest extends Specification {
         sList.size() == 0
 
         when:
-        data5[1] = 'view-persist-key-count'
+        data5[1] = 'view-persist-key-count'.bytes
 
         sList = MGroup.parseSlots('manage', data5, slotNumber)
         then:
         sList.size() == 0
 
         when:
-        data5[1] = 'view-slot-bucket-keys'
+        data5[1] = 'view-slot-bucket-keys'.bytes
         sList = MGroup.parseSlots('manage', data5, slotNumber)
         then:
         sList.size() == 0
 
         when:
-        data5[1] = 'output-dict-bytes'
+        data5[1] = 'output-dict-bytes'.bytes
         sList = MGroup.parseSlots('manage', data5, slotNumber)
         then:
         sList.size() == 0
 
         when:
-        data5[1] = 'xxx'
+        data5[1] = 'xxx'.bytes
         sList = MGroup.parseSlots('manage', data5, slotNumber)
         then:
         sList.size() == 0
@@ -187,7 +187,7 @@ class MGroupTest extends Specification {
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        mGroup.isCrossRequestWorker = true
+        mGroup.crossRequestWorker = true
         reply = mGroup.mget()
         eventloopCurrent.run()
         then:
@@ -246,7 +246,7 @@ class MGroupTest extends Specification {
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        mGroup.isCrossRequestWorker = true
+        mGroup.crossRequestWorker = true
         reply = mGroup.mset()
         eventloopCurrent.run()
         then:

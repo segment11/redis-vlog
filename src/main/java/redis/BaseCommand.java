@@ -90,6 +90,16 @@ public abstract class BaseCommand {
     protected byte[][] data;
     protected ITcpSocket socket;
 
+    // for unit test
+    public void setCmd(String cmd) {
+        this.cmd = cmd;
+    }
+
+    // for unit test
+    public void setData(byte[][] data) {
+        this.data = data;
+    }
+
     public void setSocketForTest(ITcpSocket socket) {
         this.socket = socket;
     }
@@ -120,11 +130,33 @@ public abstract class BaseCommand {
     protected TrainSampleJob trainSampleJob;
     protected List<TrainSampleJob.TrainSampleKV> sampleToTrainList;
 
+    // for unit test
+    public void setLocalTest(boolean localTest) {
+        this.localTest = localTest;
+    }
+
+    public void setLocalTestRandomValueListSize(int localTestRandomValueListSize) {
+        this.localTestRandomValueListSize = localTestRandomValueListSize;
+    }
+
+    public void setLocalTestRandomValueList(ArrayList<byte[]> localTestRandomValueList) {
+        this.localTestRandomValueList = localTestRandomValueList;
+    }
+
+    public ArrayList<byte[]> getLocalTestRandomValueList() {
+        return localTestRandomValueList;
+    }
+
     protected boolean localTest;
     protected int localTestRandomValueListSize;
     protected ArrayList<byte[]> localTestRandomValueList;
 
     protected ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed;
+
+    // for unit test
+    public ArrayList<SlotWithKeyHash> getSlotWithKeyHashListParsed() {
+        return slotWithKeyHashListParsed;
+    }
 
     // for unit test
     public void setSlotWithKeyHashListParsed(ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed) {

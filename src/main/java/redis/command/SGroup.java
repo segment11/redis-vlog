@@ -767,7 +767,7 @@ public class SGroup extends BaseCommand {
         return asyncReply;
     }
 
-    private Reply sdiffstore(boolean isInter, boolean isUnion) {
+    Reply sdiffstore(boolean isInter, boolean isUnion) {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
         }

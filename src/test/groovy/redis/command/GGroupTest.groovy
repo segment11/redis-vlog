@@ -148,7 +148,7 @@ class GGroupTest extends Specification {
         reply = gGroup.getex()
         def bufOrCv = inMemoryGetSet.getBuf(slot, 'a'.bytes, 0, cv.keyHash)
         then:
-        bufOrCv.cv.expireAt == CompressedValue.NO_EXPIRE
+        bufOrCv.cv().expireAt == CompressedValue.NO_EXPIRE
 
         when:
         data3[2] = 'persist_'.bytes
@@ -165,7 +165,7 @@ class GGroupTest extends Specification {
         reply = gGroup.getex()
         bufOrCv = inMemoryGetSet.getBuf(slot, 'a'.bytes, 0, cv.keyHash)
         then:
-        bufOrCv.cv.expireAt > System.currentTimeMillis()
+        bufOrCv.cv().expireAt > System.currentTimeMillis()
 
         when:
         data4[3] = 'a'.bytes
@@ -185,7 +185,7 @@ class GGroupTest extends Specification {
         reply = gGroup.getex()
         bufOrCv = inMemoryGetSet.getBuf(slot, 'a'.bytes, 0, cv.keyHash)
         then:
-        bufOrCv.cv.expireAt > System.currentTimeMillis()
+        bufOrCv.cv().expireAt > System.currentTimeMillis()
 
         when:
         data4[2] = 'pxat'.bytes
@@ -193,7 +193,7 @@ class GGroupTest extends Specification {
         reply = gGroup.getex()
         bufOrCv = inMemoryGetSet.getBuf(slot, 'a'.bytes, 0, cv.keyHash)
         then:
-        bufOrCv.cv.expireAt.toString().bytes == data4[3]
+        bufOrCv.cv().expireAt.toString().bytes == data4[3]
 
         when:
         data4[2] = 'exat'.bytes
@@ -201,7 +201,7 @@ class GGroupTest extends Specification {
         reply = gGroup.getex()
         bufOrCv = inMemoryGetSet.getBuf(slot, 'a'.bytes, 0, cv.keyHash)
         then:
-        bufOrCv.cv.expireAt > System.currentTimeMillis()
+        bufOrCv.cv().expireAt > System.currentTimeMillis()
 
         when:
         data4[2] = 'xx'.bytes
@@ -347,6 +347,6 @@ class GGroupTest extends Specification {
         when:
         def bufOrCv = inMemoryGetSet.getBuf(slot, 'a'.bytes, 0, cv.keyHash)
         then:
-        bufOrCv.cv.compressedData == 'value'.bytes
+        bufOrCv.cv().compressedData == 'value'.bytes
     }
 }

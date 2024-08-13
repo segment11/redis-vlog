@@ -721,7 +721,7 @@ class XGroupTest extends Specification {
         then:
         // next batch
         r.isReplType(ReplType.catch_up)
-        oneSlot.metaChunkSegmentIndex.masterBinlogFileIndexAndOffset.fileIndex == 0
+        oneSlot.metaChunkSegmentIndex.masterBinlogFileIndexAndOffset.fileIndex() == 0
         oneSlot.metaChunkSegmentIndex.masterBinlogFileIndexAndOffset.offset() == binlogOneSegmentLength
 
         when:

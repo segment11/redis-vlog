@@ -142,7 +142,7 @@ class RGroupTest extends Specification {
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
 
-        rGroup.isCrossRequestWorker = true
+        rGroup.crossRequestWorker = true
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = rGroup.rename()
         eventloopCurrent.run()
@@ -249,7 +249,7 @@ class RGroupTest extends Specification {
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        rGroup.isCrossRequestWorker = true
+        rGroup.crossRequestWorker = true
         reply = rGroup.rpoplpush()
         eventloopCurrent.run()
         then:

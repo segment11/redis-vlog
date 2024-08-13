@@ -107,6 +107,7 @@ zunionstore
                 ZGroup.parseSlots(it, data6, slotNumber)
                 return OKReply.INSTANCE
             } catch (ErrorReplyException e) {
+                println e.message
                 return ErrorReply.SYNTAX
             }
         }
@@ -120,6 +121,7 @@ zunionstore
                 ZGroup.parseSlots(it, data6, slotNumber)
                 return OKReply.INSTANCE
             } catch (ErrorReplyException e) {
+                println e.message
                 return ErrorReply.SYNTAX
             }
         }
@@ -133,6 +135,7 @@ zunionstore
                 ZGroup.parseSlots(it, data6, slotNumber)
                 return OKReply.INSTANCE
             } catch (ErrorReplyException e) {
+                println e.message
                 return ErrorReply.SYNTAX
             }
         }
@@ -171,6 +174,7 @@ zunionstore
                 ZGroup.parseSlots(it, data7, slotNumber)
                 return OKReply.INSTANCE
             } catch (ErrorReplyException e) {
+                println e.message
                 return ErrorReply.SYNTAX
             }
         }
@@ -184,6 +188,7 @@ zunionstore
                 ZGroup.parseSlots(it, data7, slotNumber)
                 return OKReply.INSTANCE
             } catch (ErrorReplyException e) {
+                println e.message
                 return ErrorReply.SYNTAX
             }
         }
@@ -197,6 +202,7 @@ zunionstore
                 ZGroup.parseSlots(it, data7, slotNumber)
                 return OKReply.INSTANCE
             } catch (ErrorReplyException e) {
+                println e.message
                 return ErrorReply.SYNTAX
             }
         }
@@ -545,8 +551,9 @@ zunionstore
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
         inMemoryGetSet.put(slot, 'a', 0, cv)
         try {
-            reply = zGroup.zcount(false)
+            zGroup.zcount(false)
         } catch (IllegalStateException e) {
+            println e.message
             wrongTypeException = true
         }
         then:
@@ -581,16 +588,16 @@ zunionstore
         ((IntegerReply) reply).integer == 2
 
         when:
-        data4[2] = '[member1'
-        data4[3] = '[member4'
+        data4[2] = '[member1'.bytes
+        data4[3] = '[member4'.bytes
         reply = zGroup.zcount(true)
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 4
 
         when:
-        data4[2] = '2'
-        data4[3] = '3'
+        data4[2] = '2'.bytes
+        data4[3] = '3'.bytes
         reply = zGroup.zcount(false)
         then:
         reply instanceof IntegerReply
@@ -605,22 +612,22 @@ zunionstore
         ((IntegerReply) reply).integer == 10
 
         when:
-        data4[2] = '3'
-        data4[3] = '2'
+        data4[2] = '3'.bytes
+        data4[3] = '2'.bytes
         reply = zGroup.zcount(false)
         then:
         reply == IntegerReply.REPLY_0
 
         when:
-        data4[2] = '[3'
-        data4[3] = '[2'
+        data4[2] = '[3'.bytes
+        data4[3] = '[2'.bytes
         reply = zGroup.zcount(false)
         then:
         reply == IntegerReply.REPLY_0
 
         when:
-        data4[2] = '[member3'
-        data4[3] = '[member2'
+        data4[2] = '[member3'.bytes
+        data4[3] = '[member2'.bytes
         reply = zGroup.zcount(true)
         then:
         reply == IntegerReply.REPLY_0
@@ -1110,7 +1117,7 @@ zunionstore
         boolean exception = false
         String exceptionMessage = null
         try {
-            reply = zGroup.zdiff(false, true)
+            zGroup.zdiff(false, true)
         } catch (ErrorReplyException e) {
             exception = true
             exceptionMessage = e.message
@@ -1132,7 +1139,7 @@ zunionstore
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        zGroup.isCrossRequestWorker = true
+        zGroup.crossRequestWorker = true
         rzB.clear()
         cvB.compressedData = rzB.encode()
         inMemoryGetSet.put(slot, 'b', 0, cvB)
@@ -1260,15 +1267,6 @@ zunionstore
 
         cleanup:
         eventloop.breakEventloop()
-    }
-
-    def 'test zdiffstore'() {
-        // todo
-        given:
-        final byte slot = 0
-
-        expect:
-        1 == 1
     }
 
     def 'test zincrby'() {
@@ -1436,7 +1434,7 @@ zunionstore
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        zGroup.isCrossRequestWorker = true
+        zGroup.crossRequestWorker = true
         reply = zGroup.zintercard()
         eventloopCurrent.run()
         then:
@@ -1987,7 +1985,7 @@ zunionstore
         tmpData5[2] = 'a'.bytes
         zGroup.slotWithKeyHashListParsed = ZGroup.parseSlots('zrangestore', tmpData5, zGroup.slotNumber)
         // rev
-        data10[5] = 'byscore'
+        data10[5] = 'byscore'.bytes
         // start / stop
         data10[2] = '(1'.bytes
         data10[3] = '(4'.bytes

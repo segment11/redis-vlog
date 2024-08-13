@@ -75,7 +75,7 @@ public class EGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    private Reply exists() {
+    Reply exists() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
         }

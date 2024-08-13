@@ -815,7 +815,7 @@ class LGroupTest extends Specification {
         inMemoryGetSet.remove(slot, 'a')
         def reply = lGroup.lpush(true, true)
         then:
-        reply == IntegerReply.REPLY_0;
+        reply == IntegerReply.REPLY_0
 
         when:
         reply = lGroup.lpush(true, false)

@@ -156,7 +156,7 @@ class CGroupTest extends Specification {
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
                 .build()
-        cGroup.isCrossRequestWorker = true
+        cGroup.crossRequestWorker = true
         reply = cGroup.copy()
         eventloopCurrent.run()
         then:
