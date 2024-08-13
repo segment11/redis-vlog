@@ -12,7 +12,7 @@ public class Repl {
 
     public static final byte[] PROTOCOL_KEYWORD_BYTES = "X-REPL".getBytes();
     // 8 bytes for slaveUuid, 1 byte for slot, 1 byte for type, 4 bytes for length
-    static final int HEADER_LENGTH = PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1 + 4;
+    public static final int HEADER_LENGTH = PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1 + 4;
 
     public static io.activej.bytebuf.ByteBuf buffer(long slaveUuid, byte slot, ReplType type, ReplContent content) {
         var encodeLength = content.encodeLength();
@@ -36,25 +36,30 @@ public class Repl {
         }
 
         public boolean isReplType(ReplType type) {
+            if (buf.limit() < PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1) {
+                return false;
+            }
             var b = buf.at(PROTOCOL_KEYWORD_BYTES.length + 8 + 1);
             return ReplType.fromCode(b) == type;
         }
     }
 
-    public static Reply reply(byte slot, ReplPair replPair, ReplType type, ReplContent content) {
+    public static ReplReply reply(byte slot, ReplPair replPair, ReplType type, ReplContent content) {
         return new ReplReply(buffer(replPair.getSlaveUuid(), slot, type, content));
     }
 
-    public static Reply error(byte slot, ReplPair replPair, String errorMessage) {
+    public static ReplReply error(byte slot, ReplPair replPair, String errorMessage) {
         return reply(slot, replPair, ReplType.error, new RawBytesContent(errorMessage.getBytes()));
     }
 
-    public static Reply ok(byte slot, ReplPair replPair, String message) {
+    public static ReplReply ok(byte slot, ReplPair replPair, String message) {
         return reply(slot, replPair, ReplType.ok, new RawBytesContent(message.getBytes()));
     }
 
-    public static Reply emptyReply() {
-        return new ReplReply(io.activej.bytebuf.ByteBuf.empty());
+    private static final ReplReply EMPTY_REPLY = new ReplReply(io.activej.bytebuf.ByteBuf.empty());
+
+    public static ReplReply emptyReply() {
+        return EMPTY_REPLY;
     }
 
     public static byte[][] decode(ByteBuf buf) {

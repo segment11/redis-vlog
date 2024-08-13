@@ -50,7 +50,7 @@ public class XGroup extends BaseCommand {
 
     private ReplPair replPair;
 
-    public Reply handleRepl() {
+    public Repl.ReplReply handleRepl() {
         var slaveUuid = ByteBuffer.wrap(data[0]).getLong();
 
         var slot = data[1][0];
@@ -84,7 +84,7 @@ public class XGroup extends BaseCommand {
         return switch (replType) {
             case error -> {
                 log.error("Repl handle receive error: {}", new String(contentBytes));
-                yield null;
+                yield Repl.emptyReply();
             }
             case ping -> {
                 // server received ping from client
@@ -121,16 +121,12 @@ public class XGroup extends BaseCommand {
                 }
 
                 oneSlot.addDelayNeedCloseReplPair(replPair);
-                yield Repl.reply(slot, replPair, ReplType.byeBye, new Ping(ConfForSlot.global.netListenAddresses));
+                yield Repl.reply(slot, replPair, ReplType.byeBye, new Pong(ConfForSlot.global.netListenAddresses));
             }
             case byeBye -> {
                 // client received bye from server
                 var netListenAddresses = new String(contentBytes);
                 log.warn("Repl handle byeBye: slave uuid={}, net listen addresses={}", slaveUuid, netListenAddresses);
-
-                if (replPair == null) {
-                    yield Repl.emptyReply();
-                }
 
                 oneSlot.addDelayNeedCloseReplPair(replPair);
                 yield Repl.emptyReply();
@@ -156,7 +152,7 @@ public class XGroup extends BaseCommand {
         };
     }
 
-    Reply hello(byte slot, byte[] contentBytes) {
+    Repl.ReplReply hello(byte slot, byte[] contentBytes) {
         // server received hello from client
         var buffer = ByteBuffer.wrap(contentBytes);
         var slaveUuid = buffer.getLong();
@@ -201,7 +197,7 @@ public class XGroup extends BaseCommand {
         return requestBytes;
     }
 
-    Reply hi(byte slot, byte[] contentBytes) {
+    Repl.ReplReply hi(byte slot, byte[] contentBytes) {
         // client received hi from server
         var buffer = ByteBuffer.wrap(contentBytes);
         var slaveUuid = buffer.getLong();
@@ -271,7 +267,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
-    Reply exists_chunk_segments(byte slot, byte[] contentBytes) {
+    Repl.ReplReply exists_chunk_segments(byte slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
         var beginSegmentIndex = buffer.getInt();
@@ -306,7 +302,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_chunk_segments, new RawBytesContent(responseBytes));
     }
 
-    Reply s_exists_chunk_segments(byte slot, byte[] contentBytes) {
+    Repl.ReplReply s_exists_chunk_segments(byte slot, byte[] contentBytes) {
         // client received from server
         var buffer = ByteBuffer.wrap(contentBytes);
         var beginSegmentIndex = buffer.getInt();
@@ -328,7 +324,8 @@ public class XGroup extends BaseCommand {
                 var chunkSegmentsBytes = new byte[chunkSegmentsLength];
                 buffer.get(chunkSegmentsBytes);
 
-                oneSlot.writeChunkSegmentsFromMasterExists(chunkSegmentsBytes, beginSegmentIndex, segmentCount);
+                var realSegmentCount = chunkSegmentsLength / ConfForSlot.global.confChunk.segmentLength;
+                oneSlot.writeChunkSegmentsFromMasterExists(chunkSegmentsBytes, beginSegmentIndex, realSegmentCount);
             }
         }
 
@@ -344,7 +341,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
-    Reply exists_key_buckets(byte slot, byte[] contentBytes) {
+    Repl.ReplReply exists_key_buckets(byte slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
         var splitIndex = buffer.get();
@@ -379,7 +376,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_key_buckets, new RawBytesContent(responseBytes));
     }
 
-    Reply s_exists_key_buckets(byte slot, byte[] contentBytes) {
+    Repl.ReplReply s_exists_key_buckets(byte slot, byte[] contentBytes) {
         // client received from server
         // empty content means no exist key buckets, next step, fetch exists chunk segments
         var oneSlot = localPersist.oneSlot(slot);
@@ -440,7 +437,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
-    Reply stat_key_count_in_buckets(byte slot, byte[] contentBytes) {
+    Repl.ReplReply stat_key_count_in_buckets(byte slot, byte[] contentBytes) {
         // server received from client
         // ignore content bytes, send all
         var oneSlot = localPersist.oneSlot(slot);
@@ -448,7 +445,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_stat_key_count_in_buckets, new RawBytesContent(bytes));
     }
 
-    Reply s_stat_key_count_in_buckets(byte slot, byte[] contentBytes) {
+    Repl.ReplReply s_stat_key_count_in_buckets(byte slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
         oneSlot.getKeyLoader().overwriteStatKeyCountInBucketsBytesFromMasterExists(contentBytes);
@@ -456,7 +453,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.exists_key_buckets, EmptyContent.INSTANCE);
     }
 
-    Reply meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
+    Repl.ReplReply meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
         // server received from client
         // ignore content bytes, send all
         var oneSlot = localPersist.oneSlot(slot);
@@ -464,7 +461,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_meta_key_bucket_split_number, new RawBytesContent(bytes));
     }
 
-    Reply s_meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
+    Repl.ReplReply s_meta_key_bucket_split_number(byte slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
         oneSlot.getKeyLoader().overwriteMetaKeyBucketSplitNumberBytesFromMasterExists(contentBytes);
@@ -472,7 +469,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.stat_key_count_in_buckets, EmptyContent.INSTANCE);
     }
 
-    Reply incremental_big_string(byte slot, byte[] contentBytes) {
+    Repl.ReplReply incremental_big_string(byte slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
         var uuid = buffer.getLong();
@@ -493,7 +490,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_incremental_big_string, new RawBytesContent(responseBytes));
     }
 
-    Reply s_incremental_big_string(byte slot, byte[] contentBytes) {
+    Repl.ReplReply s_incremental_big_string(byte slot, byte[] contentBytes) {
         // client received from server
         var buffer = ByteBuffer.wrap(contentBytes);
         var uuid = buffer.getLong();
@@ -512,7 +509,7 @@ public class XGroup extends BaseCommand {
         return Repl.emptyReply();
     }
 
-    Reply exists_big_string(byte slot, byte[] contentBytes) {
+    Repl.ReplReply exists_big_string(byte slot, byte[] contentBytes) {
         // server received from client
         // send back exists big string to client, with flag can do next step
         // client already persisted big string uuid, send to client exclude sent big string
@@ -537,7 +534,7 @@ public class XGroup extends BaseCommand {
     }
 
     // need delete local big string file if not exists in master, todo
-    Reply s_exists_big_string(byte slot, byte[] contentBytes) {
+    Repl.ReplReply s_exists_big_string(byte slot, byte[] contentBytes) {
         // client received from server
         // empty content means no big string, next step
         if (EmptyContent.isEmpty(contentBytes)) {
@@ -578,7 +575,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
-    Reply fetchExistsBigString(byte slot, OneSlot oneSlot) {
+    Repl.ReplReply fetchExistsBigString(byte slot, OneSlot oneSlot) {
         var uuidListLocal = oneSlot.getBigStringFiles().getBigStringFileUuidList();
         if (uuidListLocal.isEmpty()) {
             return Repl.reply(slot, replPair, ReplType.exists_big_string, EmptyContent.INSTANCE);
@@ -593,7 +590,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.exists_big_string, new RawBytesContent(rawBytes));
     }
 
-    Reply exists_dict(byte slot, byte[] contentBytes) {
+    Repl.ReplReply exists_dict(byte slot, byte[] contentBytes) {
         // client already persisted dict seq, send to client exclude sent dict
         ArrayList<Integer> sentDictSeqList = new ArrayList<>();
         if (contentBytes.length >= 4) {
@@ -616,7 +613,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_dict, content);
     }
 
-    Reply s_exists_dict(byte slot, byte[] contentBytes) {
+    Repl.ReplReply s_exists_dict(byte slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -650,14 +647,14 @@ public class XGroup extends BaseCommand {
         return fetchExistsBigString(slot, oneSlot);
     }
 
-    Reply exists_all_done(byte slot, byte[] contentBytes) {
+    Repl.ReplReply exists_all_done(byte slot, byte[] contentBytes) {
         // server received from client
         log.warn("Slave exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
                 replPair.getSlaveUuid(), replPair.getHostAndPort());
         return Repl.reply(slot, replPair, ReplType.s_exists_all_done, EmptyContent.INSTANCE);
     }
 
-    Reply s_exists_all_done(byte slot, byte[] contentBytes) {
+    Repl.ReplReply s_exists_all_done(byte slot, byte[] contentBytes) {
         // client received from server
         log.warn("Master reply exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
                 replPair.getSlaveUuid(), replPair.getHostAndPort());
@@ -680,7 +677,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.catch_up, content);
     }
 
-    Reply catch_up(byte slot, byte[] contentBytes) {
+    Repl.ReplReply catch_up(byte slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
         var binlogMasterUuid = buffer.getLong();
@@ -725,7 +722,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_catch_up, new RawBytesContent(responseBytes));
     }
 
-    Reply s_catch_up(byte slot, byte[] contentBytes) {
+    Repl.ReplReply s_catch_up(byte slot, byte[] contentBytes) {
         // client received from server
         var buffer = ByteBuffer.wrap(contentBytes);
         var catchUpFileIndex = buffer.getInt();

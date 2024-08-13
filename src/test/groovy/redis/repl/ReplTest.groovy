@@ -19,10 +19,10 @@ class ReplTest extends Specification {
         def ping = new Ping('localhost:6380')
         def reply = Repl.reply(slot, replPair, ReplType.ping, ping)
         then:
-        reply instanceof Repl.ReplReply
-        ((Repl.ReplReply) reply).isReplType(ReplType.ping)
-        !((Repl.ReplReply) reply).isReplType(ReplType.pong)
-        ((Repl.ReplReply) reply).buffer().limit() == Repl.HEADER_LENGTH + ping.encodeLength()
+        reply.isReplType(ReplType.ping)
+        !reply.isReplType(ReplType.pong)
+        reply.buffer().limit() == Repl.HEADER_LENGTH + ping.encodeLength()
+        !Repl.emptyReply().isReplType(ReplType.pong)
 
         when:
         def emptyReply = Repl.emptyReply()
