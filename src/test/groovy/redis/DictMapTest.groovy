@@ -10,10 +10,9 @@ import spock.lang.Specification
 class DictMapTest extends Specification {
     def 'test all'() {
         given:
-        def dirFile = new File('/tmp/redis-vlog-test-dir')
-        FileUtils.forceMkdir(dirFile)
+        FileUtils.forceMkdir(Consts.testDir)
 
-        def dictFile = new File(dirFile, 'dict-map.dat')
+        def dictFile = new File(Consts.testDir, 'dict-map.dat')
         if (dictFile.exists()) {
             dictFile.delete()
         }
@@ -21,7 +20,7 @@ class DictMapTest extends Specification {
         and:
         def dictMap = DictMap.instance
         dictMap.close()
-        dictMap.initDictMap(dirFile)
+        dictMap.initDictMap(Consts.testDir)
 
         and:
         final byte slot = 0
@@ -64,7 +63,7 @@ class DictMapTest extends Specification {
 
         when:
         // reload again
-        dictMap.initDictMap(dirFile)
+        dictMap.initDictMap(Consts.testDir)
         then:
         dictMap.dictSize() == 3
 
@@ -96,5 +95,6 @@ class DictMapTest extends Specification {
         binlog.clear()
         binlog.close()
         Consts.slotDir.deleteDir()
+        Consts.testDir.deleteDir()
     }
 }

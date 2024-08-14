@@ -565,11 +565,13 @@ class BaseCommandTest extends Specification {
         c.init(requestHandler, new Request(data3, false, false))
 
         and:
-        def dirFile = new File('/tmp/redis-vlog-test-dir')
-        FileUtils.forceMkdir(dirFile)
+        FileUtils.forceMkdir(Consts.testDir)
 
         def dictMap = DictMap.instance
-        dictMap.initDictMap(dirFile)
+        dictMap.initDictMap(Consts.testDir)
+        if (dictMap.dictSize() != 0) {
+            dictMap.clearAll()
+        }
 
         expect:
         c.handleTrainSampleResult(null) == null
@@ -649,6 +651,6 @@ class BaseCommandTest extends Specification {
 
         cleanup:
         dictMap.close()
-        dirFile.deleteDir()
+        Consts.testDir.deleteDir()
     }
 }

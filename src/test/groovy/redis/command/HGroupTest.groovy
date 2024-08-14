@@ -5,6 +5,7 @@ import redis.BaseCommand
 import redis.CompressedValue
 import redis.DictMap
 import redis.mock.InMemoryGetSet
+import redis.persist.Consts
 import redis.persist.Mock
 import redis.reply.*
 import redis.type.RedisHashKeys
@@ -904,11 +905,13 @@ class HGroupTest extends Specification {
 
     def 'test h_field_dict_train'() {
         given:
-        def dirFile = new File('/tmp/redis-vlog-test-dir')
-        FileUtils.forceMkdir(dirFile)
+        FileUtils.forceMkdir(Consts.testDir)
 
         def dictMap = DictMap.instance
-        dictMap.initDictMap(dirFile)
+        dictMap.initDictMap(Consts.testDir)
+        if (dictMap.dictSize() > 1) {
+            dictMap.clearAll()
+        }
 
         and:
         def data13 = new byte[13][]
@@ -940,5 +943,6 @@ class HGroupTest extends Specification {
         cleanup:
         dictMap.clearAll()
         dictMap.close()
+        Consts.testDir.deleteDir()
     }
 }

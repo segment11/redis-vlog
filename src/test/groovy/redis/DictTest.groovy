@@ -1,5 +1,6 @@
 package redis
 
+import redis.persist.Consts
 import spock.lang.Specification
 
 import java.nio.ByteBuffer
@@ -18,6 +19,8 @@ class DictTest extends Specification {
         dict2.seq = 0
         dict2.createdTime = System.currentTimeMillis()
         println dict2.createdTime
+
+        Dict.GLOBAL_ZSTD_DICT.dictBytes = new byte[1]
 
         expect:
         Dict.SELF_ZSTD_DICT.seq == Dict.SELF_ZSTD_DICT_SEQ
@@ -41,6 +44,8 @@ class DictTest extends Specification {
 
     def 'test global dict'() {
         given:
+        Dict.GLOBAL_ZSTD_DICT.dictBytes = new byte[1]
+
         def file = new File('dict-global-test.dat')
         file.bytes = 'test'.bytes
 
