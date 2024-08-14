@@ -2,12 +2,11 @@ package redis.jmh;
 
 import jnr.ffi.LibraryLoader;
 import jnr.posix.LibC;
-import net.openhft.affinity.AffinityStrategies;
-import net.openhft.affinity.AffinityThreadFactory;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
+import redis.ConfForSlot;
 import redis.persist.FdReadWrite;
 
 import java.io.File;
@@ -34,10 +33,6 @@ public class BenchmarkFdReadWrite {
     @Param({"1"})
     int fileNumber = 1;
 
-    // single core is same
-//    @Param({"0", "1"})
-    int isUseDifferentCpuCore = 0;
-
     LibC libC;
 
     ArrayList<FdReadWrite> fdReadWriteList = new ArrayList<>();
@@ -47,18 +42,17 @@ public class BenchmarkFdReadWrite {
         System.setProperty("jnr.ffi.asm.enabled", "false");
         libC = LibraryLoader.create(LibC.class).load("c");
 
+        ConfForSlot.global = ConfForSlot.c100m;
+
         var dir = new File(dirPath);
         if (!dir.exists()) {
             dir.mkdirs();
         }
-        var threadId = Thread.currentThread().getId();
+        var threadId = Thread.currentThread().threadId();
         var targetDir = new File(dir, "thread_" + threadId);
         if (!targetDir.exists()) {
             targetDir.mkdirs();
         }
-
-        var threadFactory = new AffinityThreadFactory("fd-read-write-group-1",
-                isUseDifferentCpuCore == 0 ? AffinityStrategies.SAME_CORE : AffinityStrategies.DIFFERENT_CORE);
 
         for (int i = 0; i < fileNumber; i++) {
             var file = new File(targetDir, "/test_fd_read_write_jmh_" + i);
@@ -81,7 +75,7 @@ public class BenchmarkFdReadWrite {
 
     private final Random random = new Random();
 
-    private Set<Integer> initIntValueSet = new HashSet<>();
+    private final Set<Integer> initIntValueSet = new HashSet<>();
 
         /*
     Threads: 16

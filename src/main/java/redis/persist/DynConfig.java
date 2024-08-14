@@ -104,7 +104,7 @@ public class DynConfig {
         update("binlogOn", binlogOn);
     }
 
-    DynConfig(byte slot, File dynConfigFile) throws IOException {
+    public DynConfig(byte slot, File dynConfigFile) throws IOException {
         this.slot = slot;
         this.dynConfigFile = dynConfigFile;
         this.afterUpdateCallback = new AfterUpdateCallbackInner(slot);
