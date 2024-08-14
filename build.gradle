@@ -42,7 +42,7 @@ dependencies {
 
     implementation group: 'commons-io', name: 'commons-io', version: '2.15.1'
     implementation group: 'org.apache.commons', name: 'commons-collections4', version: '4.4'
-    implementation group: 'org.apache.commons', name: 'commons-compress', version: '1.25.0'
+    implementation group: 'org.apache.commons', name: 'commons-compress', version: '1.26.0'
     implementation group: 'io.netty', name: 'netty-buffer', version: '4.1.100.Final'
 
     implementation group: 'com.github.ben-manes.caffeine', name: 'caffeine', version: '3.1.8'
@@ -78,14 +78,13 @@ dependencies {
 
     testImplementation group: 'org.openjdk.jol', name: 'jol-core', version: '0.17'
     testImplementation group: 'org.apache.groovy', name: 'groovy', version: '4.0.12'
-    testImplementation group: 'com.github.kevinsawicki', name: 'http-request', version: '6.0'
     testImplementation group: 'org.spockframework', name: 'spock-core', version: '2.3-groovy-4.0'
 }
 
 test {
     useJUnitPlatform()
 
-    maxHeapSize = '4G'
+    maxHeapSize = '6G'
 }
 
 jacoco {
