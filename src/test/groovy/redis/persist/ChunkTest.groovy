@@ -56,6 +56,8 @@ class ChunkTest extends Specification {
         def oneSlot = chunk.oneSlot
         def confChunk = ConfForSlot.global.confChunk
 
+        println chunk
+
         when:
         chunk.persistCountTotal = 1
         chunk.persistCvCountTotal = 100
@@ -336,7 +338,11 @@ class ChunkTest extends Specification {
         int halfSegmentNumber = (confChunk.maxSegmentNumber() / 2).intValue()
         chunk.fdLengths[0] = 4096 * 100
         chunk.mergedSegmentIndexEndLastTime = halfSegmentNumber - 1
-        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(0, blankSeqList.size(), Chunk.Flag.merged_and_persisted, blankSeqList, 0)
+        List<Long> seqList = []
+        Chunk.ONCE_PREPARE_SEGMENT_COUNT.times {
+            seqList << 0L
+        }
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(0, seqList.size(), Chunk.Flag.merged_and_persisted, seqList, 0)
         chunk.segmentIndex = 0
         r = chunk.persist(0, vListManyCount, false, xForBinlog)
         then:
@@ -388,6 +394,7 @@ class ChunkTest extends Specification {
     }
 
     def 'test repl'() {
+        given:
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
@@ -412,6 +419,149 @@ class ChunkTest extends Specification {
         when:
         def replBytes2 = new byte[4096 * 2]
         chunk.writeSegmentsFromMasterExists(replBytes2, 0, 2)
+        then:
+        1 == 1
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test need merge segment index list'() {
+        given:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+        def chunk = oneSlot.chunk
+
+        def confChunk = ConfForSlot.global.confChunk
+        int halfSegmentNumber = (confChunk.maxSegmentNumber() / 2).intValue()
+
+        when:
+        boolean exception = false
+        ArrayList<Integer> needMergeSegmentIndexList = [1, chunk.maxSegmentIndex]
+        try {
+            chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        needMergeSegmentIndexList = [0, 1, chunk.maxSegmentIndex]
+        try {
+            chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        chunk.mergedSegmentIndexEndLastTime = chunk.maxSegmentIndex - 2
+        chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        then:
+        chunk.mergedSegmentIndexEndLastTime == 1
+
+        when:
+        exception = false
+        chunk.mergedSegmentIndexEndLastTime = Chunk.NO_NEED_MERGE_SEGMENT_INDEX
+        needMergeSegmentIndexList = [1]
+        try {
+            chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        chunk.mergedSegmentIndexEndLastTime = Chunk.NO_NEED_MERGE_SEGMENT_INDEX
+        needMergeSegmentIndexList = [0, 1]
+        chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        then:
+        chunk.mergedSegmentIndexEndLastTime == 1
+
+        when:
+        chunk.mergedSegmentIndexEndLastTime = 1
+        needMergeSegmentIndexList = [3]
+        chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        then:
+        chunk.mergedSegmentIndexEndLastTime == 3
+
+        when:
+        chunk.mergedSegmentIndexEndLastTime = chunk.maxSegmentIndex - 10
+        needMergeSegmentIndexList = [chunk.maxSegmentIndex - 2, chunk.maxSegmentIndex - 1]
+        chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        then:
+        chunk.mergedSegmentIndexEndLastTime == chunk.maxSegmentIndex
+
+        when:
+        chunk.mergedSegmentIndexEndLastTime = halfSegmentNumber - 20
+        needMergeSegmentIndexList = [halfSegmentNumber - 10, halfSegmentNumber - 9]
+        chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        then:
+        chunk.mergedSegmentIndexEndLastTime == halfSegmentNumber - 1
+
+        when:
+        chunk.mergedSegmentIndexEndLastTime = halfSegmentNumber - 100
+        needMergeSegmentIndexList = [halfSegmentNumber - 90, halfSegmentNumber - 89]
+        chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        then:
+        chunk.mergedSegmentIndexEndLastTime == halfSegmentNumber - 89
+
+        when:
+        chunk.mergedSegmentIndexEndLastTime = halfSegmentNumber + 100
+        needMergeSegmentIndexList = [halfSegmentNumber + 101, halfSegmentNumber + 102]
+        chunk.updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList)
+        then:
+        chunk.mergedSegmentIndexEndLastTime == halfSegmentNumber + 102
+
+        when:
+        TreeSet<Integer> sorted = [0]
+        chunk.checkNeedMergeSegmentIndexListContinuous(sorted)
+        then:
+        1 == 1
+
+        when:
+        exception = false
+        sorted = [0, 2]
+        try {
+            chunk.checkNeedMergeSegmentIndexListContinuous(sorted)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        sorted.clear()
+        (Chunk.ONCE_PREPARE_SEGMENT_COUNT * 4 + 1).times {
+            sorted << it
+        }
+        try {
+            chunk.checkNeedMergeSegmentIndexListContinuous(sorted)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        sorted.clear()
+        (Chunk.ONCE_PREPARE_SEGMENT_COUNT * 4).times {
+            sorted << it
+        }
+        chunk.checkNeedMergeSegmentIndexListContinuous(sorted)
         then:
         1 == 1
 

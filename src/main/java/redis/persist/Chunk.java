@@ -12,10 +12,7 @@ import redis.repl.incremental.XOneWalGroupPersist;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 import static redis.persist.FdReadWrite.REPL_ONCE_INNER_COUNT;
@@ -37,6 +34,19 @@ public class Chunk {
 
     // for better latency, segment length = 4096 decompress performance is better
     final int chunkSegmentLength;
+
+    @Override
+    public String toString() {
+        return "Chunk{" +
+                "slot=" + slot +
+                ", segmentNumberPerFd=" + segmentNumberPerFd +
+                ", fdPerChunk=" + fdPerChunk +
+                ", maxSegmentIndex=" + maxSegmentIndex +
+                ", halfSegmentNumber=" + halfSegmentNumber +
+                ", chunkSegmentLength=" + chunkSegmentLength +
+                ", segmentIndex=" + segmentIndex +
+                '}';
+    }
 
     final static SimpleGauge chunkPersistGauge = new SimpleGauge("chunk_persist", "chunk persist segments",
             "slot");
@@ -494,19 +504,21 @@ public class Chunk {
     }
 
     void updateLastMergedSegmentIndexEnd(ArrayList<Integer> needMergeSegmentIndexList) {
+        TreeSet<Integer> sorted = new TreeSet<>(needMergeSegmentIndexList);
+
         // recycle, need spit to two part
-        if (needMergeSegmentIndexList.getLast() - needMergeSegmentIndexList.getFirst() > halfSegmentNumber) {
-            if (!needMergeSegmentIndexList.contains(0)) {
+        if (sorted.getLast() - sorted.getFirst() > halfSegmentNumber) {
+            if (!sorted.contains(0)) {
                 throw new IllegalStateException("Need merge segment index list not contains 0 while reuse from the beginning, s="
-                        + slot + ", list=" + needMergeSegmentIndexList);
+                        + slot + ", list=" + sorted);
             }
             if (mergedSegmentIndexEndLastTime == NO_NEED_MERGE_SEGMENT_INDEX) {
                 throw new IllegalStateException("Merged segment index end last time not set, s=" + slot);
             }
 
-            var onePart = new ArrayList<Integer>();
-            var anotherPart = new ArrayList<Integer>();
-            for (var segmentIndex : needMergeSegmentIndexList) {
+            TreeSet<Integer> onePart = new TreeSet<>();
+            TreeSet<Integer> anotherPart = new TreeSet<>();
+            for (var segmentIndex : sorted) {
                 if (segmentIndex < oneSlot.chunk.halfSegmentNumber) {
                     onePart.add(segmentIndex);
                 } else {
@@ -524,14 +536,13 @@ public class Chunk {
             for (int i = mergedSegmentIndexEndLastTime + 1; i < firstNeedMergeSegmentIndex; i++) {
                 anotherPart.add(i);
             }
-            anotherPart.sort(Integer::compareTo);
 
             checkNeedMergeSegmentIndexListContinuous(onePart);
             checkNeedMergeSegmentIndexListContinuous(anotherPart);
 
             mergedSegmentIndexEndLastTime = onePart.getLast();
         } else {
-            var firstNeedMergeSegmentIndex = needMergeSegmentIndexList.getFirst();
+            var firstNeedMergeSegmentIndex = sorted.getFirst();
             if (mergedSegmentIndexEndLastTime == NO_NEED_MERGE_SEGMENT_INDEX) {
                 if (firstNeedMergeSegmentIndex != 0) {
                     throw new IllegalStateException("First need merge segment index not 0, s=" + slot + ", i=" + firstNeedMergeSegmentIndex);
@@ -540,66 +551,57 @@ public class Chunk {
                 // prepend from merged segment index end last time
 //                assert mergedSegmentIndexEndLastTime < firstNeedMergeSegmentIndex;
                 for (int i = mergedSegmentIndexEndLastTime + 1; i < firstNeedMergeSegmentIndex; i++) {
-                    if (!needMergeSegmentIndexList.contains(i)) {
-                        needMergeSegmentIndexList.add(i);
-                    }
+                    sorted.add(i);
                 }
 
                 // last ONCE_PREPARE_SEGMENT_COUNT segments, need merge
-                var lastNeedMergeSegmentIndex = needMergeSegmentIndexList.getLast();
+                var lastNeedMergeSegmentIndex = sorted.getLast();
                 if (lastNeedMergeSegmentIndex >= maxSegmentIndex - ONCE_PREPARE_SEGMENT_COUNT) {
                     for (int i = lastNeedMergeSegmentIndex + 1; i <= maxSegmentIndex; i++) {
-                        if (!needMergeSegmentIndexList.contains(i)) {
-                            needMergeSegmentIndexList.add(i);
-                        }
+                        sorted.add(i);
                     }
-                    log.warn("Add extra need merge segment index to the end, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
+                    log.warn("Add extra need merge segment index to the end, s={}, i={}, list={}", slot, segmentIndex, sorted);
                 } else if (lastNeedMergeSegmentIndex < halfSegmentNumber &&
                         lastNeedMergeSegmentIndex >= halfSegmentNumber - 1 - ONCE_PREPARE_SEGMENT_COUNT) {
                     for (int i = lastNeedMergeSegmentIndex + 1; i < halfSegmentNumber; i++) {
-                        if (!needMergeSegmentIndexList.contains(i)) {
-                            needMergeSegmentIndexList.add(i);
-                        }
+                        sorted.add(i);
                     }
-                    log.warn("Add extra need merge segment index to the half end, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
+                    log.warn("Add extra need merge segment index to the half end, s={}, i={}, list={}", slot, segmentIndex, sorted);
                 }
-
-                needMergeSegmentIndexList.sort(Integer::compareTo);
             }
 
-            checkNeedMergeSegmentIndexListContinuous(needMergeSegmentIndexList);
-            mergedSegmentIndexEndLastTime = needMergeSegmentIndexList.getLast();
+            checkNeedMergeSegmentIndexListContinuous(sorted);
+            mergedSegmentIndexEndLastTime = sorted.getLast();
         }
     }
 
-    void checkNeedMergeSegmentIndexListContinuous(ArrayList<Integer> list) {
-        if (list.size() == 1) {
+    void checkNeedMergeSegmentIndexListContinuous(TreeSet<Integer> sortedSet) {
+        if (sortedSet.size() == 1) {
             return;
         }
 
         final int maxSize = ONCE_PREPARE_SEGMENT_COUNT * 4;
 
-        list.sort(Integer::compareTo);
-        if (list.getLast() - list.getFirst() != list.size() - 1) {
+        if (sortedSet.getLast() - sortedSet.getFirst() != sortedSet.size() - 1) {
             throw new IllegalStateException("Need merge segment index not continuous, s=" + slot +
-                    ", first need merge segment index=" + list.getFirst() +
-                    ", last need merge segment index=" + list.getLast() +
+                    ", first need merge segment index=" + sortedSet.getFirst() +
+                    ", last need merge segment index=" + sortedSet.getLast() +
                     ", last time merged segment index =" + mergedSegmentIndexEndLastTime +
-                    ", list size=" + list.size());
+                    ", list size=" + sortedSet.size());
         }
 
-        if (list.size() > maxSize) {
+        if (sortedSet.size() > maxSize) {
             throw new IllegalStateException("Need merge segment index list size too large, s=" + slot +
-                    ", first need merge segment index=" + list.getFirst() +
-                    ", last need merge segment index=" + list.getLast() +
+                    ", first need merge segment index=" + sortedSet.getFirst() +
+                    ", last need merge segment index=" + sortedSet.getLast() +
                     ", last time merged segment index =" + mergedSegmentIndexEndLastTime +
-                    ", list size=" + list.size() +
+                    ", list size=" + sortedSet.size() +
                     ", max size=" + maxSize);
         }
 
-        if (list.size() >= ONCE_PREPARE_SEGMENT_COUNT) {
+        if (sortedSet.size() >= ONCE_PREPARE_SEGMENT_COUNT) {
             log.debug("Chunk persist need merge segment index list too large, performance bad, maybe many is skipped, s={}, i={}, list={}",
-                    slot, segmentIndex, list);
+                    slot, segmentIndex, sortedSet);
         }
     }
 

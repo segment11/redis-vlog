@@ -766,10 +766,13 @@ class OneSlotTest extends Specification {
         e.isEmpty()
 
         when:
+        final String testMergedKey = 'xh!0_test-merged-key'
         def cv = new CompressedValue()
+        cv.keyHash = KeyHash.hash(testMergedKey.bytes)
         oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
-        oneSlot.chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, 'test-merged-key', 0, 0))
-        chunk.initSegmentIndexWhenFirstStart(0)
+        oneSlot.chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, testMergedKey, 0, 0))
+        oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(0, Chunk.Flag.merged, 1L, walGroupIndex)
+        chunk.initSegmentIndexWhenFirstStart(1)
         10.times {
             batchPut(oneSlot, 100, 100, 0, slotNumber)
         }
@@ -779,6 +782,14 @@ class OneSlotTest extends Specification {
         then:
         !e.isEmpty()
 
+        when:
+        // trigger persist wal
+        10.times {
+            batchPut(oneSlot, 100, 100, 1, slotNumber)
+        }
+        then:
+        oneSlot.metaChunkSegmentFlagSeq.getSegmentMergeFlag(1).flag() == Chunk.Flag.merged_and_persisted
+        oneSlot.chunkMergeWorker.mergedSegmentSet.isEmpty()
 
         cleanup:
         oneSlot.cleanUp()
@@ -891,6 +902,34 @@ class OneSlotTest extends Specification {
 
         cleanup:
         oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test init chunk flag fail'() {
+        given:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        Chunk.ONCE_PREPARE_SEGMENT_COUNT.times {
+            oneSlot.setSegmentMergeFlag(it, Chunk.Flag.merged, 1L, 0)
+        }
+        oneSlot.cleanUp()
+
+        when:
+        // load again
+        boolean exception = false
+        try {
+            LocalPersistTest.prepareLocalPersist()
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        cleanup:
         Consts.persistDir.deleteDir()
     }
 }

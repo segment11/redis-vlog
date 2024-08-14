@@ -974,7 +974,7 @@ public class OneSlot {
         }
     }
 
-    public void initFds(LibC libC) throws IOException {
+    void initFds(LibC libC) throws IOException {
         this.libC = libC;
         this.keyLoader.initFds(libC);
 
@@ -1003,7 +1003,7 @@ public class OneSlot {
             if (!canWrite) {
                 log.warn("Segment can not write, s={}, i={}", slot, currentSegmentIndex);
 
-                // set persisted flag, for next loop reuse
+                // set persisted flag reuse_new -> need merge before use
                 updateSegmentMergeFlag(currentSegmentIndex, Flag.reuse_new, snowFlake.nextId());
                 log.warn("Reset segment persisted when init");
 
