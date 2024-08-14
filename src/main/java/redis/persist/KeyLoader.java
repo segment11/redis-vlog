@@ -161,6 +161,11 @@ public class KeyLoader {
     }
 
     public long getKeyCount() {
+        // for unit test
+        if (statKeyCountInBuckets == null) {
+            return 0L;
+        }
+
         return statKeyCountInBuckets.getKeyCount();
     }
 

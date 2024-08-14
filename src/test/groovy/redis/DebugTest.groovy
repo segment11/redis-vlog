@@ -6,6 +6,7 @@ class DebugTest extends Specification {
     def 'test all'() {
         given:
         def d = Debug.instance
+        d.logMerge = false
 
         expect:
         !d.logMerge

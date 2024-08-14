@@ -84,7 +84,9 @@ dependencies {
 test {
     useJUnitPlatform()
 
-    maxHeapSize = '6G'
+    maxHeapSize = '8G'
+    // parallel = true
+    forkEvery = 4
 }
 
 jacoco {
