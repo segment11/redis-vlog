@@ -228,11 +228,12 @@ public class RGroup extends BaseCommand {
         }
 
         var buf = Unpooled.wrappedBuffer(serializedValue);
-        var rdb = new RDB(buf);
+        // todo
+        RDBImporter rdbImporter = null;
         try {
             final long finalExpireAt = expireAt;
 
-            rdb.restore(new RDB.Callback() {
+            rdbImporter.restore(buf, new RDBCallback() {
                 @Override
                 public void onInteger(Integer value) {
                     setNumber(keyBytes, value, slotWithKeyHash, finalExpireAt);
