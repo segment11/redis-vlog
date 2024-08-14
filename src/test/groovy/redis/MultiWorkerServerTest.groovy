@@ -31,6 +31,7 @@ class MultiWorkerServerTest extends Specification {
         def config = Config.create()
                 .with('slotNumber', slotNumber.toString())
                 .with('netWorkers', netWorkers.toString())
+                .with("net.listenAddresses", "localhost:7379")
 
         dirFile.deleteDir()
 
@@ -41,6 +42,8 @@ class MultiWorkerServerTest extends Specification {
         def dirFile2 = m.dirFile(config)
         def dirFile3 = m.dirFile(config)
 
+        def snowFlakes = m.snowFlakes(config)
+
         expect:
         dirFile2.exists()
         dirFile3.exists()
@@ -50,7 +53,7 @@ class MultiWorkerServerTest extends Specification {
         // need use activej inject mock, todo
         m.workerPool(null, config) == null
         m.config() != null
-        m.snowFlakes(config) != null
+        snowFlakes != null
         m.getModule() != null
         m.getBusinessLogicModule() != null
 
@@ -222,6 +225,110 @@ class MultiWorkerServerTest extends Specification {
         then:
         m.requestHandlerArray[0].isStopped
         m.requestHandlerArray[1].isStopped
+
+        when:
+        def m1 = new MultiWorkerServer.InnerModule()
+        def c = m1.confForSlot(config)
+        then:
+        1 == 1
+
+        when:
+        def b = m1.beforeCreateHandler(c, snowFlakes, config)
+        then:
+        1 == 1
+
+        when:
+        def configX = Config.create()
+                .with("net.listenAddresses", "localhost:7379")
+                .with("debugMode", "true")
+                .with("pureMemory", "true")
+                .with("bucket.bucketsPerSlot", "4096")
+                .with("bucket.initialSplitNumber", "3")
+                .with("bucket.lruPerFd.maxSize", "100")
+                .with("chunk.segmentNumberPerFd", "4096")
+                .with("chunk.fdPerChunk", "2")
+                .with("chunk.segmentLength", "4096")
+                .with("chunk.lruPerFd.maxSize", "1024")
+                .with("wal.oneChargeBucketNumber", "16")
+                .with("wal.valueSizeTrigger", "100")
+                .with("wal.shortValueSizeTrigger", "100")
+                .with("repl.binlogForReadCacheSegmentMaxCount", "100")
+                .with("big.string.lru.maxSize", "100")
+                .with("kv.lru.maxSize", "10000")
+        m1.confForSlot(configX)
+        m1.beforeCreateHandler(c, snowFlakes, configX)
+        then:
+        1 == 1
+
+        when:
+        boolean exception = false
+        def config2 = Config.create()
+                .with("slotNumber", (LocalPersist.MAX_SLOT_NUMBER + 1).toString())
+        try {
+            m1.beforeCreateHandler(c, m.snowFlakes(config2), config2)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        def config3 = Config.create()
+                .with("slotNumber", "3")
+        try {
+            m1.beforeCreateHandler(c, m.snowFlakes(config2), config3)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        def config4 = Config.create()
+                .with("slotNumber", "1")
+                .with("netWorkers", (MultiWorkerServer.MAX_NET_WORKERS + 1).toString())
+        try {
+            m1.beforeCreateHandler(c, m.snowFlakes(config2), config4)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        def cpuNumber = Runtime.getRuntime().availableProcessors()
+        def config5 = Config.create()
+                .with("slotNumber", "1")
+                .with("netWorkers", (cpuNumber + 1).toString())
+        try {
+            m1.beforeCreateHandler(c, m.snowFlakes(config2), config5)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        m1.requestHandlerArray(snowFlakes, b, config)
+        then:
+        1 == 1
+
+        when:
+        m1.scheduleRunnableArray(b, config)
+        then:
+        1 == 1
+
+        when:
+        m1.socketInspector(config)
+        then:
+        1 == 1
 
         cleanup:
         eventloop0.breakEventloop()

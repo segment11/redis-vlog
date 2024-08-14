@@ -34,6 +34,7 @@ import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.hotspot.BufferPoolsExports;
 import io.prometheus.client.hotspot.GarbageCollectorExports;
 import io.prometheus.client.hotspot.MemoryPoolsExports;
+import org.slf4j.Logger;
 import redis.decode.Request;
 import redis.decode.RequestDecoder;
 import redis.persist.KeyBucket;
@@ -58,6 +59,7 @@ import static io.activej.config.converter.ConfigConverters.*;
 import static io.activej.inject.module.Modules.combine;
 import static io.activej.launchers.initializers.Initializers.ofEventloop;
 import static io.activej.launchers.initializers.Initializers.ofPrimaryServer;
+import static org.slf4j.LoggerFactory.getLogger;
 import static redis.decode.HttpHeaderBody.*;
 import static redis.decode.Request.SLOT_CAN_HANDLE_BY_ANY_WORKER;
 
@@ -67,13 +69,11 @@ public class MultiWorkerServer extends Launcher {
 //        ApplicationSettings.set(SocketSettings.class, "receiveBufferSize", MemSize.kilobytes(64));
 //    }
 
-    private final int PORT = 7379;
-
     public static final String PROPERTIES_FILE = "redis-vlog.properties";
 
-    private static final int MAX_NET_WORKERS = 128;
+    static final int MAX_NET_WORKERS = 128;
 
-    ConfigConverter<Integer> toInt = ofInteger();
+    static ConfigConverter<Integer> toInt = ofInteger();
 
     @Inject
     PrimaryServer primaryServer;
@@ -86,12 +86,11 @@ public class MultiWorkerServer extends Launcher {
     @Inject
     SocketInspector socketInspector;
 
-    File dirFile(Config config) {
+    static File dirFile(Config config) {
         var dir = config.get(ofString(), "dir", "/tmp/redis-vlog");
         var dirFile = new File(dir);
         if (!dirFile.exists()) {
             boolean isOk = dirFile.mkdirs();
-            logger.info("Create dir {}: {}", dirFile, isOk);
             if (!isOk) {
                 throw new RuntimeException("Create dir " + dirFile.getAbsolutePath() + " failed");
             }
@@ -99,7 +98,6 @@ public class MultiWorkerServer extends Launcher {
         var persistDir = new File(dirFile, "persist");
         if (!persistDir.exists()) {
             boolean isOk = persistDir.mkdirs();
-            logger.info("Create dir {}: {}", persistDir, isOk);
             if (!isOk) {
                 throw new RuntimeException("Create dir " + persistDir.getAbsolutePath() + " failed");
             }
@@ -293,6 +291,7 @@ public class MultiWorkerServer extends Launcher {
 
     @Provides
     Config config() {
+        final int PORT = 7379;
         return Config.create()
                 .with("net.listenAddresses", Config.ofValue(ofInetSocketAddress(), new InetSocketAddress(PORT)))
                 .overrideWith(ofClassPathProperties(PROPERTIES_FILE, true))
@@ -327,7 +326,7 @@ public class MultiWorkerServer extends Launcher {
     }
 
     protected Module getBusinessLogicModule() {
-        return Module.empty();
+        return new InnerModule();
     }
 
     @Inject
@@ -415,208 +414,206 @@ public class MultiWorkerServer extends Launcher {
         }
     }
 
-    public static void main(String[] args) throws Exception {
-        Launcher launcher = new MultiWorkerServer() {
-            @Override
-            protected Module getBusinessLogicModule() {
-                return new AbstractModule() {
-                    @Provides
-                    ConfForSlot confForSlot(Config config) {
-                        long estimateKeyNumber = config.get(ofLong(), "estimateKeyNumber", 1_000_000L);
-                        int estimateOneValueLength = config.get(toInt, "estimateOneValueLength", 200);
-                        var c = ConfForSlot.from(estimateKeyNumber);
-                        c.estimateOneValueLength = estimateOneValueLength;
+    static class InnerModule extends AbstractModule {
+        private final Logger logger = getLogger(getClass());
 
-                        boolean isValueSetUseCompression = config.get(ofBoolean(), "isValueSetUseCompression", true);
-                        boolean isOnDynTrainDictForCompression = config.get(ofBoolean(), "isOnDynTrainDictForCompression", true);
-                        c.isValueSetUseCompression = isValueSetUseCompression;
-                        c.isOnDynTrainDictForCompression = isOnDynTrainDictForCompression;
+        @Provides
+        ConfForSlot confForSlot(Config config) {
+            long estimateKeyNumber = config.get(ofLong(), "estimateKeyNumber", 1_000_000L);
+            int estimateOneValueLength = config.get(toInt, "estimateOneValueLength", 200);
+            var c = ConfForSlot.from(estimateKeyNumber);
+            c.estimateOneValueLength = estimateOneValueLength;
 
-                        int toCompressMinDataLength = config.get(toInt, "toCompressMinDataLength", 64);
-                        DictMap.TO_COMPRESS_MIN_DATA_LENGTH = toCompressMinDataLength;
+            boolean isValueSetUseCompression = config.get(ofBoolean(), "isValueSetUseCompression", true);
+            boolean isOnDynTrainDictForCompression = config.get(ofBoolean(), "isOnDynTrainDictForCompression", true);
+            c.isValueSetUseCompression = isValueSetUseCompression;
+            c.isOnDynTrainDictForCompression = isOnDynTrainDictForCompression;
 
-                        ConfForSlot.global = c;
+            DictMap.TO_COMPRESS_MIN_DATA_LENGTH = config.get(toInt, "toCompressMinDataLength", 64);
 
-                        c.netListenAddresses = config.get(ofString(), "net.listenAddresses");
-                        logger.info("Net listen addresses: {}", c.netListenAddresses);
+            ConfForSlot.global = c;
 
-                        if (config.hasChild("pureMemory")) {
-                            c.pureMemory = config.get(ofBoolean(), "pureMemory");
-                        }
+            c.netListenAddresses = config.get(ofString(), "net.listenAddresses");
+            logger.info("Net listen addresses: {}", c.netListenAddresses);
 
-                        c.eventLoopIdleMillis = config.get(toInt, "eventloop.idleMillis", 10);
-
-                        boolean debugMode = config.get(ofBoolean(), "debugMode", false);
-                        if (debugMode) {
-                            c.confBucket.bucketsPerSlot = ConfForSlot.ConfBucket.debugMode.bucketsPerSlot;
-                            c.confBucket.initialSplitNumber = ConfForSlot.ConfBucket.debugMode.initialSplitNumber;
-
-                            c.confChunk.segmentNumberPerFd = ConfForSlot.ConfChunk.debugMode.segmentNumberPerFd;
-                            c.confChunk.fdPerChunk = ConfForSlot.ConfChunk.debugMode.fdPerChunk;
-                            c.confChunk.segmentLength = ConfForSlot.ConfChunk.debugMode.segmentLength;
-
-                            c.confWal.oneChargeBucketNumber = ConfForSlot.ConfWal.debugMode.oneChargeBucketNumber;
-                            c.confWal.valueSizeTrigger = ConfForSlot.ConfWal.debugMode.valueSizeTrigger;
-                            c.confWal.shortValueSizeTrigger = ConfForSlot.ConfWal.debugMode.shortValueSizeTrigger;
-                        }
-
-                        var debugInstance = Debug.getInstance();
-                        debugInstance.logMerge = config.get(ofBoolean(), "debugLogMerge", false);
-                        debugInstance.logTrainDict = config.get(ofBoolean(), "debugLogTrainDict", false);
-                        debugInstance.logRestore = config.get(ofBoolean(), "debugLogRestore", false);
-                        debugInstance.bulkLoad = config.get(ofBoolean(), "bulkLoad", false);
-
-                        // override bucket conf
-                        if (config.getChild("bucket.bucketsPerSlot").hasValue()) {
-                            c.confBucket.bucketsPerSlot = config.get(ofInteger(), "bucket.bucketsPerSlot");
-                        }
-                        if (c.confBucket.bucketsPerSlot > KeyBucket.MAX_BUCKETS_PER_SLOT) {
-                            throw new IllegalArgumentException("Bucket count per slot too large, bucket count per slot should be less than " + KeyBucket.MAX_BUCKETS_PER_SLOT);
-                        }
-                        if (c.confBucket.bucketsPerSlot % 1024 != 0) {
-                            throw new IllegalArgumentException("Bucket count per slot should be multiple of 1024");
-                        }
-                        if (config.getChild("bucket.initialSplitNumber").hasValue()) {
-                            c.confBucket.initialSplitNumber = config.get(ofInteger(), "bucket.initialSplitNumber").byteValue();
-                        }
-
-                        if (config.getChild("bucket.lruPerFd.maxSize").hasValue()) {
-                            c.confBucket.lruPerFd.maxSize = config.get(toInt, "bucket.lruPerFd.maxSize");
-                        }
-
-                        // override chunk conf
-                        if (config.getChild("chunk.segmentNumberPerFd").hasValue()) {
-                            c.confChunk.segmentNumberPerFd = config.get(ofInteger(), "chunk.segmentNumberPerFd");
-                        }
-                        if (config.getChild("chunk.fdPerChunk").hasValue()) {
-                            c.confChunk.fdPerChunk = Byte.parseByte(config.get("chunk.fdPerChunk"));
-                        }
-                        if (c.confChunk.fdPerChunk > ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK) {
-                            throw new IllegalArgumentException("Chunk fd per chunk too large, fd per chunk should be less than " + ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK);
-                        }
-
-                        if (config.getChild("chunk.segmentLength").hasValue()) {
-                            c.confChunk.segmentLength = config.get(ofInteger(), "chunk.segmentLength");
-                        }
-                        if (config.getChild("chunk.lruPerFd.maxSize").hasValue()) {
-                            c.confChunk.lruPerFd.maxSize = config.get(ofInteger(), "chunk.lruPerFd.maxSize");
-                        }
-
-                        c.confChunk.resetByOneValueLength(estimateOneValueLength);
-
-                        // override wal conf
-                        if (config.getChild("wal.oneChargeBucketNumber").hasValue()) {
-                            c.confWal.oneChargeBucketNumber = config.get(ofInteger(), "wal.oneChargeBucketNumber");
-                        }
-                        if (!Wal.VALID_ONE_CHARGE_BUCKET_NUMBER_LIST.contains(c.confWal.oneChargeBucketNumber)) {
-                            throw new IllegalArgumentException("Wal one charge bucket number invalid, wal one charge bucket number should be in " + Wal.VALID_ONE_CHARGE_BUCKET_NUMBER_LIST);
-                        }
-
-                        var walGroupNumber = c.confBucket.bucketsPerSlot / c.confWal.oneChargeBucketNumber;
-                        if (walGroupNumber > Wal.MAX_WAL_GROUP_NUMBER) {
-                            throw new IllegalArgumentException("Wal group number too large, wal group number should be less than " + Wal.MAX_WAL_GROUP_NUMBER);
-                        }
-
-                        if (config.getChild("wal.valueSizeTrigger").hasValue()) {
-                            c.confWal.valueSizeTrigger = config.get(ofInteger(), "wal.valueSizeTrigger");
-                        }
-                        if (config.getChild("wal.shortValueSizeTrigger").hasValue()) {
-                            c.confWal.shortValueSizeTrigger = config.get(ofInteger(), "wal.shortValueSizeTrigger");
-                        }
-
-                        c.confWal.resetByOneValueLength(estimateOneValueLength);
-
-                        if (config.getChild("repl.binlogForReadCacheSegmentMaxCount").hasValue()) {
-                            c.confRepl.binlogForReadCacheSegmentMaxCount = config.get(ofInteger(), "repl.binlogForReadCacheSegmentMaxCount").shortValue();
-                        }
-
-                        if (config.getChild("big.string.lru.maxSize").hasValue()) {
-                            c.lruBigString.maxSize = config.get(ofInteger(), "big.string.lru.maxSize");
-                        }
-                        if (config.getChild("kv.lru.maxSize").hasValue()) {
-                            c.lruKeyAndCompressedValueEncoded.maxSize = config.get(ofInteger(), "kv.lru.maxSize");
-                        }
-
-                        logger.info("ConfForSlot: {}", c);
-                        return c;
-                    }
-
-                    @Provides
-                    Integer beforeCreateHandler(ConfForSlot confForSlot, SnowFlake[] snowFlakes, Config config) throws IOException {
-                        int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
-                        if (slotNumber > LocalPersist.MAX_SLOT_NUMBER) {
-                            throw new IllegalArgumentException("Slot number too large, slot number should be less than " + LocalPersist.MAX_SLOT_NUMBER);
-                        }
-                        if (slotNumber != 1 && slotNumber % 2 != 0) {
-                            throw new IllegalArgumentException("Slot number should be 1 or even");
-                        }
-                        confForSlot.slotNumber = (short) slotNumber;
-
-                        int netWorkers = config.get(toInt, "netWorkers", 1);
-                        if (netWorkers > MAX_NET_WORKERS) {
-                            throw new IllegalArgumentException("Net workers too large, net workers should be less than " + MAX_NET_WORKERS);
-                        }
-                        var cpuNumber = Runtime.getRuntime().availableProcessors();
-                        if (netWorkers >= cpuNumber) {
-                            throw new IllegalArgumentException("Net workers should be less than cpu number");
-                        }
-                        confForSlot.netWorkers = (byte) netWorkers;
-
-                        var dirFile = dirFile(config);
-
-                        DictMap.getInstance().initDictMap(dirFile);
-
-                        var configCompress = config.getChild("compress");
-                        TrainSampleJob.setDictKeyPrefixEndIndex(configCompress.get(toInt, "dictKeyPrefixEndIndex", 5));
-
-                        // init local persist
-                        // already created when inject
-                        var persistDir = new File(dirFile, "persist");
-                        LocalPersist.getInstance().initSlots((byte) netWorkers, (short) slotNumber, snowFlakes, persistDir,
-                                config.getChild("persist"));
-
-                        boolean debugMode = config.get(ofBoolean(), "debugMode", false);
-                        if (debugMode) {
-                            LocalPersist.getInstance().debugMode();
-                        }
-
-                        return 0;
-                    }
-
-                    @Provides
-                    RequestHandler[] requestHandlerArray(SnowFlake[] snowFlakes, Integer beforeCreateHandler, Config config) {
-                        int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
-                        int netWorkers = config.get(toInt, "netWorkers", 1);
-
-                        var list = new RequestHandler[netWorkers];
-                        for (int i = 0; i < netWorkers; i++) {
-                            list[i] = new RequestHandler((byte) i, (byte) netWorkers, (short) slotNumber, snowFlakes[i], config);
-                        }
-                        return list;
-                    }
-
-                    @Provides
-                    TaskRunnable[] scheduleRunnableArray(Integer beforeCreateHandler, Config config) {
-                        int netWorkers = config.get(toInt, "netWorkers", 1);
-                        var list = new TaskRunnable[netWorkers];
-                        for (int i = 0; i < netWorkers; i++) {
-                            list[i] = new TaskRunnable((byte) i, (byte) netWorkers);
-                        }
-                        return list;
-                    }
-
-                    @Provides
-                    SocketInspector socketInspector(Config config) {
-                        int maxConnections = config.get(toInt, "maxConnections", 1000);
-
-                        var r = new SocketInspector();
-                        r.setMaxConnections(maxConnections);
-                        MultiWorkerServer.staticGlobalV.socketInspector = r;
-                        return r;
-                    }
-                };
+            if (config.hasChild("pureMemory")) {
+                c.pureMemory = config.get(ofBoolean(), "pureMemory");
             }
-        };
+
+            c.eventLoopIdleMillis = config.get(toInt, "eventloop.idleMillis", 10);
+
+            boolean debugMode = config.get(ofBoolean(), "debugMode", false);
+            if (debugMode) {
+                c.confBucket.bucketsPerSlot = ConfForSlot.ConfBucket.debugMode.bucketsPerSlot;
+                c.confBucket.initialSplitNumber = ConfForSlot.ConfBucket.debugMode.initialSplitNumber;
+
+                c.confChunk.segmentNumberPerFd = ConfForSlot.ConfChunk.debugMode.segmentNumberPerFd;
+                c.confChunk.fdPerChunk = ConfForSlot.ConfChunk.debugMode.fdPerChunk;
+                c.confChunk.segmentLength = ConfForSlot.ConfChunk.debugMode.segmentLength;
+
+                c.confWal.oneChargeBucketNumber = ConfForSlot.ConfWal.debugMode.oneChargeBucketNumber;
+                c.confWal.valueSizeTrigger = ConfForSlot.ConfWal.debugMode.valueSizeTrigger;
+                c.confWal.shortValueSizeTrigger = ConfForSlot.ConfWal.debugMode.shortValueSizeTrigger;
+            }
+
+            var debugInstance = Debug.getInstance();
+            debugInstance.logMerge = config.get(ofBoolean(), "debugLogMerge", false);
+            debugInstance.logTrainDict = config.get(ofBoolean(), "debugLogTrainDict", false);
+            debugInstance.logRestore = config.get(ofBoolean(), "debugLogRestore", false);
+            debugInstance.bulkLoad = config.get(ofBoolean(), "bulkLoad", false);
+
+            // override bucket conf
+            if (config.getChild("bucket.bucketsPerSlot").hasValue()) {
+                c.confBucket.bucketsPerSlot = config.get(ofInteger(), "bucket.bucketsPerSlot");
+            }
+            if (c.confBucket.bucketsPerSlot > KeyBucket.MAX_BUCKETS_PER_SLOT) {
+                throw new IllegalArgumentException("Bucket count per slot too large, bucket count per slot should be less than " + KeyBucket.MAX_BUCKETS_PER_SLOT);
+            }
+            if (c.confBucket.bucketsPerSlot % 1024 != 0) {
+                throw new IllegalArgumentException("Bucket count per slot should be multiple of 1024");
+            }
+            if (config.getChild("bucket.initialSplitNumber").hasValue()) {
+                c.confBucket.initialSplitNumber = config.get(ofInteger(), "bucket.initialSplitNumber").byteValue();
+            }
+
+            if (config.getChild("bucket.lruPerFd.maxSize").hasValue()) {
+                c.confBucket.lruPerFd.maxSize = config.get(toInt, "bucket.lruPerFd.maxSize");
+            }
+
+            // override chunk conf
+            if (config.getChild("chunk.segmentNumberPerFd").hasValue()) {
+                c.confChunk.segmentNumberPerFd = config.get(ofInteger(), "chunk.segmentNumberPerFd");
+            }
+            if (config.getChild("chunk.fdPerChunk").hasValue()) {
+                c.confChunk.fdPerChunk = Byte.parseByte(config.get("chunk.fdPerChunk"));
+            }
+            if (c.confChunk.fdPerChunk > ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK) {
+                throw new IllegalArgumentException("Chunk fd per chunk too large, fd per chunk should be less than " + ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK);
+            }
+
+            if (config.getChild("chunk.segmentLength").hasValue()) {
+                c.confChunk.segmentLength = config.get(ofInteger(), "chunk.segmentLength");
+            }
+            if (config.getChild("chunk.lruPerFd.maxSize").hasValue()) {
+                c.confChunk.lruPerFd.maxSize = config.get(ofInteger(), "chunk.lruPerFd.maxSize");
+            }
+
+            c.confChunk.resetByOneValueLength(estimateOneValueLength);
+
+            // override wal conf
+            if (config.getChild("wal.oneChargeBucketNumber").hasValue()) {
+                c.confWal.oneChargeBucketNumber = config.get(ofInteger(), "wal.oneChargeBucketNumber");
+            }
+            if (!Wal.VALID_ONE_CHARGE_BUCKET_NUMBER_LIST.contains(c.confWal.oneChargeBucketNumber)) {
+                throw new IllegalArgumentException("Wal one charge bucket number invalid, wal one charge bucket number should be in " + Wal.VALID_ONE_CHARGE_BUCKET_NUMBER_LIST);
+            }
+
+            var walGroupNumber = c.confBucket.bucketsPerSlot / c.confWal.oneChargeBucketNumber;
+            if (walGroupNumber > Wal.MAX_WAL_GROUP_NUMBER) {
+                throw new IllegalArgumentException("Wal group number too large, wal group number should be less than " + Wal.MAX_WAL_GROUP_NUMBER);
+            }
+
+            if (config.getChild("wal.valueSizeTrigger").hasValue()) {
+                c.confWal.valueSizeTrigger = config.get(ofInteger(), "wal.valueSizeTrigger");
+            }
+            if (config.getChild("wal.shortValueSizeTrigger").hasValue()) {
+                c.confWal.shortValueSizeTrigger = config.get(ofInteger(), "wal.shortValueSizeTrigger");
+            }
+
+            c.confWal.resetByOneValueLength(estimateOneValueLength);
+
+            if (config.getChild("repl.binlogForReadCacheSegmentMaxCount").hasValue()) {
+                c.confRepl.binlogForReadCacheSegmentMaxCount = config.get(ofInteger(), "repl.binlogForReadCacheSegmentMaxCount").shortValue();
+            }
+
+            if (config.getChild("big.string.lru.maxSize").hasValue()) {
+                c.lruBigString.maxSize = config.get(ofInteger(), "big.string.lru.maxSize");
+            }
+            if (config.getChild("kv.lru.maxSize").hasValue()) {
+                c.lruKeyAndCompressedValueEncoded.maxSize = config.get(ofInteger(), "kv.lru.maxSize");
+            }
+
+            logger.info("ConfForSlot: {}", c);
+            return c;
+        }
+
+        @Provides
+        Integer beforeCreateHandler(ConfForSlot confForSlot, SnowFlake[] snowFlakes, Config config) throws IOException {
+            int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
+            if (slotNumber > LocalPersist.MAX_SLOT_NUMBER) {
+                throw new IllegalArgumentException("Slot number too large, slot number should be less than " + LocalPersist.MAX_SLOT_NUMBER);
+            }
+            if (slotNumber != 1 && slotNumber % 2 != 0) {
+                throw new IllegalArgumentException("Slot number should be 1 or even");
+            }
+            confForSlot.slotNumber = (short) slotNumber;
+
+            int netWorkers = config.get(toInt, "netWorkers", 1);
+            if (netWorkers > MAX_NET_WORKERS) {
+                throw new IllegalArgumentException("Net workers too large, net workers should be less than " + MAX_NET_WORKERS);
+            }
+            var cpuNumber = Runtime.getRuntime().availableProcessors();
+            if (netWorkers >= cpuNumber) {
+                throw new IllegalArgumentException("Net workers should be less than cpu number");
+            }
+            confForSlot.netWorkers = (byte) netWorkers;
+
+            var dirFile = dirFile(config);
+
+            DictMap.getInstance().initDictMap(dirFile);
+
+            var configCompress = config.getChild("compress");
+            TrainSampleJob.setDictKeyPrefixEndIndex(configCompress.get(toInt, "dictKeyPrefixEndIndex", 5));
+
+            // init local persist
+            // already created when inject
+            var persistDir = new File(dirFile, "persist");
+            LocalPersist.getInstance().initSlots((byte) netWorkers, (short) slotNumber, snowFlakes, persistDir,
+                    config.getChild("persist"));
+
+            boolean debugMode = config.get(ofBoolean(), "debugMode", false);
+            if (debugMode) {
+                LocalPersist.getInstance().debugMode();
+            }
+
+            return 0;
+        }
+
+        @Provides
+        RequestHandler[] requestHandlerArray(SnowFlake[] snowFlakes, Integer beforeCreateHandler, Config config) {
+            int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
+            int netWorkers = config.get(toInt, "netWorkers", 1);
+
+            var list = new RequestHandler[netWorkers];
+            for (int i = 0; i < netWorkers; i++) {
+                list[i] = new RequestHandler((byte) i, (byte) netWorkers, (short) slotNumber, snowFlakes[i], config);
+            }
+            return list;
+        }
+
+        @Provides
+        TaskRunnable[] scheduleRunnableArray(Integer beforeCreateHandler, Config config) {
+            int netWorkers = config.get(toInt, "netWorkers", 1);
+            var list = new TaskRunnable[netWorkers];
+            for (int i = 0; i < netWorkers; i++) {
+                list[i] = new TaskRunnable((byte) i, (byte) netWorkers);
+            }
+            return list;
+        }
+
+        @Provides
+        SocketInspector socketInspector(Config config) {
+            int maxConnections = config.get(toInt, "maxConnections", 1000);
+
+            var r = new SocketInspector();
+            r.setMaxConnections(maxConnections);
+            MultiWorkerServer.staticGlobalV.socketInspector = r;
+            return r;
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Launcher launcher = new MultiWorkerServer();
         launcher.launch(args);
     }
 
