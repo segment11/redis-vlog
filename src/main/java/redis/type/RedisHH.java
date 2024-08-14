@@ -8,7 +8,7 @@ import java.util.HashMap;
 
 // key / value save together
 public class RedisHH {
-    public static final byte[] PREFER_COMPRESS_FIELD_MAGIC_PREFIX = "r?h!h".getBytes();
+//    public static final byte[] PREFER_COMPRESS_FIELD_MAGIC_PREFIX = "r?h!h".getBytes();
 
     // hash size short + crc int
     private static final int HEADER_LENGTH = 2 + 4;

@@ -95,10 +95,16 @@ public class Wal {
             }
 
             var keyBytes = new byte[keyLength];
-            is.read(keyBytes);
+            var n = is.read(keyBytes);
+            if (n != keyLength) {
+                throw new IllegalStateException("Read key bytes error, key length: " + keyLength + ", read length: " + n);
+            }
             var cvEncodedLength = is.readInt();
             var cvEncoded = new byte[cvEncodedLength];
-            is.read(cvEncoded);
+            var n2 = is.read(cvEncoded);
+            if (n2 != cvEncodedLength) {
+                throw new IllegalStateException("Read cv encoded bytes error, cv encoded length: " + cvEncodedLength + ", read length: " + n2);
+            }
 
             if (vLength != ENCODED_HEADER_LENGTH + keyLength + cvEncodedLength) {
                 throw new IllegalStateException("Invalid length: " + vLength);
@@ -316,28 +322,9 @@ public class Wal {
         var vShort = delayToKeyBucketShortValues.get(key);
         if (vShort != null) {
             // already removed
-            if (vShort.isRemove()) {
-                return false;
-            } else {
-                return true;
-            }
+            return !vShort.isRemove();
         } else {
             return delayToKeyBucketValues.get(key) != null;
-        }
-    }
-
-    boolean remove(String key) {
-        var vShort = delayToKeyBucketShortValues.get(key);
-        if (vShort != null) {
-            // already removed
-            if (vShort.isRemove()) {
-                return false;
-            } else {
-                delayToKeyBucketShortValues.remove(key);
-                return true;
-            }
-        } else {
-            return delayToKeyBucketValues.remove(key) != null;
         }
     }
 
@@ -351,15 +338,7 @@ public class Wal {
             var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
             var encodeLength = v.encodeLength();
 
-            var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
-            try {
-                raf.seek(targetGroupBeginOffset + offset);
-                raf.write(v.encode());
-            } catch (IOException e) {
-                log.error("Write to file error", e);
-                throw new RuntimeException("Write to file error: " + e.getMessage());
-            }
-
+            putVToFile(v, isValueShort, offset, targetGroupBeginOffset);
             positionArray[groupIndex] += encodeLength;
         }
 
@@ -369,6 +348,17 @@ public class Wal {
         } else {
             delayToKeyBucketValues.put(v.key, v);
             delayToKeyBucketShortValues.remove(v.key);
+        }
+    }
+
+    private void putVToFile(V v, boolean isValueShort, int offset, int targetGroupBeginOffset) {
+        var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
+        try {
+            raf.seek(targetGroupBeginOffset + offset);
+            raf.write(v.encode());
+        } catch (IOException e) {
+            log.error("Write to file error", e);
+            throw new RuntimeException("Write to file error: " + e.getMessage());
         }
     }
 
@@ -391,14 +381,7 @@ public class Wal {
         var bulkLoad = Debug.getInstance().bulkLoad;
         // bulk load need not wal write
         if (!ConfForSlot.global.pureMemory && !bulkLoad) {
-            var raf = isValueShort ? walSharedFileShortValue : walSharedFile;
-            try {
-                raf.seek(targetGroupBeginOffset + offset);
-                raf.write(v.encode());
-            } catch (IOException e) {
-                log.error("Write to file error", e);
-                throw new RuntimeException("Write to file error: " + e.getMessage());
-            }
+            putVToFile(v, isValueShort, offset, targetGroupBeginOffset);
         }
         positionArray[groupIndex] += encodeLength;
 

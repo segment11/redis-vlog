@@ -145,7 +145,7 @@ public class ChunkMergeJob {
 
             if (flag == Chunk.Flag.merged_and_persisted) {
                 skipSegmentIndexSet.add(segmentIndex);
-                continue;
+//                continue;
             }
         }
 
@@ -205,7 +205,7 @@ public class ChunkMergeJob {
 //        assert oneSlot.keyLoader != null;
         // calc bucket index and wal group index
         for (var one : cvList) {
-            one.bucketIndex = KeyHash.bucketIndex(one.cv.getKeyHash(), oneSlot.keyLoader.bucketsPerSlot);
+            one.bucketIndex = KeyHash.bucketIndex(one.cv.getKeyHash(), ConfForSlot.global.confBucket.bucketsPerSlot);
             one.walGroupIndex = Wal.calWalGroupIndex(one.bucketIndex);
         }
         // compare to current wal or persist value meta in key buckets, remove those deleted or expired

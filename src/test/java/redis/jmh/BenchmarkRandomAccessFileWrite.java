@@ -35,7 +35,7 @@ public class BenchmarkRandomAccessFileWrite {
         if (!dir.exists()) {
             dir.mkdirs();
         }
-        var threadId = Thread.currentThread().getId();
+        var threadId = Thread.currentThread().threadId();
         var targetDir = new File(dir, "thread_" + threadId);
         if (!targetDir.exists()) {
             targetDir.mkdirs();

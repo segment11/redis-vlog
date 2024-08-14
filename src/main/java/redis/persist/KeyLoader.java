@@ -150,8 +150,6 @@ public class KeyLoader {
 
     private final Logger log = org.slf4j.LoggerFactory.getLogger(KeyLoader.class);
 
-    public static final int BATCH_ONCE_KEY_BUCKET_COUNT_READ_FOR_REPL = 1024;
-
     StatKeyCountInBuckets statKeyCountInBuckets;
 
     public short getKeyCountInBucketIndex(int bucketIndex) {
@@ -269,7 +267,7 @@ public class KeyLoader {
         return (bucketIndex - firstBucketIndexInTargetWalGroup) * KEY_BUCKET_ONE_COST_SIZE;
     }
 
-    KeyBucket readKeyBucketForSingleKey(int bucketIndex, byte splitIndex, byte splitNumber, long keyHash, boolean isRefreshLRUCache) {
+    KeyBucket readKeyBucketForSingleKey(int bucketIndex, byte splitIndex, byte splitNumber, boolean isRefreshLRUCache) {
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
             return null;
@@ -299,7 +297,7 @@ public class KeyLoader {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
 
-        var keyBucket = readKeyBucketForSingleKey(bucketIndex, splitIndex, splitNumber, keyHash, true);
+        var keyBucket = readKeyBucketForSingleKey(bucketIndex, splitIndex, splitNumber, true);
         if (keyBucket == null) {
             return null;
         }
@@ -312,13 +310,13 @@ public class KeyLoader {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
 
-        var keyBucket = readKeyBucketForSingleKey(bucketIndex, splitIndex, splitNumber, keyHash, false);
+        var keyBucket = readKeyBucketForSingleKey(bucketIndex, splitIndex, splitNumber, false);
         if (keyBucket == null) {
             keyBucket = new KeyBucket(slot, bucketIndex, splitIndex, splitNumber, null, snowFlake);
         }
 
         keyBucket.put(keyBytes, keyHash, expireAt, seq, valueBytes);
-        updateKeyBucketInnerForTest(bucketIndex, keyBucket, false);
+        updateKeyBucketInnerForTest(bucketIndex, keyBucket, true);
     }
 
     // not exact correct when split, just for test or debug, not public
@@ -457,7 +455,7 @@ public class KeyLoader {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
 
-        var keyBucket = readKeyBucketForSingleKey(bucketIndex, splitIndex, splitNumber, keyHash, false);
+        var keyBucket = readKeyBucketForSingleKey(bucketIndex, splitIndex, splitNumber, false);
         if (keyBucket == null) {
             return false;
         }

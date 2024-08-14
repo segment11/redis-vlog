@@ -31,9 +31,8 @@ public class KeyBucket {
     // seq long + size short + cell count short
     private static final int HEADER_LENGTH = 8 + 2 + 2;
 
-    // just make sure when refactoring
-    private static final int INIT_BYTES_LENGTH = HEADER_LENGTH + INIT_CAPACITY * (ONE_CELL_META_LENGTH + ONE_CELL_LENGTH);
-
+    // just make sure one page size 4096 can contain all cells when refactoring
+//    private static final int INIT_BYTES_LENGTH = HEADER_LENGTH + INIT_CAPACITY * (ONE_CELL_META_LENGTH + ONE_CELL_LENGTH);
 //    static {
 //        if (INIT_BYTES_LENGTH > KEY_BUCKET_ONE_COST_SIZE) {
 //            throw new IllegalStateException("INIT_BYTES_LENGTH > KEY_BUCKET_ONE_COST_SIZE");
@@ -197,7 +196,7 @@ public class KeyBucket {
 
         var valueLength = buffer.get();
         // data error, need recover
-        if (valueLength > CompressedValue.VALUE_MAX_LENGTH || valueLength < 0) {
+        if (valueLength < 0) {
             throw new IllegalStateException("Value length error, value length: " + valueLength);
         }
         var valueBytes = new byte[valueLength];
@@ -239,7 +238,7 @@ public class KeyBucket {
         }
     }
 
-    private ByteBuffer buffer;
+    private final ByteBuffer buffer;
 
     public void putMeta() {
         updateSeq();
@@ -280,7 +279,7 @@ public class KeyBucket {
             }
         }
 
-        int cellCount = 1;
+        short cellCount = 1;
         for (int cellIndex = i + 1; cellIndex < capacity; cellIndex++) {
             int metaIndex = metaIndex(cellIndex);
             var nextCellHashValue = buffer.getLong(metaIndex);
@@ -330,7 +329,7 @@ public class KeyBucket {
     private record CanPutResult(boolean flag, boolean isUpdate) {
     }
 
-    record DoPutResult(boolean isPut, boolean isUpdate) {
+    public record DoPutResult(boolean isPut, boolean isUpdate) {
     }
 
     public DoPutResult put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes) {
@@ -375,7 +374,7 @@ public class KeyBucket {
 
         putTo(putToCellIndex, cellCount, keyHash, expireAt, seq, keyBytes, valueBytes);
         size++;
-        cellCost += cellCount;
+        cellCost += (short) cellCount;
 
         if (doUpdateSeq) {
             updateSeq();
@@ -559,7 +558,7 @@ public class KeyBucket {
                 var cellCount = matchMeta.cellCount();
                 clearCell(cellIndex, cellCount);
                 size--;
-                cellCost -= cellCount;
+                cellCost -= (short) cellCount;
                 if (doUpdateSeq) {
                     updateSeq();
                 }

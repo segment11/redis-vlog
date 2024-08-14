@@ -83,10 +83,7 @@ public class Request {
             return data[1][0];
         }
 
-        if (slotWithKeyHashList == null) {
-            return SLOT_CAN_HANDLE_BY_ANY_WORKER;
-        }
-        if (slotWithKeyHashList.size() == 0) {
+        if (slotWithKeyHashList == null || slotWithKeyHashList.isEmpty()) {
             return SLOT_CAN_HANDLE_BY_ANY_WORKER;
         }
 

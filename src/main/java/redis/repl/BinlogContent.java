@@ -30,20 +30,13 @@ public interface BinlogContent {
         }
 
         BinlogContent decodeFrom(ByteBuffer buffer) {
-            switch (this) {
-                case wal:
-                    return XWalV.decodeFrom(buffer);
-                case one_wal_group_persist:
-                    return XOneWalGroupPersist.decodeFrom(buffer);
-                case big_strings:
-                    return XBigStrings.decodeFrom(buffer);
-                case dict:
-                    return XDict.decodeFrom(buffer);
-                case dyn_config:
-                    return XDynConfig.decodeFrom(buffer);
-                default:
-                    throw new IllegalArgumentException("Invalid binlog type: " + this);
-            }
+            return switch (this) {
+                case wal -> XWalV.decodeFrom(buffer);
+                case one_wal_group_persist -> XOneWalGroupPersist.decodeFrom(buffer);
+                case big_strings -> XBigStrings.decodeFrom(buffer);
+                case dict -> XDict.decodeFrom(buffer);
+                case dyn_config -> XDynConfig.decodeFrom(buffer);
+            };
         }
     }
 

@@ -216,7 +216,7 @@ public class Binlog {
                 raf = new RandomAccessFile(nextFile, "rw");
 
                 currentFileOffset = 0;
-                beforeAppendFileOffset = 0;
+//                beforeAppendFileOffset = 0;
             }
 
             raf.seek(currentFileOffset);

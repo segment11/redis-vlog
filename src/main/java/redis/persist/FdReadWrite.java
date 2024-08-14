@@ -319,7 +319,7 @@ public class FdReadWrite {
         if (!ConfForSlot.global.pureMemory) {
             if (isChunkFd) {
                 var maxSize = ConfForSlot.global.confChunk.lruPerFd.maxSize;
-                var lruMemoryRequireMB = 1L * maxSize * oneInnerLength / 1024 / 1024;
+                var lruMemoryRequireMB = ((long) maxSize * oneInnerLength) / 1024 / 1024;
                 log.info("Chunk lru max size for one chunk fd: {}, one inner length: {}, memory require: {}MB, name: {}",
                         maxSize, oneInnerLength, lruMemoryRequireMB, name);
                 log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_chunk_data, lruMemoryRequireMB, name);
@@ -334,7 +334,7 @@ public class FdReadWrite {
                 var maxSize = ConfForSlot.global.confBucket.lruPerFd.maxSize;
                 // need to compare with metrics
                 final var compressRatio = 0.25;
-                var lruMemoryRequireMB = 1L * maxSize * oneInnerLength / 1024 / 1024 * compressRatio;
+                var lruMemoryRequireMB = ((long) maxSize * oneInnerLength) / 1024 / 1024 * compressRatio;
                 log.info("Key bucket lru max size for one key bucket fd: {}, one inner length: {}， compress ratio maybe: {}, memory require: {}MB, name: {}",
                         maxSize, oneInnerLength, compressRatio, lruMemoryRequireMB, name);
                 log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_key_bucket, lruMemoryRequireMB, name);
@@ -716,17 +716,9 @@ public class FdReadWrite {
 
                 var offset = position;
                 for (int i = 0; i < walGroupCount; i++) {
-                    // only for check if shared bytes is null
-                    var sharedBytesCompressed = allBytesByOneWalGroupIndexForKeyBucket[beginWalGroupIndex + i];
-                    if (sharedBytesCompressed == null) {
-                        var addedSharedBytes = new byte[oneWalGroupSharedBytesLength];
-                        System.arraycopy(bytes, offset, addedSharedBytes, 0, addedSharedBytes.length);
-                        setSharedBytesCompressToMemory(addedSharedBytes, beginWalGroupIndex + i);
-                    } else {
-                        var subBytes = new byte[oneWalGroupSharedBytesLength];
-                        System.arraycopy(bytes, offset, subBytes, 0, subBytes.length);
-                        setSharedBytesCompressToMemory(subBytes, beginWalGroupIndex + i);
-                    }
+                    var sharedBytes = new byte[oneWalGroupSharedBytesLength];
+                    System.arraycopy(bytes, offset, sharedBytes, 0, sharedBytes.length);
+                    setSharedBytesCompressToMemory(sharedBytes, beginWalGroupIndex + i);
                     offset += oneWalGroupSharedBytesLength;
                 }
                 return walGroupCount * oneWalGroupSharedBytesLength;
@@ -803,9 +795,7 @@ public class FdReadWrite {
             return sharedBytes.length;
         }
 
-        return writeInnerByBuffer(bucketIndex, writeForOneWalGroupBatchBuffer, (buffer) -> {
-            buffer.put(sharedBytes);
-        }, false);
+        return writeInnerByBuffer(bucketIndex, writeForOneWalGroupBatchBuffer, (buffer) -> buffer.put(sharedBytes), false);
     }
 
     public int writeBatchForRepl(int oneInnerIndex, byte[] bytes, int position) {

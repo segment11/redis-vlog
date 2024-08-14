@@ -74,16 +74,16 @@ public class DictMap {
     }
 
     public TreeMap<Integer, Dict> getCacheDictBySeqCopy() {
-        return new TreeMap(cacheDictBySeq);
+        return new TreeMap<>(cacheDictBySeq);
     }
 
     // worker share dict, init on start, need persist
     // for compress
-    private ConcurrentHashMap<String, Dict> cacheDict = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Dict> cacheDict = new ConcurrentHashMap<>();
     // can not be removed
     // for decompress
     // if dict retrain, and dict count is large, it will be a problem, need clean not used dict, todo
-    private ConcurrentHashMap<Integer, Dict> cacheDictBySeq = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Integer, Dict> cacheDictBySeq = new ConcurrentHashMap<>();
 
     public int dictSize() {
         return cacheDictBySeq.size();

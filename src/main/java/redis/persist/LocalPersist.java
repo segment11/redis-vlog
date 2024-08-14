@@ -104,8 +104,7 @@ public class LocalPersist {
     }
 
     public OneSlot currentThreadFirstOneSlot() {
-        for (int i = 0; i < oneSlots.length; i++) {
-            var oneSlot = oneSlots[i];
+        for (var oneSlot : oneSlots) {
             if (oneSlot.threadIdProtectedForSafe == Thread.currentThread().threadId()) {
                 return oneSlot;
             }

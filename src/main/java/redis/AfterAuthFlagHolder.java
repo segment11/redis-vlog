@@ -8,7 +8,7 @@ public class AfterAuthFlagHolder {
     }
 
     // need thread safe
-    private static ConcurrentHashMap<InetSocketAddress, Boolean> flagBySocketAddress = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<InetSocketAddress, Boolean> flagBySocketAddress = new ConcurrentHashMap<>();
 
     public static void add(InetSocketAddress address) {
         flagBySocketAddress.put(address, true);

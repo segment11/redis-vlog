@@ -254,7 +254,7 @@ class KeyLoaderTest extends Specification {
         valueBytesWithExpireAt.valueBytes() == 'a'.bytes
 
         when:
-        def k0 = keyLoader.readKeyBucketForSingleKey(0, splitIndex, (byte) 1, 10L, false)
+        def k0 = keyLoader.readKeyBucketForSingleKey(0, splitIndex, (byte) 1, false)
         k0.splitNumber = (byte) 2
         def bytes = k0.encode(true)
         keyLoader.fdReadWriteArray[0].writeOneInner(0, bytes, false)
@@ -338,7 +338,7 @@ class KeyLoaderTest extends Specification {
         keyLoader.writeSharedBytesList(sharedBytesListBySplitIndex, 0)
         then:
         keyLoader.fdReadWriteArray[1] != null
-        keyLoader.readKeyBucketForSingleKey(0, (byte) 1, (byte) 3, 1L, false) == null
+        keyLoader.readKeyBucketForSingleKey(0, (byte) 1, (byte) 3, false) == null
 
         when:
         ConfForSlot.global.pureMemory = true
@@ -356,8 +356,8 @@ class KeyLoaderTest extends Specification {
         keyBucketListFromMemory[0] == null
         keyBucketListFromMemory[1] == null
         keyBucketListFromMemory[2] != null
-        keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 3, 1L, false) == null
-        keyLoader.readKeyBucketForSingleKey(0, (byte) 2, (byte) 3, 1L, false) != null
+        keyLoader.readKeyBucketForSingleKey(0, (byte) 0, (byte) 3, false) == null
+        keyLoader.readKeyBucketForSingleKey(0, (byte) 2, (byte) 3, false) != null
 
         cleanup:
         ConfForSlot.global.pureMemory = false

@@ -152,8 +152,7 @@ public class SegmentBatch {
         buffer.putInt(totalBytesN);
 
         int offset = HEADER_LENGTH;
-        for (int i = 0; i < onceList.size(); i++) {
-            var s = onceList.get(i);
+        for (var s : onceList) {
             var compressedBytes = s.compressedBytes;
             var length = compressedBytes.length;
 
@@ -179,8 +178,7 @@ public class SegmentBatch {
         int onceListBytesLength = 0;
 
         int afterTightSegmentIndex = segments.get(0).segmentIndex;
-        for (int i = 0; i < segments.size(); i++) {
-            var segment = segments.get(i);
+        for (var segment : segments) {
             var compressedBytes = segment.compressedBytes;
 
             if (onceList.size() == MAX_BLOCK_NUMBER || onceListBytesLength + compressedBytes.length > chunkSegmentLength - HEADER_LENGTH) {

@@ -15,13 +15,13 @@ public class SimpleGauge extends Collector {
         Map<String, ValueWithLabelValues> get();
     }
 
-    private ArrayList<RawGetter> rawGetterList = new ArrayList<>();
+    private final ArrayList<RawGetter> rawGetterList = new ArrayList<>();
 
     public void addRawGetter(RawGetter rawGetter) {
         rawGetterList.add(rawGetter);
     }
 
-    private Map<String, ValueWithLabelValues> gauges = new HashMap<>();
+    private final Map<String, ValueWithLabelValues> gauges = new HashMap<>();
 
     protected final List<String> labels;
 

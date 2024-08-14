@@ -6,7 +6,7 @@ import redis.persist.OneSlot;
 import java.util.HashMap;
 
 public class InMemoryGetSet implements ByPassGetSet {
-    private HashMap<String, CompressedValue> map = new HashMap<>();
+    private final HashMap<String, CompressedValue> map = new HashMap<>();
 
     @Override
     public void put(byte slot, String key, int bucketIndex, CompressedValue cv) {

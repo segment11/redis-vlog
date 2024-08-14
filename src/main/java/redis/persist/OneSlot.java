@@ -823,18 +823,11 @@ public class OneSlot {
         var cvEncodedFromWal = getFromWal(key, bucketIndex);
         if (cvEncodedFromWal != null) {
             // write batch kv is the newest
-            if (CompressedValue.isDeleted(cvEncodedFromWal)) {
-                return false;
-            }
-            return true;
+            return !CompressedValue.isDeleted(cvEncodedFromWal);
         }
 
         var valueBytesWithExpireAtAndSeq = keyLoader.getValueByKey(bucketIndex, key.getBytes(), keyHash);
-        if (valueBytesWithExpireAtAndSeq == null || valueBytesWithExpireAtAndSeq.isExpired()) {
-            return false;
-        }
-
-        return true;
+        return valueBytesWithExpireAtAndSeq != null && !valueBytesWithExpireAtAndSeq.isExpired();
     }
 
     public boolean remove(String key, int bucketIndex, long keyHash) {

@@ -321,16 +321,14 @@ public class Chunk {
         var doLog = (Debug.getInstance().logMerge && logMergeCount % 1000 == 0);
 
         moveSegmentIndexForPrepare();
+        boolean canWrite;
         if (isMerge) {
-            boolean canWrite = reuseSegments(false, ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE, false);
-            if (!canWrite) {
-                throw new SegmentOverflowException("Segment can not write, s=" + slot + ", i=" + segmentIndex);
-            }
+            canWrite = reuseSegments(false, ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE, false);
         } else {
-            boolean canWrite = reuseSegments(false, ONCE_PREPARE_SEGMENT_COUNT, false);
-            if (!canWrite) {
-                throw new SegmentOverflowException("Segment can not write, s=" + slot + ", i=" + segmentIndex);
-            }
+            canWrite = reuseSegments(false, ONCE_PREPARE_SEGMENT_COUNT, false);
+        }
+        if (!canWrite) {
+            throw new SegmentOverflowException("Segment can not write, s=" + slot + ", i=" + segmentIndex);
         }
 
         var oncePrepareSegmentCount = isMerge ? ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE : ONCE_PREPARE_SEGMENT_COUNT;
@@ -521,7 +519,7 @@ public class Chunk {
             // prepend from merged segment index end last time
             var firstNeedMergeSegmentIndex = anotherPart.getFirst();
 
-            // mergedSegmentIndexEndLastTime maybe > firstNeedMergeSegmentIndex when server restart, because pre read merge before persist wal
+            // mergedSegmentIndexEndLastTime maybe > firstNeedMergeSegmentIndex when server restart, because pre-read merge before persist wal
 //            assert mergedSegmentIndexEndLastTime < firstNeedMergeSegmentIndex;
             for (int i = mergedSegmentIndexEndLastTime + 1; i < firstNeedMergeSegmentIndex; i++) {
                 anotherPart.add(i);

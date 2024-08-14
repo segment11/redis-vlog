@@ -74,7 +74,7 @@ public class BigStringFiles {
             return list;
         }
 
-        File[] files = bigStringDir.listFiles();
+        var files = bigStringDir.listFiles();
         for (File file : files) {
             list.add(Long.parseLong(file.getName()));
         }

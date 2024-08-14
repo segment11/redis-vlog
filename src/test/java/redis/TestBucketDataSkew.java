@@ -38,5 +38,6 @@ public class TestBucketDataSkew {
                 writer.write("b " + j + " c: " + array[j] + "\n");
             }
         }
+        writer.close();
     }
 }

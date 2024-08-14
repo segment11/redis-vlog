@@ -20,7 +20,7 @@ public class ThreadFactoryAssignSupport {
     @Deprecated
     public Inner ForFdReadWrite = new Inner(8, 16, "fd-read-write-group-", true);
 
-    public class Inner {
+    public static class Inner {
         final int number;
         final int threadNumberPerGroup;
         private final ThreadFactory[] threadFactories;

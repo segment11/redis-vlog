@@ -67,7 +67,7 @@ public class HttpHeaderBody {
     public int contentLength() {
         if (contentLengthCache == -1) {
             var s = headers.get(HEADER_CONTENT_LENGTH);
-            contentLengthCache = s != null ? Integer.valueOf(s.trim()) : 0;
+            contentLengthCache = s != null ? Integer.parseInt(s.trim()) : 0;
         }
         return contentLengthCache;
     }

@@ -135,10 +135,6 @@ public abstract class BaseCommand {
         this.localTest = localTest;
     }
 
-    public void setLocalTestRandomValueListSize(int localTestRandomValueListSize) {
-        this.localTestRandomValueListSize = localTestRandomValueListSize;
-    }
-
     public void setLocalTestRandomValueList(ArrayList<byte[]> localTestRandomValueList) {
         this.localTestRandomValueList = localTestRandomValueList;
     }

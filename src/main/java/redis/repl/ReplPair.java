@@ -193,8 +193,8 @@ public class ReplPair {
     }
 
     // as slave delay pull incremental big string file from master when catch up
-    private LinkedList<Long> toFetchBigStringUuidList = new LinkedList<>();
-    private LinkedList<Long> doFetchingBigStringUuidList = new LinkedList<>();
+    private final LinkedList<Long> toFetchBigStringUuidList = new LinkedList<>();
+    private final LinkedList<Long> doFetchingBigStringUuidList = new LinkedList<>();
 
     public LinkedList<Long> getToFetchBigStringUuidList() {
         return toFetchBigStringUuidList;

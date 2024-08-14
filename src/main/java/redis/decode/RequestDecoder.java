@@ -5,8 +5,6 @@ import io.activej.common.exception.MalformedDataException;
 import io.activej.csp.binary.decoder.ByteBufsDecoder;
 import io.netty.buffer.Unpooled;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import redis.repl.Repl;
 
 import java.util.ArrayList;
@@ -17,8 +15,6 @@ import static redis.repl.Repl.PROTOCOL_KEYWORD_BYTES;
 public class RequestDecoder implements ByteBufsDecoder<ArrayList<Request>> {
     // in local thread
     private final RESP resp = new RESP();
-
-    private final Logger log = LoggerFactory.getLogger(getClass());
 
     private Request tryDecodeOne(ByteBufs bufs) {
         io.netty.buffer.CompositeByteBuf compositeByteBuf = Unpooled.compositeBuffer();
@@ -122,9 +118,7 @@ public class RequestDecoder implements ByteBufsDecoder<ArrayList<Request>> {
             }
             return pipeline.isEmpty() ? null : pipeline;
         } catch (Exception e) {
-            log.error("Decode error", e);
-            return null;
-//            throw e;
+            throw new MalformedDataException(e);
         }
     }
 }

@@ -14,11 +14,7 @@ public class CompressStats {
     public long decompressedCount = 0;
     public long decompressedCostTimeTotalUs = 0;
 
-    private final String name;
-
     public CompressStats(String name) {
-        this.name = name;
-
         compressStatsGauge.addRawGetter(() -> {
             var labelValues = List.of(name);
 

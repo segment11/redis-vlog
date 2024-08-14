@@ -48,7 +48,7 @@ public class KeyBucketsInOneWalGroup {
         return listInitWithNull;
     }
 
-    private void readBeforePutBatch() {
+    void readBeforePutBatch() {
         // for unit test
         if (keyLoader == null) {
             return;

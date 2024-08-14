@@ -4,7 +4,7 @@ import io.activej.bytebuf.ByteBuf;
 import io.activej.promise.SettablePromise;
 
 public class AsyncReply implements Reply {
-    private SettablePromise<Reply> settablePromise;
+    private final SettablePromise<Reply> settablePromise;
 
     public AsyncReply(SettablePromise<Reply> settablePromise) {
         this.settablePromise = settablePromise;

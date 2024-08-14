@@ -273,7 +273,7 @@ public class CompressedValue {
             return false;
         }
 
-        var compareMinBytesNum = Math.min(20, Math.min(data.length, compressedData.length));
+        var compareMinBytesNum = Math.min(20, data.length);
         var buffer1 = ByteBuffer.wrap(data, 0, compareMinBytesNum);
         var buffer2 = ByteBuffer.wrap(compressedData, 0, compareMinBytesNum);
         return buffer1.equals(buffer2);
