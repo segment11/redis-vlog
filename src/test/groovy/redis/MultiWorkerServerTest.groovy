@@ -45,7 +45,7 @@ class MultiWorkerServerTest extends Specification {
         dirFile2.exists()
         dirFile3.exists()
         m.staticGlobalV.socketInspector == null
-        def pr = m.primaryReactor(config) != null
+        m.primaryReactor(config) != null
         m.workerReactor(workerId0, OptionalDependency.empty(), config) != null
         // need use activej inject mock, todo
         m.workerPool(null, config) == null

@@ -59,7 +59,7 @@ class RESPReplyTest extends Specification {
     def 'test async reply'() {
         // just a wrapper, no need to test
         given:
-        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        SettablePromise<Reply> finalPromise = new SettablePromise<>()
         def asyncReply = new AsyncReply(finalPromise)
 
         expect:

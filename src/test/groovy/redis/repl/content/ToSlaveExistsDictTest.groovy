@@ -10,7 +10,7 @@ class ToSlaveExistsDictTest extends Specification {
     def 'test all'() {
         given:
         HashMap<String, Dict> cacheDict = [:]
-        TreeMap<Integer, Dict> cacheDictBySeq = [:]
+        TreeMap<Integer, Dict> cacheDictBySeq = new TreeMap<>()
         ArrayList<Integer> sentDictSeqList = []
         def content = new ToSlaveExistsDict(cacheDict, cacheDictBySeq, sentDictSeqList)
 

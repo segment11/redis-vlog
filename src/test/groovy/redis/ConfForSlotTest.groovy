@@ -70,48 +70,43 @@ class ConfForSlotTest extends Specification {
         ConfForSlot.global = ConfForSlot.from(1_000_000)
         def c = ConfForSlot.global
 
-        c.confChunk.mark();
+        c.confChunk.mark()
 
         when:
         ConfForSlot.global.isValueSetUseCompression = true
         c.confChunk.resetByOneValueLength(200)
-
         then:
         c.confChunk.fdPerChunk == 1
         Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE == 8
 
         when:
-        c.confChunk.reset();
+        c.confChunk.reset()
         ConfForSlot.global.isValueSetUseCompression = false
         c.confChunk.resetByOneValueLength(200)
-
         then:
         c.confChunk.fdPerChunk == 2
         Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE == 16
 
         when:
-        c.confChunk.reset();
+        c.confChunk.reset()
         ConfForSlot.global.isValueSetUseCompression = true
         c.confChunk.resetByOneValueLength(500)
-
         then:
         c.confChunk.fdPerChunk == 2
         Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE == 8
 
         when:
-        c.confChunk.reset();
+        c.confChunk.reset()
         ConfForSlot.global.isValueSetUseCompression = false
         c.confChunk.resetByOneValueLength(500)
-
         then:
         c.confChunk.fdPerChunk == 4
         Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE == 16
 
         when:
-        c.confChunk.reset();
+        c.confChunk.reset()
         ConfForSlot.global.isValueSetUseCompression = true
         c.confChunk.resetByOneValueLength(1000)
-
         then:
         c.confChunk.segmentNumberPerFd == 256 * 1024 / 4
         c.confChunk.segmentLength == 4096 * 4
@@ -120,10 +115,9 @@ class ConfForSlotTest extends Specification {
         Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE == 4
 
         when:
-        c.confChunk.reset();
+        c.confChunk.reset()
         ConfForSlot.global.isValueSetUseCompression = false
         c.confChunk.resetByOneValueLength(1000)
-
         then:
         c.confChunk.segmentNumberPerFd == 256 * 1024 / 4
         c.confChunk.segmentLength == 4096 * 4
@@ -132,10 +126,9 @@ class ConfForSlotTest extends Specification {
         Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE == 8
 
         when:
-        c.confChunk.reset();
+        c.confChunk.reset()
         ConfForSlot.global.isValueSetUseCompression = true
         c.confChunk.resetByOneValueLength(2000)
-
         then:
         c.confChunk.segmentNumberPerFd == 256 * 1024 / 4
         c.confChunk.segmentLength == 4096 * 4
@@ -144,10 +137,9 @@ class ConfForSlotTest extends Specification {
         Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE == 4
 
         when:
-        c.confChunk.reset();
+        c.confChunk.reset()
         ConfForSlot.global.isValueSetUseCompression = false
         c.confChunk.resetByOneValueLength(2000)
-
         then:
         c.confChunk.segmentNumberPerFd == 256 * 1024 / 4
         c.confChunk.segmentLength == 4096 * 4
@@ -156,14 +148,14 @@ class ConfForSlotTest extends Specification {
         Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE == 8
 
         when:
-        c.confChunk.reset();
+        c.confChunk.reset()
         boolean exception = false
         try {
             c.confChunk.resetByOneValueLength(4000)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
     }
@@ -177,7 +169,6 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confWal.resetByOneValueLength(200)
-
         then:
         c.confWal.valueSizeTrigger >= 100
         Wal.ONE_GROUP_BUFFER_SIZE == 4096 * 32 / 4
@@ -185,7 +176,6 @@ class ConfForSlotTest extends Specification {
         when:
         c.confWal.reset()
         c.confWal.resetByOneValueLength(500)
-
         then:
         c.confWal.valueSizeTrigger >= 100
         Wal.ONE_GROUP_BUFFER_SIZE == 4096 * 32 / 2
@@ -193,7 +183,6 @@ class ConfForSlotTest extends Specification {
         when:
         c.confWal.reset()
         c.confWal.resetByOneValueLength(1000)
-
         then:
         c.confWal.oneChargeBucketNumber == 16
         c.confWal.valueSizeTrigger == 100
@@ -202,7 +191,6 @@ class ConfForSlotTest extends Specification {
         when:
         c.confWal.reset()
         c.confWal.resetByOneValueLength(2000)
-
         then:
         c.confWal.oneChargeBucketNumber == 16
         c.confWal.valueSizeTrigger == 50
@@ -211,13 +199,12 @@ class ConfForSlotTest extends Specification {
         when:
         c.confWal.reset()
         boolean exception = false
-
         try {
             c.confWal.resetByOneValueLength(4000)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
     }

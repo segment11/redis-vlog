@@ -19,9 +19,7 @@ class SnowFlakeTest extends Specification {
         }
         def endT = System.nanoTime()
         println 'Times: ' + times + ', Cost time: ' + (endT - beginT) / 1000 + 'us'
-
         println 'Last next id: ' + snowFlake.lastNextId
-
         then:
         idSet.size() == 2
         idSet.last() > idSet.first()
@@ -30,64 +28,58 @@ class SnowFlakeTest extends Specification {
     def 'test exception'() {
         when:
         boolean exception = false
-
         try {
             new SnowFlake(-1, 0)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
 
         when:
         exception = false
-
         try {
             new SnowFlake(128, 0)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
 
         when:
         exception = false
-
         try {
             new SnowFlake(0, -1)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
 
         when:
         exception = false
-
         try {
             new SnowFlake(0, 128)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
 
         when:
         exception = false
-
         def snowFlake = new SnowFlake(1, 1)
         snowFlake.lastStamp = System.currentTimeMillis() + 1000
-
         try {
             snowFlake.nextId()
         } catch (RuntimeException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
     }

@@ -99,6 +99,7 @@ class ChunkTest extends Specification {
         try {
             chunk.moveSegmentIndexNext(confChunk.maxSegmentNumber() + 1)
         } catch (SegmentOverflowException e) {
+            println e.message
             isMoveOverflow = true
         }
         then:
@@ -242,8 +243,9 @@ class ChunkTest extends Specification {
         when:
         boolean exception = false
         try {
-            bytes = chunk.preadForMerge(0, FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE + 1)
-        } catch (IllegalArgumentException ignored) {
+            chunk.preadForMerge(0, FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE + 1)
+        } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:

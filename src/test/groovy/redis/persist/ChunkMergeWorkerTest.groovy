@@ -5,7 +5,6 @@ import spock.lang.Specification
 
 class ChunkMergeWorkerTest extends Specification {
     final byte slot = 0
-    final byte slotNumber = 1
 
     def 'test base'() {
         given:
@@ -74,7 +73,6 @@ class ChunkMergeWorkerTest extends Specification {
         chunkMergeWorker.MERGED_CV_SIZE_THRESHOLD = 1000
 
         and:
-        int walGroupIndex = 0
         int bucketIndex = 0
         int segmentIndex = 0
 

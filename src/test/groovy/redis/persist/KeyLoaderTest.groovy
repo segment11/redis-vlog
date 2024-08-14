@@ -225,7 +225,6 @@ class KeyLoaderTest extends Specification {
         given:
         ConfForSlot.global.confBucket.initialSplitNumber = (byte) 1
         def keyLoader = prepareKeyLoader()
-        var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
 
         expect:
         keyLoader.maxSplitNumberForRepl() == (byte) 1

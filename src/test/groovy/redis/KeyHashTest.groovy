@@ -10,8 +10,8 @@ class KeyHashTest extends Specification {
         }
 
         when:
-        Set<String> hash32Set = []
-        Set<String> hash64Set = []
+        Set<Integer> hash32Set = []
+        Set<Long> hash64Set = []
         keyList.each {
             hash32Set.add(KeyHash.hash32(it.bytes))
             hash64Set.add(KeyHash.hash(it.bytes))

@@ -25,21 +25,18 @@ class RedisHashKeysTest extends Specification {
 
         when:
         rhk.add('field1')
-
         then:
         rhk.contains('field1')
         rhk.size() == 1
 
         when:
         rhk.add('field2')
-
         then:
         rhk.contains('field2')
         rhk.size() == 2
 
         when:
         rhk.remove('field1')
-
         then:
         !rhk.contains('field1')
         rhk.size() == 1
@@ -54,10 +51,8 @@ class RedisHashKeysTest extends Specification {
         when:
         rhk.add('field1')
         rhk.add('field2')
-
         def encoded = rhk.encode()
         def rhk2 = RedisHashKeys.decode(encoded)
-
         then:
         rhk2.contains('field1')
         rhk2.contains('field2')
@@ -72,17 +67,15 @@ class RedisHashKeysTest extends Specification {
         when:
         rhk.add('field1')
         rhk.add('field2')
-
         def encoded = rhk.encode()
         encoded[3] = 0
-
         boolean exception = false
         try {
-            def rhk2 = RedisHashKeys.decode(encoded)
+            RedisHashKeys.decode(encoded)
         } catch (IllegalStateException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
     }
@@ -94,7 +87,6 @@ class RedisHashKeysTest extends Specification {
         when:
         def encoded = rhk.encode()
         def rhk2 = RedisHashKeys.decode(encoded, false)
-
         then:
         rhk2.size() == 0
 
@@ -102,7 +94,6 @@ class RedisHashKeysTest extends Specification {
         rhk.add('field1')
         def encoded2 = rhk.encode()
         def rhk3 = RedisHashKeys.decode(encoded2, false)
-
         then:
         rhk3.size() == 1
     }
@@ -114,18 +105,16 @@ class RedisHashKeysTest extends Specification {
         when:
         rhk.add('field1')
         rhk.add('field2')
-
         def encoded = rhk.encode()
         def buffer = ByteBuffer.wrap(encoded)
         buffer.putShort(6, (short) 0)
-
         boolean exception = false
         try {
-            def rhk2 = RedisHashKeys.decode(encoded, false)
+            RedisHashKeys.decode(encoded, false)
         } catch (IllegalStateException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
     }

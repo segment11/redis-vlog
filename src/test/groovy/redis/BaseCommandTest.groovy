@@ -87,7 +87,6 @@ class BaseCommandTest extends Specification {
         when:
         def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, Config.create())
         c.init(requestHandler, new Request(data2, false, false))
-
         // overwrite
         def aGroup = BaseCommand.mockAGroup()
         def aGroup2 = BaseCommand.mockAGroup()
@@ -95,7 +94,6 @@ class BaseCommandTest extends Specification {
         c.from(aGroup)
         c.from(aGroup2)
         c.byPassGetSet = null
-
         then:
         c.workerId == 0
         c.netWorkers == 1

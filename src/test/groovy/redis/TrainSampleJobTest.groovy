@@ -50,68 +50,57 @@ class TrainSampleJobTest extends Specification {
         def result = job.train()
 
         expect:
-        result.cacheDict.size() == 1
-        result.removedSampleKVSeqList.size() == 11
-        result.removedSampleKVSeqList == sampleToTrainList.findAll { it.key.startsWith('key:') }.collect { it.seq }
+        result.cacheDict().size() == 1
+        result.removedSampleKVSeqList().size() == 11
+        result.removedSampleKVSeqList() == sampleToTrainList.findAll { it.key().startsWith('key:') }.collect { it.seq() }
 
         when:
-        def dict = result.cacheDict.get('key:')
+        def dict = result.cacheDict().get('key:')
         def cv = CompressedValue.compress(sampleValueBytes, dict, Zstd.defaultCompressionLevel())
         def decompressBytes = cv.decompress(dict)
-
         then:
         Arrays.equals(sampleValueBytes, decompressBytes)
 
         when:
         Debug.getInstance().logTrainDict = true
-
         sampleToTrainList.clear()
         10.times {
             sampleToTrainList << new TrainSampleJob.TrainSampleKV("key:$it", null, snowFlake.nextId(), sampleValueBytes)
         }
-
         job.resetSampleToTrainList(sampleToTrainList)
         // skip train, sample count not enough
         result = job.train()
-
         then:
         result == null
 
         when:
         Debug.getInstance().logTrainDict = true
         job.trainCount = 99
-
         // skip train, sample count not enough
         result = job.train()
-
         then:
         result == null
 
         when:
         TrainSampleJob.keyPrefixGroupList = ['prefix:']
-
         sampleToTrainList.clear()
         10.times {
             sampleToTrainList << new TrainSampleJob.TrainSampleKV("key:$it", null, snowFlake.nextId(), sampleValueBytes)
         }
         sampleToTrainList << new TrainSampleJob.TrainSampleKV("key:11", null, snowFlake.nextId(), longSampleValueBytes)
-
         job.resetSampleToTrainList(sampleToTrainList)
         // skip, dict already exists
         result = job.train()
-
         then:
-        result.cacheDict.size() == 1
+        result.cacheDict().size() == 1
 
         when:
         job = new TrainSampleJob((byte) 0)
         job.dictSize = 512
         job.trainSampleMinBodyLength = 1024
-
         job.resetSampleToTrainList(sampleToTrainList)
         result = job.train()
-
         then:
-        result.cacheDict.size() == 1
+        result.cacheDict().size() == 1
     }
 }

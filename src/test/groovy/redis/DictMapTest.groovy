@@ -71,11 +71,11 @@ class DictMapTest extends Specification {
         when:
         dictMap.clearAll()
         dictMap.close()
-
         boolean exception = false
         try {
             dictMap.putDict('test', dict)
         } catch (RuntimeException e) {
+            println e.message
             exception = true
         }
         then:
@@ -86,6 +86,7 @@ class DictMapTest extends Specification {
         try {
             dictMap.clearAll()
         } catch (RuntimeException e) {
+            println e.message
             exception = true
         }
         then:

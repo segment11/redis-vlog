@@ -2,6 +2,7 @@ package redis.persist
 
 import com.github.luben.zstd.Zstd
 import redis.*
+import redis.repl.incremental.XOneWalGroupPersist
 import spock.lang.Specification
 
 class ChunkMergeJobTest extends Specification {
@@ -180,7 +181,8 @@ class ChunkMergeJobTest extends Specification {
         fdChunk.writeOneInner(segmentIndex + 1, r[1].tightBytesWithLength(), false)
         println 'write segment ' + segmentIndex + ', ' + (segmentIndex + 1)
 
-        oneSlot.keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, returnPvmList)
+        def xForBinlog = new XOneWalGroupPersist(true, 0)
+        oneSlot.keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, returnPvmList, xForBinlog)
         println 'bucket ' + bucketIndex + ' key count: ' + oneSlot.keyLoader.getKeyCountInBucketIndex(bucketIndex)
 
         when:

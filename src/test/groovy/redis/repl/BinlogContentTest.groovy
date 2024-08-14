@@ -39,11 +39,6 @@ class BinlogContentTest extends Specification {
         then:
         xWalV11.v.encode() == v.encode()
 
-        // to be implemented
-        BinlogContent.Type.fromCode(BinlogContent.Type.chunk_segments.code()).decodeFrom(null) == null
-        BinlogContent.Type.fromCode(BinlogContent.Type.key_buckets.code()).decodeFrom(null) == null
-        BinlogContent.Type.fromCode(BinlogContent.Type.dyn_config.code()).decodeFrom(null) == null
-
         when:
         def uuid = 1L
         def key = 'test-big-string-key'

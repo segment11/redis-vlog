@@ -45,8 +45,9 @@ class ReplTest extends Specification {
         nettyBuf.readerIndex(0)
         boolean exception = false
         try {
-            data = Repl.decode(nettyBuf)
+            Repl.decode(nettyBuf)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:

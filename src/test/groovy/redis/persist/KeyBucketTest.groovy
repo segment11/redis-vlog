@@ -45,7 +45,6 @@ class KeyBucketTest extends Specification {
         println keyBucket
         keyBucket.allPrint()
         keyBucket.putMeta()
-
         then:
         keyBucket.getSplitIndex() == 0
         keyBucket.size == 3
@@ -54,13 +53,11 @@ class KeyBucketTest extends Specification {
 
         when:
         keyBucket.put('b'.bytes, 98L, 0L, 2L, 'bb'.bytes)
-
         then:
         keyBucket.size == 2
 
         when:
         keyBucket.put('c'.bytes, 99L, 0L, 3L, 'cc'.bytes)
-
         then:
         keyBucket.size == 2
     }
@@ -91,15 +88,14 @@ class KeyBucketTest extends Specification {
         def k22 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, sharedBytes, 4096, snowFlake)
         def k33 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, sharedBytes, sharedBytes.length, snowFlake)
         def k333 = new KeyBucket(slot, 1, (byte) 0, (byte) -1, sharedBytes, sharedBytes.length, snowFlake)
-
         def isInvalidBytes = false
         KeyBucket k44
         try {
             k44 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, new byte[5000], 0, snowFlake)
         } catch (IllegalStateException e) {
+            println e.message
             isInvalidBytes = true
         }
-
         def isInvalidBytes2 = false
         def invalidBytes2 = new byte[4096]
         def buffer55 = ByteBuffer.wrap(invalidBytes2)
@@ -109,12 +105,11 @@ class KeyBucketTest extends Specification {
         try {
             k55 = new KeyBucket(slot, 1, (byte) 0, (byte) 1, invalidBytes2, 0, snowFlake)
         } catch (IllegalStateException e) {
+            println e.message
             isInvalidBytes2 = true
         }
-
         then:
         k3Bytes.length == 4096
-
         k11.isSharedBytes()
         k22.isSharedBytes()
         !k33.isSharedBytes()
@@ -123,9 +118,8 @@ class KeyBucketTest extends Specification {
         k33.size == 0
         isInvalidBytes
         isInvalidBytes2
-
-        k11.getValueByKey('a'.bytes, 97L).valueBytes == 'a'.bytes
-        k22.getValueByKey('a'.bytes, 97L).valueBytes == 'a'.bytes
+        k11.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
+        k22.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
     }
 
     def 'multi cell count'() {
@@ -136,7 +130,6 @@ class KeyBucketTest extends Specification {
 
         when:
         keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
-
         then:
         keyBucket.size == 1
         keyBucket.cellCost == 1
@@ -146,17 +139,14 @@ class KeyBucketTest extends Specification {
         // 99 / 54 = 1, cell count = 3
         def longKeyBytes = 'a'.padRight(90, 'a').bytes
         keyBucket.put(longKeyBytes, 9797L, 0L, 1L, 'long a'.bytes)
-
         then:
         keyBucket.size == 2
         keyBucket.cellCost == 3
-
-        keyBucket.getValueByKey(longKeyBytes, 9797L).valueBytes == 'long a'.bytes
+        keyBucket.getValueByKey(longKeyBytes, 9797L).valueBytes() == 'long a'.bytes
 
         when:
         keyBucket.put('bb'.bytes, 9898L, System.currentTimeMillis() + 1000, 22L, 'bb'.bytes)
         keyBucket.put('b'.bytes, 98L, System.currentTimeMillis() - 1000, 2L, 'b'.bytes)
-
         then:
         keyBucket.size == 4
         keyBucket.getValueByKey('b'.bytes, 98L) != null
@@ -169,7 +159,6 @@ class KeyBucketTest extends Specification {
         keyBucket.iterate { keyHash, expireAt, seq, keyBytes, valueBytes ->
             println new String(keyBytes) + ': ' + new String(valueBytes)
         }
-
         then:
         keyBucket.size == 3
         keyBucket.getValueByKey('b'.bytes, 98L) == null
@@ -177,7 +166,6 @@ class KeyBucketTest extends Specification {
 
         when:
         keyBucket.clearAll()
-
         then:
         keyBucket.size == 0
         keyBucket.cellCost == 0
@@ -192,23 +180,20 @@ class KeyBucketTest extends Specification {
 
         when:
         keyBucket.updateSeq()
-        def lastUpdateSplitNumber = (byte) (keyBucket.lastUpdateSeq & 0b1111);
-
+        def lastUpdateSplitNumber = (byte) (keyBucket.lastUpdateSeq & 0b1111)
         then:
         lastUpdateSplitNumber == 1
 
         when:
         keyBucket.splitNumber = 3
         keyBucket.updateSeq()
-        lastUpdateSplitNumber = (byte) (keyBucket.lastUpdateSeq & 0b1111);
-
+        lastUpdateSplitNumber = (byte) (keyBucket.lastUpdateSeq & 0b1111)
         then:
         lastUpdateSplitNumber == 3
 
         when:
         def encoded = keyBucket.encode(true)
         def keyBucket2 = new KeyBucket(slot, 0, (byte) 0, (byte) -1, encoded, snowFlake)
-
         then:
         keyBucket2.splitNumber == 3
     }
@@ -222,12 +207,11 @@ class KeyBucketTest extends Specification {
         keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
         keyBucket.put('aa'.bytes, 97L, 0L, 1L, 'aa'.bytes)
         keyBucket.put('ax'.bytes, 97L, 0L, 1L, 'ax'.bytes)
-
         then:
         keyBucket.size == 3
-        keyBucket.getValueByKey('a'.bytes, 97L).valueBytes == 'a'.bytes
-        keyBucket.getValueByKey('aa'.bytes, 97L).valueBytes == 'aa'.bytes
-        keyBucket.getValueByKey('ax'.bytes, 97L).valueBytes == 'ax'.bytes
+        keyBucket.getValueByKey('a'.bytes, 97L).valueBytes() == 'a'.bytes
+        keyBucket.getValueByKey('aa'.bytes, 97L).valueBytes() == 'aa'.bytes
+        keyBucket.getValueByKey('ax'.bytes, 97L).valueBytes() == 'ax'.bytes
     }
 
     def 'test put full'() {
@@ -239,13 +223,11 @@ class KeyBucketTest extends Specification {
         (1..KeyBucket.INIT_CAPACITY).each {
             keyBucket.put(('key:' + it).bytes, it, 0L, it, 'value'.bytes)
         }
-
         then:
         keyBucket.size == KeyBucket.INIT_CAPACITY
 
         when:
         def r = keyBucket.put(('key:' + (KeyBucket.INIT_CAPACITY + 1)).bytes, KeyBucket.INIT_CAPACITY + 1, 0L, KeyBucket.INIT_CAPACITY + 1, 'value'.bytes)
-
         then:
         !r.isPut()
         !r.isUpdate()
@@ -253,38 +235,35 @@ class KeyBucketTest extends Specification {
         when:
         boolean exception = false
         def longValueString = 'value' * 30
-
         try {
             keyBucket.put('long-key'.bytes, 100L, 0L, 100L, longValueString.bytes)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
 
         when:
         exception = false
-
         def longKeyString = 'long-key' * 1000
         try {
             keyBucket.put(longKeyString.bytes, 100L, 0L, 100L, 'value'.bytes)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
 
         when:
-        exception
-
+        exception = false
         try {
             keyBucket.clearOneExpired(KeyBucket.INIT_CAPACITY)
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
     }
@@ -296,38 +275,30 @@ class KeyBucketTest extends Specification {
 
         when:
         keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
-
         def cell2Key = 'abcd' * 4
         def cell2ValueBytes = new byte[42]
-
         keyBucket.put(cell2Key.bytes, 100L, System.currentTimeMillis() - 1000, 100L, cell2ValueBytes)
-
         then:
         keyBucket.size == 2
         keyBucket.cellCost == 3
 
         when:
         keyBucket.put('b'.bytes, 98L, 0L, 98L, 'b'.bytes)
-
         then:
         keyBucket.size == 2
         keyBucket.cellCost == 2
 
         when:
         keyBucket.put(cell2Key.bytes, 100L, 0L, 100L, cell2ValueBytes)
-
         then:
         keyBucket.size == 3
         keyBucket.cellCost == 4
 
         when:
-
         // overwrite key but only one cell cost
         def cell1Key = cell2Key
         def cell1ValueBytes = new byte[41]
-
         keyBucket.put(cell1Key.bytes, 100L, 0L, 100L, cell1ValueBytes)
-
         then:
         keyBucket.size == 3
         keyBucket.cellCost == 3
@@ -345,7 +316,6 @@ class KeyBucketTest extends Specification {
 
         when:
         keyBucket.put('a'.bytes, 97L, 0L, 1L, 'a'.bytes)
-
         then:
         !keyBucket.isCellAvailableN(0, 1, false)
         !keyBucket.isCellAvailableN(0, 1, true)
@@ -354,9 +324,7 @@ class KeyBucketTest extends Specification {
         when:
         def cell2Key = 'abcd' * 4
         def cell2ValueBytes = new byte[42]
-
         keyBucket.put(cell2Key.bytes, 100L, 0L, 100L, cell2ValueBytes)
-
         then:
         !keyBucket.isCellAvailableN(1, 1, true)
         !keyBucket.isCellAvailableN(1, 1, false)

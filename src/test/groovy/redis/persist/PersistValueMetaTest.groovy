@@ -32,7 +32,6 @@ class PersistValueMetaTest extends Specification {
 
         when:
         def encoded = one.encode()
-
         then:
         PersistValueMeta.isPvm(encoded)
         PersistValueMeta.decode(encoded).toString() == one.toString()
@@ -49,33 +48,30 @@ class PersistValueMetaTest extends Specification {
 
         when:
         def cellCost = one.cellCostInKeyBucket()
-
         then:
         cellCost == 1
 
         when:
         one.extendBytes = new byte[Byte.MAX_VALUE + 1]
         boolean exception = false
-
         try {
-            cellCost = one.cellCostInKeyBucket()
+            one.cellCostInKeyBucket()
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
 
         when:
         one.extendBytes = new byte[Byte.MAX_VALUE]
         exception = false
-
         try {
-            cellCost = one.cellCostInKeyBucket()
+            one.cellCostInKeyBucket()
         } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
-
         then:
         !exception
     }

@@ -31,7 +31,6 @@ class HttpHeaderBodyTest extends Specification {
         def b1 = "GET /?1=1 HTTP/1.1\r\nX-Key: X-value\r\n".bytes
         def h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         !h1.isOk
 
@@ -39,7 +38,6 @@ class HttpHeaderBodyTest extends Specification {
         b1 = "GET /?1=1 HTTP/1.1\r\nAccept: text:/html\r\n\r\n".bytes
         h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         h1.isOk
 
@@ -47,7 +45,6 @@ class HttpHeaderBodyTest extends Specification {
         b1 = "POST /?1=1 HTTP/1.1\r\nAccept: text/html\r\nX-key: X-value\r\nContent-Length: 4\r\n\r\n1234".bytes
         h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         h1.isOk
 
@@ -55,7 +52,6 @@ class HttpHeaderBodyTest extends Specification {
         b1 = "GET /?1=1 HTTP/1.1\r\nAccept: text/html\r\n".bytes
         h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         !h1.isOk
 
@@ -63,7 +59,6 @@ class HttpHeaderBodyTest extends Specification {
         b1 = "GET /?1=1\r".bytes
         h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         !h1.isOk
 
@@ -71,7 +66,6 @@ class HttpHeaderBodyTest extends Specification {
         b1 = "GET /?1=1\n\n".bytes
         h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         !h1.isOk
 
@@ -79,7 +73,6 @@ class HttpHeaderBodyTest extends Specification {
         b1 = "GET /?1=1\r\nAccept: text/htm\r\n".bytes
         h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         !h1.isOk
 
@@ -87,7 +80,6 @@ class HttpHeaderBodyTest extends Specification {
         b1 = "GET /?1=1 HTTP/1.1\r\nAccept: text/html\r\r\r\n".bytes
         h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         !h1.isOk
 
@@ -95,7 +87,6 @@ class HttpHeaderBodyTest extends Specification {
         b1 = "GET /?1=1 HTTP/1.1\r\nAccept: text/html\n\n\r\n".bytes
         h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         !h1.isOk
 
@@ -104,7 +95,6 @@ class HttpHeaderBodyTest extends Specification {
         b1 = "GET /?1=1 HTTP/1.1\r\nAccept: text/htmlxx\r\n".bytes
         h1 = new HttpHeaderBody()
         h1.feed(b1)
-
         then:
         !h1.isOk
 
@@ -139,9 +129,9 @@ class HttpHeaderBodyTest extends Specification {
         try {
             h.feed(getHeader2)
         } catch (IllegalArgumentException e) {
+            println e.message
             execption = true
         }
-
         then:
         execption
     }

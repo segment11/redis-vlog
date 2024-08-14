@@ -11,10 +11,8 @@ class RedisZSetTest extends Specification {
         rz.add(1, 'a')
         rz.add(2, 'b')
         rz.add(3, 'c')
-
         def memberA = rz.get('a')
         memberA.score(1)
-
         then:
         !rz.isEmpty()
         rz.size() == 3
@@ -22,10 +20,8 @@ class RedisZSetTest extends Specification {
         rz.contains('a')
         memberA.initRank == 0
         !rz.remove('d')
-
         !rz.add(0.9, 'a', false, false)
         rz.add(1.8, 'b', true, true)
-
         rz.between(1, true, 2, true).collect { it.member() }.join(',') == 'a,b'
         rz.betweenByMember('a', true, 'b', true).collect { it.value.score() }.join(',') == '1.0,1.8'
         rz.betweenByMember('-', true, '+', true).collect { it.value.score() }.join(',') == '1.0,1.8,3.0'
@@ -40,7 +36,6 @@ class RedisZSetTest extends Specification {
 
         when:
         def isDeletedA = rz.remove('a')
-
         then:
         isDeletedA
         rz.size() == 2
@@ -51,25 +46,20 @@ class RedisZSetTest extends Specification {
         rz.add(5, 'e')
         rz.print()
         println rz.toString()
-
         then:
         rz.size() == 4
         rz.getSet().size() == 4
         rz.contains('d')
         rz.contains('e')
-
         rz.pollFirst().member() == 'b'
         rz.pollLast().member() == 'e'
-
         rz.pollLast().member() == 'd'
         rz.pollLast().member() == 'c'
-
         rz.pollFirst() == null
         rz.pollLast() == null
 
         when:
         rz.clear()
-
         then:
         rz.size() == 0
     }
@@ -82,11 +72,9 @@ class RedisZSetTest extends Specification {
         rz.add(1, 'a')
         rz.add(2, 'b')
         rz.add(3, 'c')
-
         def encoded = rz.encode()
         def rz2 = RedisZSet.decode(encoded, false)
         def rz3 = RedisZSet.decode(encoded)
-
         then:
         rz2.size() == 3
         rz3.size() == 3
@@ -94,7 +82,6 @@ class RedisZSetTest extends Specification {
         rz2.contains('a')
         rz2.contains('b')
         rz2.contains('c')
-
         rz2.get('a').score() == 1
         rz2.get('b').score() == 2
         rz2.get('c').score() == 3
@@ -108,17 +95,15 @@ class RedisZSetTest extends Specification {
         rz.add(1, 'a')
         rz.add(2, 'b')
         rz.add(3, 'c')
-
         def encoded = rz.encode()
         encoded[2] = Byte.MAX_VALUE
-
         boolean exception = false
         try {
-            def rz2 = RedisZSet.decode(encoded, true)
+            RedisZSet.decode(encoded, true)
         } catch (IllegalStateException e) {
+            println e.message
             exception = true
         }
-
         then:
         exception
     }
@@ -133,7 +118,6 @@ class RedisZSetTest extends Specification {
         rz.add(2, 'zz')
         rz.add(3, 'c')
         rz.add(3, 'zz')
-
         then:
         rz.pollLast().member() == 'zz'
     }
@@ -145,7 +129,6 @@ class RedisZSetTest extends Specification {
         when:
         def encoded = rz.encode()
         def rz2 = RedisZSet.decode(encoded, false)
-
         then:
         rz2.size() == 0
     }

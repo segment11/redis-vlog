@@ -13,7 +13,6 @@ class AfterAuthFlagHolderTest extends Specification {
 
         when:
         AfterAuthFlagHolder.remove(remoteAddress)
-
         then:
         !AfterAuthFlagHolder.contains(remoteAddress)
     }
