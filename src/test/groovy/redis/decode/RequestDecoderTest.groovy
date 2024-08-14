@@ -2,6 +2,7 @@ package redis.decode
 
 import io.activej.bytebuf.ByteBuf
 import io.activej.bytebuf.ByteBufs
+import io.activej.common.exception.MalformedDataException
 import redis.repl.Repl
 import redis.repl.ReplType
 import redis.repl.content.Ping
@@ -29,7 +30,6 @@ class RequestDecoderTest extends Specification {
 
         when:
         def requestList = decoder.tryDecode(bufs)
-
         then:
         requestList.size() == 3
         requestList.every { !it.isHttp() && !it.isRepl() }
@@ -38,12 +38,9 @@ class RequestDecoderTest extends Specification {
         def buf3 = ByteBuf.wrapForReading(
                 '*'.bytes
         )
-
         def bufs3 = new ByteBufs(1)
         bufs3.add(buf3)
-
         def requestList3 = decoder.tryDecode(bufs3)
-
         then:
         requestList3 == null
 
@@ -51,12 +48,9 @@ class RequestDecoderTest extends Specification {
         buf3 = ByteBuf.wrapForReading(
                 '+0\r\n'.bytes
         )
-
         bufs3 = new ByteBufs(1)
         bufs3.add(buf3)
-
         requestList3 = decoder.tryDecode(bufs3)
-
         then:
         requestList3.size() == 1
 
@@ -64,12 +58,9 @@ class RequestDecoderTest extends Specification {
         buf3 = ByteBuf.wrapForReading(
                 '*2\r\r\r\r\r\r'.bytes
         )
-
         bufs3 = new ByteBufs(1)
         bufs3.add(buf3)
-
         requestList3 = decoder.tryDecode(bufs3)
-
         then:
         requestList3 == null
     }
@@ -88,11 +79,9 @@ class RequestDecoderTest extends Specification {
 
         when:
         def requestList = decoder.tryDecode(bufs)
-
         then:
         requestList.size() == 1
         requestList[0].isHttp()
-
         requestList[0].data.length == 2
         requestList[0].data[0] == 'get'.bytes
         requestList[0].data[1] == 'mykey'.bytes
@@ -101,16 +90,12 @@ class RequestDecoderTest extends Specification {
         buf = ByteBuf.wrapForReading(
                 "POST / HTTP/1.1\r\nContent-Length: 9\r\n\r\nget mykey".bytes
         )
-
         bufs = new ByteBufs(1)
         bufs.add(buf)
-
         requestList = decoder.tryDecode(bufs)
-
         then:
         requestList.size() == 1
         requestList[0].isHttp()
-
         requestList[0].data.length == 2
         requestList[0].data[0] == 'get'.bytes
         requestList[0].data[1] == 'mykey'.bytes
@@ -119,12 +104,9 @@ class RequestDecoderTest extends Specification {
         buf = ByteBuf.wrapForReading(
                 "POST / HTTP/1.1\r\nContent-Length: 0\r\n\r\n".bytes
         )
-
         bufs = new ByteBufs(1)
         bufs.add(buf)
-
         requestList = decoder.tryDecode(bufs)
-
         then:
         requestList == null
 
@@ -132,12 +114,9 @@ class RequestDecoderTest extends Specification {
         buf = ByteBuf.wrapForReading(
                 "PUT / HTTP/1.1\r\nContent-Length: 0\r\n\r\n".bytes
         )
-
         bufs = new ByteBufs(1)
         bufs.add(buf)
-
         requestList = decoder.tryDecode(bufs)
-
         then:
         requestList == null
 
@@ -146,12 +125,9 @@ class RequestDecoderTest extends Specification {
         def buf2 = ByteBuf.wrapForReading(
                 "GET /?set&mykey&myvalue HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n".bytes
         )
-
         def bufs2 = new ByteBufs(1)
         bufs2.add(buf2)
-
         def requestList2 = decoder.tryDecode(bufs2)
-
         then:
         requestList2 == null
 
@@ -160,12 +136,9 @@ class RequestDecoderTest extends Specification {
         def buf3 = ByteBuf.wrapForReading(
                 "GET /xxx HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n\r\n".bytes
         )
-
         def bufs3 = new ByteBufs(1)
         bufs3.add(buf3)
-
         def requestList3 = decoder.tryDecode(bufs3)
-
         then:
         requestList3 == null
 
@@ -173,26 +146,18 @@ class RequestDecoderTest extends Specification {
         buf3 = ByteBuf.wrapForReading(
                 "DELETE /xxx HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n\r\n".bytes
         )
-
         bufs3 = new ByteBufs(1)
         bufs3.add(buf3)
-
         requestList3 = decoder.tryDecode(bufs3)
-
         then:
         requestList3 == null
 
-
         when:
         buf3 = ByteBuf.wrapForReading(new byte[1])
-
         bufs3 = new ByteBufs(1)
         bufs3.add(buf3)
-
         buf3.head(1)
-
         requestList3 = decoder.tryDecode(bufs3)
-
         then:
         requestList3 == null
     }
@@ -210,11 +175,9 @@ class RequestDecoderTest extends Specification {
 
         when:
         def requestList = decoder.tryDecode(bufs)
-
         then:
         requestList.size() == 1
         requestList[0].isRepl()
-
         requestList[0].data.length == 4
         ByteBuffer.wrap(requestList[0].data[0]).getLong() == 0L
         requestList[0].data[1][0] == 0
@@ -225,12 +188,9 @@ class RequestDecoderTest extends Specification {
         def buf2 = ByteBuf.wrapForReading(
                 "X-REPLx".bytes
         )
-
         def bufs2 = new ByteBufs(1)
         bufs2.add(buf2)
-
         def requestList2 = decoder.tryDecode(bufs2)
-
         then:
         requestList2 == null
 
@@ -240,15 +200,17 @@ class RequestDecoderTest extends Specification {
         buffer.put('X-REPL'.bytes)
         buffer.putLong(0L)
         buffer.put((byte) -1)
-
         buf2 = ByteBuf.wrapForReading(bb)
-
         bufs2 = new ByteBufs(1)
         bufs2.add(buf2)
-
-        requestList2 = decoder.tryDecode(bufs2)
-
+        boolean exception = false
+        try {
+            decoder.tryDecode(bufs2)
+        } catch (MalformedDataException e) {
+            println e.message
+            exception = true
+        }
         then:
-        requestList2 == null
+        exception
     }
 }
