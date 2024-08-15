@@ -262,10 +262,8 @@ public class Binlog {
             throw new IllegalArgumentException("Repl read binlog segment bytes, offset must be multiple of one segment length, offset: " + offset);
         }
 
-        // get from cache first
-        // may be cross file
-        // refer to ConfForSlot.global.confRepl.binlogOneFileMaxLength = 256 * 1024 * 1024
-        if ((currentFileIndex - fileIndex) * 1024 < forReadCacheSegmentMaxCount) {
+        // get from cache first, only consider current file or previous file
+        if (currentFileIndex == fileIndex || currentFileIndex - 1 == fileIndex) {
             // check cache
             var segmentBytes = getLatestAppendForReadCacheSegmentBytes(fileIndex, offset);
             if (segmentBytes != null) {
