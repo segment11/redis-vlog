@@ -25,8 +25,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
-import static redis.repl.ReplType.hi;
-import static redis.repl.ReplType.pong;
+import static redis.repl.ReplType.*;
 
 public class XGroup extends BaseCommand {
     public XGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -60,6 +59,11 @@ public class XGroup extends BaseCommand {
             return null;
         }
         var contentBytes = data[3];
+
+        if (replType == error) {
+            log.error("Repl handle receive error: {}", new String(contentBytes));
+            return Repl.emptyReply();
+        }
 
         var oneSlot = localPersist.oneSlot(slot);
         if (this.replPair == null) {
@@ -109,7 +113,7 @@ public class XGroup extends BaseCommand {
             case bye -> {
                 // server received bye from client
                 var netListenAddresses = new String(contentBytes);
-                log.warn("Repl handle bye: slave uuid={}, net listen addresses={}", slaveUuid, netListenAddresses);
+                log.warn("Repl master handle bye: slave uuid={}, net listen addresses={}", slaveUuid, netListenAddresses);
 
                 if (replPair == null) {
                     yield Repl.emptyReply();
@@ -121,7 +125,7 @@ public class XGroup extends BaseCommand {
             case byeBye -> {
                 // client received bye from server
                 var netListenAddresses = new String(contentBytes);
-                log.warn("Repl handle byeBye: slave uuid={}, net listen addresses={}", slaveUuid, netListenAddresses);
+                log.warn("Repl slave handle bye bye: slave uuid={}, net listen addresses={}", slaveUuid, netListenAddresses);
 
                 oneSlot.addDelayNeedCloseReplPair(replPair);
                 yield Repl.emptyReply();
@@ -170,7 +174,7 @@ public class XGroup extends BaseCommand {
             oneSlot.getDynConfig().setBinlogOn(true);
             log.warn("Repl master start binlog, master uuid={}", replPair.getMasterUuid());
         } catch (IOException e) {
-            var errorMessage = "Repl handle error: start binlog error";
+            var errorMessage = "Repl master handle error: start binlog error";
             log.error(errorMessage, e);
             return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
         }
@@ -693,7 +697,7 @@ public class XGroup extends BaseCommand {
                 } else {
                     dictMap.putDict(keyPrefix, dict);
                 }
-                log.warn("Repl handle s exists dict: dict with key={}", dictWithKeyPrefix);
+                log.warn("Repl slave save master exists dict: dict with key={}", dictWithKeyPrefix);
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -748,13 +752,13 @@ public class XGroup extends BaseCommand {
 
         var binlogOneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
         if (needFetchOffset % binlogOneSegmentLength != 0) {
-            throw new IllegalArgumentException("Repl handle error: catch up offset: " + needFetchOffset +
+            throw new IllegalArgumentException("Repl master handle error: catch up offset: " + needFetchOffset +
                     " is not a multiple of binlog one segment length: " + binlogOneSegmentLength);
         }
 
         var oneSlot = localPersist.oneSlot(slot);
         if (oneSlot.getMasterUuid() != binlogMasterUuid) {
-            var errorMessage = "Repl handle error: master uuid not match";
+            var errorMessage = "Repl master handle error: master uuid not match";
             log.error(errorMessage);
             return Repl.error(slot, replPair, errorMessage);
         }
@@ -764,13 +768,13 @@ public class XGroup extends BaseCommand {
         try {
             readSegmentBytes = binlog.readPrevRafOneSegment(needFetchFileIndex, needFetchOffset);
         } catch (IOException e) {
-            var errorMessage = "Repl handle error: read binlog file error";
+            var errorMessage = "Repl master handle error: read binlog file error";
             log.error(errorMessage, e);
             return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
         }
 
         if (readSegmentBytes == null) {
-//            log.warn("Repl handle catch up: get binlog null, slot={}, slave uuid={}, {}, binlog file index={}, offset={}", slot,
+//            log.warn("Repl master handle catch up: get binlog null, slot={}, slave uuid={}, {}, binlog file index={}, offset={}", slot,
 //                    replPair.getSlaveUuid(), replPair.getHostAndPort(), needFetchFileIndex, needFetchOffset);
 //            return Repl.error(slot, replPair, "Get binlog null, slot=" + slot +
 //                    ", binlog file index=" + needFetchFileIndex + ", offset=" + needFetchOffset);
@@ -838,7 +842,7 @@ public class XGroup extends BaseCommand {
                         slot, replPair.getSlaveUuid(), replPair.getHostAndPort(), fetchedFileIndex, fetchedOffset, n);
             }
         } catch (Exception e) {
-            var errorMessage = "Repl handle error: decode and apply binlog error";
+            var errorMessage = "Repl slave handle error: decode and apply binlog error";
             log.error(errorMessage, e);
             return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
         }
@@ -846,11 +850,13 @@ public class XGroup extends BaseCommand {
         // set can read if catch up to current file, and offset not too far
         var isCatchUpToCurrentFile = fetchedFileIndex == currentFileIndex;
         if (isCatchUpToCurrentFile) {
-            var diffOffset = currentOffset - fetchedOffset;
+            var diffOffset = currentOffset - fetchedOffset - skipBytesN;
             if (diffOffset < ConfForSlot.global.confRepl.catchUpOffsetMinDiff) {
                 try {
-                    log.warn("Slot can read, slot={}", slot);
-                    oneSlot.setCanRead(true);
+                    if (!oneSlot.isCanRead()) {
+                        oneSlot.setCanRead(true);
+                        log.warn("Repl slave can read now as already catch up nearly to master latest, slot: {}", slot);
+                    }
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -866,7 +872,7 @@ public class XGroup extends BaseCommand {
 
             // still catch up current (latest) segment, delay
             var content = new RawBytesContent(toMasterCatchUp(binlogMasterUuid, fetchedFileIndex, fetchedOffset));
-            oneSlot.delayRun(ConfForSlot.global.confRepl.catchUpLatestSegmentDelayMillis, () -> {
+            oneSlot.delayRun(1000, () -> {
                 replPair.write(ReplType.catch_up, content);
             });
             return Repl.emptyReply();
@@ -874,7 +880,7 @@ public class XGroup extends BaseCommand {
 
         var binlogOneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
         if (readSegmentLength != binlogOneSegmentLength) {
-            throw new IllegalStateException("Repl handle error: read segment length: " + readSegmentLength +
+            throw new IllegalStateException("Repl slave handle error: read segment length: " + readSegmentLength +
                     " is not equal to binlog one segment length: " + binlogOneSegmentLength);
         }
 

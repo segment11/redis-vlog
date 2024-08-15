@@ -1,5 +1,7 @@
 package redis.repl.incremental;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.Dict;
 import redis.DictMap;
@@ -25,6 +27,8 @@ public class XDict implements BinlogContent {
         this.keyPrefix = keyPrefix;
         this.dict = dict;
     }
+
+    private final Logger log = LoggerFactory.getLogger(getClass());
 
     @Override
     public Type type() {
@@ -90,6 +94,7 @@ public class XDict implements BinlogContent {
 
     @Override
     public void apply(byte slot, ReplPair replPair) {
+        log.warn("Repl slave get dict, key prefix: {}, seq: {}", keyPrefix, dict.getSeq());
         // ignore slot, need sync
         var dictMap = DictMap.getInstance();
         synchronized (dictMap) {
