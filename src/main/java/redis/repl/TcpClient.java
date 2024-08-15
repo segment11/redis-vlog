@@ -87,6 +87,7 @@ public class TcpClient {
                             .decodeStream(new RequestDecoder())
                             .map(pipeline -> {
                                 if (pipeline == null) {
+                                    log.error("Repl slave request decode fail: pipeline is null");
                                     return null;
                                 }
 
@@ -95,11 +96,17 @@ public class TcpClient {
                                 var xGroup = new XGroup(null, request.getData(), socket);
                                 xGroup.init(requestHandler, request);
                                 xGroup.setReplPair(replPair);
-                                var reply = xGroup.handleRepl();
-                                if (reply == null) {
-                                    return null;
+
+                                try {
+                                    var reply = xGroup.handleRepl();
+                                    if (reply == null) {
+                                        log.error("Repl slave handle error: reply is null");
+                                        return null;
+                                    }
+                                    return reply.buffer();
+                                } catch (Exception e) {
+                                    return Repl.error(slot, replPair, "Repl slave handle error: " + e.getMessage()).buffer();
                                 }
-                                return reply.buffer();
                             })
                             .streamTo(ChannelConsumers.ofSocket(socket));
 

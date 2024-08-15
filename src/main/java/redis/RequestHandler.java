@@ -193,12 +193,13 @@ public class RequestHandler {
             var xGroup = new XGroup(null, data, socket);
             xGroup.init(this, request);
 
-            try {
-                return xGroup.handleRepl();
-            } catch (Exception e) {
-                log.error("Repl handle error", e);
-                return new ErrorReply(e.getMessage());
+            // try catch in handle repl method
+            var replReply = xGroup.handleRepl();
+            if (replReply == null) {
+                log.warn("Repl handle error, repl reply is null");
+                return null;
             }
+            return replReply;
         }
 
         // metrics, prometheus format
