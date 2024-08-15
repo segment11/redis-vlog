@@ -120,6 +120,7 @@ jar {
     manifest {
         attributes "Main-Class": 'redis.MultiWorkerServer'
     }
+//    exclude 'redis-vlog.properties'
     from {
         configurations.runtimeClasspath.collect {
             it.isDirectory() ? it : zipTree(it)

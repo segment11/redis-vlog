@@ -53,8 +53,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Random;
 
-import static io.activej.config.Config.ofClassPathProperties;
-import static io.activej.config.Config.ofSystemProperties;
+import static io.activej.config.Config.*;
 import static io.activej.config.converter.ConfigConverters.*;
 import static io.activej.inject.module.Modules.combine;
 import static io.activej.launchers.initializers.Initializers.ofEventloop;
@@ -295,6 +294,7 @@ public class MultiWorkerServer extends Launcher {
         return Config.create()
                 .with("net.listenAddresses", Config.ofValue(ofInetSocketAddress(), new InetSocketAddress(PORT)))
                 .overrideWith(ofClassPathProperties(PROPERTIES_FILE, true))
+                .overrideWith(ofProperties("/etc/" + PROPERTIES_FILE, true))
                 .overrideWith(ofSystemProperties("redis-vlog-config"));
     }
 
@@ -457,6 +457,7 @@ public class MultiWorkerServer extends Launcher {
             }
 
             var debugInstance = Debug.getInstance();
+            debugInstance.logCmd = config.get(ofBoolean(), "debugLogCmd", false);
             debugInstance.logMerge = config.get(ofBoolean(), "debugLogMerge", false);
             debugInstance.logTrainDict = config.get(ofBoolean(), "debugLogTrainDict", false);
             debugInstance.logRestore = config.get(ofBoolean(), "debugLogRestore", false);
