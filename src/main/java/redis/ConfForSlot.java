@@ -3,6 +3,7 @@ package redis;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.persist.Chunk;
+import redis.persist.FdReadWrite;
 import redis.persist.KeyBucket;
 import redis.persist.Wal;
 
@@ -184,7 +185,12 @@ public enum ConfForSlot {
             this.segmentLength = this.segmentLengthOld;
         }
 
+        public byte[] REPL_EMPTY_BYTES_FOR_ONCE_WRITE;
+
         public void resetByOneValueLength(int estimateOneValueLength) {
+            // when call this method, chunk segment length will not be changed
+            REPL_EMPTY_BYTES_FOR_ONCE_WRITE = new byte[FdReadWrite.REPL_ONCE_INNER_COUNT * segmentLength];
+
             boolean isValueSetUseCompression1 = ConfForSlot.global.isValueSetUseCompression;
             // if not use compression, chunk files number need to be doubled
             if (!isValueSetUseCompression1) {
