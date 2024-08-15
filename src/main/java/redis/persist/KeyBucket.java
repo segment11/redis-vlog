@@ -8,6 +8,7 @@ import redis.SnowFlake;
 
 import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 
 import static redis.CompressedValue.NO_EXPIRE;
 import static redis.persist.KeyLoader.KEY_BUCKET_ONE_COST_SIZE;
@@ -337,6 +338,10 @@ public class KeyBucket {
     }
 
     public DoPutResult put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, boolean doUpdateSeq) {
+        return put(keyBytes, keyHash, expireAt, seq, valueBytes, doUpdateSeq, true);
+    }
+
+    private DoPutResult put(byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes, boolean doUpdateSeq, boolean doDeleteTargetKeyFirst) {
         if (valueBytes.length > Byte.MAX_VALUE) {
             throw new IllegalArgumentException("Value bytes too large, value length=" + valueBytes.length);
         }
@@ -348,7 +353,7 @@ public class KeyBucket {
         }
 
         // all in memory, performance is not a problem
-        var isExists = del(keyBytes, keyHash, false);
+        var isExists = doDeleteTargetKeyFirst && del(keyBytes, keyHash, false);
 
         boolean isUpdate = false;
         int putToCellIndex = -1;
@@ -362,12 +367,12 @@ public class KeyBucket {
         }
 
         if (putToCellIndex == -1) {
-            if (isExists) {
-                // cell count is not enough ? key is not change, will not happen
-                // already deleted, data missing, SHIT
-                log.error("!!!Key bucket put fail but already delete old one already saved, need put manually, key: {}", new String(keyBytes));
-                log.error("!!!Key bucket put fail but already delete old one already saved, need put manually, key: {}", new String(keyBytes));
-                log.error("!!!Key bucket put fail but already delete old one already saved, need put manually, key: {}", new String(keyBytes));
+            // maybe cost cell = 2, but can put cells are always is 1 because expired or deleted the same key cell cost is 1
+            if (INIT_CAPACITY - cellCost >= cellCount) {
+                // need re-put all in this key bucket
+                rePutAll();
+                // put again, but need not delete target key again
+                return put(keyBytes, keyHash, expireAt, seq, valueBytes, doUpdateSeq, false);
             }
             return new DoPutResult(false, false);
         }
@@ -380,6 +385,29 @@ public class KeyBucket {
             updateSeq();
         }
         return new DoPutResult(true, isUpdate);
+    }
+
+    void rePutAll() {
+        ArrayList<PersistValueMeta> tmpList = new ArrayList<>(INIT_CAPACITY);
+        iterate((keyHash, expireAt, seq, keyBytes, valueBytes) -> {
+            var pvm = new PersistValueMeta();
+            pvm.expireAt = expireAt;
+            pvm.seq = seq;
+            pvm.keyBytes = keyBytes;
+            pvm.keyHash = keyHash;
+            pvm.bucketIndex = bucketIndex;
+            pvm.extendBytes = valueBytes;
+            tmpList.add(pvm);
+        });
+
+        buffer.position(0).put(EMPTY_BYTES);
+
+        int putToCellIndex = 0;
+        for (var pvm : tmpList) {
+            var cellCount = KVMeta.calcCellCount((short) pvm.keyBytes.length, (byte) pvm.extendBytes.length);
+            putTo(putToCellIndex, cellCount, pvm.keyHash, pvm.expireAt, pvm.seq, pvm.keyBytes, pvm.extendBytes);
+            putToCellIndex += cellCount;
+        }
     }
 
     private void putTo(int putToCellIndex, int cellCount, long keyHash, long expireAt, long seq, byte[] keyBytes, byte[] valueBytes) {
@@ -406,7 +434,7 @@ public class KeyBucket {
                 break;
             }
 
-            // never happen here, because expired or exists already clear cells
+            // never happen here, because before put, always delete target key first
             buffer.putLong(buffer.position() - EXPIRE_AT_VALUE_LENGTH, NO_EXPIRE);
             buffer.putLong(buffer.position() - EXPIRE_AT_VALUE_LENGTH - HASH_VALUE_LENGTH, NO_KEY);
             beginResetOldCellIndex++;
@@ -445,7 +473,7 @@ public class KeyBucket {
             var matchMeta = keyMatch(keyBytes, oneCellOffset(cellIndex));
             if (matchMeta != null) {
                 // update
-                // never happen here, because exists already clear cells
+                // never happen here, because before put, always delete target key first
                 var flag = isCellAvailableN(cellIndex + 1, cellCount - 1, true);
                 return new CanPutResult(flag, true);
             } else {

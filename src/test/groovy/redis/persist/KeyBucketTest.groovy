@@ -1,6 +1,7 @@
 package redis.persist
 
-
+import redis.CompressedValue
+import redis.KeyHash
 import redis.SnowFlake
 import spock.lang.Specification
 
@@ -330,5 +331,52 @@ class KeyBucketTest extends Specification {
         !keyBucket.isCellAvailableN(1, 1, false)
         !keyBucket.isCellAvailableN(2, 1, false)
         keyBucket.isCellAvailableN(2, 1, true)
+    }
+
+    def 'test re put all'() {
+        given:
+        def snowFlake = new SnowFlake(1, 1)
+        def keyBucket = new KeyBucket(slot, 0, (byte) 0, (byte) 1, null, snowFlake)
+
+        when:
+        keyBucket.put('a'.bytes, 97L, 0L, 97L, 'a'.bytes)
+        keyBucket.put('b'.bytes, 98L, 0L, 98L, 'b'.bytes)
+        keyBucket.put('c'.bytes, 99L, 0L, 99L, 'c'.bytes)
+        keyBucket.del('b'.bytes, 98L, false)
+        keyBucket.rePutAll()
+        then:
+        keyBucket.size == 2
+
+        when:
+        keyBucket.clearAll()
+        (1..KeyBucket.INIT_CAPACITY).each {
+            keyBucket.put(('key:' + it).bytes, it, 0L, it, 'value'.bytes)
+        }
+        keyBucket.del('key:1'.bytes, 1, false)
+        keyBucket.del('key:3'.bytes, 3, false)
+        // add cost two cells key value pair
+        def cell2Key = 'abcd' * 4
+        def cell2Cv = new CompressedValue()
+        cell2Cv.keyHash = KeyHash.hash(cell2Key.bytes)
+        cell2Cv.compressedData = new byte[30]
+        cell2Cv.compressedLength = 30
+        cell2Cv.uncompressedLength = 30
+        // will trigger re-put all
+        keyBucket.put(cell2Key.bytes, 100L, 0, 100L, cell2Cv.encode())
+        then:
+        keyBucket.size == KeyBucket.INIT_CAPACITY - 1
+        keyBucket.cellCost == KeyBucket.INIT_CAPACITY
+
+        when:
+        keyBucket.shortValueCvExpiredCallBack = new KeyBucket.ShortValueCvExpiredCallBack() {
+            @Override
+            void handle(String key, CompressedValue cvExpired) {
+                println key + ' expired'
+            }
+        }
+        keyBucket.clearOneExpired(KeyBucket.INIT_CAPACITY - 2)
+        then:
+        keyBucket.size == KeyBucket.INIT_CAPACITY - 2
+        keyBucket.cellCost == KeyBucket.INIT_CAPACITY - 2
     }
 }
