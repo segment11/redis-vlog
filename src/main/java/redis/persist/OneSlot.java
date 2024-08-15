@@ -1268,12 +1268,12 @@ public class OneSlot {
     }
 
     void checkFirstMergedButNotPersistedSegmentIndexTooNear() {
-        if (chunkMergeWorker.mergedSegmentSet.isEmpty()) {
+        if (chunkMergeWorker.isMergedSegmentSetEmpty()) {
             return;
         }
 
         var currentSegmentIndex = chunk.currentSegmentIndex();
-        var firstMergedButNotPersisted = chunkMergeWorker.mergedSegmentSet.first().segmentIndex();
+        var firstMergedButNotPersisted = chunkMergeWorker.firstMergedSegmentIndex();
 
         // need persist merged segments immediately, or next time wal persist will not prepare ready
         boolean needPersistMergedButNotPersisted = isNeedPersistMergedButNotPersisted(currentSegmentIndex, firstMergedButNotPersisted);

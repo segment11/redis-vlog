@@ -39,6 +39,8 @@ class ChunkMergeWorkerTest extends Specification {
         chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, 'key' + cv.seq, 32, 1))
         chunkMergeWorker.addMergedSegment(0, 1)
         then:
+        !chunkMergeWorker.isMergedSegmentSetEmpty()
+        chunkMergeWorker.firstMergedSegmentIndex() == 0
         chunkMergeWorker.getMergedButNotPersistedBeforePersistWal(walGroupIndex) == null
 
         when:
@@ -52,11 +54,12 @@ class ChunkMergeWorkerTest extends Specification {
         when:
         chunkMergeWorker.removeMergedButNotPersistedAfterPersistWal([0], 0)
         Debug.instance.logMerge = true
-        chunkMergeWorker.logMergeCount = 999
+        chunkMergeWorker.logMergeCount = 1000
         chunkMergeWorker.removeMergedButNotPersistedAfterPersistWal([1], 1)
+        chunkMergeWorker.clearMergedSegmentSetForTest()
         then:
-        chunkMergeWorker.mergedCvList.size() == 0
-        chunkMergeWorker.mergedSegmentSet.size() == 0
+        chunkMergeWorker.mergedCvListSize == 0
+        chunkMergeWorker.mergedSegmentSetSize == 0
 
         cleanup:
         oneSlot.cleanUp()
@@ -87,8 +90,23 @@ class ChunkMergeWorkerTest extends Specification {
         chunkMergeWorker.persistFIFOMergedCvListIfBatchSizeOk()
         chunkMergeWorker.persistAllMergedCvListInTargetSegmentIndexList([segmentIndex])
         then:
-        chunkMergeWorker.mergedCvList.size() == 0
-        chunkMergeWorker.mergedSegmentSet.size() == 0
+        chunkMergeWorker.mergedCvListSize == 0
+        chunkMergeWorker.mergedSegmentSetSize == 0
+
+        when:
+        def cvList2 = Mock.prepareCompressedValueList(chunkMergeWorker.MERGED_CV_SIZE_THRESHOLD)
+        for (cv in cvList2) {
+            chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, 'key' + cv.seq, bucketIndex, segmentIndex))
+        }
+        chunkMergeWorker.addMergedSegment(segmentIndex, cvList2.size())
+        10.times {
+            chunkMergeWorker.addMergedSegment(segmentIndex + it + 1, 1)
+        }
+        chunkMergeWorker.persistFIFOMergedCvListIfBatchSizeOk()
+        then:
+        chunkMergeWorker.mergedCvListSize == 0
+        // once persist segment number: chunkMergeWorker.MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST
+        chunkMergeWorker.mergedSegmentSetSize == 1 + 10 - chunkMergeWorker.MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST
 
         cleanup:
         oneSlot.cleanUp()

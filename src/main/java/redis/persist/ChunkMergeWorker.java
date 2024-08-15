@@ -57,10 +57,14 @@ public class ChunkMergeWorker {
         LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer, lruMemoryRequireMB, false);
     }
 
-    final List<CvWithKeyAndBucketIndexAndSegmentIndex> mergedCvList = new ArrayList<>(MERGED_CV_SIZE_THRESHOLD);
+    private final List<CvWithKeyAndBucketIndexAndSegmentIndex> mergedCvList = new ArrayList<>(MERGED_CV_SIZE_THRESHOLD);
 
     void addMergedCv(CvWithKeyAndBucketIndexAndSegmentIndex cvWithKeyAndBucketIndexAndSegmentIndex) {
         mergedCvList.add(cvWithKeyAndBucketIndexAndSegmentIndex);
+    }
+
+    int getMergedCvListSize() {
+        return mergedCvList.size();
     }
 
     record MergedSegment(int segmentIndex, int validCvCount) implements Comparable<MergedSegment> {
@@ -78,10 +82,27 @@ public class ChunkMergeWorker {
         }
     }
 
-    final TreeSet<MergedSegment> mergedSegmentSet = new TreeSet<>();
+    private final TreeSet<MergedSegment> mergedSegmentSet = new TreeSet<>();
 
     void addMergedSegment(int segmentIndex, int validCvCount) {
         mergedSegmentSet.add(new MergedSegment(segmentIndex, validCvCount));
+    }
+
+    boolean isMergedSegmentSetEmpty() {
+        return mergedSegmentSet.isEmpty();
+    }
+
+    int getMergedSegmentSetSize() {
+        return mergedSegmentSet.size();
+    }
+
+    // not empty when call this
+    int firstMergedSegmentIndex() {
+        return mergedSegmentSet.first().segmentIndex;
+    }
+
+    void clearMergedSegmentSetForTest() {
+        mergedSegmentSet.clear();
     }
 
     OneSlot.BeforePersistWalExt2FromMerge getMergedButNotPersistedBeforePersistWal(int walGroupIndex) {

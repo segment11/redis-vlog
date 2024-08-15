@@ -789,7 +789,7 @@ class OneSlotTest extends Specification {
         }
         then:
         oneSlot.metaChunkSegmentFlagSeq.getSegmentMergeFlag(1).flag() == Chunk.Flag.merged_and_persisted
-        oneSlot.chunkMergeWorker.mergedSegmentSet.isEmpty()
+        oneSlot.chunkMergeWorker.isMergedSegmentSetEmpty()
 
         cleanup:
         oneSlot.cleanUp()
@@ -837,7 +837,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
         oneSlot.chunkMergeWorker.addMergedSegment(100, 1)
         chunk.initSegmentIndexWhenFirstStart(0)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -845,7 +845,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
         oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -853,7 +853,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
         oneSlot.chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 1, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -861,7 +861,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
         oneSlot.chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 100, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -869,7 +869,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
         oneSlot.chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber - 1, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -877,7 +877,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
         oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 1)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -885,7 +885,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
         oneSlot.chunkMergeWorker.addMergedSegment(100, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 1)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -893,7 +893,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.mergedSegmentSet.clear()
+        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
         oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 100)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
