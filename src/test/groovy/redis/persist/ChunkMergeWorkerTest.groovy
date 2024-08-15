@@ -108,6 +108,20 @@ class ChunkMergeWorkerTest extends Specification {
         // once persist segment number: chunkMergeWorker.MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST
         chunkMergeWorker.mergedSegmentSetSize == 1 + 10 - chunkMergeWorker.MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST
 
+        when:
+        chunkMergeWorker.clearMergedSegmentSetForTest()
+        for (cv in cvList2) {
+            chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, 'key' + cv.seq, bucketIndex, segmentIndex))
+            chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, 'key' + cv.seq + 10000, bucketIndex + 32, segmentIndex + 1))
+        }
+        chunkMergeWorker.addMergedSegment(segmentIndex, cvList2.size())
+        chunkMergeWorker.addMergedSegment(segmentIndex + 1, cvList2.size())
+        chunkMergeWorker.logMergeCount = 999
+        chunkMergeWorker.persistFIFOMergedCvListIfBatchSizeOk()
+        then:
+        chunkMergeWorker.mergedCvListSize == 0
+        chunkMergeWorker.mergedSegmentSetSize == 0
+
         cleanup:
         oneSlot.cleanUp()
         Consts.persistDir.deleteDir()

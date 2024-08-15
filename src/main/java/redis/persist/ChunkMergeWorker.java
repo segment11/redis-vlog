@@ -176,6 +176,9 @@ public class ChunkMergeWorker {
         if (groupByWalGroupIndex.size() > MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST) {
             log.warn("Go to persist merged cv list once, perf bad, group by wal group index size: {}", groupByWalGroupIndex.size());
         }
+
+        XOneWalGroupPersist lastXForBinlog = null;
+        int i = 0;
         for (var entry : groupByWalGroupIndex.entrySet()) {
             var walGroupIndex = entry.getKey();
             var subMergedCvList = entry.getValue();
@@ -194,6 +197,15 @@ public class ChunkMergeWorker {
             // refer Chunk.ONCE_PREPARE_SEGMENT_COUNT
             // list size is not large, need not multi batch persist
             oneSlot.chunk.persist(walGroupIndex, list, true, xForBinlog);
+
+            i++;
+            var isLastEntry = groupByWalGroupIndex.size() == i;
+
+            if (!isLastEntry) {
+                oneSlot.appendBinlog(xForBinlog);
+            } else {
+                lastXForBinlog = xForBinlog;
+            }
         }
 
         if (doLog) {
@@ -214,7 +226,11 @@ public class ChunkMergeWorker {
             oneSlot.updateSegmentMergeFlag(one.segmentIndex, Chunk.Flag.merged_and_persisted, 0L);
             it.remove();
             sb.append(one.segmentIndex).append(";");
+
+            // lastXForBinlog must not be null
+            lastXForBinlog.putUpdatedChunkSegmentFlagWithSeq(one.segmentIndex, Chunk.Flag.merged_and_persisted, 0L);
         }
+        oneSlot.appendBinlog(lastXForBinlog);
 
         if (doLog) {
             log.info("P s:{}, {}", slot, sb);

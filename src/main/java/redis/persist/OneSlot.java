@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import redis.*;
 import redis.metric.SimpleGauge;
 import redis.repl.Binlog;
+import redis.repl.BinlogContent;
 import redis.repl.ReplPair;
 import redis.repl.ReplType;
 import redis.repl.content.RawBytesContent;
@@ -563,10 +564,16 @@ public class OneSlot {
         metaChunkSegmentIndex.set(segmentIndex);
     }
 
-    final Binlog binlog;
+    private final Binlog binlog;
 
     public Binlog getBinlog() {
         return binlog;
+    }
+
+    public void appendBinlog(BinlogContent content) {
+        if (binlog != null) {
+            binlog.append(content);
+        }
     }
 
     private final TaskChain taskChain = new TaskChain();
@@ -851,10 +858,8 @@ public class OneSlot {
         if (putResult.needPersist()) {
             doPersist(walGroupIndex, key, putResult);
         } else {
-            if (binlog != null) {
-                var xWalV = new XWalV(putResult.needPutV(), putResult.isValueShort(), putResult.offset());
-                binlog.append(xWalV);
-            }
+            var xWalV = new XWalV(putResult.needPutV(), putResult.isValueShort(), putResult.offset());
+            appendBinlog(xWalV);
         }
     }
 
@@ -902,10 +907,8 @@ public class OneSlot {
 
             // encode again
             cvEncoded = cv.encodeAsBigStringMeta(uuid);
-            if (binlog != null) {
-                var xBigStrings = new XBigStrings(uuid, key, cvEncoded);
-                binlog.append(xBigStrings);
-            }
+            var xBigStrings = new XBigStrings(uuid, key, cvEncoded);
+            appendBinlog(xBigStrings);
 
             v = new Wal.V(cv.getSeq(), bucketIndex, cv.getKeyHash(), cv.getExpireAt(),
                     key, cvEncoded, isFromMerge);
@@ -915,10 +918,8 @@ public class OneSlot {
 
         var putResult = targetWal.put(isValueShort, key, v);
         if (!putResult.needPersist()) {
-            if (binlog != null) {
-                var xWalV = new XWalV(v, isValueShort, putResult.offset());
-                binlog.append(xWalV);
-            }
+            var xWalV = new XWalV(v, isValueShort, putResult.offset());
+            appendBinlog(xWalV);
 
             return;
         }
@@ -939,10 +940,9 @@ public class OneSlot {
         var needPutV = putResult.needPutV();
         if (needPutV != null) {
             targetWal.put(putResult.isValueShort(), key, needPutV);
-            if (binlog != null) {
-                var xWalV = new XWalV(needPutV, putResult.isValueShort(), putResult.offset());
-                binlog.append(xWalV);
-            }
+
+            var xWalV = new XWalV(needPutV, putResult.isValueShort(), putResult.offset());
+            appendBinlog(xWalV);
         }
     }
 
@@ -1255,9 +1255,7 @@ public class OneSlot {
             chunkMergeWorker.removeMergedButNotPersistedAfterPersistWal(segmentIndexList, walGroupIndex);
         }
 
-        if (binlog != null) {
-            binlog.append(xForBinlog);
-        }
+        appendBinlog(xForBinlog);
 
         if (!needMergeSegmentIndexList.isEmpty()) {
             doMergeJob(needMergeSegmentIndexList);

@@ -303,7 +303,7 @@ class XGroupTest extends Specification {
         when:
         def vList = Mock.prepareValueList(10)
         for (v in vList) {
-            oneSlot.binlog.append(new XWalV(v))
+            oneSlot.appendBinlog(new XWalV(v))
         }
         r = x.handleRepl()
         then:

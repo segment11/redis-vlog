@@ -5,6 +5,7 @@ import io.activej.config.Config
 import io.activej.eventloop.Eventloop
 import redis.*
 import redis.repl.ReplPairTest
+import redis.repl.incremental.XWalV
 import spock.lang.Specification
 
 import java.nio.ByteBuffer
@@ -465,6 +466,10 @@ class OneSlotTest extends Specification {
         and:
         def key = 'key'
         def sKey = BaseCommand.slot(key.bytes, slotNumber)
+
+        def v = Mock.prepareValueList(1)[0]
+        def xWalV = new XWalV(v, true, 0)
+        oneSlot.appendBinlog(xWalV)
 
         expect:
         oneSlot.binlog != null
