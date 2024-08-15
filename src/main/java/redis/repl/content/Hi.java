@@ -7,14 +7,14 @@ import redis.repl.ReplContent;
 public class Hi implements ReplContent {
     private final long slaveUuid;
     private final long masterUuid;
-    private final Binlog.FileIndexAndOffset binlogFileIndexAndOffset;
+    private final Binlog.FileIndexAndOffset currentFileIndexAndOffset;
     private final Binlog.FileIndexAndOffset earliestFileIndexAndOffset;
 
-    public Hi(long slaveUuid, long masterUuid, Binlog.FileIndexAndOffset binlogFileIndexAndOffset,
+    public Hi(long slaveUuid, long masterUuid, Binlog.FileIndexAndOffset currentFileIndexAndOffset,
               Binlog.FileIndexAndOffset earliestFileIndexAndOffset) {
         this.slaveUuid = slaveUuid;
         this.masterUuid = masterUuid;
-        this.binlogFileIndexAndOffset = binlogFileIndexAndOffset;
+        this.currentFileIndexAndOffset = currentFileIndexAndOffset;
         this.earliestFileIndexAndOffset = earliestFileIndexAndOffset;
     }
 
@@ -22,8 +22,8 @@ public class Hi implements ReplContent {
     public void encodeTo(ByteBuf toBuf) {
         toBuf.writeLong(slaveUuid);
         toBuf.writeLong(masterUuid);
-        toBuf.writeInt(binlogFileIndexAndOffset.fileIndex());
-        toBuf.writeLong(binlogFileIndexAndOffset.offset());
+        toBuf.writeInt(currentFileIndexAndOffset.fileIndex());
+        toBuf.writeLong(currentFileIndexAndOffset.offset());
         toBuf.writeInt(earliestFileIndexAndOffset.fileIndex());
         toBuf.writeLong(earliestFileIndexAndOffset.offset());
     }
