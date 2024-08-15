@@ -257,6 +257,7 @@ public class MGroup extends BaseCommand {
             var isOn = val.equals("1") || val.equals("true");
 
             switch (field) {
+                case "logCmd" -> Debug.getInstance().logCmd = isOn;
                 case "logMerge" -> Debug.getInstance().logMerge = isOn;
                 case "logTrainDict" -> Debug.getInstance().logTrainDict = isOn;
                 case "logRestore" -> Debug.getInstance().logRestore = isOn;

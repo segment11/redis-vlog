@@ -222,6 +222,20 @@ public class RequestHandler {
             return PongReply.INSTANCE;
         }
 
+        var doLogCmd = Debug.getInstance().logCmd;
+        if (doLogCmd) {
+            if (data.length == 1) {
+                log.info("Request cmd: {}", cmd);
+            } else {
+                var sb = new StringBuilder();
+                sb.append("Request cmd: ").append(cmd).append(" ");
+                for (int i = 1; i < data.length; i++) {
+                    sb.append(new String(data[i])).append(" ");
+                }
+                log.info(sb.toString());
+            }
+        }
+
         if (cmd.equals(QUIT_COMMAND)) {
             socket.close();
             return OKReply.INSTANCE;

@@ -290,7 +290,23 @@ class RequestHandlerTest extends Specification {
         then:
         reply == ErrorReply.FORMAT
 
+        when:
+        Debug.instance.logCmd = true
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        def httpData2 = new byte[2][]
+        httpData2[0] = '123'.bytes
+        httpData2[1] = '123'.bytes
+        def httpRequest2 = new Request(httpData2, true, false)
+        reply = requestHandler.handle(httpRequest2, socket)
+        then:
+        reply == ErrorReply.FORMAT
+
         cleanup:
+        Debug.instance.logCmd = false
         localPersist.cleanUp()
         Consts.persistDir.deleteDir()
     }

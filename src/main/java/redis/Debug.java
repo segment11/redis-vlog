@@ -11,6 +11,8 @@ public class Debug {
         return instance;
     }
 
+    public boolean logCmd = false;
+
     public boolean logMerge = false;
 
     public boolean logTrainDict = false;
