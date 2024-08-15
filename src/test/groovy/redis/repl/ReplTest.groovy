@@ -21,8 +21,10 @@ class ReplTest extends Specification {
         then:
         reply.isReplType(ReplType.ping)
         !reply.isReplType(ReplType.pong)
+        !reply.isEmpty()
         reply.buffer().limit() == Repl.HEADER_LENGTH + ping.encodeLength()
         !Repl.emptyReply().isReplType(ReplType.pong)
+        Repl.emptyReply().isEmpty()
 
         when:
         def emptyReply = Repl.emptyReply()

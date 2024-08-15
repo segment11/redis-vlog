@@ -101,7 +101,7 @@ class XGroupTest extends Specification {
         r = x.handleRepl()
         then:
         // empty
-        r.buffer().limit() == 0
+        r.isEmpty()
 
         when:
         // master receive hello from slave, then create repl pair again
@@ -297,17 +297,34 @@ class XGroupTest extends Specification {
         requestBuffer.putLong(0, oneSlot.masterUuid)
         r = x.handleRepl()
         then:
-        // no binlog segment write yet
-        r.isReplType(ReplType.error)
+        // empty content return
+        r.isReplType(ReplType.s_catch_up)
 
         when:
         def vList = Mock.prepareValueList(10)
         for (v in vList) {
             oneSlot.appendBinlog(new XWalV(v))
         }
+        // read segment bytes < one segment length
         r = x.handleRepl()
         then:
         r.isReplType(ReplType.s_catch_up)
+
+        when:
+        boolean exception = false
+        requestBuffer.position(0)
+        requestBuffer.putLong(oneSlot.masterUuid)
+        requestBuffer.putInt(0)
+        // not margin
+        requestBuffer.putLong(1)
+        try {
+            x.handleRepl()
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
 
         cleanup:
         localPersist.cleanUp()
@@ -317,6 +334,7 @@ class XGroupTest extends Specification {
     def 'test as slave'() {
         given:
         ConfForSlot.global.netListenAddresses = 'localhost:6380'
+        ConfForSlot.global.confChunk.REPL_EMPTY_BYTES_FOR_ONCE_WRITE = new byte[FdReadWrite.REPL_ONCE_INNER_COUNT * 4096]
 
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
@@ -334,15 +352,13 @@ class XGroupTest extends Specification {
         x.replPair = null
         r = x.handleRepl()
         then:
-        // empty
-        r.buffer().limit() == 0
+        r.isEmpty()
 
         when:
         oneSlot.createReplPairAsSlave('localhost', 6379)
         r = x.handleRepl()
         then:
-        // empty
-        r.buffer().limit() == 0
+        r.isEmpty()
 
         when:
         // error
@@ -350,8 +366,7 @@ class XGroupTest extends Specification {
         def x = new XGroup(null, data, null)
         def r = x.handleRepl()
         then:
-        // empty
-        r.buffer().limit() == 0
+        r.isEmpty()
 
         // hi
         when:
@@ -377,7 +392,23 @@ class XGroupTest extends Specification {
 
         when:
         // already fetch all exists data, just catch up binlog
+        // from beginning
         metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, 0L)
+        r = x.handleRepl()
+        then:
+        r.isReplType(ReplType.catch_up)
+
+        when:
+        // last updated offset not margined
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, 106L)
+        r = x.handleRepl()
+        then:
+        r.isReplType(ReplType.catch_up)
+
+        when:
+        // last updated offset margined
+        def binlogOneSegmentLengthTmp = ConfForSlot.global.confRepl.binlogOneSegmentLength
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, binlogOneSegmentLengthTmp)
         r = x.handleRepl()
         then:
         r.isReplType(ReplType.catch_up)
@@ -399,8 +430,7 @@ class XGroupTest extends Specification {
         x = new XGroup(null, data, null)
         r = x.handleRepl()
         then:
-        // empty
-        r.buffer().limit() == 0
+        r.isEmpty()
 
         // byeBye
         when:
@@ -408,8 +438,7 @@ class XGroupTest extends Specification {
         x = new XGroup(null, data, null)
         r = x.handleRepl()
         then:
-        // empty
-        r.buffer().limit() == 0
+        r.isEmpty()
 
         when:
         def data4 = new byte[4][]
@@ -529,8 +558,8 @@ class XGroupTest extends Specification {
         requestBuffer.putInt(1 + 1, ConfForSlot.global.confBucket.bucketsPerSlot - ConfForSlot.global.confWal.oneChargeBucketNumber)
         r = x.handleRepl()
         then:
-        // next batch
-        r.isReplType(ReplType.exists_key_buckets)
+        // delay fetch next batch
+        r.isEmpty()
 
         when:
         // last batch in split index 2
@@ -567,8 +596,7 @@ class XGroupTest extends Specification {
         data4[3] = contentBytes
         r = x.handleRepl()
         then:
-        // empty
-        r.buffer().limit() == 0
+        r.isEmpty()
 
         when:
         contentBytes = new byte[8 + 1024]
@@ -577,14 +605,12 @@ class XGroupTest extends Specification {
         data4[3] = contentBytes
         r = x.handleRepl()
         then:
-        // empty
-        r.buffer().limit() == 0
+        r.isEmpty()
         oneSlot.bigStringFiles.getBigStringBytes(1L).length == 1024
 
         // s_exists_big_string
         when:
         data4[2][0] = ReplType.s_exists_big_string.code
-        // empty
         contentBytes = new byte[1]
         data4[3] = contentBytes
         r = x.handleRepl()
@@ -674,6 +700,8 @@ class XGroupTest extends Specification {
 
         // s_catch_up
         when:
+        // clear slave catch up binlog file index and offset
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, 0L)
         data4[2][0] = ReplType.s_catch_up.code
         // mock 10 wal values in binlog
         int n = 0
@@ -700,8 +728,7 @@ class XGroupTest extends Specification {
         data4[3] = contentBytes
         r = x.handleRepl()
         then:
-        // empty
-        r.buffer().limit() == 0
+        r.isEmpty()
 
         when:
         def binlogOneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
@@ -712,8 +739,10 @@ class XGroupTest extends Specification {
         requestBuffer.putInt(0)
         requestBuffer.putLong(binlogOneSegmentLength * 2)
         requestBuffer.putInt(binlogOneSegmentLength)
+        int mockSkipN = 0
         for (v in vList) {
             def encoded = new XWalV(v).encodeWithType()
+            mockSkipN = encoded.length
             requestBuffer.put(encoded)
         }
         data4[3] = contentBytes
@@ -732,6 +761,73 @@ class XGroupTest extends Specification {
         then:
         // next batch
         r.isReplType(ReplType.catch_up)
+
+        when:
+        requestBuffer.position(0)
+        requestBuffer.putInt(0)
+        requestBuffer.putLong(0)
+        requestBuffer.putInt(0)
+        requestBuffer.putLong(binlogOneSegmentLength - 1)
+        requestBuffer.putInt(binlogOneSegmentLength)
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, mockSkipN)
+        r = x.handleRepl()
+        then:
+        // delay to fetch next batch
+        r.isEmpty()
+
+        when:
+        requestBuffer.position(0)
+        requestBuffer.putInt(0)
+        requestBuffer.putLong(0)
+        requestBuffer.putInt(1)
+        requestBuffer.putLong(binlogOneSegmentLength)
+        requestBuffer.putInt(binlogOneSegmentLength)
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, 0)
+        r = x.handleRepl()
+        then:
+        // next batch
+        r.isReplType(ReplType.catch_up)
+
+        when:
+        def binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength
+        requestBuffer.position(0)
+        requestBuffer.putInt(0)
+        requestBuffer.putLong(binlogOneFileMaxLength - binlogOneSegmentLength)
+        requestBuffer.putInt(1)
+        requestBuffer.putLong(binlogOneSegmentLength)
+        requestBuffer.putInt(binlogOneSegmentLength)
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, 0)
+        r = x.handleRepl()
+        then:
+        // begin with new binlog file next batch, delay
+        r.isEmpty()
+
+        when:
+        boolean exception = false
+        requestBuffer.position(0)
+        requestBuffer.putInt(0)
+        requestBuffer.putLong(0)
+        requestBuffer.putInt(1)
+        requestBuffer.putLong(binlogOneSegmentLength)
+        requestBuffer.putInt(1)
+        requestBuffer.put((byte) 0)
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, 0)
+        try {
+            x.handleRepl()
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        // empty from master, mean no new binlog
+        contentBytes = new byte[1]
+        data4[3] = contentBytes
+        r = x.handleRepl()
+        then:
+        r.isEmpty()
 
         cleanup:
         localPersist.cleanUp()

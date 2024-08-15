@@ -42,6 +42,10 @@ public class Repl {
             var b = buf.at(PROTOCOL_KEYWORD_BYTES.length + 8 + 1);
             return ReplType.fromCode(b) == type;
         }
+
+        public boolean isEmpty() {
+            return buf.limit() == 0;
+        }
     }
 
     public static ReplReply reply(byte slot, ReplPair replPair, ReplType type, ReplContent content) {
