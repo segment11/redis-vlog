@@ -207,12 +207,7 @@ class FdReadWriteTest extends Specification {
         exception
 
         when:
-        fdChunk.writeSegmentBatchForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD], 0)
-        then:
-        fdChunk.readOneInner(1024 + FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD - 1, false).length == segmentLength
-
-        when:
-        fdChunk.writeSegmentBatchForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD + 1], 1)
+        fdChunk.writeSegmentsBatchForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD])
         then:
         fdChunk.readOneInner(1024 + FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD - 1, false).length == segmentLength
 
@@ -287,7 +282,7 @@ class FdReadWriteTest extends Specification {
         when:
         exception = false
         try {
-            fdKeyBucket.writeSegmentBatchForRepl(0, new byte[10], 0)
+            fdKeyBucket.writeSegmentsBatchForRepl(0, new byte[10])
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -299,11 +294,6 @@ class FdReadWriteTest extends Specification {
         fdChunk.writeSegmentsBatch(100, new byte[segmentLength * FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE], false)
         then:
         fdChunk.readOneInner(100 + FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE - 1, false).length == segmentLength
-
-        when:
-        fdChunk.writeSegmentBatchForRepl(1024, new byte[segmentLength * FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD], 0)
-        then:
-        fdChunk.readOneInner(1024 + FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD - 1, false).length == segmentLength
 
         when:
         exception = false
@@ -320,7 +310,7 @@ class FdReadWriteTest extends Specification {
         exception = false
         try {
             fdKeyBucket.writeOneInnerBatchToMemory(0, new byte[10], 0)
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
             println e.message
             exception = true
         }

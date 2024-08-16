@@ -7,6 +7,8 @@ import redis.SnowFlake
 import redis.repl.incremental.XOneWalGroupPersist
 import spock.lang.Specification
 
+import static redis.persist.FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD
+
 class ChunkTest extends Specification {
     static Chunk prepareOne(byte slot, boolean withKeyLoader = false) {
         def confChunk = ConfForSlot.global.confChunk
@@ -408,6 +410,23 @@ class ChunkTest extends Specification {
         1 == 1
 
         when:
+        // write again, fd length will not change
+        chunk.writeSegmentsFromMasterExists(replBytes, 0, 1)
+        then:
+        1 == 1
+
+        when:
+        boolean exception = false
+        try {
+            chunk.writeSegmentsFromMasterExists(replBytes, 0, REPL_ONCE_SEGMENT_COUNT_PREAD + 1)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
         ConfForSlot.global.pureMemory = true
         for (fdReadWrite in chunk.fdReadWriteArray) {
             fdReadWrite.initByteBuffers(true)
@@ -423,6 +442,7 @@ class ChunkTest extends Specification {
         1 == 1
 
         cleanup:
+        ConfForSlot.global.pureMemory = false
         localPersist.cleanUp()
         Consts.persistDir.deleteDir()
     }

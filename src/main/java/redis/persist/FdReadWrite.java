@@ -664,7 +664,7 @@ public class FdReadWrite {
         if (isSmallerThanOneInner) {
             // always is chunk fd
             if (!isChunkFd) {
-                throw new IllegalStateException("Write bytes smaller than one segment length to memory must be chunk fd");
+                throw new IllegalArgumentException("Write bytes smaller than one segment length to memory must be chunk fd");
             }
             // position is 0
             allBytesBySegmentIndexForOneChunkFd[beginOneInnerIndex] = bytes;
@@ -672,7 +672,6 @@ public class FdReadWrite {
         }
 
         var oneInnerCount = (bytes.length - position) / oneInnerLength;
-        var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber;
         // for key bucket, memory copy one wal group by one wal group
         if (!isChunkFd) {
             if (oneInnerCount != 1) {
@@ -681,6 +680,7 @@ public class FdReadWrite {
             }
         }
 
+        var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber;
         // memory copy one segment/bucket by one segment/bucket
         var offset = position;
         for (int i = 0; i < oneInnerCount; i++) {
@@ -736,6 +736,13 @@ public class FdReadWrite {
         }, isRefreshLRUCache);
     }
 
+    public int writeSegmentsBatchForRepl(int beginSegmentIndex, byte[] bytes) {
+        // pure memory will not reach here, refer Chunk.writeSegmentsFromMasterExists
+        return writeInnerByBuffer(beginSegmentIndex, forReplBuffer, (buffer) -> {
+            buffer.put(bytes);
+        }, false);
+    }
+
     public int writeSharedBytesForKeyBucketsInOneWalGroup(int bucketIndex, byte[] sharedBytes) {
         var keyBucketCount = sharedBytes.length / oneInnerLength;
         if (keyBucketCount != ConfForSlot.global.confWal.oneChargeBucketNumber) {
@@ -749,25 +756,6 @@ public class FdReadWrite {
         }
 
         return writeInnerByBuffer(bucketIndex, forOneWalGroupBatchBuffer, (buffer) -> buffer.put(sharedBytes), false);
-    }
-
-    public int writeSegmentBatchForRepl(int beginSegmentIndex, byte[] bytes, int position) {
-        var segmentCount = bytes.length / oneInnerLength;
-        if (segmentCount != REPL_ONCE_SEGMENT_COUNT_PREAD) {
-            throw new IllegalArgumentException("Repl write segment batch bytes length not match repl once segment count");
-        }
-
-        if (ConfForSlot.global.pureMemory) {
-            return writeOneInnerBatchToMemory(beginSegmentIndex, bytes, position);
-        }
-
-        return writeInnerByBuffer(beginSegmentIndex, forReplBuffer, (buffer) -> {
-            if (position == 0) {
-                buffer.put(bytes);
-            } else {
-                buffer.put(bytes, position, bytes.length - position);
-            }
-        }, false);
     }
 
     public void truncate() {

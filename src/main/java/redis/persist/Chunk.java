@@ -167,7 +167,7 @@ public class Chunk {
     // -1 means not init
     int segmentIndex = -1;
 
-    int currentSegmentIndex() {
+    public int currentSegmentIndex() {
         return segmentIndex;
     }
 
@@ -660,14 +660,12 @@ public class Chunk {
         return segmentIndexToMerge;
     }
 
-    public boolean writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount) {
+    public void writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount) {
         if (ConfForSlot.global.pureMemory) {
             var fdIndex = targetFdIndex(segmentIndex);
             var segmentIndexTargetFd = targetSegmentIndexTargetFd(segmentIndex);
 
             var fdReadWrite = fdReadWriteArray[fdIndex];
-
-            var isNewAppend = fdReadWrite.isTargetSegmentIndexNullInMemory(segmentIndexTargetFd);
             if (segmentCount == 1) {
                 fdReadWrite.writeOneInner(segmentIndexTargetFd, bytes, false);
             } else {
@@ -678,11 +676,9 @@ public class Chunk {
                     fdReadWrite.writeOneInner(segmentIndexTargetFd + i, oneSegmentBytes, false);
                 }
             }
-
-            return isNewAppend;
         } else {
             this.segmentIndex = segmentIndex;
-            return writeSegments(bytes, segmentCount);
+            writeSegmentsForRepl(bytes, segmentCount);
         }
     }
 
@@ -692,18 +688,18 @@ public class Chunk {
     }
 
     private boolean writeSegments(byte[] bytes, int segmentCount) {
+//        if (segmentCount != 1 && segmentCount != BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
+//            throw new IllegalArgumentException("Write segment count not support: " + segmentCount);
+//        }
+
         var fdIndex = targetFdIndex();
         var segmentIndexTargetFd = targetSegmentIndexTargetFd();
 
         var fdReadWrite = fdReadWriteArray[fdIndex];
         if (segmentCount == 1) {
             fdReadWrite.writeOneInner(segmentIndexTargetFd, bytes, false);
-        } else if (segmentCount == BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
-            fdReadWrite.writeSegmentsBatch(segmentIndexTargetFd, bytes, false);
-        } else if (segmentCount == REPL_ONCE_SEGMENT_COUNT_PREAD) {
-            fdReadWrite.writeSegmentBatchForRepl(segmentIndexTargetFd, bytes, 0);
         } else {
-            throw new IllegalArgumentException("Write segment count not support: " + segmentCount);
+            fdReadWrite.writeSegmentsBatch(segmentIndexTargetFd, bytes, false);
         }
 
         boolean isNewAppend = false;
@@ -714,5 +710,22 @@ public class Chunk {
         }
 
         return isNewAppend;
+    }
+
+    private void writeSegmentsForRepl(byte[] bytes, int segmentCount) {
+        if (segmentCount > REPL_ONCE_SEGMENT_COUNT_PREAD) {
+            throw new IllegalArgumentException("Write segment count not support: " + segmentCount);
+        }
+
+        var fdIndex = targetFdIndex();
+        var segmentIndexTargetFd = targetSegmentIndexTargetFd();
+
+        var fdReadWrite = fdReadWriteArray[fdIndex];
+        fdReadWrite.writeSegmentsBatchForRepl(segmentIndexTargetFd, bytes);
+
+        int afterThisBatchOffset = (segmentIndexTargetFd + segmentCount) * chunkSegmentLength;
+        if (fdLengths[fdIndex] < afterThisBatchOffset) {
+            fdLengths[fdIndex] = afterThisBatchOffset;
+        }
     }
 }
