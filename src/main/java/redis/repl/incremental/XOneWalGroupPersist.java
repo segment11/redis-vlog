@@ -60,13 +60,13 @@ public class XOneWalGroupPersist implements BinlogContent {
     record SegmentFlagWithSeq(Chunk.Flag flag, long seq) {
     }
 
-    private TreeMap<Integer, SegmentFlagWithSeq> updatedChunkSegmentFlagWithSeqMap = new TreeMap<>();
+    private final TreeMap<Integer, SegmentFlagWithSeq> updatedChunkSegmentFlagWithSeqMap = new TreeMap<>();
 
     public void putUpdatedChunkSegmentFlagWithSeq(int segmentIndex, Chunk.Flag flag, long seq) {
         updatedChunkSegmentFlagWithSeqMap.put(segmentIndex, new SegmentFlagWithSeq(flag, seq));
     }
 
-    private TreeMap<Integer, byte[]> updatedChunkSegmentBytesMap = new TreeMap<>();
+    private final TreeMap<Integer, byte[]> updatedChunkSegmentBytesMap = new TreeMap<>();
 
     public void putUpdatedChunkSegmentBytes(int segmentIndex, byte[] bytes) {
         updatedChunkSegmentBytesMap.put(segmentIndex, bytes);
