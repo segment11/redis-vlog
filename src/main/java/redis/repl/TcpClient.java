@@ -73,7 +73,8 @@ public class TcpClient {
     }
 
     public boolean bye() {
-        System.out.println("Send bye to server: " + replPair.getHostAndPort() + ", slot: " + slot);
+        log.warn("Repl slave send bye to server: {}, slot: {}", replPair.getHostAndPort(), slot);
+        System.out.println("Repl slave send bye to server: " + replPair.getHostAndPort() + ", slot: " + slot);
         return write(ReplType.bye, new Ping(ConfForSlot.global.netListenAddresses));
     }
 
@@ -120,9 +121,11 @@ public class TcpClient {
     public void close() {
         if (sock != null && !sock.isClosed()) {
             sock.close();
-            System.out.println("Closed socket, to server: " + replPair.getHostAndPort() + ", slot: " + slot);
+            log.warn("Repl closed socket, to server: {}, slot: {}", replPair.getHostAndPort(), slot);
+            System.out.println("Repl closed socket, to server: " + replPair.getHostAndPort() + ", slot: " + slot);
         } else {
-            System.out.println("Socket is already closed, to server: " + replPair.getHostAndPort() + ", slot: " + slot);
+            log.warn("Repl socket is already closed, to server: {}, slot: {}", replPair.getHostAndPort(), slot);
+            System.out.println("Repl socket is already closed, to server: " + replPair.getHostAndPort() + ", slot: " + slot);
         }
     }
 }
