@@ -1137,18 +1137,8 @@ public class OneSlot {
 
         for (int i = 0; i < segmentCount; i++) {
             var segmentIndex = firstSegmentIndex + i;
-//            var segmentFlag = getSegmentMergeFlag(segmentIndex);
-//            // need not check again, because only get target wal index segment
-//            if (segmentFlag.walGroupIndex() != walGroupIndex) {
-//                continue;
-//            }
-//
-//            var flag = segmentFlag.flag();
-//            if (flag != Flag.new_write && flag != Flag.reuse_new) {
-//                continue;
-//            }
-
             int relativeOffsetInBatchBytes = i * chunkSegmentLength;
+
             // refer to Chunk.ONCE_PREPARE_SEGMENT_COUNT
             // last segments not write at all, need skip
             if (segmentBytesBatchRead == null || relativeOffsetInBatchBytes >= segmentBytesBatchRead.length) {
