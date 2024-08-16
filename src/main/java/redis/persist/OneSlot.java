@@ -1378,7 +1378,7 @@ public class OneSlot {
         return metaChunkSegmentFlagSeq.getSegmentSeqListBatchForRepl(beginSegmentIndex, segmentCount);
     }
 
-    void updateSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq) {
+    public void updateSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq) {
         var segmentFlag = getSegmentMergeFlag(segmentIndex);
         setSegmentMergeFlag(segmentIndex, flag, segmentSeq, segmentFlag.walGroupIndex());
     }

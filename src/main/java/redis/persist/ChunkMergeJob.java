@@ -4,6 +4,7 @@ import com.github.luben.zstd.Zstd;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
+import redis.repl.incremental.XChunkSegmentFlagUpdate;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -126,7 +127,8 @@ public class ChunkMergeJob {
         chunkMergeWorker.logMergeCount++;
         var doLog = Debug.getInstance().logMerge && chunkMergeWorker.logMergeCount % 1000 == 0;
 
-        var firstSegmentIndex = needMergeSegmentIndexList.getFirst();
+        // unbox to use ==, not equals
+        int firstSegmentIndex = needMergeSegmentIndexList.getFirst();
         var lastSegmentIndex = needMergeSegmentIndexList.getLast();
         if (needMergeSegmentIndexList.size() != lastSegmentIndex - firstSegmentIndex + 1) {
             throw new IllegalStateException("Merge segments index need be continuous, but: " + needMergeSegmentIndexList);
@@ -223,11 +225,14 @@ public class ChunkMergeJob {
             hasValidCvSegmentIndexSet.add(one.segmentIndex);
         }
 
+        var xChunkSegmentFlagUpdate = new XChunkSegmentFlagUpdate();
         for (var segmentIndex : needMergeSegmentIndexList) {
             var validCvCountRecord = validCvCountRecordList.get(segmentIndex - firstSegmentIndex);
 
             if (hasValidCvSegmentIndexSet.contains(segmentIndex)) {
-                oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.Flag.merged, snowFlake.nextId());
+                var segmentSeq = snowFlake.nextId();
+                oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.Flag.merged, segmentSeq);
+                xChunkSegmentFlagUpdate.putUpdatedChunkSegmentFlagWithSeq(segmentIndex, Chunk.Flag.merged, segmentSeq);
 
                 if (doLog) {
                     log.info("Set segment flag to merged, s={}, i={}, valid cv count={}, invalid cv count={}",
@@ -237,12 +242,17 @@ public class ChunkMergeJob {
                 chunkMergeWorker.addMergedSegment(segmentIndex, validCvCountRecord.validCvCount);
             } else {
                 oneSlot.updateSegmentMergeFlag(segmentIndex, Chunk.Flag.merged_and_persisted, 0L);
+                xChunkSegmentFlagUpdate.putUpdatedChunkSegmentFlagWithSeq(segmentIndex, Chunk.Flag.merged_and_persisted, 0L);
 
                 if (doLog && segmentIndex == firstSegmentIndex) {
                     log.info("Set segment flag to persisted, s={}, i={}, valid cv count={}, invalid cv count={}",
                             slot, segmentIndex, validCvCountRecord.validCvCount, validCvCountRecord.invalidCvCount);
                 }
             }
+        }
+
+        if (!xChunkSegmentFlagUpdate.isEmpty()) {
+            oneSlot.appendBinlog(xChunkSegmentFlagUpdate);
         }
 
         chunkMergeWorker.persistFIFOMergedCvListIfBatchSizeOk();
