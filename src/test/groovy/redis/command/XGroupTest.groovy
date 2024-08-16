@@ -112,11 +112,11 @@ class XGroupTest extends Specification {
         // response exists chunk segments
         data4[2][0] = ReplType.exists_chunk_segments.code
 
-        def metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(0, FdReadWrite.REPL_ONCE_INNER_COUNT)
+        def metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(0, FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD)
         def contentBytes = new byte[4 + 4 + metaBytes.length]
         def requestBuffer = ByteBuffer.wrap(contentBytes)
         requestBuffer.putInt(0)
-        requestBuffer.putInt(FdReadWrite.REPL_ONCE_INNER_COUNT)
+        requestBuffer.putInt(FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD)
         requestBuffer.put(metaBytes)
         data4[3] = contentBytes
         x = new XGroup(null, data4, null)
@@ -133,7 +133,7 @@ class XGroupTest extends Specification {
         then:
         r.isReplType(ReplType.s_exists_chunk_segments)
         // only meta bytes, chunk segment bytes not write yet
-        r.buffer().limit() == Repl.HEADER_LENGTH + 8 + 8 + FdReadWrite.REPL_ONCE_INNER_COUNT * MetaChunkSegmentFlagSeq.ONE_LENGTH
+        r.buffer().limit() == Repl.HEADER_LENGTH + 8 + 8 + FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * MetaChunkSegmentFlagSeq.ONE_LENGTH
 
         when:
         // chunk segment bytes exists
@@ -142,7 +142,7 @@ class XGroupTest extends Specification {
         then:
         r.isReplType(ReplType.s_exists_chunk_segments)
         // meta bytes with just one chunk segment bytes
-        r.buffer().limit() == Repl.HEADER_LENGTH + 8 + 8 + FdReadWrite.REPL_ONCE_INNER_COUNT * MetaChunkSegmentFlagSeq.ONE_LENGTH + 4096
+        r.buffer().limit() == Repl.HEADER_LENGTH + 8 + 8 + FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * MetaChunkSegmentFlagSeq.ONE_LENGTH + 4096
 
         // response exists key buckets
         when:
@@ -334,7 +334,7 @@ class XGroupTest extends Specification {
     def 'test as slave'() {
         given:
         ConfForSlot.global.netListenAddresses = 'localhost:6380'
-        ConfForSlot.global.confChunk.REPL_EMPTY_BYTES_FOR_ONCE_WRITE = new byte[FdReadWrite.REPL_ONCE_INNER_COUNT * 4096]
+        ConfForSlot.global.confChunk.REPL_EMPTY_BYTES_FOR_ONCE_WRITE = new byte[FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * 4096]
 
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
@@ -456,7 +456,7 @@ class XGroupTest extends Specification {
         def contentBytes = new byte[8]
         def requestBuffer = ByteBuffer.wrap(contentBytes)
         requestBuffer.putInt(0)
-        requestBuffer.putInt(FdReadWrite.REPL_ONCE_INNER_COUNT)
+        requestBuffer.putInt(FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD)
         data4[3] = contentBytes
         x = new XGroup(null, data4, null)
         r = x.handleRepl()
@@ -467,13 +467,13 @@ class XGroupTest extends Specification {
         when:
         // last batch
         requestBuffer.position(0)
-        requestBuffer.putInt(ConfForSlot.global.confChunk.maxSegmentNumber() - FdReadWrite.REPL_ONCE_INNER_COUNT)
+        requestBuffer.putInt(ConfForSlot.global.confChunk.maxSegmentNumber() - FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD)
         r = x.handleRepl()
         then:
         r.isReplType(ReplType.exists_all_done)
 
         when:
-        def metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(0, FdReadWrite.REPL_ONCE_INNER_COUNT)
+        def metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(0, FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD)
         contentBytes = new byte[8 + 4 + metaBytes.length + 4]
         requestBuffer = ByteBuffer.wrap(contentBytes)
         requestBuffer.putInt(0)

@@ -189,7 +189,7 @@ public enum ConfForSlot {
 
         public void resetByOneValueLength(int estimateOneValueLength) {
             // when call this method, chunk segment length will not be changed
-            REPL_EMPTY_BYTES_FOR_ONCE_WRITE = new byte[FdReadWrite.REPL_ONCE_INNER_COUNT * segmentLength];
+            REPL_EMPTY_BYTES_FOR_ONCE_WRITE = new byte[FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * segmentLength];
 
             boolean isValueSetUseCompression1 = ConfForSlot.global.isValueSetUseCompression;
             // if not use compression, chunk files number need to be doubled

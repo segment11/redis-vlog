@@ -346,9 +346,9 @@ class KeyLoaderTest extends Specification {
         def splitNumberArray = new byte[oneChargeBucketNumber]
         splitNumberArray[0] = (byte) 3
         keyLoader.metaKeyBucketSplitNumber.setBatch(0, splitNumberArray)
-        keyLoader.fdReadWriteArray[0].resetAllBytesByOneWalGroupIndexForKeyBucketForTest(walGroupNumber)
-        keyLoader.fdReadWriteArray[1].resetAllBytesByOneWalGroupIndexForKeyBucketForTest(walGroupNumber)
-        keyLoader.fdReadWriteArray[2].resetAllBytesByOneWalGroupIndexForKeyBucketForTest(walGroupNumber)
+        keyLoader.fdReadWriteArray[0].resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(walGroupNumber)
+        keyLoader.fdReadWriteArray[1].resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(walGroupNumber)
+        keyLoader.fdReadWriteArray[2].resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(walGroupNumber)
         keyLoader.writeSharedBytesList(sharedBytesListBySplitIndex, 0)
         def keyBucketListFromMemory = keyLoader.readKeyBuckets(0)
         then:

@@ -284,7 +284,7 @@ public class XGroup extends BaseCommand {
         var beginSegmentIndex = buffer.getInt();
         var segmentCount = buffer.getInt();
 
-        if (beginSegmentIndex % (FdReadWrite.REPL_ONCE_INNER_COUNT * 10) == 0) {
+        if (beginSegmentIndex % (FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * 10) == 0) {
             log.warn("Repl master fetch exists chunk segments, slot: {}, begin segment index: {}, segment count: {}",
                     slot, beginSegmentIndex, segmentCount);
         }
@@ -325,7 +325,7 @@ public class XGroup extends BaseCommand {
         var segmentCount = buffer.getInt();
         // segmentCount == FdReadWrite.REPL_ONCE_INNER_COUNT
 
-        if (beginSegmentIndex % (FdReadWrite.REPL_ONCE_INNER_COUNT * 10) == 0) {
+        if (beginSegmentIndex % (FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * 10) == 0) {
             log.warn("Repl slave ready to fetch exists chunk segments, slot: {}, begin segment index: {}, segment count: {}",
                     slot, beginSegmentIndex, segmentCount);
         }
@@ -361,7 +361,7 @@ public class XGroup extends BaseCommand {
             var nextBatchMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(nextBatchBeginSegmentIndex, segmentCount);
             var content = new ToMasterExistsChunkSegments(nextBatchBeginSegmentIndex, segmentCount, nextBatchMetaBytes);
 
-            if (nextBatchBeginSegmentIndex % (FdReadWrite.REPL_ONCE_INNER_COUNT * 10) == 0) {
+            if (nextBatchBeginSegmentIndex % (FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * 10) == 0) {
                 oneSlot.delayRun(1000, () -> {
                     replPair.write(ReplType.exists_chunk_segments, content);
                 });
@@ -450,7 +450,7 @@ public class XGroup extends BaseCommand {
             log.warn("Repl slave fetch all key buckets done, slot: {}", slot);
 
             // next step, fetch exists chunk segments
-            var segmentCount = FdReadWrite.REPL_ONCE_INNER_COUNT;
+            var segmentCount = FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD;
             var metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(0, segmentCount);
             var content = new ToMasterExistsChunkSegments(0, segmentCount, metaBytes);
             return Repl.reply(slot, replPair, ReplType.exists_chunk_segments, content);
