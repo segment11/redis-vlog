@@ -121,12 +121,69 @@ class WalTest extends Specification {
         then:
         n == 0
 
-//        when:
-//        wal.writePositionArray[0] = 0
-//        wal.writePositionArrayShortValue[0] = 0
-//        then:
-//        wal.writePositionArray[0] == v1.encodeLength() * 2
-//        wal.writePositionArrayShortValue[0] == v1.encodeLength() * 2
+        // repl
+        // repl export exists batch to slave
+        when:
+        ConfForSlot.global.pureMemory = false
+        def toSlaveExistsBytes = wal.toSlaveExistsOneWalGroupBytes()
+        then:
+        toSlaveExistsBytes.length == 16 + Wal.ONE_GROUP_BUFFER_SIZE * 2
+
+        // repl import exists batch from master
+        when:
+        def wal11 = new Wal(slot, 0, raf, rafShortValue, snowFlake)
+        wal11.fromMasterExistsOneWalGroupBytes(toSlaveExistsBytes)
+        then:
+        wal.delayToKeyBucketValues.size() == wal11.delayToKeyBucketValues.size()
+        wal.delayToKeyBucketShortValues.size() == wal11.delayToKeyBucketShortValues.size()
+
+        when:
+        def oldOneGroupBufferSize = Wal.ONE_GROUP_BUFFER_SIZE
+        Wal.ONE_GROUP_BUFFER_SIZE = oldOneGroupBufferSize * 2
+        exception = false
+        // buffer size not match
+        try {
+            wal11.fromMasterExistsOneWalGroupBytes(toSlaveExistsBytes)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        Wal.ONE_GROUP_BUFFER_SIZE = oldOneGroupBufferSize
+        exception = false
+        try {
+            wal2.fromMasterExistsOneWalGroupBytes(toSlaveExistsBytes)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        // put from x (slave replay / apply)
+        when:
+        wal.putFromX(v1, true, wal.writePositionShortValue)
+        wal.putFromX(v1, false, wal.writePosition)
+        then:
+        1 == 1
+
+        when:
+        ConfForSlot.global.pureMemory = true
+        wal.putFromX(v1, true, wal.writePositionShortValue)
+        wal.putFromX(v1, false, wal.writePosition)
+        then:
+        1 == 1
+
+        when:
+        ConfForSlot.global.pureMemory = false
+        wal.clearValues()
+        wal.clearShortValues()
+        then:
+        wal.delayToKeyBucketValues.size() == 0
+        wal.delayToKeyBucketShortValues.size() == 0
 
         cleanup:
         wal.clear()
@@ -247,7 +304,7 @@ class WalTest extends Specification {
         wal.keyCount == 0
 
         cleanup:
-        Wal.ONE_GROUP_BUFFER_SIZE = 64 * 1024
         ConfForSlot.global.pureMemory = false
+        Wal.ONE_GROUP_BUFFER_SIZE = 64 * 1024
     }
 }

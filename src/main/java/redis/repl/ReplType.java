@@ -10,6 +10,7 @@ public enum ReplType {
     byeBye(true, false, (byte) 5),
     ok(true, false, (byte) 100),
 
+    exists_wal(false, true, (byte) 19),
     exists_chunk_segments(false, true, (byte) 20),
     exists_key_buckets(false, true, (byte) 21),
     meta_key_bucket_split_number(false, true, (byte) 22),
@@ -20,6 +21,7 @@ public enum ReplType {
     exists_all_done(false, true, (byte) 26),
     catch_up(true, true, (byte) 27),
 
+    s_exists_wal(false, false, (byte) 29),
     s_exists_chunk_segments(false, false, (byte) 30),
     s_exists_key_buckets(false, false, (byte) 31),
     s_meta_key_bucket_split_number(false, false, (byte) 32),

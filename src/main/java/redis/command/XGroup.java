@@ -10,6 +10,7 @@ import redis.DictMap;
 import redis.persist.FdReadWrite;
 import redis.persist.KeyLoader;
 import redis.persist.OneSlot;
+import redis.persist.Wal;
 import redis.repl.Binlog;
 import redis.repl.Repl;
 import redis.repl.ReplPair;
@@ -127,6 +128,7 @@ public class XGroup extends BaseCommand {
                 oneSlot.addDelayNeedCloseReplPair(replPair);
                 yield Repl.emptyReply();
             }
+            case exists_wal -> exists_wal(slot, contentBytes);
             case exists_chunk_segments -> exists_chunk_segments(slot, contentBytes);
             case exists_key_buckets -> exists_key_buckets(slot, contentBytes);
             case meta_key_bucket_split_number -> meta_key_bucket_split_number(slot, contentBytes);
@@ -136,6 +138,7 @@ public class XGroup extends BaseCommand {
             case exists_dict -> exists_dict(slot, contentBytes);
             case exists_all_done -> exists_all_done(slot, contentBytes);
             case catch_up -> catch_up(slot, contentBytes);
+            case s_exists_wal -> s_exists_wal(slot, contentBytes);
             case s_exists_chunk_segments -> s_exists_chunk_segments(slot, contentBytes);
             case s_exists_key_buckets -> s_exists_key_buckets(slot, contentBytes);
             case s_meta_key_bucket_split_number -> s_meta_key_bucket_split_number(slot, contentBytes);
@@ -282,6 +285,71 @@ public class XGroup extends BaseCommand {
         }
     }
 
+    Repl.ReplReply exists_wal(byte slot, byte[] contentBytes) {
+        // server received from client
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var groupIndex = buffer.getInt();
+
+        var walGroupNumber = Wal.calcWalGroupNumber();
+        if (groupIndex < 0 || groupIndex >= walGroupNumber) {
+            log.error("Repl master update wal exists bytes error: group index out of range, slot: {}, group index: {}",
+                    slot, groupIndex);
+            return Repl.error(slot, replPair, "Repl master update wal exists bytes error: group index out of range");
+        }
+
+        if (groupIndex % 100 == 0) {
+            log.warn("Repl master fetch exists wal, slot: {}, group index: {}", slot, groupIndex);
+        }
+
+        var oneSlot = localPersist.oneSlot(slot);
+        var targetWal = oneSlot.getWalByGroupIndex(groupIndex);
+        try {
+            var toSlaveBytes = targetWal.toSlaveExistsOneWalGroupBytes();
+            return Repl.reply(slot, replPair, ReplType.s_exists_wal, new RawBytesContent(toSlaveBytes));
+        } catch (IOException e) {
+            log.error("Repl master get wal exists bytes error, slot: " + slot + ", group index: " + groupIndex, e);
+            return Repl.error(slot, replPair, "Repl master get wal exists bytes error: " + e.getMessage());
+        }
+    }
+
+    Repl.ReplReply s_exists_wal(byte slot, byte[] contentBytes) {
+        // client received from server
+        var buffer = ByteBuffer.wrap(contentBytes);
+        var groupIndex = buffer.getInt();
+
+        var oneSlot = localPersist.oneSlot(slot);
+        var targetWal = oneSlot.getWalByGroupIndex(groupIndex);
+        try {
+            targetWal.fromMasterExistsOneWalGroupBytes(contentBytes);
+        } catch (IOException e) {
+            log.error("Repl slave update wal exists bytes error, slot: " + slot + ", group index: " + groupIndex, e);
+            return Repl.error(slot, replPair, "Repl slave update wal exists bytes error: " + e.getMessage());
+        }
+
+        var walGroupNumber = Wal.calcWalGroupNumber();
+        if (groupIndex == walGroupNumber - 1) {
+            return Repl.reply(slot, replPair, ReplType.exists_all_done, EmptyContent.INSTANCE);
+        } else {
+            var nextGroupIndex = groupIndex + 1;
+            if (nextGroupIndex % 100 == 0) {
+                // delay
+                oneSlot.delayRun(1000, () -> {
+                    replPair.write(ReplType.exists_wal, requestExistsWal(nextGroupIndex));
+                });
+                return Repl.emptyReply();
+            } else {
+                return Repl.reply(slot, replPair, ReplType.exists_wal, requestExistsWal(nextGroupIndex));
+            }
+        }
+    }
+
+    private RawBytesContent requestExistsWal(int groupIndex) {
+        var requestBytes = new byte[4];
+        var requestBuffer = ByteBuffer.wrap(requestBytes);
+        requestBuffer.putInt(groupIndex);
+        return new RawBytesContent(requestBytes);
+    }
+
     Repl.ReplReply exists_chunk_segments(byte slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -359,7 +427,8 @@ public class XGroup extends BaseCommand {
         var maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber();
         boolean isLastBatch = maxSegmentNumber == beginSegmentIndex + segmentCount;
         if (isLastBatch) {
-            return Repl.reply(slot, replPair, ReplType.exists_all_done, EmptyContent.INSTANCE);
+            // next step, fetch exists wal
+            return Repl.reply(slot, replPair, exists_wal, requestExistsWal(0));
         } else {
             var nextBatchBeginSegmentIndex = beginSegmentIndex + segmentCount;
             var nextBatchMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(nextBatchBeginSegmentIndex, segmentCount);

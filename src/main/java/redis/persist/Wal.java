@@ -158,6 +158,7 @@ public class Wal {
     // chunk batch write 4 segments, each segment has 3 or 4 sub blocks, each blocks may contain 10-40 keys, 64K is enough for 1 batch about 100-200 keys
     // the smaller, latency will be better, MAX_WAL_GROUP_NUMBER will be larger, wal memory will be larger
     public static int ONE_GROUP_BUFFER_SIZE = PAGE_SIZE * 16;
+    // readonly
     public static byte[] EMPTY_BYTES_FOR_ONE_GROUP = new byte[ONE_GROUP_BUFFER_SIZE];
     // for init prepend wal file
     static final byte[] INIT_M4 = new byte[1024 * 1024 * 4];
@@ -176,8 +177,8 @@ public class Wal {
     }
 
     // current wal group write position in target group of wal file
-    final int[] writePositionArray = new int[MAX_WAL_GROUP_NUMBER];
-    final int[] writePositionArrayShortValue = new int[MAX_WAL_GROUP_NUMBER];
+    int writePosition;
+    int writePositionShortValue;
 
     private final byte slot;
     final int groupIndex;
@@ -216,9 +217,13 @@ public class Wal {
             return 0;
         }
 
+        return readBytesToList(toMap, isShortValue, bufferBytes, 0, ONE_GROUP_BUFFER_SIZE);
+    }
+
+    private int readBytesToList(HashMap<String, V> toMap, boolean isShortValue, byte[] bufferBytes, int offset, int length) throws IOException {
         int n = 0;
         int position = 0;
-        var is = new DataInputStream(new ByteArrayInputStream(bufferBytes));
+        var is = new DataInputStream(new ByteArrayInputStream(bufferBytes, offset, length));
         while (true) {
             var v = V.decode(is);
             if (v == null) {
@@ -230,14 +235,16 @@ public class Wal {
             n++;
         }
 
-        var positionArray = isShortValue ? writePositionArrayShortValue : writePositionArray;
-        positionArray[groupIndex] = position;
+        if (isShortValue) {
+            writePositionShortValue = position;
+        } else {
+            writePosition = position;
+        }
         return n;
     }
 
     private void resetWal(boolean isShortValue) {
         var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
-        var positionArray = isShortValue ? writePositionArrayShortValue : writePositionArray;
 
         if (!ConfForSlot.global.pureMemory) {
             var raf = isShortValue ? walSharedFileShortValue : walSharedFile;
@@ -250,7 +257,11 @@ public class Wal {
         }
 
         // reset write position
-        positionArray[groupIndex] = 0;
+        if (isShortValue) {
+            writePositionShortValue = 0;
+        } else {
+            writePosition = 0;
+        }
     }
 
     // not thread safe
@@ -328,18 +339,24 @@ public class Wal {
         }
     }
 
+    // stats
     long needPersistCountTotal = 0;
     long needPersistKvCountTotal = 0;
     long needPersistOffsetTotal = 0;
 
+    // slave catch up master binlog, replay wal, need update write position, be careful
     public void putFromX(V v, boolean isValueShort, int offset) {
         if (!ConfForSlot.global.pureMemory) {
             var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
-            var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
-            var encodeLength = v.encodeLength();
-
             putVToFile(v, isValueShort, offset, targetGroupBeginOffset);
-            positionArray[groupIndex] += encodeLength;
+
+            // update write position
+            var encodeLength = v.encodeLength();
+            if (isValueShort) {
+                writePositionShortValue = offset + encodeLength;
+            } else {
+                writePosition = offset + encodeLength;
+            }
         }
 
         if (isValueShort) {
@@ -365,8 +382,7 @@ public class Wal {
     // return need persist
     PutResult put(boolean isValueShort, String key, V v) {
         var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
-        var positionArray = isValueShort ? writePositionArrayShortValue : writePositionArray;
-        int offset = positionArray[groupIndex];
+        var offset = isValueShort ? writePositionShortValue : writePosition;
 
         var encodeLength = v.encodeLength();
         if (offset + encodeLength > ONE_GROUP_BUFFER_SIZE) {
@@ -383,7 +399,11 @@ public class Wal {
         if (!ConfForSlot.global.pureMemory && !bulkLoad) {
             putVToFile(v, isValueShort, offset, targetGroupBeginOffset);
         }
-        positionArray[groupIndex] += encodeLength;
+        if (isValueShort) {
+            writePositionShortValue += encodeLength;
+        } else {
+            writePosition += encodeLength;
+        }
 
         if (isValueShort) {
             delayToKeyBucketShortValues.put(key, v);
@@ -393,7 +413,7 @@ public class Wal {
             if (needPersist) {
                 needPersistCountTotal++;
                 needPersistKvCountTotal += delayToKeyBucketShortValues.size();
-                needPersistOffsetTotal += positionArray[groupIndex];
+                needPersistOffsetTotal += writePositionShortValue;
             }
             return new PutResult(needPersist, true, null, needPersist ? 0 : offset);
         }
@@ -405,8 +425,67 @@ public class Wal {
         if (needPersist) {
             needPersistCountTotal++;
             needPersistKvCountTotal += delayToKeyBucketValues.size();
-            needPersistOffsetTotal += positionArray[groupIndex];
+            needPersistOffsetTotal += writePosition;
         }
         return new PutResult(needPersist, false, null, needPersist ? 0 : offset);
+    }
+
+    public byte[] toSlaveExistsOneWalGroupBytes() throws IOException {
+        // encoded length
+        // 4 bytes for group index
+        // 4 bytes for one group buffer size
+        // 4 bytes for write position, both value and short
+        // value encoded + short value encoded
+        int n = 4 + 4 + 4 * 2 + ONE_GROUP_BUFFER_SIZE * 2;
+
+        var bytes = new byte[n];
+        var buffer = ByteBuffer.wrap(bytes);
+        buffer.putInt(groupIndex);
+        buffer.putInt(ONE_GROUP_BUFFER_SIZE);
+        buffer.putInt(writePosition);
+        buffer.putInt(writePositionShortValue);
+
+        var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
+
+        walSharedFile.seek(targetGroupBeginOffset);
+        walSharedFile.read(bytes, 16, ONE_GROUP_BUFFER_SIZE);
+
+        walSharedFileShortValue.seek(targetGroupBeginOffset);
+        walSharedFileShortValue.read(bytes, 16 + ONE_GROUP_BUFFER_SIZE, ONE_GROUP_BUFFER_SIZE);
+
+        return bytes;
+    }
+
+    public void fromMasterExistsOneWalGroupBytes(byte[] bytes) throws IOException {
+        var buffer = ByteBuffer.wrap(bytes);
+        var groupIndex1 = buffer.getInt();
+        var oneGroupBufferSize = buffer.getInt();
+
+        if (groupIndex1 != groupIndex) {
+            throw new IllegalStateException("Repl slave fetch wal group error, slot: " + slot +
+                    ", group index: " + groupIndex1 + ", expect group index: " + groupIndex);
+        }
+        if (oneGroupBufferSize != ONE_GROUP_BUFFER_SIZE) {
+            throw new IllegalStateException("Repl slave fetch wal group error, slot: " + slot +
+                    ", group index: " + groupIndex1 + ", one group buffer size: " + oneGroupBufferSize + ", expect size: " + ONE_GROUP_BUFFER_SIZE);
+        }
+
+        writePosition = buffer.getInt();
+        writePositionShortValue = buffer.getInt();
+
+        var targetGroupBeginOffset = oneGroupBufferSize * groupIndex1;
+
+        walSharedFile.seek(targetGroupBeginOffset);
+        walSharedFile.write(bytes, 16, oneGroupBufferSize);
+
+        walSharedFileShortValue.seek(targetGroupBeginOffset);
+        walSharedFileShortValue.write(bytes, 16 + oneGroupBufferSize, oneGroupBufferSize);
+
+        delayToKeyBucketValues.clear();
+        delayToKeyBucketShortValues.clear();
+        var n1 = readBytesToList(delayToKeyBucketValues, false, bytes, 16, oneGroupBufferSize);
+        var n2 = readBytesToList(delayToKeyBucketShortValues, true, bytes, 16 + oneGroupBufferSize, oneGroupBufferSize);
+        log.warn("Repl slave fetch wal group success, slot: {}, group index: {}, value size: {}, short value size: {}",
+                slot, groupIndex1, n1, n2);
     }
 }

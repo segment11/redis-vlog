@@ -144,6 +144,44 @@ class XGroupTest extends Specification {
         // meta bytes with just one chunk segment bytes
         r.buffer().limit() == Repl.HEADER_LENGTH + 8 + 8 + FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * MetaChunkSegmentFlagSeq.ONE_LENGTH + 4096
 
+        // response exists wal
+        when:
+        data4[2][0] = ReplType.exists_wal.code
+        contentBytes = new byte[4]
+        requestBuffer = ByteBuffer.wrap(contentBytes)
+        // wal group index
+        requestBuffer.putInt(0)
+        data4[3] = contentBytes
+        r = x.handleRepl()
+        then:
+        r.isReplType(ReplType.s_exists_wal)
+
+        when:
+        requestBuffer.position(0)
+        // no log
+        requestBuffer.putInt(99)
+        r = x.handleRepl()
+        then:
+        r.isReplType(ReplType.s_exists_wal)
+
+        when:
+        // exception
+        def walGroupNumber = Wal.calcWalGroupNumber()
+        requestBuffer.position(0)
+        requestBuffer.putInt(walGroupNumber)
+        r = x.handleRepl()
+        then:
+        // error
+        r.isReplType(ReplType.error)
+
+        when:
+        requestBuffer.position(0)
+        requestBuffer.putInt(-1)
+        r = x.handleRepl()
+        then:
+        // error
+        r.isReplType(ReplType.error)
+
         // response exists key buckets
         when:
         data4[2][0] = ReplType.exists_key_buckets.code
@@ -498,7 +536,7 @@ class XGroupTest extends Specification {
         requestBuffer.putInt(ConfForSlot.global.confChunk.maxSegmentNumber() - FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD)
         r = x.handleRepl()
         then:
-        r.isReplType(ReplType.exists_all_done)
+        r.isReplType(ReplType.exists_wal)
 
         when:
         requestBuffer.position(0)
@@ -538,6 +576,38 @@ class XGroupTest extends Specification {
         then:
         // next batch
         r.isReplType(ReplType.exists_chunk_segments)
+
+        // exists wal
+        when:
+        data4[2][0] = ReplType.s_exists_wal.code
+        contentBytes = new byte[16 + 2 * Wal.ONE_GROUP_BUFFER_SIZE]
+        requestBuffer = ByteBuffer.wrap(contentBytes)
+        // wal group index
+        requestBuffer.putInt(0)
+        requestBuffer.putInt(Wal.ONE_GROUP_BUFFER_SIZE)
+        data4[3] = contentBytes
+        r = x.handleRepl()
+        then:
+        // next batch
+        r.isReplType(ReplType.exists_wal)
+
+        when:
+        requestBuffer.position(0)
+        requestBuffer.putInt(99)
+        r = x.handleRepl()
+        then:
+        // delay fetch next batch
+        r.isEmpty()
+
+        when:
+        // last batch
+        def walGroupNumber = Wal.calcWalGroupNumber()
+        requestBuffer.position(0)
+        requestBuffer.putInt(walGroupNumber - 1)
+        r = x.handleRepl()
+        then:
+        // next step
+        r.isReplType(ReplType.exists_all_done)
 
         // fetch exists key buckets
         when:

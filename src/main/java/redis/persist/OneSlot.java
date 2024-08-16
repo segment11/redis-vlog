@@ -508,6 +508,10 @@ public class OneSlot {
         return walArray[walGroupIndex];
     }
 
+    public Wal getWalByGroupIndex(int walGroupIndex) {
+        return walArray[walGroupIndex];
+    }
+
     private final RandomAccessFile raf;
     private final RandomAccessFile rafShortValue;
 

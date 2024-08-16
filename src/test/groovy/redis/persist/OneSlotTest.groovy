@@ -375,6 +375,7 @@ class OneSlotTest extends Specification {
         oneSlot.canRead = true
         def bucketIndex0KeyList = batchPut(oneSlot)
         // so read must be from key buckets file
+        oneSlot.getWalByGroupIndex(0).clear()
         oneSlot.getWalByBucketIndex(0).clear()
         oneSlot.getWalByBucketIndex(1).clear()
         for (key in bucketIndex0KeyList) {
