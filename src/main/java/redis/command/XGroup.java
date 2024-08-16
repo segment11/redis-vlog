@@ -180,7 +180,8 @@ public class XGroup extends BaseCommand {
         var binlog = oneSlot.getBinlog();
         var currentFileIndexAndOffset = binlog.currentFileIndexAndOffset();
         var earliestFileIndexAndOffset = binlog.earliestFileIndexAndOffset();
-        var content = new Hi(slaveUuid, oneSlot.getMasterUuid(), currentFileIndexAndOffset, earliestFileIndexAndOffset);
+        var content = new Hi(slaveUuid, oneSlot.getMasterUuid(), currentFileIndexAndOffset, earliestFileIndexAndOffset,
+                oneSlot.getChunk().currentSegmentIndex());
         return Repl.reply(slot, replPair, hi, content);
     }
 
@@ -205,6 +206,7 @@ public class XGroup extends BaseCommand {
         // master binlog earliest (not deleted yet) file index and offset
         var earliestFileIndex = buffer.getInt();
         var earliestOffset = buffer.getLong();
+        var currentSegmentIndex = buffer.getInt();
 
         // should not happen
         if (slaveUuid != replPair.getSlaveUuid()) {
@@ -217,6 +219,10 @@ public class XGroup extends BaseCommand {
         log.warn("Repl slave handle hi: slave uuid={}, master uuid={}", slaveUuid, masterUuid);
 
         var oneSlot = localPersist.oneSlot(slot);
+        // after exist all done, when catch up, XOneWalGroupSeq will update chunk segment index
+        oneSlot.setMetaChunkSegmentIndex(currentSegmentIndex);
+        log.warn("Repl slave set meta chunk segment index, slot: {}, segment index: {}", slot, currentSegmentIndex);
+
         var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
 
         var lastUpdatedMasterUuid = metaChunkSegmentIndex.getMasterUuid();
@@ -323,7 +329,7 @@ public class XGroup extends BaseCommand {
         var segmentCount = buffer.getInt();
         // segmentCount == FdReadWrite.REPL_ONCE_INNER_COUNT
 
-        if (beginSegmentIndex % (FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * 10) == 0) {
+        if (beginSegmentIndex % (segmentCount * 10) == 0) {
             log.warn("Repl slave ready to fetch exists chunk segments, slot: {}, begin segment index: {}, segment count: {}",
                     slot, beginSegmentIndex, segmentCount);
         }
@@ -359,7 +365,7 @@ public class XGroup extends BaseCommand {
             var nextBatchMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(nextBatchBeginSegmentIndex, segmentCount);
             var content = new ToMasterExistsChunkSegments(nextBatchBeginSegmentIndex, segmentCount, nextBatchMetaBytes);
 
-            if (nextBatchBeginSegmentIndex % (FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * 10) == 0) {
+            if (nextBatchBeginSegmentIndex % (segmentCount * 10) == 0) {
                 oneSlot.delayRun(1000, () -> {
                     replPair.write(ReplType.exists_chunk_segments, content);
                 });

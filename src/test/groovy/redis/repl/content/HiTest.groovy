@@ -11,10 +11,10 @@ class HiTest extends Specification {
         given:
         def content = new Hi(11L, 10L,
                 new Binlog.FileIndexAndOffset(1, 1L),
-                new Binlog.FileIndexAndOffset(0, 0L))
+                new Binlog.FileIndexAndOffset(0, 0L), 0)
 
         expect:
-        content.encodeLength() == 40
+        content.encodeLength() == 44
 
         when:
         def bytes = new byte[content.encodeLength()]
@@ -28,5 +28,6 @@ class HiTest extends Specification {
         buffer.getLong() == 1
         buffer.getInt() == 0
         buffer.getLong() == 0
+        buffer.getInt() == 0
     }
 }

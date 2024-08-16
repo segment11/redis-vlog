@@ -402,7 +402,7 @@ class XGroupTest extends Specification {
         metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, false, 0, 0L)
         def hi = new Hi(replPairAsMaster.slaveUuid, masterUuid,
                 new Binlog.FileIndexAndOffset(1, 1L),
-                new Binlog.FileIndexAndOffset(0, 0L))
+                new Binlog.FileIndexAndOffset(0, 0L), 0)
         data = mockData(replPairAsMaster, ReplType.hi, hi)
         x = new XGroup(null, data, null)
         r = x.handleRepl()
@@ -445,7 +445,7 @@ class XGroupTest extends Specification {
         // not match slave uuid
         hi = new Hi(replPairAsMaster.slaveUuid + 1, masterUuid,
                 new Binlog.FileIndexAndOffset(1, 1L),
-                new Binlog.FileIndexAndOffset(0, 0L))
+                new Binlog.FileIndexAndOffset(0, 0L), 0)
         data = mockData(replPairAsMaster, ReplType.hi, hi)
         x = new XGroup(null, data, null)
         r = x.handleRepl()
