@@ -200,18 +200,18 @@ public class Chunk {
         // skip can not reuse segments
         if (!isFirstStart && segmentIndex == 0) {
             var segmentFlagList = oneSlot.getSegmentMergeFlagBatch(segmentIndex, segmentCount);
-            int j = 0;
+            int skipN = 0;
             for (int i = 0; i < segmentFlagList.size(); i++) {
                 var segmentFlag = segmentFlagList.get(i);
                 var flag = segmentFlag.flag();
                 if (!flag.canReuse()) {
-                    j = i;
+                    skipN = (i + 1);
                 }
             }
 
             // begin with new segment index
-            if (j != 0) {
-                segmentIndex = j + 1;
+            if (skipN != 0) {
+                segmentIndex += skipN;
                 return reuseSegments(false, segmentCount, updateAsReuseFlag);
             }
         }
