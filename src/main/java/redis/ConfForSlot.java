@@ -20,7 +20,7 @@ public enum ConfForSlot {
     public long estimateKeyNumber;
     public int estimateOneValueLength = DEFAULT_ESTIMATE_ONE_VALUE_LENGTH;
     private static final int DEFAULT_ESTIMATE_ONE_VALUE_LENGTH = 200;
-    private static final int MAX_ESTIMATE_ONE_VALUE_LENGTH = 2000;
+    static final int MAX_ESTIMATE_ONE_VALUE_LENGTH = 4000;
 
     public boolean isValueSetUseCompression = true;
     public boolean isOnDynTrainDictForCompression = true;
@@ -211,20 +211,27 @@ public enum ConfForSlot {
             if (estimateOneValueLength <= 1000) {
                 this.segmentNumberPerFd = this.segmentNumberPerFd / 4;
                 this.segmentLength = PAGE_SIZE * 4;
-                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 4 * this.fdPerChunk);
+                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 4 * this.fdPerChunk * (isValueSetUseCompression1 ? 1 : 2));
 
-                Chunk.ONCE_PREPARE_SEGMENT_COUNT = 32;
-                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 4 : 8;
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 8 : 16;
+                return;
+            }
+
+            if (estimateOneValueLength <= 2000) {
+                this.segmentNumberPerFd = this.segmentNumberPerFd / 8;
+                this.segmentLength = PAGE_SIZE * 8;
+                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 8 * this.fdPerChunk * (isValueSetUseCompression1 ? 1 : 2));
+
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 8 : 16;
                 return;
             }
 
             if (estimateOneValueLength <= MAX_ESTIMATE_ONE_VALUE_LENGTH) {
-                this.segmentNumberPerFd = this.segmentNumberPerFd / 4;
-                this.segmentLength = PAGE_SIZE * 4;
-                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 8 * this.fdPerChunk);
+                this.segmentNumberPerFd = this.segmentNumberPerFd / 16;
+                this.segmentLength = PAGE_SIZE * 16;
+                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 16 * this.fdPerChunk * (isValueSetUseCompression1 ? 1 : 2));
 
-                Chunk.ONCE_PREPARE_SEGMENT_COUNT = 32;
-                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 4 : 8;
+                Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 8 : 16;
                 return;
             }
 
@@ -324,8 +331,15 @@ public enum ConfForSlot {
                 return;
             }
 
-            if (estimateOneValueLength <= MAX_ESTIMATE_ONE_VALUE_LENGTH) {
+            if (estimateOneValueLength <= 2000) {
                 this.valueSizeTrigger = 50;
+                this.oneChargeBucketNumber = 16;
+                resetWalStaticValues(PAGE_SIZE * oneChargeBucketNumber);
+                return;
+            }
+
+            if (estimateOneValueLength <= MAX_ESTIMATE_ONE_VALUE_LENGTH) {
+                this.valueSizeTrigger = 20;
                 this.oneChargeBucketNumber = 16;
                 resetWalStaticValues(PAGE_SIZE * oneChargeBucketNumber);
                 return;

@@ -308,7 +308,7 @@ public class Chunk {
     // 64 not tight segments is enough for 1000 Wal.V persist ?, need check, todo
     // one wal group charges 64 key buckets, 64 * 4KB = 256KB
     // with merged valid cv list together, once read 10 segments, valid cv list may be > 1000
-    public static int ONCE_PREPARE_SEGMENT_COUNT = 64;
+    public final static int ONCE_PREPARE_SEGMENT_COUNT = 64;
 
     int mergedSegmentIndexEndLastTime = NO_NEED_MERGE_SEGMENT_INDEX;
 
