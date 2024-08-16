@@ -15,7 +15,6 @@ import java.util.List;
 
 import static redis.persist.Chunk.Flag;
 import static redis.persist.Chunk.NO_NEED_MERGE_SEGMENT_INDEX;
-import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
 public class MetaChunkSegmentFlagSeq {
     private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
@@ -123,7 +122,9 @@ public class MetaChunkSegmentFlagSeq {
     int[] iterateAndFindThoseNeedToMerge(int beginSegmentIndex, int nextSegmentCount, int targetWalGroupIndex, Chunk chunk) {
         var findSegmentIndexWithSegmentCount = new int[]{NO_NEED_MERGE_SEGMENT_INDEX, 0};
 
-        int segmentCount = 0;
+        // only find 2 segments at most, or once write too many segments for this batch
+        final var maxFindSegmentCount = 2;
+        var segmentCount = 0;
         var end = Math.min(beginSegmentIndex + nextSegmentCount, maxSegmentNumber);
         for (int segmentIndex = beginSegmentIndex; segmentIndex < end; segmentIndex++) {
             var offset = segmentIndex * ONE_LENGTH;
@@ -147,16 +148,16 @@ public class MetaChunkSegmentFlagSeq {
                 }
                 segmentCount++;
 
-                int segmentCountMax = Math.min(BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE, chunk.maxSegmentIndex - segmentIndex + 1);
-                if (segmentCount >= segmentCountMax) {
-                    break;
-                }
-
                 var targetFdIndexFirstFind = chunk.targetFdIndex(findSegmentIndexWithSegmentCount[0]);
                 var targetFdIndexThisFind = chunk.targetFdIndex(segmentIndex);
                 // cross two files, exclude this find segment
                 if (targetFdIndexThisFind != targetFdIndexFirstFind) {
                     segmentCount--;
+                    break;
+                }
+
+                int segmentCountMax = Math.min(maxFindSegmentCount, chunk.maxSegmentIndex - segmentIndex + 1);
+                if (segmentCount >= segmentCountMax) {
                     break;
                 }
             }
