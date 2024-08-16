@@ -413,10 +413,10 @@ class XGroupTest extends Specification {
         def replPairAsMaster = ReplPairTest.mockAsMaster(masterUuid)
         replPairAsMaster.slaveUuid = oneSlot.masterUuid
         def pong = new Pong('localhost:6379')
-        data = mockData(replPairAsMaster, ReplType.pong, pong)
-        x = new XGroup(null, data, null)
+        def data = mockData(replPairAsMaster, ReplType.pong, pong)
+        def x = new XGroup(null, data, null)
         x.replPair = null
-        r = x.handleRepl()
+        def r = x.handleRepl()
         then:
         r.isEmpty()
 
@@ -428,9 +428,9 @@ class XGroupTest extends Specification {
 
         when:
         // error
-        def data = mockData(Repl.error(slot, replPairAsMaster, 'error'))
-        def x = new XGroup(null, data, null)
-        def r = x.handleRepl()
+        data = mockData(Repl.error(slot, replPairAsMaster, 'error'))
+        x = new XGroup(null, data, null)
+        r = x.handleRepl()
         then:
         r.isEmpty()
 

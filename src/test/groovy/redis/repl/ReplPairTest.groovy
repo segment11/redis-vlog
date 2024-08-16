@@ -36,13 +36,29 @@ class ReplPairTest extends Specification {
         replPair
     }
 
+    final byte slot = 0
+
     def 'test base'() {
         given:
-        byte slot = 0
         ConfForSlot.global.netListenAddresses = 'localhost:6380'
 
         def replPairAsMaster = mockAsMaster()
         def replPairAsSlave = mockAsSlave()
+        for (replType in ReplType.values()) {
+            replPairAsMaster.increaseStatsCountForReplType(replType)
+            replPairAsSlave.increaseStatsCountForReplType(replType)
+        }
+
+        // trigger log
+        100.times {
+            replPairAsMaster.increaseStatsCountForReplType(ReplType.pong)
+            replPairAsMaster.increaseStatsCountForReplType(ReplType.catch_up)
+            replPairAsSlave.increaseStatsCountForReplType(ReplType.ping)
+            replPairAsSlave.increaseStatsCountForReplType(ReplType.s_catch_up)
+        }
+
+        println replPairAsMaster.statsCountForReplTypeAsString
+        println replPairAsSlave.statsCountForReplTypeAsString
 
         expect:
         replPairAsMaster.slot == slot

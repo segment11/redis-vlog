@@ -88,6 +88,29 @@ public class ReplPair {
     // server side send pong, client side update timestamp
     private long lastPongGetTimestamp;
 
+    private final long[] statsCountForReplType = new long[ReplType.values().length];
+
+    public void increaseStatsCountForReplType(ReplType type) {
+        int i = type.ordinal();
+        statsCountForReplType[i]++;
+
+        // only log for ping and pong and catch up
+        if (type == ReplType.ping || type == ReplType.pong || type == ReplType.catch_up || type == ReplType.s_catch_up) {
+            if (statsCountForReplType[i] % 100 == 0) {
+                log.info("Repl pair stats count for repl type, alive, target host: {}, port: {}, slot: {}, stats: {}",
+                        host, port, slot, getStatsCountForReplTypeAsString());
+            }
+        }
+    }
+
+    public String getStatsCountForReplTypeAsString() {
+        var sb = new StringBuilder();
+        for (var type : ReplType.values()) {
+            sb.append(type.name()).append(": ").append(statsCountForReplType[type.ordinal()]).append(", ");
+        }
+        return sb.toString();
+    }
+
     // change 3 -> 5 or 10
     private final boolean[] linkUpFlagArray = new boolean[3];
 

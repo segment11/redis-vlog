@@ -78,6 +78,10 @@ public class XGroup extends BaseCommand {
             }
         }
 
+        if (replPair != null) {
+            replPair.increaseStatsCountForReplType(replType);
+        }
+
         return switch (replType) {
             case error -> {
                 log.error("Repl handle receive error: {}", new String(contentBytes));
@@ -92,6 +96,7 @@ public class XGroup extends BaseCommand {
 
                 if (replPair == null) {
                     replPair = oneSlot.createIfNotExistReplPairAsMaster(slaveUuid, host, port);
+                    replPair.increaseStatsCountForReplType(ping);
                 }
 
                 replPair.setLastPingGetTimestamp(System.currentTimeMillis());
@@ -167,6 +172,7 @@ public class XGroup extends BaseCommand {
         var oneSlot = localPersist.oneSlot(slot);
         if (replPair == null) {
             replPair = oneSlot.createIfNotExistReplPairAsMaster(slaveUuid, host, port);
+            replPair.increaseStatsCountForReplType(hello);
         }
 
         // start binlog
