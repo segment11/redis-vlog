@@ -279,7 +279,7 @@ class XGroupTest extends Specification {
         // catch_up
         when:
         data4[2][0] = ReplType.catch_up.code
-        contentBytes = new byte[8 + 4 + 8]
+        contentBytes = new byte[8 + 4 + 8 + 8]
         requestBuffer = ByteBuffer.wrap(contentBytes)
         // master uuid long
         // not match
@@ -288,13 +288,16 @@ class XGroupTest extends Specification {
         requestBuffer.putInt(0)
         // binlog file offset
         requestBuffer.putLong(0)
+        // last updated file offset
+        requestBuffer.putLong(0)
         data4[3] = contentBytes
         r = x.handleRepl()
         then:
         r.isReplType(ReplType.error)
 
         when:
-        requestBuffer.putLong(0, oneSlot.masterUuid)
+        requestBuffer.position(0)
+        requestBuffer.putLong(oneSlot.masterUuid)
         r = x.handleRepl()
         then:
         // empty content return
@@ -306,6 +309,31 @@ class XGroupTest extends Specification {
             oneSlot.appendBinlog(new XWalV(v))
         }
         // read segment bytes < one segment length
+        r = x.handleRepl()
+        then:
+        r.isReplType(ReplType.s_catch_up)
+
+        when:
+        requestBuffer.position(8 + 4 + 8)
+        requestBuffer.putLong(106)
+        r = x.handleRepl()
+        then:
+        r.isReplType(ReplType.s_catch_up)
+
+        when:
+        requestBuffer.position(8 + 4 + 8)
+        requestBuffer.putLong(oneSlot.binlog.currentFileIndexAndOffset().offset())
+        r = x.handleRepl()
+        then:
+        // empty content return
+        r.isReplType(ReplType.s_catch_up)
+
+        when:
+        requestBuffer.position(8)
+        // file index not match master binlog current file index
+        requestBuffer.putInt(1)
+        requestBuffer.putLong(0)
+        requestBuffer.putLong(oneSlot.binlog.currentFileIndexAndOffset().offset())
         r = x.handleRepl()
         then:
         r.isReplType(ReplType.s_catch_up)
@@ -471,6 +499,14 @@ class XGroupTest extends Specification {
         r = x.handleRepl()
         then:
         r.isReplType(ReplType.exists_all_done)
+
+        when:
+        requestBuffer.position(0)
+        // next batch will delay run
+        requestBuffer.putInt(FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * 9)
+        r = x.handleRepl()
+        then:
+        r.isEmpty()
 
         when:
         def metaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(0, FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD)
@@ -654,6 +690,18 @@ class XGroupTest extends Specification {
         r = x.handleRepl()
         then:
         // next batch
+        r.isReplType(ReplType.exists_big_string)
+
+        when:
+        def bigStringFileUuidList = oneSlot.bigStringFiles.bigStringFileUuidList
+        if (bigStringFileUuidList) {
+            for (uuid in bigStringFileUuidList) {
+                oneSlot.bigStringFiles.deleteBigStringFileIfExist(uuid)
+            }
+        }
+        r = x.fetchExistsBigString(slot, oneSlot)
+        then:
+        // empty content return
         r.isReplType(ReplType.exists_big_string)
 
         // s_exists_dict
