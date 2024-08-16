@@ -110,7 +110,7 @@ public enum ConfForSlot {
 
     public enum ConfBucket {
         debugMode(4096, (byte) 1),
-        c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT, (byte) 3),
+        c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT, (byte) 1),
         c10m(KeyBucket.MAX_BUCKETS_PER_SLOT, (byte) 1),
         c100m(KeyBucket.MAX_BUCKETS_PER_SLOT, (byte) 9);
 
