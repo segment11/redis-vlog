@@ -282,7 +282,7 @@ class ChunkTest extends Specification {
         def libC = LibraryLoader.create(LibC.class).load('c')
         chunk.initFds(libC)
 
-        def xForBinlog = new XOneWalGroupPersist(true, 0)
+        def xForBinlog = new XOneWalGroupPersist(true, false, 0)
 
         when:
         def vList = Mock.prepareValueList(100)

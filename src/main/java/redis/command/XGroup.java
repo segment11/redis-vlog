@@ -260,7 +260,7 @@ public class XGroup extends BaseCommand {
 
         metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, false,
                 currentFileIndex, currentOffset);
-        log.warn("Repl set master binlog current/latest file index and offset for incremental catch up, slot: {}, master binlog file index: {}, offset: {}",
+        log.warn("Repl slave set master binlog current/latest file index and offset for incremental catch up, slot: {}, master binlog file index: {}, offset: {}",
                 slot, currentFileIndex, currentOffset);
         log.warn("Repl slave begin fetch all exists data from master, slot: {}", slot);
 
@@ -288,7 +288,7 @@ public class XGroup extends BaseCommand {
         var beginSegmentIndex = buffer.getInt();
         var segmentCount = buffer.getInt();
 
-        if (beginSegmentIndex % (FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * 10) == 0) {
+        if (beginSegmentIndex % (segmentCount * 10) == 0) {
             log.warn("Repl master fetch exists chunk segments, slot: {}, begin segment index: {}, segment count: {}",
                     slot, beginSegmentIndex, segmentCount);
         }
@@ -725,6 +725,8 @@ public class XGroup extends BaseCommand {
                 replPair.getSlaveUuid(), replPair.getHostAndPort());
 
         var oneSlot = localPersist.oneSlot(slot);
+        oneSlot.setChunkSegmentIndexFromMeta();
+
         var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
 
         var binlogMasterUuid = metaChunkSegmentIndex.getMasterUuid();

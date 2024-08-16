@@ -424,6 +424,17 @@ class OneSlotTest extends Specification {
         oneSlot.chunkWriteSegmentIndex == 0
 
         when:
+        oneSlot.setMetaChunkSegmentIndex(0)
+        oneSlot.setChunkSegmentIndexFromMeta()
+        then:
+        oneSlot.chunk.segmentIndex == 0
+
+        when:
+        oneSlot.setMetaChunkSegmentIndex(1, true)
+        then:
+        oneSlot.chunk.segmentIndex == 1
+
+        when:
         boolean exception = false
         try {
             oneSlot.setMetaChunkSegmentIndex(-1)
@@ -808,6 +819,7 @@ class OneSlotTest extends Specification {
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         def oneSlot = localPersist.oneSlot(slot)
         def chunk = oneSlot.chunk
+        def chunkMergeWorker = oneSlot.chunkMergeWorker
 
         when:
         final int walGroupIndex = 0
@@ -835,71 +847,79 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.addMergedSegment(1, 1)
+        String testMergedKey = 'xh!0_test-merged-key'
+        def cv = new CompressedValue()
+        cv.keyHash = KeyHash.hash(testMergedKey.bytes)
+        chunkMergeWorker.addMergedSegment(1, 1)
+        chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, testMergedKey, 0, 1))
         chunk.initSegmentIndexWhenFirstStart(0)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
         then:
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
-        oneSlot.chunkMergeWorker.addMergedSegment(100, 1)
+        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.addMergedSegment(100, 1)
         chunk.initSegmentIndexWhenFirstStart(0)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
         then:
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
-        oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
+        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.addMergedSegment(0, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
         then:
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
-        oneSlot.chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 1, 1)
+        chunkMergeWorker.clearMergedCvListForTest()
+        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 1, 1)
+        chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, testMergedKey, 0, chunk.halfSegmentNumber + 1))
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
         then:
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
-        oneSlot.chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 100, 1)
+        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 100, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
         then:
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
-        oneSlot.chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber - 1, 1)
+        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber - 1, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
         then:
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
-        oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
+        chunkMergeWorker.clearMergedCvListForTest()
+        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.addMergedSegment(0, 1)
+        chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, testMergedKey, 0, 0))
         chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 1)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
         then:
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
-        oneSlot.chunkMergeWorker.addMergedSegment(100, 1)
+        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.addMergedSegment(100, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 1)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
         then:
         1 == 1
 
         when:
-        oneSlot.chunkMergeWorker.clearMergedSegmentSetForTest()
-        oneSlot.chunkMergeWorker.addMergedSegment(0, 1)
+        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.addMergedSegment(0, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 100)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
         then:

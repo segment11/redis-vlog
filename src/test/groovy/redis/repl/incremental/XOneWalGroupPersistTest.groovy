@@ -14,7 +14,7 @@ import java.nio.ByteBuffer
 class XOneWalGroupPersistTest extends Specification {
     def 'test encode and decode'() {
         given:
-        def x = new XOneWalGroupPersist(true, 0)
+        def x = new XOneWalGroupPersist(true, true, 0)
 
         expect:
         x.type() == BinlogContent.Type.one_wal_group_persist
@@ -40,11 +40,34 @@ class XOneWalGroupPersistTest extends Specification {
         x2.encodedLength() == encoded.length
 
         when:
+        buffer.position(1 + 4)
+        buffer.put((byte) 0)
+        buffer.put((byte) 0)
+        // skip type
+        buffer.position(1)
+        x2 = XOneWalGroupPersist.decodeFrom(buffer)
+        then:
+        x2.encodedLength() == encoded.length
+        x2.encodeWithType().length == encoded.length
+
+        when:
         final byte slot = 0
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         def replPair = ReplPairTest.mockAsSlave()
+        x.apply(slot, replPair)
+        then:
+        1 == 1
+
+        when:
+        x.setShortValueForTest(false)
+        x.apply(slot, replPair)
+        then:
+        1 == 1
+
+        when:
+        x.clearWalAfterApplyForTest = false
         x.apply(slot, replPair)
         then:
         1 == 1

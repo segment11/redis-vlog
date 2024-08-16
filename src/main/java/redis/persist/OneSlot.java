@@ -557,11 +557,22 @@ public class OneSlot {
     }
 
     public void setMetaChunkSegmentIndex(int segmentIndex) {
+        setMetaChunkSegmentIndex(segmentIndex, false);
+    }
+
+    public void setMetaChunkSegmentIndex(int segmentIndex, boolean updateChunkSegmentIndex) {
         if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
             throw new IllegalArgumentException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
         }
 
         metaChunkSegmentIndex.set(segmentIndex);
+        if (updateChunkSegmentIndex) {
+            chunk.segmentIndex = segmentIndex;
+        }
+    }
+
+    public void setChunkSegmentIndexFromMeta() {
+        chunk.segmentIndex = metaChunkSegmentIndex.get();
     }
 
     private final Binlog binlog;
@@ -1160,7 +1171,7 @@ public class OneSlot {
 
     void persistWal(boolean isShortValue, Wal targetWal) {
         var walGroupIndex = targetWal.groupIndex;
-        var xForBinlog = new XOneWalGroupPersist(isShortValue, walGroupIndex);
+        var xForBinlog = new XOneWalGroupPersist(isShortValue, true, walGroupIndex);
         if (isShortValue) {
             keyLoader.persistShortValueListBatchInOneWalGroup(walGroupIndex, targetWal.delayToKeyBucketShortValues.values(), xForBinlog);
             return;
@@ -1224,6 +1235,8 @@ public class OneSlot {
                     xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segmentIndex, Flag.merged_and_persisted, 0L);
                 }
             } else {
+                // when read some segments before persist wal, meta is continuous, but segments read from chunk may be null, skip some, so is not continuous anymore
+                // usually not happen
                 for (var segmentIndex : segmentIndexList) {
                     setSegmentMergeFlag(segmentIndex, Flag.merged_and_persisted, 0L, walGroupIndex);
                     xForBinlog.putUpdatedChunkSegmentFlagWithSeq(segmentIndex, Flag.merged_and_persisted, 0L);

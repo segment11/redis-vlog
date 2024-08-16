@@ -67,6 +67,10 @@ public class ChunkMergeWorker {
         return mergedCvList.size();
     }
 
+    void clearMergedCvListForTest() {
+        mergedCvList.clear();
+    }
+
     record MergedSegment(int segmentIndex, int validCvCount) implements Comparable<MergedSegment> {
         @Override
         public String toString() {
@@ -193,7 +197,7 @@ public class ChunkMergeWorker {
                         key, cv.encode(), true));
             }
 
-            var xForBinlog = new XOneWalGroupPersist(false, walGroupIndex);
+            var xForBinlog = new XOneWalGroupPersist(false, false, walGroupIndex);
             // refer Chunk.ONCE_PREPARE_SEGMENT_COUNT
             // list size is not large, need not multi batch persist
             oneSlot.chunk.persist(walGroupIndex, list, true, xForBinlog);

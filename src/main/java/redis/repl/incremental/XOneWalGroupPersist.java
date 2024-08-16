@@ -9,11 +9,21 @@ import java.nio.ByteBuffer;
 import java.util.TreeMap;
 
 public class XOneWalGroupPersist implements BinlogContent {
-    private final boolean isShortValue;
+    private boolean isShortValue;
+    private boolean clearWalAfterApply;
     private final int walGroupIndex;
 
-    public XOneWalGroupPersist(boolean isShortValue, int walGroupIndex) {
+    public void setShortValueForTest(boolean isShortValue) {
         this.isShortValue = isShortValue;
+    }
+
+    public void setClearWalAfterApplyForTest(boolean clearWalAfterApply) {
+        this.clearWalAfterApply = clearWalAfterApply;
+    }
+
+    public XOneWalGroupPersist(boolean isShortValue, boolean clearWalAfterApply, int walGroupIndex) {
+        this.isShortValue = isShortValue;
+        this.clearWalAfterApply = clearWalAfterApply;
         this.walGroupIndex = walGroupIndex;
     }
 
@@ -77,8 +87,8 @@ public class XOneWalGroupPersist implements BinlogContent {
     public int encodedLength() {
         // 1 byte for type, 4 bytes for encoded length for check
         var n = 1 + 4;
-        // 1 byte for is short value, 4 bytes for wal group index
-        n += 1 + 4;
+        // 1 byte for is short value, 1 byte for clear wal after apply, 4 bytes for wal group index
+        n += 1 + 1 + 4;
         // 4 bytes for begin bucket index
         n += 4;
         // 4 bytes for key count for stats tmp, 4 bytes for each key count
@@ -124,6 +134,7 @@ public class XOneWalGroupPersist implements BinlogContent {
         buffer.put(type().code());
         buffer.putInt(bytes.length);
         buffer.put(isShortValue ? (byte) 1 : (byte) 0);
+        buffer.put(clearWalAfterApply ? (byte) 1 : (byte) 0);
         buffer.putInt(walGroupIndex);
         buffer.putInt(beginBucketIndex);
 
@@ -172,8 +183,9 @@ public class XOneWalGroupPersist implements BinlogContent {
         // already read type byte
         var encodedLength = buffer.getInt();
         var isShortValue = buffer.get() == 1;
+        var clearWalAfterApply = buffer.get() == 1;
         var walGroupIndex = buffer.getInt();
-        var x = new XOneWalGroupPersist(isShortValue, walGroupIndex);
+        var x = new XOneWalGroupPersist(isShortValue, clearWalAfterApply, walGroupIndex);
         x.setBeginBucketIndex(buffer.getInt());
 
         var keyCountForStatsTmpSize = buffer.getInt();
@@ -260,14 +272,15 @@ public class XOneWalGroupPersist implements BinlogContent {
             chunk.writeSegmentToTargetSegmentIndex(bytes, segmentIndex);
         }
 
-        oneSlot.setMetaChunkSegmentIndex(chunkSegmentIndexAfterPersist);
-        oneSlot.getChunk().initSegmentIndexWhenFirstStart(chunkSegmentIndexAfterPersist);
+        oneSlot.setMetaChunkSegmentIndex(chunkSegmentIndexAfterPersist, true);
 
-        var targetWal = oneSlot.getWalByBucketIndex(beginBucketIndex);
-        if (isShortValue) {
-            targetWal.clearShortValues();
-        } else {
-            targetWal.clearValues();
+        if (clearWalAfterApply) {
+            var targetWal = oneSlot.getWalByBucketIndex(beginBucketIndex);
+            if (isShortValue) {
+                targetWal.clearShortValues();
+            } else {
+                targetWal.clearValues();
+            }
         }
     }
 }

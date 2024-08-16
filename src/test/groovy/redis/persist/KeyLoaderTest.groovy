@@ -391,7 +391,7 @@ class KeyLoaderTest extends Specification {
         })
 
         when:
-        def xForBinlog = new XOneWalGroupPersist(true, 0)
+        def xForBinlog = new XOneWalGroupPersist(true, false, 0)
         keyLoader.persistShortValueListBatchInOneWalGroup(0, shortValueList, xForBinlog)
         then:
         shortValueList.every {
@@ -438,7 +438,7 @@ class KeyLoaderTest extends Specification {
         }
 
         when:
-        def xForBinlog = new XOneWalGroupPersist(true, 0)
+        def xForBinlog = new XOneWalGroupPersist(true, false, 0)
         keyLoader.updatePvmListBatchAfterWriteSegments(0, pvmList, xForBinlog)
         then:
         pvmList.every {
