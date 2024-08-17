@@ -62,7 +62,11 @@ public class DictMap {
         }
 
         if (binlog != null) {
-            binlog.append(new XDict(keyPrefix, dict));
+            try {
+                binlog.append(new XDict(keyPrefix, dict));
+            } catch (IOException e) {
+                throw new RuntimeException("Append binlog error, dict key prefix: " + keyPrefix, e);
+            }
         }
 
         cacheDictBySeq.put(dict.seq, dict);

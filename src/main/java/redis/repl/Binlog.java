@@ -75,7 +75,7 @@ public class Binlog {
 
     private final Logger log = LoggerFactory.getLogger(Binlog.class);
 
-    // already sorted
+    // return sorted by file index
     private ArrayList<File> listFiles() {
         ArrayList<File> list = new ArrayList<>();
         var files = binlogDir.listFiles();
@@ -163,7 +163,7 @@ public class Binlog {
         return (int) (fileOffset - fileOffset % oneSegmentLength);
     }
 
-    public void append(BinlogContent content) {
+    public void append(BinlogContent content) throws IOException {
         if (!dynConfig.isBinlogOn()) {
             return;
         }
@@ -182,52 +182,52 @@ public class Binlog {
         if (isCrossSegment) {
             // need padding
             var padding = new byte[(int) (oneSegmentLength - beforeAppendFileOffset % oneSegmentLength)];
-            try {
-                raf.seek(currentFileOffset);
-                raf.write(padding);
-                currentFileOffset += padding.length;
 
-                tempAppendSegmentBuffer.put(padding);
-                addForReadCacheSegmentBytes(currentFileIndex, currentFileOffset - oneSegmentLength);
-                tempAppendSegmentBuffer.clear();
-                Arrays.fill(tempAppendSegmentBytes, (byte) 0);
-            } catch (IOException e) {
-                log.error("Write padding to binlog file error, slot: " + slot, e);
-                throw new RuntimeException("Write padding to binlog file error: " + e.getMessage() + ", slot: " + slot);
-            }
+            raf.seek(currentFileOffset);
+            raf.write(padding);
+            currentFileOffset += padding.length;
+
+            tempAppendSegmentBuffer.put(padding);
+            addForReadCacheSegmentBytes(currentFileIndex, currentFileOffset - oneSegmentLength);
+            tempAppendSegmentBuffer.clear();
+            Arrays.fill(tempAppendSegmentBytes, (byte) 0);
 
             beforeAppendFileOffset = currentFileOffset;
             afterAppendFileOffset = beforeAppendFileOffset + encoded.length;
         }
 
-        try {
-            if (afterAppendFileOffset > oneFileMaxLength) {
-                // new file
-                try {
-                    raf.close();
-                } catch (IOException e) {
-                    log.error("Close binlog raf error, file index: " + currentFileIndex + ", slot: " + slot, e);
-                }
+        if (afterAppendFileOffset > oneFileMaxLength) {
+            // new file
+            raf.close();
+            log.info("Close current binlog file as overflow, file: {}, slot: {}", fileName(), slot);
 
-                currentFileIndex++;
-                var nextFile = new File(binlogDir, fileName());
-                FileUtils.touch(nextFile);
-                log.info("Create new binlog file, file: {}, slot: {}", nextFile.getName(), slot);
-                raf = new RandomAccessFile(nextFile, "rw");
+            currentFileIndex++;
+            var nextFile = new File(binlogDir, fileName());
+            FileUtils.touch(nextFile);
+            log.info("Create new binlog file, file: {}, slot: {}", nextFile.getName(), slot);
+            raf = new RandomAccessFile(nextFile, "rw");
 
-                currentFileOffset = 0;
+            currentFileOffset = 0;
 //                beforeAppendFileOffset = 0;
+
+            // check file keep max count
+            var files = listFiles();
+            if (files.size() > ConfForSlot.global.confRepl.binlogFileKeepMaxCount) {
+                // already sorted
+                var firstFile = files.get(0);
+                if (!firstFile.delete()) {
+                    log.error("Delete binlog file error, file: {}, slot: {}", firstFile.getName(), slot);
+                } else {
+                    log.info("Delete binlog file success, file: {}, slot: {}", firstFile.getName(), slot);
+                }
             }
-
-            raf.seek(currentFileOffset);
-            raf.write(encoded);
-            currentFileOffset += encoded.length;
-
-            tempAppendSegmentBuffer.put(encoded);
-        } catch (IOException e) {
-            log.error("Write to binlog file error, slot: " + slot, e);
-            throw new RuntimeException("Write to binlog file error: " + e.getMessage() + ", slot: " + slot);
         }
+
+        raf.seek(currentFileOffset);
+        raf.write(encoded);
+        currentFileOffset += encoded.length;
+
+        tempAppendSegmentBuffer.put(encoded);
     }
 
     RandomAccessFile prevRaf(int fileIndex) {

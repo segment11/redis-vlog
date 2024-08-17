@@ -587,7 +587,11 @@ public class OneSlot {
 
     public void appendBinlog(BinlogContent content) {
         if (binlog != null) {
-            binlog.append(content);
+            try {
+                binlog.append(content);
+            } catch (IOException e) {
+                throw new RuntimeException("Append binlog error, slot: " + slot, e);
+            }
         }
     }
 

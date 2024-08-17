@@ -61,6 +61,8 @@ public enum ConfForSlot {
         map.put("chunk.fdPerChunk", confChunk.fdPerChunk);
         map.put("chunk.segmentLength", confChunk.segmentLength);
         map.put("wal.oneChargeBucketNumber", confWal.oneChargeBucketNumber);
+        map.put("repl.binlogOneSegmentLength", confRepl.binlogOneSegmentLength);
+        map.put("repl.binlogOneFileMaxLength", confRepl.binlogOneFileMaxLength);
         return map;
     }
 
@@ -367,6 +369,7 @@ public enum ConfForSlot {
         public final int binlogOneSegmentLength = 1024 * 1024;
         public final int binlogOneFileMaxLength = 512 * 1024 * 1024;
         public short binlogForReadCacheSegmentMaxCount = 100;
+        public short binlogFileKeepMaxCount = 100;
         // if slave catch up binlog offset is less than min diff, slave can service read
         public int catchUpOffsetMinDiff = 1024 * 1024;
 

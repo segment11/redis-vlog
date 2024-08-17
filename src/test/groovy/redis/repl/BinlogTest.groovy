@@ -29,7 +29,7 @@ class BinlogTest extends Specification {
         new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 0) > new Binlog.BytesWithFileIndexAndOffset(new byte[10], 0, 0)
         new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 1) > new Binlog.BytesWithFileIndexAndOffset(new byte[10], 1, 0)
         Binlog.marginFileOffset(100) == 0
-        Binlog.marginFileOffset(256 * 1024 + 100) == 256 * 1024
+        Binlog.marginFileOffset(1024 * 1024 + 100) == 1024 * 1024
 
         when:
         def dynConfig = new DynConfig(slot, DynConfigTest.tmpFile)
@@ -74,6 +74,7 @@ class BinlogTest extends Specification {
         binlog.currentFileIndex == 1
         binlog.prevRaf(0) != null
         binlog.readPrevRafOneSegment(0, 0).length == oneSegmentLength
+        binlog.readPrevRafOneSegment(1, 0).length < oneSegmentLength
 
         when:
         binlog.currentFileOffset = oneSegmentLength - 1
@@ -143,6 +144,15 @@ class BinlogTest extends Specification {
         binlog.currentFileOffset == lastAppendFileOffset
         binlog.prevRaf(0) != null
 
+        when:
+        ConfForSlot.global.confRepl.binlogFileKeepMaxCount = 1
+        binlog.currentFileOffset = oneFileMaxLength - 1
+        for (v in vList[0..9]) {
+            binlog.append(new XWalV(v))
+        }
+        then:
+        binlog.currentFileIndex == 2
+
         cleanup:
         binlog.clear()
         binlog.close()
@@ -174,6 +184,11 @@ class BinlogTest extends Specification {
         Binlog.decodeAndApply(slot, oneSegmentBytes, 0, null)
         then:
         oneSlot.getWalByBucketIndex(0).keyCount == 10
+
+        when:
+        def n = Binlog.decodeAndApply(slot, oneSegmentBytes, oneSegmentBytes.length, null)
+        then:
+        n == 0
 
         cleanup:
         localPersist.cleanUp()
