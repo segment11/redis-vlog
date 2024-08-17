@@ -1421,7 +1421,8 @@ public class OneSlot {
         return job.run();
     }
 
-    void persistMergingOrMergedSegmentsButNotPersisted() {
+    @MasterReset
+    public void persistMergingOrMergedSegmentsButNotPersisted() {
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
 
         this.metaChunkSegmentFlagSeq.iterateAll((segmentIndex, flag, segmentSeq, walGroupIndex) -> {
@@ -1526,7 +1527,8 @@ public class OneSlot {
             map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
 
             if (chunk != null) {
-                map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.currentSegmentIndex(), labelValues));
+                map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.segmentIndex, labelValues));
+                map.put("chunk_merged_segment_index_end_last_time", new SimpleGauge.ValueWithLabelValues((double) chunk.mergedSegmentIndexEndLastTime, labelValues));
                 map.put("chunk_max_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.maxSegmentIndex, labelValues));
             }
 
@@ -1565,6 +1567,12 @@ public class OneSlot {
                         (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq), labelValues));
                 map.put("static_memory_prepare_mb_fd_read_write_buffer_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer), labelValues));
+
+                var replPairAsSlave = getReplPairAsSlave(masterUuid);
+                if (replPairAsSlave != null) {
+                    map.put("repl_slave_catch_up_last_seq", new SimpleGauge.ValueWithLabelValues(
+                            (double) replPairAsSlave.getSlaveCatchUpLastSeq(), labelValues));
+                }
             }
 
             var hitMissTotal = kvLRUHitTotal + kvLRUMissTotal;

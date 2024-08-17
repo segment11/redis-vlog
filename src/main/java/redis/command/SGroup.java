@@ -231,12 +231,22 @@ public class SGroup extends BaseCommand {
         var hostBytes = data[1];
         var portBytes = data[2];
 
+        var firstOneSlot = localPersist.currentThreadFirstOneSlot();
+
         var isNoOne = "no".equalsIgnoreCase(new String(hostBytes));
         if (isNoOne) {
+            // check if self is already slave of another master
+            if (!firstOneSlot.isAsSlave()) {
+                return new ErrorReply("not slave of another master");
+            }
+
             Promise<Void>[] promises = new Promise[slotNumber];
             for (int i = 0; i < slotNumber; i++) {
                 var oneSlot = localPersist.oneSlot((byte) i);
-                promises[i] = oneSlot.asyncRun(() -> oneSlot.removeReplPairAsSlave());
+                promises[i] = oneSlot.asyncRun(() -> {
+                    oneSlot.removeReplPairAsSlave();
+                    oneSlot.persistMergingOrMergedSegmentsButNotPersisted();
+                });
             }
 
             SettablePromise<Reply> finalPromise = new SettablePromise<>();
@@ -244,7 +254,6 @@ public class SGroup extends BaseCommand {
 
             Promises.all(promises).whenComplete((r, e) -> {
                 if (e != null) {
-
                     log.error("slaveof error: {}", e.getMessage());
                     finalPromise.setException(e);
                     return;
@@ -272,6 +281,11 @@ public class SGroup extends BaseCommand {
             return new ErrorReply("invalid port");
         }
 
+        // check if self is already slave of another master
+        if (firstOneSlot.isAsSlave()) {
+            return new ErrorReply("already slave of another master");
+        }
+
         Jedis jedis = null;
         try {
             jedis = new Jedis(host, port);
@@ -289,7 +303,9 @@ public class SGroup extends BaseCommand {
         } catch (Exception e) {
             return new ErrorReply("connect failed");
         } finally {
-            jedis.close();
+            if (jedis != null) {
+                jedis.close();
+            }
         }
 
         Promise<Void>[] promises = new Promise[slotNumber];
