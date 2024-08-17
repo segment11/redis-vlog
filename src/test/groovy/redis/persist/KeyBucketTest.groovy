@@ -374,6 +374,9 @@ class KeyBucketTest extends Specification {
                 println key + ' expired'
             }
         }
+        keyBucket.del(cell2Key.bytes, 100L, false)
+        // put again
+        keyBucket.put(cell2Key.bytes, 100L, 0, 100L, cell2Cv.encode())
         keyBucket.clearOneExpired(KeyBucket.INIT_CAPACITY - 2)
         then:
         keyBucket.size == KeyBucket.INIT_CAPACITY - 2

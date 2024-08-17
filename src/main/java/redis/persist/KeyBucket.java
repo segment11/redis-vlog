@@ -269,12 +269,16 @@ public class KeyBucket {
     ShortValueCvExpiredCallBack shortValueCvExpiredCallBack;
 
     void clearOneExpired(int i) {
+        clearOneExpired(i, null);
+    }
+
+    void clearOneExpired(int i, KeyBytesAndValueBytes kvBytesAlreadyGet) {
         if (i >= capacity) {
             throw new IllegalArgumentException("i >= capacity");
         }
 
         if (shortValueCvExpiredCallBack != null) {
-            var kvBytes = getFromOneCell(i);
+            var kvBytes = kvBytesAlreadyGet == null ? getFromOneCell(i) : kvBytesAlreadyGet;
             if (!PersistValueMeta.isPvm(kvBytes.valueBytes)) {
                 var cv = CompressedValue.decode(Unpooled.wrappedBuffer(kvBytes.valueBytes), kvBytes.keyBytes, 0L);
                 shortValueCvExpiredCallBack.handle(new String(kvBytes.keyBytes), cv);
@@ -544,7 +548,7 @@ public class KeyBucket {
             return null;
         }
 
-        byte[] valueBytes = new byte[matchMeta.valueLength];
+        var valueBytes = new byte[matchMeta.valueLength];
         buffer.position(matchMeta.valueOffset()).get(valueBytes);
         return new ValueBytesWithExpireAtAndSeq(valueBytes, expireAt, seq);
     }
@@ -584,10 +588,11 @@ public class KeyBucket {
             var cellOffset = oneCellOffset(cellIndex);
             var matchMeta = keyMatch(keyBytes, cellOffset);
             if (matchMeta != null) {
-                var cellCount = matchMeta.cellCount();
-                clearCell(cellIndex, cellCount);
-                size--;
-                cellCost -= (short) cellCount;
+                var valueBytes = new byte[matchMeta.valueLength];
+                buffer.position(matchMeta.valueOffset()).get(valueBytes);
+
+                clearOneExpired(cellIndex, new KeyBytesAndValueBytes(keyBytes, valueBytes));
+
                 if (doUpdateSeq) {
                     updateSeq();
                 }
