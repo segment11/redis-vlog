@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.StaticMemoryPrepareBytesStats;
 import redis.repl.SlaveNeedReplay;
+import redis.repl.SlaveReplay;
 
 import java.io.File;
 import java.io.IOException;
@@ -315,6 +316,8 @@ public class MetaChunkSegmentFlagSeq {
         return list;
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     void clear() {
         if (ConfForSlot.global.pureMemory) {
             fillSegmentFlagInit(inMemoryCachedBytes);

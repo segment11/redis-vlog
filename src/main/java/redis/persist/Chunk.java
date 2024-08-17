@@ -332,6 +332,7 @@ public class Chunk {
     // but even list size is smaller, one v maybe is not compressed, one v encoded length is large
     public static int ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = 16;
 
+    @SlaveNeedReplay
     // return need merge segment index array
     public ArrayList<Integer> persist(int walGroupIndex, ArrayList<Wal.V> list, boolean isMerge, XOneWalGroupPersist xForBinlog) {
         logMergeCount++;
@@ -670,6 +671,7 @@ public class Chunk {
         return segmentIndexToMerge;
     }
 
+    @SlaveReplay
     public void writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount) {
         if (ConfForSlot.global.pureMemory) {
             var fdIndex = targetFdIndex(segmentIndex);
@@ -698,6 +700,7 @@ public class Chunk {
         return writeSegments(bytes, 1);
     }
 
+    @SlaveNeedReplay
     private boolean writeSegments(byte[] bytes, int segmentCount) {
 //        if (segmentCount != 1 && segmentCount != BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
 //            throw new IllegalArgumentException("Write segment count not support: " + segmentCount);
@@ -723,6 +726,7 @@ public class Chunk {
         return isNewAppend;
     }
 
+    @SlaveReplay
     private void writeSegmentsForRepl(byte[] bytes, int segmentCount) {
         if (segmentCount > REPL_ONCE_SEGMENT_COUNT_PREAD) {
             throw new IllegalArgumentException("Write segment count not support: " + segmentCount);

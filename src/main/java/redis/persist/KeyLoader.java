@@ -486,6 +486,8 @@ public class KeyLoader {
         return isDeleted;
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public void flush() {
         metaKeyBucketSplitNumber.clear();
         metaOneWalGroupSeq.clear();

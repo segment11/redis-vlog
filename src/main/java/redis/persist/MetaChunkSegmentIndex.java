@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.repl.Binlog;
 import redis.repl.SlaveNeedReplay;
+import redis.repl.SlaveReplay;
 
 import java.io.File;
 import java.io.IOException;
@@ -121,6 +122,8 @@ public class MetaChunkSegmentIndex {
         return new Binlog.FileIndexAndOffset(inMemoryCachedByteBuffer.getInt(16), inMemoryCachedByteBuffer.getLong(20));
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     void clear() {
         setAll(0, 0L, false, 0, 0L);
         System.out.println("Meta chunk segment index clear done, set 0 from the beginning. Clear master binlog file index and offset.");

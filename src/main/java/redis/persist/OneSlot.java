@@ -967,6 +967,8 @@ public class OneSlot {
         }
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public void flush() {
         checkCurrentThreadId();
 
@@ -1053,6 +1055,7 @@ public class OneSlot {
         return chunk.preadForRepl(segmentIndex);
     }
 
+    @SlaveReplay
     public void writeChunkSegmentsFromMasterExists(byte[] bytes, int beginSegmentIndex, int segmentCount) {
         checkCurrentThreadId();
 

@@ -45,7 +45,7 @@ class FdReadWriteTest extends Specification {
         fdKeyBucket.initByteBuffers(false)
         def walGroupNumber = Wal.calcWalGroupNumber()
         fdKeyBucket.resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(walGroupNumber)
-        fdKeyBucket.clearOneWalGroupToMemoryForTest(0)
+        fdKeyBucket.clearAllKeyBucketsInOneWalGroupToMemoryForTest(0)
         println fdKeyBucket
 
         fdChunk.afterFdPreadCompressCountTotal = 1
@@ -280,17 +280,6 @@ class FdReadWriteTest extends Specification {
         exception
 
         when:
-        exception = false
-        try {
-            fdKeyBucket.writeSegmentsBatchForRepl(0, new byte[10])
-        } catch (IllegalArgumentException e) {
-            println e.message
-            exception = true
-        }
-        then:
-        exception
-
-        when:
         fdChunk.writeSegmentsBatch(100, new byte[segmentLength * FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE], false)
         then:
         fdChunk.readOneInner(100 + FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE - 1, false).length == segmentLength
@@ -353,7 +342,7 @@ class FdReadWriteTest extends Specification {
         keyBucket1BytesRead == new byte[segmentLength]
 
         when:
-        fdKeyBucket.clearKeyBucketsInOneWalGroupToMemory(oneChargeBucketNumber)
+        fdKeyBucket.clearKeyBucketsToMemoryForTest(oneChargeBucketNumber)
         then:
         fdKeyBucket.readKeyBucketsSharedBytesInOneWalGroup(oneChargeBucketNumber) == null
 

@@ -268,7 +268,8 @@ public class Wal {
         }
     }
 
-    // not thread safe
+    @SlaveNeedReplay
+    @SlaveReplay
     void clear() {
         delayToKeyBucketValues.clear();
         delayToKeyBucketShortValues.clear();

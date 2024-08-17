@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.StaticMemoryPrepareBytesStats;
 import redis.metric.SimpleGauge;
+import redis.repl.SlaveNeedReplay;
+import redis.repl.SlaveReplay;
 
 import java.io.File;
 import java.io.IOException;
@@ -25,7 +27,7 @@ import static redis.persist.LocalPersist.PAGE_SIZE;
 import static redis.persist.LocalPersist.PROTECTION;
 
 // need thread safe
-// need refactor to FdChunk + FdKeyBucket, todo
+// need refactor to FdChunkSegments + FdKeyBuckets, todo
 public class FdReadWrite {
 
     protected final Logger log = LoggerFactory.getLogger(this.getClass());
@@ -190,10 +192,11 @@ public class FdReadWrite {
     private long forOneWalGroupBatchAddress;
 
     private int oneInnerLength;
-    boolean isChunkFd;
+    private boolean isChunkFd;
 
     static final int BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE = 10;
 
+    // when pure memory mode, need to store all bytes in memory
     // for chunk, already compressed, refer to SegmentBatch
     // first index is relative segment index in target chunk fd, !!!important, relative segment index
     private byte[][] allBytesBySegmentIndexForOneChunkFd;
@@ -244,11 +247,11 @@ public class FdReadWrite {
         return sharedBytes;
     }
 
-    public boolean isTargetSegmentIndexNullInMemory(int segmentIndex) {
+    boolean isTargetSegmentIndexNullInMemory(int segmentIndex) {
         return allBytesBySegmentIndexForOneChunkFd[segmentIndex] == null;
     }
 
-    // chunk fd is by segment index, key bucket fd is by bucket index
+    // chunk fd is by relative segment index, key bucket fd is by bucket index
     private LRUMap<Integer, byte[]> oneInnerBytesByIndexLRU;
 
     public void initByteBuffers(boolean isChunkFd) {
@@ -285,6 +288,7 @@ public class FdReadWrite {
                 this.writeSegmentBatchAddress = pageManager.allocatePages(npagesWriteSegmentBatch, PROTECTION);
                 this.writeSegmentBatchBuffer = m.newDirectByteBuffer(writeSegmentBatchAddress, npagesWriteSegmentBatch * PAGE_SIZE);
 
+                // chunk repl
                 var npagesRepl = npagesOneInner * REPL_ONCE_SEGMENT_COUNT_PREAD;
                 this.forReplAddress = pageManager.allocatePages(npagesRepl, PROTECTION);
                 this.forReplBuffer = m.newDirectByteBuffer(forReplAddress, npagesRepl * PAGE_SIZE);
@@ -310,37 +314,40 @@ public class FdReadWrite {
     }
 
     private void initLRU(boolean isChunkFd, int oneInnerLength) {
-        if (!ConfForSlot.global.pureMemory) {
-            if (isChunkFd) {
-                var maxSize = ConfForSlot.global.confChunk.lruPerFd.maxSize;
-                var lruMemoryRequireMB = ((long) maxSize * oneInnerLength) / 1024 / 1024;
-                log.info("Chunk lru max size for one chunk fd: {}, one inner length: {}, memory require: {}MB, name: {}",
-                        maxSize, oneInnerLength, lruMemoryRequireMB, name);
-                log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_chunk_data, lruMemoryRequireMB, name);
-                LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, (int) lruMemoryRequireMB, true);
+        if (ConfForSlot.global.pureMemory) {
+            log.warn("Pure memory mode, not use lru cache, name: {}", name);
+            return;
+        }
 
-                if (maxSize > 0) {
-                    this.oneInnerBytesByIndexLRU = new LRUMap<>(maxSize);
-                    this.isLRUOn = true;
-                }
-            } else {
-                // key bucket
-                var maxSize = ConfForSlot.global.confBucket.lruPerFd.maxSize;
-                // need to compare with metrics
-                final var compressRatio = 0.25;
-                var lruMemoryRequireMB = ((long) maxSize * oneInnerLength) / 1024 / 1024 * compressRatio;
-                log.info("Key bucket lru max size for one key bucket fd: {}, one inner length: {}， compress ratio maybe: {}, memory require: {}MB, name: {}",
-                        maxSize, oneInnerLength, compressRatio, lruMemoryRequireMB, name);
-                log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_key_bucket, lruMemoryRequireMB, name);
-                LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, (int) lruMemoryRequireMB, false);
+        if (isChunkFd) {
+            // tips: per fd, if one chunk has too many fd files, may OOM
+            var maxSize = ConfForSlot.global.confChunk.lruPerFd.maxSize;
+            var lruMemoryRequireMB = ((long) maxSize * oneInnerLength) / 1024 / 1024;
+            log.info("Chunk lru max size for one chunk fd: {}, one inner length: {}, memory require: {}MB, name: {}",
+                    maxSize, oneInnerLength, lruMemoryRequireMB, name);
+            log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_chunk_data, lruMemoryRequireMB, name);
+            LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, (int) lruMemoryRequireMB, true);
 
-                if (maxSize > 0) {
-                    this.oneInnerBytesByIndexLRU = new LRUMap<>(maxSize);
-                    this.isLRUOn = true;
-                }
+            if (maxSize > 0) {
+                this.oneInnerBytesByIndexLRU = new LRUMap<>(maxSize);
+                this.isLRUOn = true;
             }
         } else {
-            log.warn("Pure memory mode, not use lru cache, name: {}", name);
+            // key bucket
+            // tips: per fd, if one key loader has too many fd files as split number is big, may OOM
+            var maxSize = ConfForSlot.global.confBucket.lruPerFd.maxSize;
+            // need to compare with metrics
+            final var compressRatio = 0.25;
+            var lruMemoryRequireMB = ((long) maxSize * oneInnerLength) / 1024 / 1024 * compressRatio;
+            log.info("Key bucket lru max size for one key bucket fd: {}, one inner length: {}， compress ratio maybe: {}, memory require: {}MB, name: {}",
+                    maxSize, oneInnerLength, compressRatio, lruMemoryRequireMB, name);
+            log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_key_bucket, lruMemoryRequireMB, name);
+            LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, (int) lruMemoryRequireMB, false);
+
+            if (maxSize > 0) {
+                this.oneInnerBytesByIndexLRU = new LRUMap<>(maxSize);
+                this.isLRUOn = true;
+            }
         }
     }
 
@@ -401,7 +408,7 @@ public class FdReadWrite {
         }
     }
 
-    interface WriteBufferPrepare {
+    private interface WriteBufferPrepare {
         void prepare(ByteBuffer buffer);
     }
 
@@ -646,12 +653,12 @@ public class FdReadWrite {
         setSharedBytesCompressToMemory(sharedBytes, walGroupIndex);
     }
 
-    public void clearKeyBucketsInOneWalGroupToMemory(int bucketIndex) {
+    public void clearKeyBucketsToMemoryForTest(int bucketIndex) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-        setSharedBytesCompressToMemory(null, walGroupIndex);
+        clearAllKeyBucketsInOneWalGroupToMemoryForTest(walGroupIndex);
     }
 
-    public void clearOneWalGroupToMemoryForTest(int walGroupIndex) {
+    public void clearAllKeyBucketsInOneWalGroupToMemoryForTest(int walGroupIndex) {
         setSharedBytesCompressToMemory(null, walGroupIndex);
     }
 
@@ -705,6 +712,7 @@ public class FdReadWrite {
         return oneInnerCount * oneInnerLength;
     }
 
+    @SlaveNeedReplay
     public int writeOneInner(int oneInnerIndex, byte[] bytes, boolean isRefreshLRUCache) {
         if (bytes.length > oneInnerLength) {
             throw new IllegalArgumentException("Write bytes length must be less than one inner length");
@@ -720,6 +728,7 @@ public class FdReadWrite {
         }, isRefreshLRUCache);
     }
 
+    @SlaveNeedReplay
     public int writeSegmentsBatch(int segmentIndex, byte[] bytes, boolean isRefreshLRUCache) {
         var segmentCount = bytes.length / oneInnerLength;
         if (segmentCount != BATCH_ONCE_SEGMENT_COUNT_PWRITE) {
@@ -736,6 +745,7 @@ public class FdReadWrite {
         }, isRefreshLRUCache);
     }
 
+    @SlaveReplay
     public int writeSegmentsBatchForRepl(int beginSegmentIndex, byte[] bytes) {
         // pure memory will not reach here, refer Chunk.writeSegmentsFromMasterExists
         return writeInnerByBuffer(beginSegmentIndex, forReplBuffer, (buffer) -> {
@@ -743,6 +753,8 @@ public class FdReadWrite {
         }, false);
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public int writeSharedBytesForKeyBucketsInOneWalGroup(int bucketIndex, byte[] sharedBytes) {
         var keyBucketCount = sharedBytes.length / oneInnerLength;
         if (keyBucketCount != ConfForSlot.global.confWal.oneChargeBucketNumber) {
@@ -758,6 +770,8 @@ public class FdReadWrite {
         return writeInnerByBuffer(bucketIndex, forOneWalGroupBatchBuffer, (buffer) -> buffer.put(sharedBytes), false);
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public void truncate() {
         if (libC != null) {
             var r = libC.ftruncate(fd, 0);
