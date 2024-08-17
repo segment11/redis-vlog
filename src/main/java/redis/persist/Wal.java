@@ -7,6 +7,8 @@ import redis.CompressedValue;
 import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
+import redis.repl.SlaveNeedReplay;
+import redis.repl.SlaveReplay;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -195,7 +197,9 @@ public class Wal {
     private final RandomAccessFile walSharedFileShortValue;
     private final SnowFlake snowFlake;
 
+    @SlaveNeedReplay
     HashMap<String, V> delayToKeyBucketValues;
+    @SlaveNeedReplay
     HashMap<String, V> delayToKeyBucketShortValues;
 
     public int getKeyCount() {
@@ -280,6 +284,7 @@ public class Wal {
     long clearShortValuesCount = 0;
     long clearValuesCount = 0;
 
+    @SlaveNeedReplay
     public void clearShortValues() {
         delayToKeyBucketShortValues.clear();
         resetWal(true);
@@ -290,6 +295,7 @@ public class Wal {
         }
     }
 
+    @SlaveNeedReplay
     public void clearValues() {
         delayToKeyBucketValues.clear();
         resetWal(false);
@@ -430,6 +436,7 @@ public class Wal {
         return new PutResult(needPersist, false, null, needPersist ? 0 : offset);
     }
 
+    @SlaveReplay
     public byte[] toSlaveExistsOneWalGroupBytes() throws IOException {
         // encoded length
         // 4 bytes for group index
@@ -456,6 +463,7 @@ public class Wal {
         return bytes;
     }
 
+    @SlaveReplay
     public void fromMasterExistsOneWalGroupBytes(byte[] bytes) throws IOException {
         var buffer = ByteBuffer.wrap(bytes);
         var groupIndex1 = buffer.getInt();

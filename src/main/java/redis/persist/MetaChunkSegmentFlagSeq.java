@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.StaticMemoryPrepareBytesStats;
+import redis.repl.SlaveNeedReplay;
 
 import java.io.File;
 import java.io.IOException;
@@ -248,6 +249,7 @@ public class MetaChunkSegmentFlagSeq {
         return list;
     }
 
+    @SlaveNeedReplay
     public void setSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex) {
         var offset = segmentIndex * ONE_LENGTH;
         var bytes = new byte[ONE_LENGTH];

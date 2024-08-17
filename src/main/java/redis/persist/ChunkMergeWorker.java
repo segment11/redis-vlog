@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.Debug;
 import redis.metric.SimpleGauge;
+import redis.repl.SlaveNeedReplay;
 import redis.repl.incremental.XOneWalGroupPersist;
 
 import java.util.ArrayList;
@@ -158,6 +159,7 @@ public class ChunkMergeWorker {
         }
     }
 
+    @SlaveNeedReplay
     void persistFIFOMergedCvList() {
         logMergeCount++;
         var doLog = Debug.getInstance().logMerge && logMergeCount % 1000 == 0;

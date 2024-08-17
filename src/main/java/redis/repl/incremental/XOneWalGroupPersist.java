@@ -281,7 +281,7 @@ public class XOneWalGroupPersist implements BinlogContent {
             var flag = entry.getValue().flag;
             var seq = entry.getValue().seq;
             // RandAccessFile use os page cache, perf ok
-            oneSlot.getMetaChunkSegmentFlagSeq().setSegmentMergeFlag(segmentIndex, flag, seq, walGroupIndex);
+            oneSlot.setSegmentMergeFlag(segmentIndex, flag, seq, walGroupIndex);
         }
 
         var chunk = oneSlot.getChunk();

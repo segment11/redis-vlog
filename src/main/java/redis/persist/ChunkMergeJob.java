@@ -4,6 +4,7 @@ import com.github.luben.zstd.Zstd;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
+import redis.repl.SlaveNeedReplay;
 import redis.repl.incremental.XChunkSegmentFlagUpdate;
 
 import java.nio.ByteBuffer;
@@ -123,6 +124,7 @@ public class ChunkMergeJob {
         final int segmentIndex;
     }
 
+    @SlaveNeedReplay
     void mergeSegments(List<Integer> needMergeSegmentIndexList) {
         chunkMergeWorker.logMergeCount++;
         var doLog = Debug.getInstance().logMerge && chunkMergeWorker.logMergeCount % 1000 == 0;

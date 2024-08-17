@@ -7,6 +7,8 @@ import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
+import redis.repl.SlaveNeedReplay;
+import redis.repl.SlaveReplay;
 import redis.repl.incremental.XOneWalGroupPersist;
 
 import java.io.File;
@@ -312,6 +314,7 @@ public class Chunk {
 
     int mergedSegmentIndexEndLastTime = NO_NEED_MERGE_SEGMENT_INDEX;
 
+    @SlaveNeedReplay
     public void setMergedSegmentIndexEndLastTimeAfterSlaveCatchUp(int mergedSegmentIndexEndLastTime) {
         this.mergedSegmentIndexEndLastTime = mergedSegmentIndexEndLastTime;
     }
@@ -689,6 +692,7 @@ public class Chunk {
         }
     }
 
+    @SlaveReplay
     public boolean writeSegmentToTargetSegmentIndex(byte[] bytes, int targetSegmentIndex) {
         this.segmentIndex = targetSegmentIndex;
         return writeSegments(bytes, 1);

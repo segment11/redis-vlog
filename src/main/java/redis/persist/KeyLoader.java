@@ -6,6 +6,8 @@ import redis.ConfForSlot;
 import redis.KeyHash;
 import redis.SnowFlake;
 import redis.metric.SimpleGauge;
+import redis.repl.SlaveNeedReplay;
+import redis.repl.SlaveReplay;
 import redis.repl.incremental.XOneWalGroupPersist;
 
 import java.io.File;
@@ -83,6 +85,8 @@ public class KeyLoader {
         return metaKeyBucketSplitNumber.getBatch(beginBucketIndex, bucketCount);
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public boolean updateMetaKeyBucketSplitNumberBatchIfChanged(int beginBucketIndex, byte[] splitNumberArray) {
         if (beginBucketIndex < 0 || beginBucketIndex >= bucketsPerSlot) {
             throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
@@ -103,11 +107,13 @@ public class KeyLoader {
         return metaKeyBucketSplitNumber.maxSplitNumber();
     }
 
+    @SlaveReplay
     // read only, important
     public byte[] getMetaKeyBucketSplitNumberBytesToSlaveExists() {
         return metaKeyBucketSplitNumber.getInMemoryCachedBytes();
     }
 
+    @SlaveReplay
     public void overwriteMetaKeyBucketSplitNumberBytesFromMasterExists(byte[] bytes) {
         metaKeyBucketSplitNumber.overwriteInMemoryCachedBytes(bytes);
         log.warn("Repl overwrite meta key bucket split number bytes from master exists, slot: {}", slot);
@@ -128,6 +134,7 @@ public class KeyLoader {
         return metaOneWalGroupSeq.get(walGroupIndex, splitIndex);
     }
 
+    @SlaveReplay
     public void setMetaOneWalGroupSeq(byte splitIndex, int bucketIndex, long seq) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
         metaOneWalGroupSeq.set(walGroupIndex, splitIndex, seq);
@@ -169,15 +176,19 @@ public class KeyLoader {
         return statKeyCountInBuckets.getKeyCount();
     }
 
+    @SlaveReplay
     public byte[] getStatKeyCountInBucketsBytesToSlaveExists() {
         return statKeyCountInBuckets.getInMemoryCachedBytes();
     }
 
+    @SlaveReplay
     public void overwriteStatKeyCountInBucketsBytesFromMasterExists(byte[] bytes) {
         statKeyCountInBuckets.overwriteInMemoryCachedBytes(bytes);
         log.warn("Repl overwrite stat key count in buckets bytes from master exists, slot: {}", slot);
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public void updateKeyCountBatchCached(int beginBucketIndex, int[] keyCountTmp) {
         if (beginBucketIndex < 0 || beginBucketIndex + keyCountTmp.length > bucketsPerSlot) {
             throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
@@ -429,6 +440,8 @@ public class KeyLoader {
         doAfterPutAll(walGroupIndex, xForBinlog, inner);
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public long[] writeSharedBytesList(byte[][] sharedBytesListBySplitIndex, int beginBucketIndex) {
         var seqArray = new long[sharedBytesListBySplitIndex.length];
         for (int splitIndex = 0; splitIndex < sharedBytesListBySplitIndex.length; splitIndex++) {

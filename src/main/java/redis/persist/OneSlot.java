@@ -16,10 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
 import redis.metric.SimpleGauge;
-import redis.repl.Binlog;
-import redis.repl.BinlogContent;
-import redis.repl.ReplPair;
-import redis.repl.ReplType;
+import redis.repl.*;
 import redis.repl.content.RawBytesContent;
 import redis.repl.incremental.XBigStrings;
 import redis.repl.incremental.XOneWalGroupPersist;
@@ -564,6 +561,8 @@ public class OneSlot {
         setMetaChunkSegmentIndex(segmentIndex, false);
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public void setMetaChunkSegmentIndex(int segmentIndex, boolean updateChunkSegmentIndex) {
         if (segmentIndex < 0 || segmentIndex > chunk.maxSegmentIndex) {
             throw new IllegalArgumentException("Segment index out of bound, s=" + slot + ", i=" + segmentIndex);
@@ -867,6 +866,7 @@ public class OneSlot {
         }
     }
 
+    @SlaveNeedReplay
     public void removeDelay(String key, int bucketIndex, long keyHash) {
         checkCurrentThreadId();
 
@@ -888,6 +888,7 @@ public class OneSlot {
         put(key, bucketIndex, cv, false);
     }
 
+    @SlaveNeedReplay
     // thread safe, same slot, same event loop
     public void put(String key, int bucketIndex, CompressedValue cv, boolean isFromMerge) {
         checkCurrentThreadId();
@@ -946,6 +947,7 @@ public class OneSlot {
         doPersist(walGroupIndex, key, putResult);
     }
 
+    @SlaveNeedReplay
     private void doPersist(int walGroupIndex, String key, Wal.PutResult putResult) {
         var targetWal = walArray[walGroupIndex];
         persistWal(putResult.isValueShort(), targetWal);
@@ -1177,6 +1179,7 @@ public class OneSlot {
 
     long logMergeCount = 0;
 
+    @SlaveNeedReplay
     void persistWal(boolean isShortValue, Wal targetWal) {
         var walGroupIndex = targetWal.groupIndex;
         var xForBinlog = new XOneWalGroupPersist(isShortValue, true, walGroupIndex);
@@ -1386,12 +1389,16 @@ public class OneSlot {
         return metaChunkSegmentFlagSeq.getSegmentSeqListBatchForRepl(beginSegmentIndex, segmentCount);
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public void updateSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq) {
         var segmentFlag = getSegmentMergeFlag(segmentIndex);
         setSegmentMergeFlag(segmentIndex, flag, segmentSeq, segmentFlag.walGroupIndex());
     }
 
-    void setSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex) {
+    @SlaveNeedReplay
+    @SlaveReplay
+    public void setSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex) {
         checkSegmentIndex(segmentIndex);
         metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, flag, segmentSeq, walGroupIndex);
     }

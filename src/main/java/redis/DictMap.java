@@ -4,6 +4,8 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.repl.Binlog;
+import redis.repl.SlaveNeedReplay;
+import redis.repl.SlaveReplay;
 import redis.repl.incremental.XDict;
 
 import java.io.*;
@@ -40,6 +42,8 @@ public class DictMap {
         return cacheDict.get(keyPrefix);
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public synchronized Dict putDict(String keyPrefix, Dict dict) {
         // check dict seq is already in cache
         var existDict = cacheDictBySeq.get(dict.seq);

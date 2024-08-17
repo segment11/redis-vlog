@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.repl.Binlog;
+import redis.repl.SlaveNeedReplay;
 
 import java.io.File;
 import java.io.IOException;
@@ -56,6 +57,7 @@ public class MetaChunkSegmentIndex {
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
     }
 
+    @SlaveNeedReplay
     void set(int segmentIndex) {
         if (ConfForSlot.global.pureMemory) {
             this.inMemoryCachedByteBuffer.putInt(0, segmentIndex);

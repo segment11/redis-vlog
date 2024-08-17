@@ -4,6 +4,7 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.repl.SlaveReplay;
 
 import java.io.File;
 import java.io.IOException;
@@ -22,12 +23,14 @@ public class MetaKeyBucketSplitNumber {
 
     private final ByteBuffer inMemoryCachedByteBuffer;
 
+    @SlaveReplay
     byte[] getInMemoryCachedBytes() {
         var dst = new byte[inMemoryCachedBytes.length];
         inMemoryCachedByteBuffer.position(0).get(dst);
         return dst;
     }
 
+    @SlaveReplay
     void overwriteInMemoryCachedBytes(byte[] bytes) {
         if (bytes.length != inMemoryCachedBytes.length) {
             throw new IllegalArgumentException("Repl meta key bucket split number, bytes length not match");

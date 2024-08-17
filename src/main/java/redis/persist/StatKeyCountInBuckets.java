@@ -4,6 +4,8 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.repl.SlaveNeedReplay;
+import redis.repl.SlaveReplay;
 
 import java.io.File;
 import java.io.IOException;
@@ -16,7 +18,6 @@ public class StatKeyCountInBuckets {
     // short is enough for one key bucket total value count
     public static final int ONE_LENGTH = 2;
 
-    private final byte slot;
     private final int bucketsPerSlot;
     final int allCapacity;
     private RandomAccessFile raf;
@@ -24,12 +25,14 @@ public class StatKeyCountInBuckets {
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
+    @SlaveReplay
     byte[] getInMemoryCachedBytes() {
         var dst = new byte[inMemoryCachedBytes.length];
         inMemoryCachedByteBuffer.position(0).get(dst);
         return dst;
     }
 
+    @SlaveReplay
     void overwriteInMemoryCachedBytes(byte[] bytes) {
         if (bytes.length != inMemoryCachedBytes.length) {
             throw new IllegalArgumentException("Repl stat key count in buckets, bytes length not match");
@@ -52,7 +55,6 @@ public class StatKeyCountInBuckets {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     public StatKeyCountInBuckets(byte slot, int bucketsPerSlot, File slotDir) throws IOException {
-        this.slot = slot;
         this.bucketsPerSlot = bucketsPerSlot;
         this.allCapacity = bucketsPerSlot * ONE_LENGTH;
 
@@ -85,6 +87,7 @@ public class StatKeyCountInBuckets {
         log.info("Key count in buckets: {}, slot: {}", getKeyCount(), slot);
     }
 
+    @SlaveNeedReplay
     void setKeyCountForBucketIndex(int bucketIndex, short keyCount) {
         var offset = bucketIndex * ONE_LENGTH;
 

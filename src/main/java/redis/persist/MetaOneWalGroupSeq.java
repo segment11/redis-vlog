@@ -4,6 +4,7 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.repl.SlaveNeedReplay;
 
 import java.io.File;
 import java.io.IOException;
@@ -22,12 +23,6 @@ public class MetaOneWalGroupSeq {
     private final byte[] inMemoryCachedBytes;
 
     private final ByteBuffer inMemoryCachedByteBuffer;
-
-    byte[] getInMemoryCachedBytes() {
-        var dst = new byte[inMemoryCachedBytes.length];
-        inMemoryCachedByteBuffer.position(0).get(dst);
-        return dst;
-    }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -75,6 +70,7 @@ public class MetaOneWalGroupSeq {
         return inMemoryCachedByteBuffer.getLong(offset);
     }
 
+    @SlaveNeedReplay
     void set(int oneWalGroupIndex, byte splitIndex, long seq) {
         var offset = 8 * oneWalGroupIndex + 8 * walGroupNumber * splitIndex;
         if (ConfForSlot.global.pureMemory) {
