@@ -105,6 +105,13 @@ public class XGroup extends BaseCommand {
             case pong -> {
                 // client received pong from server
                 replPair.setLastPongGetTimestamp(System.currentTimeMillis());
+
+                var millis = replPair.getLastGetCatchUpResponseMillis();
+                if (millis != 0 && System.currentTimeMillis() - millis > 1000 * 10) {
+                    // trigger catch up
+                    s_catch_up(slot, new byte[1]);
+                }
+
                 yield Repl.emptyReply();
             }
             case hello -> hello(slot, contentBytes);
@@ -883,6 +890,8 @@ public class XGroup extends BaseCommand {
 
     Repl.ReplReply s_catch_up(byte slot, byte[] contentBytes) {
         // client received from server
+        replPair.setLastGetCatchUpResponseMillis(System.currentTimeMillis());
+
         var oneSlot = localPersist.oneSlot(slot);
         var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
         var binlogMasterUuid = metaChunkSegmentIndex.getMasterUuid();

@@ -122,6 +122,12 @@ class ReplPairTest extends Specification {
         replPairAsMaster.doFetchingBigStringUuidList.size() == 0
 
         when:
+        def millis = System.currentTimeMillis() - 1000L
+        replPairAsSlave.lastGetCatchUpResponseMillis = millis
+        then:
+        replPairAsSlave.lastGetCatchUpResponseMillis == millis
+
+        when:
         replPairAsSlave.initAsSlave(null, null)
         then:
         !replPairAsSlave.isLinkUp()

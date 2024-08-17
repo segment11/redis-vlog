@@ -111,7 +111,11 @@ public class ReplPair {
         return sb.toString();
     }
 
-    long slaveCatchUpLastSeq;
+    private long slaveCatchUpLastSeq;
+
+    public long getSlaveCatchUpLastSeq() {
+        return slaveCatchUpLastSeq;
+    }
 
     public void setSlaveCatchUpLastSeq(long slaveCatchUpLastSeq) {
         this.slaveCatchUpLastSeq = slaveCatchUpLastSeq;
@@ -248,5 +252,15 @@ public class ReplPair {
 
     public void doneFetchBigStringUuid(long uuid) {
         doFetchingBigStringUuidList.removeIf(e -> e == uuid);
+    }
+
+    private long lastGetCatchUpResponseMillis;
+
+    public long getLastGetCatchUpResponseMillis() {
+        return lastGetCatchUpResponseMillis;
+    }
+
+    public void setLastGetCatchUpResponseMillis(long lastGetCatchUpResponseMillis) {
+        this.lastGetCatchUpResponseMillis = lastGetCatchUpResponseMillis;
     }
 }
