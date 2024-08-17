@@ -494,7 +494,9 @@ public class Wal {
         delayToKeyBucketShortValues.clear();
         var n1 = readBytesToList(delayToKeyBucketValues, false, bytes, 16, oneGroupBufferSize);
         var n2 = readBytesToList(delayToKeyBucketShortValues, true, bytes, 16 + oneGroupBufferSize, oneGroupBufferSize);
-        log.warn("Repl slave fetch wal group success, slot: {}, group index: {}, value size: {}, short value size: {}",
-                slot, groupIndex1, n1, n2);
+        if (groupIndex1 % 100 == 0) {
+            log.warn("Repl slave fetch wal group success, slot: {}, group index: {}, value size: {}, short value size: {}",
+                    slot, groupIndex1, n1, n2);
+        }
     }
 }
