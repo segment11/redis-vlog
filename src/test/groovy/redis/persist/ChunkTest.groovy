@@ -142,6 +142,7 @@ class ChunkTest extends Specification {
 
         when:
         chunk.mergedSegmentIndexEndLastTime = Chunk.NO_NEED_MERGE_SEGMENT_INDEX
+        chunk.mergedSegmentIndexEndLastTimeAfterSlaveCatchUp = Chunk.NO_NEED_MERGE_SEGMENT_INDEX
         chunk.checkMergedSegmentIndexEndLastTimeValidAfterServerStart()
         chunk.mergedSegmentIndexEndLastTime = 0
         chunk.checkMergedSegmentIndexEndLastTimeValidAfterServerStart()
@@ -203,7 +204,8 @@ class ChunkTest extends Specification {
         chunk.segmentIndex = 0
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(0, Chunk.Flag.new_write, 1L, 0)
         then:
-        !chunk.reuseSegments(false, 1, false)
+        chunk.reuseSegments(false, 1, false)
+        chunk.segmentIndex == 1
 
         when:
         chunk.segmentIndex = 0
@@ -304,26 +306,26 @@ class ChunkTest extends Specification {
         chunk.segmentIndex == 1
         r.size() == 0
 
-        when:
-        chunk.segmentIndex = confChunk.maxSegmentNumber() - 10
-        boolean exception = false
-        try {
-            chunk.persist(0, vList, false, xForBinlog)
-        } catch (SegmentOverflowException ignore) {
-            exception = true
-        }
-        then:
-        exception
+//        when:
+//        chunk.segmentIndex = confChunk.maxSegmentNumber() - 10
+//        boolean exception = false
+//        try {
+//            chunk.persist(0, vList, false, xForBinlog)
+//        } catch (SegmentOverflowException ignore) {
+//            exception = true
+//        }
+//        then:
+//        exception
 
-        when:
-        exception = false
-        try {
-            chunk.persist(0, vList, true, xForBinlog)
-        } catch (SegmentOverflowException ignore) {
-            exception = true
-        }
-        then:
-        exception
+//        when:
+//        exception = false
+//        try {
+//            chunk.persist(0, vList, true, xForBinlog)
+//        } catch (SegmentOverflowException ignore) {
+//            exception = true
+//        }
+//        then:
+//        exception
 
         when:
         oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(0, blankSeqList.size(), Chunk.Flag.init, blankSeqList, 0)

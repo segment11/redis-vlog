@@ -60,12 +60,15 @@ class ReplPairTest extends Specification {
         println replPairAsMaster.statsCountForReplTypeAsString
         println replPairAsSlave.statsCountForReplTypeAsString
 
+        replPairAsSlave.slaveCatchUpLastSeq = 1000L
+
         expect:
         replPairAsMaster.slot == slot
         replPairAsMaster.hostAndPort == 'localhost:6379'
         replPairAsMaster.asMaster
         replPairAsMaster.masterUuid == 0L
         replPairAsMaster.lastPingGetTimestamp == 0L
+        replPairAsSlave.slaveCatchUpLastSeq == 1000L
         !replPairAsMaster.sendBye
         !replPairAsMaster.ping()
         !replPairAsMaster.bye()

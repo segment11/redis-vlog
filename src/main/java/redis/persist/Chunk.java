@@ -312,6 +312,10 @@ public class Chunk {
 
     int mergedSegmentIndexEndLastTime = NO_NEED_MERGE_SEGMENT_INDEX;
 
+    public void setMergedSegmentIndexEndLastTimeAfterSlaveCatchUp(int mergedSegmentIndexEndLastTime) {
+        this.mergedSegmentIndexEndLastTime = mergedSegmentIndexEndLastTime;
+    }
+
     // for find bug
     void checkMergedSegmentIndexEndLastTimeValidAfterServerStart() {
         if (mergedSegmentIndexEndLastTime != NO_NEED_MERGE_SEGMENT_INDEX) {
@@ -496,6 +500,9 @@ public class Chunk {
 
         needMergeSegmentIndexList.sort(Integer::compareTo);
         updateLastMergedSegmentIndexEnd(needMergeSegmentIndexList);
+        xForBinlog.setChunkMergedSegmentIndexEndLastTime(mergedSegmentIndexEndLastTime);
+
+        xForBinlog.setLastSegmentSeq(segmentSeqListAll.getLast());
 
         if (doLog) {
             log.info("Chunk persist need merge segment index list, s={}, i={}, list={}", slot, segmentIndex, needMergeSegmentIndexList);
@@ -644,7 +651,7 @@ public class Chunk {
         }
     }
 
-    static final int NO_NEED_MERGE_SEGMENT_INDEX = -1;
+    public static final int NO_NEED_MERGE_SEGMENT_INDEX = -1;
 
     int needMergeSegmentIndex(boolean isNewAppend, int targetIndex) {
         int segmentIndexToMerge = NO_NEED_MERGE_SEGMENT_INDEX;

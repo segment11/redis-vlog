@@ -108,5 +108,7 @@ public class XWalV implements BinlogContent {
         var oneSlot = localPersist.oneSlot(slot);
         var targetWal = oneSlot.getWalByBucketIndex(v.bucketIndex());
         targetWal.putFromX(v, isValueShort, offset);
+
+        replPair.setSlaveCatchUpLastSeq(v.seq());
     }
 }

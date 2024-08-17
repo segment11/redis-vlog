@@ -78,6 +78,18 @@ public class XOneWalGroupPersist implements BinlogContent {
         this.chunkSegmentIndexAfterPersist = chunkSegmentIndexAfterPersist;
     }
 
+    private int chunkMergedSegmentIndexEndLastTime = Chunk.NO_NEED_MERGE_SEGMENT_INDEX;
+
+    public void setChunkMergedSegmentIndexEndLastTime(int chunkMergedSegmentIndexEndLastTime) {
+        this.chunkMergedSegmentIndexEndLastTime = chunkMergedSegmentIndexEndLastTime;
+    }
+
+    private long lastSegmentSeq;
+
+    public void setLastSegmentSeq(long lastSegmentSeq) {
+        this.lastSegmentSeq = lastSegmentSeq;
+    }
+
     @Override
     public Type type() {
         return Type.one_wal_group_persist;
@@ -122,7 +134,9 @@ public class XOneWalGroupPersist implements BinlogContent {
             n += entry.getValue().length;
         }
         // 4 bytes for chunk segment index after persist
-        n += 4;
+        // 4 bytes for chunk merged segment index end last time
+        // 4 bytes for last segment seq
+        n += 4 + 4 + 8;
         return n;
     }
 
@@ -174,7 +188,10 @@ public class XOneWalGroupPersist implements BinlogContent {
             buffer.putInt(entry.getValue().length);
             buffer.put(entry.getValue());
         }
+
         buffer.putInt(chunkSegmentIndexAfterPersist);
+        buffer.putInt(chunkMergedSegmentIndexEndLastTime);
+        buffer.putLong(lastSegmentSeq);
 
         return bytes;
     }
@@ -237,6 +254,8 @@ public class XOneWalGroupPersist implements BinlogContent {
         }
 
         x.setChunkSegmentIndexAfterPersist(buffer.getInt());
+        x.setChunkMergedSegmentIndexEndLastTime(buffer.getInt());
+        x.setLastSegmentSeq(buffer.getLong());
         return x;
     }
 
@@ -273,6 +292,14 @@ public class XOneWalGroupPersist implements BinlogContent {
         }
 
         oneSlot.setMetaChunkSegmentIndex(chunkSegmentIndexAfterPersist, true);
+
+        if (chunkMergedSegmentIndexEndLastTime != Chunk.NO_NEED_MERGE_SEGMENT_INDEX) {
+            chunk.setMergedSegmentIndexEndLastTimeAfterSlaveCatchUp(chunkMergedSegmentIndexEndLastTime);
+        }
+
+        if (lastSegmentSeq != 0L) {
+            replPair.setSlaveCatchUpLastSeq(lastSegmentSeq);
+        }
 
         if (clearWalAfterApply) {
             var targetWal = oneSlot.getWalByBucketIndex(beginBucketIndex);

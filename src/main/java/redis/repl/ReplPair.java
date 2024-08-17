@@ -111,6 +111,12 @@ public class ReplPair {
         return sb.toString();
     }
 
+    long slaveCatchUpLastSeq;
+
+    public void setSlaveCatchUpLastSeq(long slaveCatchUpLastSeq) {
+        this.slaveCatchUpLastSeq = slaveCatchUpLastSeq;
+    }
+
     // change 3 -> 5 or 10
     private final boolean[] linkUpFlagArray = new boolean[3];
 
