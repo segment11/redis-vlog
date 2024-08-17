@@ -160,6 +160,11 @@ public class ChunkMergeJob {
 
         chunkMergeWorker.mergedSegmentCount++;
 
+        ArrayList<ValidCvCountRecord> validCvCountRecordList = new ArrayList<>(needMergeSegmentIndexList.size());
+        for (var segmentIndex : needMergeSegmentIndexList) {
+            validCvCountRecordList.add(new ValidCvCountRecord(segmentIndex));
+        }
+
         // read all segments to memory, then compare with key buckets
         int chunkSegmentLength = ConfForSlot.global.confChunk.segmentLength;
         var tmpCapacity = chunkSegmentLength / ConfForSlot.global.estimateOneValueLength * BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
@@ -195,13 +200,12 @@ public class ChunkMergeJob {
                 alreadyDoLog = true;
             }
 
-            readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, oneSlot, true);
+            var expiredCount = readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, oneSlot);
+            if (expiredCount > 0) {
+                var validCvCountRecord = validCvCountRecordList.get(segmentIndex - firstSegmentIndex);
+                validCvCountRecord.invalidCvCount += expiredCount;
+            }
             i++;
-        }
-
-        ArrayList<ValidCvCountRecord> validCvCountRecordList = new ArrayList<>(needMergeSegmentIndexList.size());
-        for (var segmentIndex : needMergeSegmentIndexList) {
-            validCvCountRecordList.add(new ValidCvCountRecord(segmentIndex));
         }
 
 //        assert oneSlot.keyLoader != null;
@@ -220,7 +224,7 @@ public class ChunkMergeJob {
 
         HashSet<Integer> hasValidCvSegmentIndexSet = new HashSet<>();
         for (var one : cvList) {
-            // use memory list, and threshold, then persist to merge worker's chunk
+            // use memory list, and threshold, then persist to chunk
             chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(one.cv, one.key, one.bucketIndex, one.segmentIndex));
             hasValidCvSegmentIndexSet.add(one.segmentIndex);
         }
@@ -264,8 +268,10 @@ public class ChunkMergeJob {
         chunkMergeWorker.invalidCvCountTotal += invalidCvCountAfterRun;
     }
 
-    static void readToCvList(ArrayList<CvWithKeyAndSegmentOffset> cvList, byte[] segmentBytesBatchRead, int relativeOffsetInBatchBytes,
-                             int chunkSegmentLength, int segmentIndex, OneSlot oneSlot, boolean includeExpired) {
+    // return expired count
+    static int readToCvList(ArrayList<CvWithKeyAndSegmentOffset> cvList, byte[] segmentBytesBatchRead, int relativeOffsetInBatchBytes,
+                            int chunkSegmentLength, int segmentIndex, OneSlot oneSlot) {
+        final int[] expiredCountArray = {0};
         var buffer = ByteBuffer.wrap(segmentBytesBatchRead, relativeOffsetInBatchBytes, Math.min(segmentBytesBatchRead.length, chunkSegmentLength)).slice();
         // sub blocks
         // refer to SegmentBatch tight HEADER_LENGTH
@@ -288,12 +294,15 @@ public class ChunkMergeJob {
 
             int finalSubBlockIndex = subBlockIndex;
             SegmentBatch.iterateFromSegmentBytes(decompressedBytes, (key, cv, offsetInThisSegment) -> {
-                if (!includeExpired && cv.isExpired()) {
+                // exclude expired
+                if (cv.isExpired()) {
+                    expiredCountArray[0]++;
                     return;
                 }
                 cvList.add(new CvWithKeyAndSegmentOffset(cv, key, offsetInThisSegment, segmentIndex, (byte) finalSubBlockIndex));
             });
         }
+        return expiredCountArray[0];
     }
 
     private void removeOld(OneSlot oneSlot, ArrayList<CvWithKeyAndSegmentOffset> cvList, ArrayList<ValidCvCountRecord> validCvCountRecordList) {
@@ -316,16 +325,18 @@ public class ChunkMergeJob {
                 var bucketIndex = one.bucketIndex;
 
                 var validCvCountRecord = validCvCountRecordList.get(segmentIndex - firstSegmentIndex);
-                if (cv.isExpired()) {
-                    validCvCountRecord.invalidCvCount++;
-                    toRemoveCvList.add(one);
-                    continue;
-                }
+                // already excluded expired
+//                if (cv.isExpired()) {
+//                    validCvCountRecord.invalidCvCount++;
+//                    toRemoveCvList.add(one);
+//                    continue;
+//                }
 
                 byte[] valueBytesCurrent;
                 var tmpWalValueBytes = oneSlot.getFromWal(key, bucketIndex);
                 if (tmpWalValueBytes != null) {
                     // from wal, is the newest
+                    // if deleted, discard
                     if (CompressedValue.isDeleted(tmpWalValueBytes)) {
                         valueBytesCurrent = null;
                     } else {

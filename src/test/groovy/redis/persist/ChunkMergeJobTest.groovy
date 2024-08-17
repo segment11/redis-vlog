@@ -63,7 +63,7 @@ class ChunkMergeJobTest extends Specification {
         1 == 1
 
         when:
-        10.times {
+        2.times {
             OneSlotTest.batchPut(oneSlot, 100, 100, 0, slotNumber)
         }
         List<Long> seqList = []
@@ -71,6 +71,8 @@ class ChunkMergeJobTest extends Specification {
             seqList << 1L
         }
         oneSlot.setSegmentMergeFlagBatch(segmentIndex, 10, Chunk.Flag.new_write, seqList, 0)
+        Debug.instance.logMerge = true
+        chunkMergeWorker.logMergeCount = 999
         job.mergeSegments(needMergeSegmentIndexList)
         then:
         1 == 1

@@ -1164,7 +1164,7 @@ public class OneSlot {
                 continue;
             }
 
-            ChunkMergeJob.readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, this, false);
+            ChunkMergeJob.readToCvList(cvList, segmentBytesBatchRead, relativeOffsetInBatchBytes, chunkSegmentLength, segmentIndex, this);
             segmentIndexList.add(segmentIndex);
         }
 
