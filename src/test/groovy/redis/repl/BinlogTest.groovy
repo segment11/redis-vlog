@@ -50,18 +50,26 @@ class BinlogTest extends Specification {
             new File(binlogDir2, 'test.txt').text = 'test'
         }
         def binlog2 = new Binlog(slot, slotDir2, dynConfig2)
-
         and:
         def vList = Mock.prepareValueList(11)
         for (v in vList[0..9]) {
             binlog.append(new XWalV(v))
             binlog2.append(new XWalV(v))
         }
-
         then:
         binlog.prevRaf(-1) == null
         binlog.readPrevRafOneSegment(-1, 0) == null
-        binlog.readPrevRafOneSegment(1, 0) == null
+
+        when:
+        boolean exception = false
+        try {
+            binlog.readPrevRafOneSegment(1, 0) == null
+        } catch (IOException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
 
         when:
         def oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength
@@ -114,7 +122,7 @@ class BinlogTest extends Specification {
         bytes == null
 
         when:
-        boolean exception = false
+        exception = false
         try {
             binlog.readPrevRafOneSegment(0, 1)
         } catch (IllegalArgumentException ignored) {
@@ -181,12 +189,13 @@ class BinlogTest extends Specification {
         def oneSlot = localPersist.oneSlot(slot)
 
         when:
-        Binlog.decodeAndApply(slot, oneSegmentBytes, 0, null)
+        def replPair = ReplPairTest.mockAsSlave()
+        Binlog.decodeAndApply(slot, oneSegmentBytes, 0, replPair)
         then:
         oneSlot.getWalByBucketIndex(0).keyCount == 10
 
         when:
-        def n = Binlog.decodeAndApply(slot, oneSegmentBytes, oneSegmentBytes.length, null)
+        def n = Binlog.decodeAndApply(slot, oneSegmentBytes, oneSegmentBytes.length, replPair)
         then:
         n == 0
 

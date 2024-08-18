@@ -93,7 +93,7 @@ public class Binlog {
         this.binlogDir = new File(slotDir, BINLOG_DIR_NAME);
         if (!binlogDir.exists()) {
             if (!binlogDir.mkdirs()) {
-                throw new IOException("Create binlog dir error, slot: " + slot);
+                throw new IOException("Repl create binlog dir error, slot: " + slot);
             }
         }
         this.dynConfig = dynConfig;
@@ -199,12 +199,12 @@ public class Binlog {
         if (afterAppendFileOffset > oneFileMaxLength) {
             // new file
             raf.close();
-            log.info("Close current binlog file as overflow, file: {}, slot: {}", fileName(), slot);
+            log.info("Repl close current binlog file as overflow, file: {}, slot: {}", fileName(), slot);
 
             currentFileIndex++;
             var nextFile = new File(binlogDir, fileName());
             FileUtils.touch(nextFile);
-            log.info("Create new binlog file, file: {}, slot: {}", nextFile.getName(), slot);
+            log.info("Repl create new binlog file, file: {}, slot: {}", nextFile.getName(), slot);
             raf = new RandomAccessFile(nextFile, "rw");
 
             currentFileOffset = 0;
@@ -216,9 +216,9 @@ public class Binlog {
                 // already sorted
                 var firstFile = files.get(0);
                 if (!firstFile.delete()) {
-                    log.error("Delete binlog file error, file: {}, slot: {}", firstFile.getName(), slot);
+                    log.error("Repl delete binlog file error, file: {}, slot: {}", firstFile.getName(), slot);
                 } else {
-                    log.info("Delete binlog file success, file: {}, slot: {}", firstFile.getName(), slot);
+                    log.info("Repl delete binlog file success, file: {}, slot: {}", firstFile.getName(), slot);
                 }
             }
         }
@@ -274,7 +274,9 @@ public class Binlog {
         // need not close
         var prevRaf = prevRaf(fileIndex);
         if (prevRaf == null) {
-            return null;
+            // keep max count = 10 or 100, if write too fast, may be lost some files
+            // so slave will get error repl reply, then need re-fetch all exists data from master and re-catch up
+            throw new IOException("Repl read binlog segment bytes, file not exist, file index: " + fileIndex);
         }
 
         if (prevRaf.length() <= offset) {
@@ -285,7 +287,7 @@ public class Binlog {
         prevRaf.seek(offset);
         var n = prevRaf.read(bytes);
         if (n < 0) {
-            throw new RuntimeException("Read binlog one segment error, file index: " + fileIndex + ", offset: " + offset + ", slot: " + slot);
+            throw new IOException("Repl read binlog segment bytes error, file index: " + fileIndex + ", offset: " + offset + ", slot: " + slot);
         }
         if (n < oneSegmentLength) {
             var readBytes = new byte[n];
@@ -329,7 +331,7 @@ public class Binlog {
         raf.seek(offset);
         var n = raf.read(bytes);
         if (n < 0) {
-            throw new RuntimeException("Read binlog one segment error, file index: " + currentFileIndex + ", offset: " + offset + ", slot: " + slot);
+            throw new RuntimeException("Repl read binlog segment bytes error, file index: " + currentFileIndex + ", offset: " + offset + ", slot: " + slot);
         }
 
         if (n == oneSegmentLength) {
@@ -369,7 +371,7 @@ public class Binlog {
         try {
             raf.setLength(0);
         } catch (IOException e) {
-            log.error("clear binlog error, slot: " + slot, e);
+            log.error("Repl clear binlog raf error, slot: " + slot + ", file index: " + currentFileIndex, e);
         }
 
         var it = prevRafByFileIndex.entrySet().iterator();
@@ -380,7 +382,7 @@ public class Binlog {
                 prevRaf.setLength(0);
                 prevRaf.close();
             } catch (IOException e) {
-                log.error("clear binlog old raf error, slot: " + slot + ", file index: " + entry.getKey(), e);
+                log.error("Repl clear binlog old raf error, slot: " + slot + ", file index: " + entry.getKey(), e);
             }
             it.remove();
         }
@@ -392,9 +394,9 @@ public class Binlog {
             }
 
             if (!file.delete()) {
-                log.error("Delete binlog file error, file: {}, slot: {}", file.getName(), slot);
+                log.error("Repl delete binlog file error, file: {}, slot: {}", file.getName(), slot);
             } else {
-                log.info("Delete binlog file success, file: {}, slot: {}", file.getName(), slot);
+                log.info("Repl delete binlog file success, file: {}, slot: {}", file.getName(), slot);
             }
         }
     }
@@ -402,18 +404,18 @@ public class Binlog {
     public void close() {
         try {
             raf.close();
-            System.out.println("Close binlog current raf success, slot: " + slot);
+            System.out.println("Repl close binlog current raf success, slot: " + slot);
         } catch (IOException e) {
-            System.err.println("Close binlog current raf error, slot: " + slot);
+            System.err.println("Repl close binlog current raf error, slot: " + slot);
         }
 
         for (var entry : prevRafByFileIndex.entrySet()) {
             var prevRaf = entry.getValue();
             try {
                 prevRaf.close();
-                System.out.println("Close binlog old raf success, slot: " + slot + ", file: " + entry.getKey());
+                System.out.println("Repl close binlog old raf success, slot: " + slot + ", file: " + entry.getKey());
             } catch (IOException e) {
-                System.err.println("Close binlog old raf error, slot: " + slot + ", file: " + entry.getKey());
+                System.err.println("Repl close binlog old raf error, slot: " + slot + ", file: " + entry.getKey());
             }
         }
     }
