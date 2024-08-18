@@ -993,7 +993,7 @@ public class OneSlot {
         }
 
         if (this.chunk != null) {
-            this.chunk.segmentIndex = 0;
+            this.chunk.resetAsFlush();
         }
     }
 
@@ -1321,7 +1321,8 @@ public class OneSlot {
         return needPersistMergedButNotPersisted;
     }
 
-    void checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(boolean isServerStart) {
+    @MasterReset
+    public void checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(boolean isServerStart) {
         var currentSegmentIndex = chunk.currentSegmentIndex();
 
         ArrayList<Integer> needMergeSegmentIndexList = new ArrayList<>();
@@ -1483,7 +1484,8 @@ public class OneSlot {
         return validCvCountTotal;
     }
 
-    void getMergedSegmentIndexEndLastTime() {
+    @MasterReset
+    public void getMergedSegmentIndexEndLastTime() {
         chunk.mergedSegmentIndexEndLastTime = metaChunkSegmentFlagSeq.getMergedSegmentIndexEndLastTime(
                 chunk.currentSegmentIndex(), chunk.halfSegmentNumber);
         chunk.checkMergedSegmentIndexEndLastTimeValidAfterServerStart();

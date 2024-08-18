@@ -173,6 +173,13 @@ public class Chunk {
         return segmentIndex;
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
+    void resetAsFlush() {
+        segmentIndex = 0;
+        mergedSegmentIndexEndLastTime = NO_NEED_MERGE_SEGMENT_INDEX;
+    }
+
     int targetFdIndex() {
         return segmentIndex / segmentNumberPerFd;
     }

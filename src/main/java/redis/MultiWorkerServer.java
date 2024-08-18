@@ -351,7 +351,7 @@ public class MultiWorkerServer extends Launcher {
     @Override
     protected void onStart() throws Exception {
         var localPersist = LocalPersist.getInstance();
-        localPersist.persistMergeSegmentsUndone();
+        localPersist.persistMergedSegmentsJobUndone();
 
         netWorkerThreadIds = new long[netWorkerEventloopArray.length];
 

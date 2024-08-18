@@ -245,7 +245,11 @@ public class SGroup extends BaseCommand {
                 var oneSlot = localPersist.oneSlot((byte) i);
                 promises[i] = oneSlot.asyncRun(() -> {
                     oneSlot.removeReplPairAsSlave();
+
+                    // reset as master
                     oneSlot.persistMergingOrMergedSegmentsButNotPersisted();
+                    oneSlot.checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
+                    oneSlot.getMergedSegmentIndexEndLastTime();
                 });
             }
 

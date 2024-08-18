@@ -36,7 +36,7 @@ class LocalPersistTest extends Specification {
         when:
         prepareLocalPersist()
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
-        localPersist.persistMergeSegmentsUndone()
+        localPersist.persistMergedSegmentsJobUndone()
         then:
         localPersist.oneSlots().length == 1
         localPersist.oneSlot(slot) != null

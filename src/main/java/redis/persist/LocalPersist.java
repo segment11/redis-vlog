@@ -38,7 +38,7 @@ public class LocalPersist {
 
     public static final int O_DIRECT = 040000;
 
-    public void persistMergeSegmentsUndone() {
+    public void persistMergedSegmentsJobUndone() {
         for (var oneSlot : oneSlots) {
             oneSlot.persistMergingOrMergedSegmentsButNotPersisted();
             // merged segments may do merge again, it is ok, only do once when server restart
