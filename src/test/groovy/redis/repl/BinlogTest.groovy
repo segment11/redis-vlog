@@ -221,7 +221,7 @@ class BinlogTest extends Specification {
         // write to next file not created yet
         binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 4, 0)
         then:
-        // not change
+        // change to bigger file index
         binlog.currentFileIndex == 4
         binlog.currentFileOffset == oneSegmentLength
 
@@ -237,6 +237,7 @@ class BinlogTest extends Specification {
         oneSegmentBytes = new byte[oneSegmentLength / 2]
         binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 5, oneFileMaxLength - oneSegmentLength)
         then:
+        // not change as current file index is bigger
         binlog.currentFileIndex == 6
         binlog.currentFileOffset == 0
 
@@ -245,7 +246,8 @@ class BinlogTest extends Specification {
         oneSegmentBytes = new byte[oneSegmentLength + 1]
         try {
             binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 5, 0)
-        } catch (IllegalArgumentException ignored) {
+        } catch (IllegalArgumentException e) {
+            println e.message
             exception = true
         }
         then:
