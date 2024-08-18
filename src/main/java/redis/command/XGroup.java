@@ -923,6 +923,13 @@ public class XGroup extends BaseCommand {
         var readSegmentBytes = new byte[readSegmentLength];
         buffer.get(readSegmentBytes);
 
+        // only when self is as slave but also as master, need to write binlog
+        try {
+            oneSlot.getBinlog().writeFromMasterOneSegmentBytes(readSegmentBytes, fetchedFileIndex, fetchedOffset);
+        } catch (IOException e) {
+            log.error("Repl slave write binlog from master error, slot: " + slot, e);
+        }
+
         // update last catch up file index and offset
         var skipBytesN = 0;
         var isLastTimeCatchUpThisSegmentButNotCompleted = lastUpdatedFileIndex == fetchedFileIndex && lastUpdatedOffset > fetchedOffset;

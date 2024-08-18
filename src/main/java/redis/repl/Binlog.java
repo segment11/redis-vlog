@@ -1,6 +1,7 @@
 package redis.repl;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,14 +144,19 @@ public class Binlog {
     private final byte[] tempAppendSegmentBytes;
     private final ByteBuffer tempAppendSegmentBuffer;
 
-    private void addForReadCacheSegmentBytes(int fileIndex, long offset) {
+    private void addForReadCacheSegmentBytes(int fileIndex, long offset, byte[] givenBytes) {
+        // copy one
+        byte[] bytes;
+        if (givenBytes != null) {
+            bytes = givenBytes;
+        } else {
+            bytes = new byte[tempAppendSegmentBytes.length];
+            System.arraycopy(tempAppendSegmentBytes, 0, bytes, 0, tempAppendSegmentBytes.length);
+        }
+
         if (latestAppendForReadCacheSegmentBytesSet.size() >= forReadCacheSegmentMaxCount) {
             latestAppendForReadCacheSegmentBytesSet.removeFirst();
         }
-
-        // copy one
-        var bytes = new byte[tempAppendSegmentBytes.length];
-        System.arraycopy(tempAppendSegmentBytes, 0, bytes, 0, tempAppendSegmentBytes.length);
         latestAppendForReadCacheSegmentBytesSet.add(new BytesWithFileIndexAndOffset(bytes, fileIndex, offset));
     }
 
@@ -172,6 +178,10 @@ public class Binlog {
         var oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
 
         var encoded = content.encodeWithType();
+        if (encoded.length >= oneSegmentLength) {
+            throw new IllegalArgumentException("Repl append binlog content error, encoded length must be less than one segment length, slot: " +
+                    slot + ", encoded length: " + encoded.length);
+        }
 
         var beforeAppendFileOffset = currentFileOffset;
         var beforeAppendSegmentIndex = beforeAppendFileOffset / oneSegmentLength;
@@ -188,7 +198,7 @@ public class Binlog {
             currentFileOffset += padding.length;
 
             tempAppendSegmentBuffer.put(padding);
-            addForReadCacheSegmentBytes(currentFileIndex, currentFileOffset - oneSegmentLength);
+            addForReadCacheSegmentBytes(currentFileIndex, currentFileOffset - oneSegmentLength, null);
             tempAppendSegmentBuffer.clear();
             Arrays.fill(tempAppendSegmentBytes, (byte) 0);
 
@@ -197,30 +207,7 @@ public class Binlog {
         }
 
         if (afterAppendFileOffset > oneFileMaxLength) {
-            // new file
-            raf.close();
-            log.info("Repl close current binlog file as overflow, file: {}, slot: {}", fileName(), slot);
-
-            currentFileIndex++;
-            var nextFile = new File(binlogDir, fileName());
-            FileUtils.touch(nextFile);
-            log.info("Repl create new binlog file, file: {}, slot: {}", nextFile.getName(), slot);
-            raf = new RandomAccessFile(nextFile, "rw");
-
-            currentFileOffset = 0;
-//                beforeAppendFileOffset = 0;
-
-            // check file keep max count
-            var files = listFiles();
-            if (files.size() > ConfForSlot.global.confRepl.binlogFileKeepMaxCount) {
-                // already sorted
-                var firstFile = files.get(0);
-                if (!firstFile.delete()) {
-                    log.error("Repl delete binlog file error, file: {}, slot: {}", firstFile.getName(), slot);
-                } else {
-                    log.info("Repl delete binlog file success, file: {}, slot: {}", firstFile.getName(), slot);
-                }
-            }
+            createAndUseNextFile();
         }
 
         raf.seek(currentFileOffset);
@@ -230,12 +217,120 @@ public class Binlog {
         tempAppendSegmentBuffer.put(encoded);
     }
 
+    // self as slave, but also as master to another slave, need do binlog just same as master
+    public void writeFromMasterOneSegmentBytes(byte[] oneSegmentBytes, int toFileIndex, long toFileOffset) throws IOException {
+        if (!dynConfig.isBinlogOn()) {
+            return;
+        }
+
+        int binlogOneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
+        if (oneSegmentBytes.length > binlogOneSegmentLength) {
+            throw new IllegalArgumentException("Repl write binlog one segment bytes error, length must be less than " + binlogOneSegmentLength);
+        }
+
+        var oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
+
+        if (currentFileIndex == toFileIndex) {
+            raf.seek(toFileOffset);
+            raf.write(oneSegmentBytes);
+
+            // because when master reset, self will write binlog from wal
+            // need margin so can use a new beginning segment
+            currentFileOffset = toFileOffset + binlogOneSegmentLength;
+
+            var isLastSegment = currentFileOffset == oneFileMaxLength;
+            if (isLastSegment) {
+                createAndUseNextFile();
+            }
+        } else {
+            var prevRaf = prevRaf(toFileIndex, true);
+
+            prevRaf.seek(toFileOffset);
+            prevRaf.write(oneSegmentBytes);
+
+            if (currentFileIndex < toFileIndex) {
+                IOUtils.closeQuietly(raf);
+                var rafRemoved = prevRafByFileIndex.remove(currentFileIndex);
+                if (rafRemoved != null) {
+                    if (rafRemoved != raf) {
+                        IOUtils.closeQuietly(rafRemoved);
+                    }
+                }
+
+                // set current to latest, because when master reset, self will write binlog from wal
+                // need margin so can use a new beginning segment
+                currentFileIndex = toFileIndex;
+                currentFileOffset = toFileOffset + binlogOneSegmentLength;
+                raf = prevRaf;
+
+                var isLastSegment = currentFileOffset == oneFileMaxLength;
+                if (isLastSegment) {
+                    createAndUseNextFile();
+                }
+            }
+        }
+
+        addForReadCacheSegmentBytes(toFileIndex, toFileOffset, oneSegmentBytes);
+    }
+
+    private void createAndUseNextFile() throws IOException {
+        raf.close();
+        log.info("Repl close current binlog file as overflow, file: {}, slot: {}", fileName(), slot);
+
+        var prevRaf = prevRafByFileIndex.remove(currentFileIndex);
+        if (prevRaf != null) {
+            if (prevRaf != raf) {
+                IOUtils.closeQuietly(prevRaf);
+            }
+        }
+
+        currentFileIndex++;
+        var nextFile = new File(binlogDir, fileName());
+        FileUtils.touch(nextFile);
+        log.info("Repl create new binlog file, file: {}, slot: {}", nextFile.getName(), slot);
+        raf = new RandomAccessFile(nextFile, "rw");
+
+        currentFileOffset = 0;
+
+        // check file keep max count
+        var files = listFiles();
+        if (files.size() > ConfForSlot.global.confRepl.binlogFileKeepMaxCount) {
+            // already sorted
+            var firstFile = files.get(0);
+            var firstFileIndex = fileIndex(firstFile);
+            var rafRemoved = prevRafByFileIndex.remove(firstFileIndex);
+            if (rafRemoved != null) {
+                rafRemoved.close();
+                log.info("Repl close binlog old raf success, slot: " + slot + ", file index: " + firstFileIndex);
+            }
+
+            if (!firstFile.delete()) {
+                log.error("Repl delete binlog file error, file: {}, slot: {}", firstFile.getName(), slot);
+            } else {
+                log.info("Repl delete binlog file success, file: {}, slot: {}", firstFile.getName(), slot);
+            }
+        }
+    }
+
     RandomAccessFile prevRaf(int fileIndex) {
+        return prevRaf(fileIndex, false);
+    }
+
+    RandomAccessFile prevRaf(int fileIndex, boolean createIfNotExists) {
         return prevRafByFileIndex.computeIfAbsent(fileIndex, k -> {
             var file = new File(binlogDir, FILE_NAME_PREFIX + fileIndex);
             if (!file.exists()) {
-                return null;
+                if (!createIfNotExists) {
+                    return null;
+                } else {
+                    try {
+                        FileUtils.touch(file);
+                    } catch (IOException e) {
+                        throw new RuntimeException("Repl touch new binlog file error, slot: " + slot + ", file index: " + fileIndex, e);
+                    }
+                }
             }
+
             try {
                 return new RandomAccessFile(file, "rw");
             } catch (FileNotFoundException e) {
@@ -378,12 +473,7 @@ public class Binlog {
         while (it.hasNext()) {
             var entry = it.next();
             var prevRaf = entry.getValue();
-            try {
-                prevRaf.setLength(0);
-                prevRaf.close();
-            } catch (IOException e) {
-                log.error("Repl clear binlog old raf error, slot: " + slot + ", file index: " + entry.getKey(), e);
-            }
+            IOUtils.closeQuietly(prevRaf);
             it.remove();
         }
 
@@ -410,12 +500,13 @@ public class Binlog {
         }
 
         for (var entry : prevRafByFileIndex.entrySet()) {
+            var prevFileIndex = entry.getKey();
             var prevRaf = entry.getValue();
             try {
                 prevRaf.close();
-                System.out.println("Repl close binlog old raf success, slot: " + slot + ", file: " + entry.getKey());
+                System.out.println("Repl close binlog old raf success, slot: " + slot + ", file index: " + prevFileIndex);
             } catch (IOException e) {
-                System.err.println("Repl close binlog old raf error, slot: " + slot + ", file: " + entry.getKey());
+                System.err.println("Repl close binlog old raf error, slot: " + slot + ", file index: " + prevFileIndex);
             }
         }
     }

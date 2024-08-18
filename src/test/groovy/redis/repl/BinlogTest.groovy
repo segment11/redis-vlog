@@ -155,11 +155,107 @@ class BinlogTest extends Specification {
         when:
         ConfForSlot.global.confRepl.binlogFileKeepMaxCount = 1
         binlog.currentFileOffset = oneFileMaxLength - 1
+        // trigger remove old file
         for (v in vList[0..9]) {
             binlog.append(new XWalV(v))
         }
         then:
         binlog.currentFileIndex == 2
+
+        when:
+        exception = false
+        def testBinlogContent = new BinlogContent() {
+            @Override
+            BinlogContent.Type type() {
+                return null
+            }
+
+            @Override
+            int encodedLength() {
+                return 0
+            }
+
+            @Override
+            byte[] encodeWithType() {
+                new byte[oneSegmentLength]
+            }
+
+            @Override
+            void apply(byte slot, ReplPair replPair) {
+
+            }
+        }
+        try {
+            binlog.append(testBinlogContent)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        // write from master
+        when:
+        def oneSegmentBytes = new byte[oneSegmentLength]
+        // write to current file index
+        binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 2, 0)
+        then:
+        binlog.currentFileOffset == oneSegmentLength
+
+        when:
+        binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 2, oneFileMaxLength - oneSegmentLength)
+        then:
+        // create next file
+        binlog.currentFileIndex == 3
+        binlog.currentFileOffset == 0
+
+        when:
+        // write perv again
+        binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 2, 0)
+        then:
+        // not change
+        binlog.currentFileIndex == 3
+        binlog.currentFileOffset == 0
+
+        when:
+        // write to next file not created yet
+        binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 4, 0)
+        then:
+        // not change
+        binlog.currentFileIndex == 4
+        binlog.currentFileOffset == oneSegmentLength
+
+        when:
+        // write to next file not created yet
+        binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 5, oneFileMaxLength - oneSegmentLength)
+        then:
+        // create next file
+        binlog.currentFileIndex == 6
+        binlog.currentFileOffset == 0
+
+        when:
+        oneSegmentBytes = new byte[oneSegmentLength / 2]
+        binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 5, oneFileMaxLength - oneSegmentLength)
+        then:
+        binlog.currentFileIndex == 6
+        binlog.currentFileOffset == 0
+
+        when:
+        exception = false
+        oneSegmentBytes = new byte[oneSegmentLength + 1]
+        try {
+            binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 5, 0)
+        } catch (IllegalArgumentException ignored) {
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        dynConfig.binlogOn = false
+        binlog.writeFromMasterOneSegmentBytes(oneSegmentBytes, 5, 0)
+        then:
+        1 == 1
 
         cleanup:
         binlog.clear()
