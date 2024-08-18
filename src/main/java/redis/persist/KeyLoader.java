@@ -189,22 +189,18 @@ public class KeyLoader {
 
     @SlaveNeedReplay
     @SlaveReplay
-    public void updateKeyCountBatchCached(int beginBucketIndex, int[] keyCountTmp) {
-        if (beginBucketIndex < 0 || beginBucketIndex + keyCountTmp.length > bucketsPerSlot) {
+    public void updateKeyCountBatch(int walGroupIndex, int beginBucketIndex, short[] keyCountArray) {
+        if (beginBucketIndex < 0 || beginBucketIndex + keyCountArray.length > bucketsPerSlot) {
             throw new IllegalArgumentException("Begin bucket index out of range, slot: " + slot + ", begin bucket index: " + beginBucketIndex);
         }
 
-        for (int i = 0; i < keyCountTmp.length; i++) {
-            var bucketIndex = beginBucketIndex + i;
-            var keyCount = keyCountTmp[i];
-            statKeyCountInBuckets.setKeyCountForBucketIndex(bucketIndex, (short) keyCount);
-        }
+        statKeyCountInBuckets.setKeyCountBatch(walGroupIndex, beginBucketIndex, keyCountArray);
     }
 
     public void initFds(LibC libC) throws IOException {
         this.metaKeyBucketSplitNumber = new MetaKeyBucketSplitNumber(slot, slotDir);
         this.metaOneWalGroupSeq = new MetaOneWalGroupSeq(slot, slotDir);
-        this.statKeyCountInBuckets = new StatKeyCountInBuckets(slot, bucketsPerSlot, slotDir);
+        this.statKeyCountInBuckets = new StatKeyCountInBuckets(slot, slotDir);
 
         this.libC = libC;
         this.fdReadWriteArray = new FdReadWrite[MAX_SPLIT_NUMBER];
@@ -401,7 +397,7 @@ public class KeyLoader {
     }
 
     private void doAfterPutAll(int walGroupIndex, XOneWalGroupPersist xForBinlog, KeyBucketsInOneWalGroup inner) {
-        updateKeyCountBatchCached(inner.beginBucketIndex, inner.keyCountForStatsTmp);
+        updateKeyCountBatch(walGroupIndex, inner.beginBucketIndex, inner.keyCountForStatsTmp);
         xForBinlog.setKeyCountForStatsTmp(inner.keyCountForStatsTmp);
 
         var sharedBytesList = inner.writeAfterPutBatch();

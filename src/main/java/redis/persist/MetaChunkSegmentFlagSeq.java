@@ -253,27 +253,19 @@ public class MetaChunkSegmentFlagSeq {
     @SlaveNeedReplay
     public void setSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex) {
         var offset = segmentIndex * ONE_LENGTH;
+
         var bytes = new byte[ONE_LENGTH];
         ByteBuffer wrap = ByteBuffer.wrap(bytes);
         wrap.put(flag.flagByte);
         wrap.putLong(segmentSeq);
         wrap.putInt(walGroupIndex);
 
-        if (ConfForSlot.global.pureMemory) {
-            inMemoryCachedByteBuffer.put(offset, bytes);
-            return;
-        }
-
-        try {
-            raf.seek(offset);
-            raf.write(bytes);
-            inMemoryCachedByteBuffer.put(offset, bytes);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        StatKeyCountInBuckets.writeToRaf(offset, bytes, inMemoryCachedByteBuffer, raf);
     }
 
     public void setSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount, Flag flag, List<Long> segmentSeqList, int walGroupIndex) {
+        var offset = beginSegmentIndex * ONE_LENGTH;
+
         var bytes = new byte[segmentCount * ONE_LENGTH];
         var wrap = ByteBuffer.wrap(bytes);
         for (int i = 0; i < segmentCount; i++) {
@@ -282,19 +274,7 @@ public class MetaChunkSegmentFlagSeq {
             wrap.putInt(i * ONE_LENGTH + 1 + 8, walGroupIndex);
         }
 
-        var offset = beginSegmentIndex * ONE_LENGTH;
-        if (ConfForSlot.global.pureMemory) {
-            inMemoryCachedByteBuffer.put(offset, bytes);
-            return;
-        }
-
-        try {
-            raf.seek(offset);
-            raf.write(bytes);
-            inMemoryCachedByteBuffer.put(offset, bytes);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        StatKeyCountInBuckets.writeToRaf(offset, bytes, inMemoryCachedByteBuffer, raf);
     }
 
     Chunk.SegmentFlag getSegmentMergeFlag(int segmentIndex) {

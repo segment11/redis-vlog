@@ -4,7 +4,6 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
-import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
 
 import java.io.File;
@@ -15,7 +14,7 @@ import java.util.Arrays;
 
 public class StatKeyCountInBuckets {
     private static final String STAT_KEY_BUCKET_LAST_UPDATE_COUNT_FILE = "stat_key_count_in_buckets.dat";
-    // short is enough for one key bucket total value count
+    // short is enough for one key bucket index total value count
     public static final int ONE_LENGTH = 2;
 
     private final int bucketsPerSlot;
@@ -24,6 +23,10 @@ public class StatKeyCountInBuckets {
 
     private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
+
+    private final int[] keyCountInOneWalGroup;
+
+    private long totalKeyCountCached;
 
     @SlaveReplay
     byte[] getInMemoryCachedBytes() {
@@ -40,6 +43,7 @@ public class StatKeyCountInBuckets {
 
         if (ConfForSlot.global.pureMemory) {
             inMemoryCachedByteBuffer.position(0).put(bytes);
+            calcKeyCount();
             return;
         }
 
@@ -47,6 +51,7 @@ public class StatKeyCountInBuckets {
             raf.seek(0);
             raf.write(bytes);
             inMemoryCachedByteBuffer.position(0).put(bytes);
+            calcKeyCount();
         } catch (IOException e) {
             throw new RuntimeException("Repl stat key count in buckets, write file error", e);
         }
@@ -54,9 +59,12 @@ public class StatKeyCountInBuckets {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public StatKeyCountInBuckets(byte slot, int bucketsPerSlot, File slotDir) throws IOException {
-        this.bucketsPerSlot = bucketsPerSlot;
+    public StatKeyCountInBuckets(byte slot, File slotDir) throws IOException {
+        this.bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
         this.allCapacity = bucketsPerSlot * ONE_LENGTH;
+
+        var walGroupNumber = Wal.calcWalGroupNumber();
+        this.keyCountInOneWalGroup = new int[walGroupNumber];
 
         // max 512KB * 2 = 1MB
         this.inMemoryCachedBytes = new byte[allCapacity];
@@ -84,22 +92,42 @@ public class StatKeyCountInBuckets {
         }
 
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
-        log.info("Key count in buckets: {}, slot: {}", getKeyCount(), slot);
+        log.info("Key count in buckets: {}, slot: {}", calcKeyCount(), slot);
     }
 
-    @SlaveNeedReplay
-    void setKeyCountForBucketIndex(int bucketIndex, short keyCount) {
-        var offset = bucketIndex * ONE_LENGTH;
+    private void updateKeyCountForTargetWalGroup(int walGroupIndex, int keyCount) {
+        var oldKeyCountInOneWalGroup = keyCountInOneWalGroup[walGroupIndex];
+        keyCountInOneWalGroup[walGroupIndex] = keyCount;
+        totalKeyCountCached += keyCount - oldKeyCountInOneWalGroup;
+    }
 
+    void setKeyCountBatch(int walGroupIndex, int beginBucketIndex, short[] keyCountArray) {
+        var offset = beginBucketIndex * ONE_LENGTH;
+
+        var tmpBytes = new byte[keyCountArray.length * ONE_LENGTH];
+        var tmpByteBuffer = ByteBuffer.wrap(tmpBytes);
+
+        int totalKeyCountInTargetWalGroup = 0;
+        for (short keyCount : keyCountArray) {
+            totalKeyCountInTargetWalGroup += keyCount;
+            tmpByteBuffer.putShort(keyCount);
+        }
+
+        writeToRaf(offset, tmpBytes, inMemoryCachedByteBuffer, raf);
+
+        updateKeyCountForTargetWalGroup(walGroupIndex, totalKeyCountInTargetWalGroup);
+    }
+
+    static void writeToRaf(int offset, byte[] tmpBytes, ByteBuffer inMemoryCachedByteBuffer, RandomAccessFile raf) {
         if (ConfForSlot.global.pureMemory) {
-            inMemoryCachedByteBuffer.putShort(offset, keyCount);
+            inMemoryCachedByteBuffer.put(offset, tmpBytes);
             return;
         }
 
         try {
             raf.seek(offset);
-            raf.writeShort(keyCount);
-            inMemoryCachedByteBuffer.putShort(offset, keyCount);
+            raf.write(tmpBytes);
+            inMemoryCachedByteBuffer.put(offset, tmpBytes);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -110,18 +138,37 @@ public class StatKeyCountInBuckets {
         return inMemoryCachedByteBuffer.getShort(offset);
     }
 
-    long getKeyCount() {
-        long keyCount = 0;
+    // perf bad if bucketsPerSlot = 512K when one slot will hold 100M keys
+    // so cached by wal group
+    private long calcKeyCount() {
+        var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber;
+
+        long totalKeyCount = 0;
+        int tmpKeyCountInOneWalGroup = 0;
         for (int i = 0; i < bucketsPerSlot; i++) {
             var offset = i * ONE_LENGTH;
-            keyCount += inMemoryCachedByteBuffer.getShort(offset);
+            var keyCountInOneKeyBucketIndex = inMemoryCachedByteBuffer.getShort(offset);
+            totalKeyCount += keyCountInOneKeyBucketIndex;
+            tmpKeyCountInOneWalGroup += keyCountInOneKeyBucketIndex;
+
+            if (i % oneChargeBucketNumber == oneChargeBucketNumber - 1) {
+                keyCountInOneWalGroup[i / oneChargeBucketNumber] = tmpKeyCountInOneWalGroup;
+                tmpKeyCountInOneWalGroup = 0;
+            }
         }
-        return keyCount;
+        totalKeyCountCached = totalKeyCount;
+        return totalKeyCount;
+    }
+
+    long getKeyCount() {
+        return totalKeyCountCached;
     }
 
     void clear() {
         if (ConfForSlot.global.pureMemory) {
             Arrays.fill(inMemoryCachedBytes, (byte) 0);
+            Arrays.fill(keyCountInOneWalGroup, 0);
+            totalKeyCountCached = 0;
             return;
         }
 
@@ -131,6 +178,8 @@ public class StatKeyCountInBuckets {
             raf.seek(0);
             raf.write(tmpBytes);
             inMemoryCachedByteBuffer.position(0).put(tmpBytes);
+            Arrays.fill(keyCountInOneWalGroup, 0);
+            totalKeyCountCached = 0;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

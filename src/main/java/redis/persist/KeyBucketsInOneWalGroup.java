@@ -19,7 +19,7 @@ public class KeyBucketsInOneWalGroup {
 
         var oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber;
         this.oneChargeBucketNumber = oneChargeBucketNumber;
-        this.keyCountForStatsTmp = new int[oneChargeBucketNumber];
+        this.keyCountForStatsTmp = new short[oneChargeBucketNumber];
         this.beginBucketIndex = oneChargeBucketNumber * groupIndex;
 
         this.readBeforePutBatch();
@@ -29,7 +29,7 @@ public class KeyBucketsInOneWalGroup {
     private final int oneChargeBucketNumber;
     // index is bucket index - begin bucket index
     byte[] splitNumberTmp;
-    final int[] keyCountForStatsTmp;
+    final short[] keyCountForStatsTmp;
     final int beginBucketIndex;
 
     private final KeyLoader keyLoader;
@@ -84,6 +84,7 @@ public class KeyBucketsInOneWalGroup {
                 var keyBucket = new KeyBucket(slot, bucketIndex, (byte) splitIndex, currentSplitNumber, sharedBytes,
                         KeyLoader.KEY_BUCKET_ONE_COST_SIZE * i, keyLoader.snowFlake);
                 keyBucket.shortValueCvExpiredCallBack = keyLoader.shortValueCvExpiredCallBack;
+                // one key bucket max size = KeyBucket.INIT_CAPACITY (48), max split number = 9 or 27, 27 * 48 = 1296 < short max value
                 keyCountForStatsTmp[i] += keyBucket.size;
                 list.set(i, keyBucket);
             }

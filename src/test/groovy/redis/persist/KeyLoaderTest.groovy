@@ -30,6 +30,7 @@ class KeyLoaderTest extends Specification {
         def keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir, snowFlake)
         // do nothing, just for test coverage
         keyLoader.cleanUp()
+        keyLoader.keyCount
 
         keyLoader.initFds(libC)
         keyLoader.initFds((byte) 1)
@@ -185,10 +186,10 @@ class KeyLoaderTest extends Specification {
         exception
 
         when:
-        int[] keyCountArray = new int[2]
-        keyCountArray[0] = 1
-        keyCountArray[1] = 2
-        keyLoader.updateKeyCountBatchCached(0, keyCountArray)
+        short[] keyCountArray = new short[2]
+        keyCountArray[0] = (short) 1
+        keyCountArray[1] = (short) 2
+        keyLoader.updateKeyCountBatch(0, 0, keyCountArray)
         then:
         keyLoader.getKeyCountInBucketIndex(0) == 1
         keyLoader.getKeyCountInBucketIndex(1) == 2
@@ -196,7 +197,7 @@ class KeyLoaderTest extends Specification {
         when:
         exception = false
         try {
-            keyLoader.updateKeyCountBatchCached(-1, new int[1])
+            keyLoader.updateKeyCountBatch(0, -1, new short[1])
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -207,7 +208,7 @@ class KeyLoaderTest extends Specification {
         when:
         exception = false
         try {
-            keyLoader.updateKeyCountBatchCached(bucketsPerSlot, new int[1])
+            keyLoader.updateKeyCountBatch(0, bucketsPerSlot, new short[1])
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -248,10 +249,11 @@ class KeyLoaderTest extends Specification {
         def keyLoader = prepareKeyLoader()
 
         when:
-        keyLoader.putValueByKeyForTest(0, 'a'.bytes, 10L, 0L, 1L, 'a'.bytes)
+        def encodeAsShortStringA = Mock.prepareShortStringCvEncoded('a', 'a')
+        keyLoader.putValueByKeyForTest(0, 'a'.bytes, 10L, 0L, 1L, encodeAsShortStringA)
         def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 10L)
         then:
-        valueBytesWithExpireAt.valueBytes() == 'a'.bytes
+        valueBytesWithExpireAt.valueBytes() == encodeAsShortStringA
 
         when:
         def k0 = keyLoader.readKeyBucketForSingleKey(0, splitIndex, (byte) 1, false)
@@ -313,13 +315,14 @@ class KeyLoaderTest extends Specification {
         keyLoader.fdReadWriteArray[0] = rawFdReadWrite
         def keyBucket = new KeyBucket(slot, 0, splitIndex, (byte) 1, null, keyLoader.snowFlake)
         rawFdReadWrite.writeOneInner(0, keyBucket.encode(true), false)
-        keyLoader.putValueByKeyForTest(0, 'a'.bytes, 10L, 0L, 1L, 'a'.bytes)
+        def encodeAsShortStringA = Mock.prepareShortStringCvEncoded('a', 'a')
+        keyLoader.putValueByKeyForTest(0, 'a'.bytes, 10L, 0L, 1L, encodeAsShortStringA)
         def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 10L)
         def bytesBatch = keyLoader.readBatchInOneWalGroup(splitIndex, 0)
         def isRemoved = keyLoader.removeSingleKeyForTest(0, 'a'.bytes, 10L)
         def isRemoved2 = keyLoader.removeSingleKeyForTest(0, 'b'.bytes, 11L)
         then:
-        valueBytesWithExpireAt.valueBytes() == 'a'.bytes
+        valueBytesWithExpireAt.valueBytes() == encodeAsShortStringA
         bytesBatch != null
         isRemoved
         !isRemoved2

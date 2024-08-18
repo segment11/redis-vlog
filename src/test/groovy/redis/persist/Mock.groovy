@@ -75,6 +75,15 @@ class Mock {
         compressedValueList
     }
 
+    static byte[] prepareShortStringCvEncoded(String key, String value) {
+        def cv = new CompressedValue()
+        cv.keyHash = KeyHash.hash(key.bytes)
+        cv.compressedData = value.bytes
+        cv.compressedLength = value.length()
+        cv.uncompressedLength = value.length()
+        cv.encodeAsShortString()
+    }
+
     // tuple2: key, keyHash
     static Map<Integer, List<Tuple2<String, Long>>> prepareKeyHashIndexByKeyBucketList(int n, int bucketsPerSlot) {
         Map<Integer, List<Tuple2<String, Long>>> keyHashByBucketIndex = [:]

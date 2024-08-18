@@ -33,9 +33,9 @@ public class XOneWalGroupPersist implements BinlogContent {
         this.beginBucketIndex = beginBucketIndex;
     }
 
-    private int[] keyCountForStatsTmp;
+    private short[] keyCountForStatsTmp;
 
-    public void setKeyCountForStatsTmp(int[] keyCountForStatsTmp) {
+    public void setKeyCountForStatsTmp(short[] keyCountForStatsTmp) {
         this.keyCountForStatsTmp = keyCountForStatsTmp;
     }
 
@@ -103,8 +103,8 @@ public class XOneWalGroupPersist implements BinlogContent {
         n += 1 + 1 + 4;
         // 4 bytes for begin bucket index
         n += 4;
-        // 4 bytes for key count for stats tmp, 4 bytes for each key count
-        n += 4 + keyCountForStatsTmp.length * 4;
+        // 4 bytes for key count for stats tmp, 2 bytes for each key count
+        n += 4 + keyCountForStatsTmp.length * 2;
         // 4 bytes for shared bytes list by split index size
         n += 4;
         for (var bytes : sharedBytesListBySplitIndex) {
@@ -154,7 +154,7 @@ public class XOneWalGroupPersist implements BinlogContent {
 
         buffer.putInt(keyCountForStatsTmp.length);
         for (var keyCount : keyCountForStatsTmp) {
-            buffer.putInt(keyCount);
+            buffer.putShort(keyCount);
         }
 
         buffer.putInt(sharedBytesListBySplitIndex.length);
@@ -206,9 +206,9 @@ public class XOneWalGroupPersist implements BinlogContent {
         x.setBeginBucketIndex(buffer.getInt());
 
         var keyCountForStatsTmpSize = buffer.getInt();
-        var keyCountForStatsTmp = new int[keyCountForStatsTmpSize];
+        var keyCountForStatsTmp = new short[keyCountForStatsTmpSize];
         for (var i = 0; i < keyCountForStatsTmpSize; i++) {
-            keyCountForStatsTmp[i] = buffer.getInt();
+            keyCountForStatsTmp[i] = buffer.getShort();
         }
         x.setKeyCountForStatsTmp(keyCountForStatsTmp);
 
@@ -266,7 +266,7 @@ public class XOneWalGroupPersist implements BinlogContent {
         var oneSlot = localPersist.oneSlot(slot);
 
         var keyLoader = oneSlot.getKeyLoader();
-        keyLoader.updateKeyCountBatchCached(beginBucketIndex, keyCountForStatsTmp);
+        keyLoader.updateKeyCountBatch(walGroupIndex, beginBucketIndex, keyCountForStatsTmp);
         keyLoader.writeSharedBytesList(sharedBytesListBySplitIndex, beginBucketIndex);
         for (int splitIndex = 0; splitIndex < oneWalGroupSeqArrayBySplitIndex.length; splitIndex++) {
             var seq = oneWalGroupSeqArrayBySplitIndex[splitIndex];

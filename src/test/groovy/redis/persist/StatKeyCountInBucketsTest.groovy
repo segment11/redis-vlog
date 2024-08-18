@@ -3,6 +3,8 @@ package redis.persist
 import redis.ConfForSlot
 import spock.lang.Specification
 
+import java.nio.ByteBuffer
+
 import static redis.persist.Consts.getSlotDir
 
 class StatKeyCountInBucketsTest extends Specification {
@@ -10,8 +12,8 @@ class StatKeyCountInBucketsTest extends Specification {
 
     def 'test for repl'() {
         given:
-        def one = new StatKeyCountInBuckets(slot, 4096, slotDir)
-        def two = new StatKeyCountInBuckets(slot, 4096, slotDir)
+        def one = new StatKeyCountInBuckets(slot, slotDir)
+        def two = new StatKeyCountInBuckets(slot, slotDir)
 
         when:
         def allInMemoryCachedBytes = one.getInMemoryCachedBytes()
@@ -20,15 +22,21 @@ class StatKeyCountInBucketsTest extends Specification {
 
         when:
         def bytes0 = new byte[one.allCapacity]
+        def buffer0 = ByteBuffer.wrap(bytes0)
+        ConfForSlot.global.confBucket.bucketsPerSlot.times {
+            buffer0.putShort((short) 1)
+        }
         one.overwriteInMemoryCachedBytes(bytes0)
         then:
         one.inMemoryCachedBytes.length == one.allCapacity
+        one.keyCount == one.allCapacity / 2
 
         when:
         ConfForSlot.global.pureMemory = true
         one.overwriteInMemoryCachedBytes(bytes0)
         then:
         one.inMemoryCachedBytes.length == one.allCapacity
+        one.keyCount == one.allCapacity / 2
 
         when:
         boolean exception = false
@@ -53,31 +61,48 @@ class StatKeyCountInBucketsTest extends Specification {
     def 'test set and get'() {
         given:
         ConfForSlot.global.pureMemory = false
-
-        def one = new StatKeyCountInBuckets(slot, 4096, slotDir)
+        def one = new StatKeyCountInBuckets(slot, slotDir)
 
         when:
-        one.setKeyCountForBucketIndex(10, (short) 10)
-        one.setKeyCountForBucketIndex(20, (short) 20)
+        short[] keyCountArray = new short[32]
+        keyCountArray[10] = (short) 10
+        keyCountArray[20] = (short) 20
+        one.setKeyCountBatch(0, 0, keyCountArray)
         then:
         one.getKeyCountForBucketIndex(10) == 10
         one.getKeyCountForBucketIndex(20) == 20
-        one.getKeyCount() == 30
+        one.keyCount == 30
+
+        when:
+        def one1 = new StatKeyCountInBuckets(slot, slotDir)
+        then:
+        one1.getKeyCountForBucketIndex(10) == 10
+        one1.getKeyCountForBucketIndex(20) == 20
+        one1.keyCount == 30
 
         when:
         ConfForSlot.global.pureMemory = true
-        def one2 = new StatKeyCountInBuckets(slot, 4096, slotDir)
-        one2.setKeyCountForBucketIndex(10, (short) 10)
-        one2.setKeyCountForBucketIndex(20, (short) 20)
+        def one2 = new StatKeyCountInBuckets(slot, slotDir)
+        one2.setKeyCountBatch(0, 0, keyCountArray)
         then:
         one2.getKeyCountForBucketIndex(10) == 10
         one2.getKeyCountForBucketIndex(20) == 20
-        one2.getKeyCount() == 30
+        one2.keyCount == 30
+
+        when:
+        keyCountArray[10] = (short) 20
+        keyCountArray[20] = (short) 40
+        one2.setKeyCountBatch(0, 0, keyCountArray)
+        then:
+        one2.getKeyCountForBucketIndex(10) == 20
+        one2.getKeyCountForBucketIndex(20) == 40
+        one2.keyCount == 60
 
         cleanup:
         ConfForSlot.global.pureMemory = false
         one.clear()
         one.cleanUp()
+        one1.cleanUp()
         ConfForSlot.global.pureMemory = true
         one2.clear()
         one2.cleanUp()
