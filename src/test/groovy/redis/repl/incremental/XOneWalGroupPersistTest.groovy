@@ -54,6 +54,19 @@ class XOneWalGroupPersistTest extends Specification {
         x2.encodeWithType().length == encoded.length
 
         when:
+        boolean exception = false
+        buffer.putInt(1, 0)
+        buffer.position(1)
+        try {
+            XOneWalGroupPersist.decodeFrom(buffer)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
         final byte slot = 0
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance

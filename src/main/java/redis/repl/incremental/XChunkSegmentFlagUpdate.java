@@ -66,6 +66,10 @@ public class XChunkSegmentFlagUpdate implements BinlogContent {
             var seq = buffer.getLong();
             x.putUpdatedChunkSegmentFlagWithSeq(segmentIndex, flag, seq);
         }
+
+        if (encodedLength != x.encodedLength()) {
+            throw new IllegalStateException("Invalid encoded length: " + encodedLength);
+        }
         return x;
     }
 

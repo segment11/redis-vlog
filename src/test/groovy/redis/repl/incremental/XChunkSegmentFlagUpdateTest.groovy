@@ -32,6 +32,19 @@ class XChunkSegmentFlagUpdateTest extends Specification {
         x2.encodedLength() == encoded.length
 
         when:
+        boolean exception = false
+        buffer.putInt(1, 0)
+        buffer.position(1)
+        try {
+            XChunkSegmentFlagUpdate.decodeFrom(buffer)
+        } catch (IllegalStateException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
         final byte slot = 0
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance

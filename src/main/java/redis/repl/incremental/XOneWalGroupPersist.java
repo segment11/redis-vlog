@@ -256,6 +256,10 @@ public class XOneWalGroupPersist implements BinlogContent {
         x.setChunkSegmentIndexAfterPersist(buffer.getInt());
         x.setChunkMergedSegmentIndexEndLastTime(buffer.getInt());
         x.setLastSegmentSeq(buffer.getLong());
+
+        if (encodedLength != x.encodedLength()) {
+            throw new IllegalStateException("Invalid encoded length: " + encodedLength);
+        }
         return x;
     }
 
