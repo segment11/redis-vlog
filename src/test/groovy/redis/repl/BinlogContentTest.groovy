@@ -6,6 +6,7 @@ import redis.KeyHash
 import redis.persist.Mock
 import redis.repl.incremental.XBigStrings
 import redis.repl.incremental.XDict
+import redis.repl.incremental.XFlush
 import redis.repl.incremental.XWalV
 import spock.lang.Specification
 
@@ -63,5 +64,13 @@ class BinlogContentTest extends Specification {
         def xDict2 = BinlogContent.Type.fromCode(buffer.get()).decodeFrom(buffer) as XDict
         then:
         xDict2.encodedLength() == encoded.length
+
+        when:
+        def xFlush = new XFlush()
+        encoded = xFlush.encodeWithType()
+        buffer = ByteBuffer.wrap(encoded)
+        def xFlush2 = BinlogContent.Type.fromCode(buffer.get()).decodeFrom(buffer) as XFlush
+        then:
+        xFlush2.encodedLength() == encoded.length
     }
 }

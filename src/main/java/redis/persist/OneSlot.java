@@ -19,6 +19,7 @@ import redis.metric.SimpleGauge;
 import redis.repl.*;
 import redis.repl.content.RawBytesContent;
 import redis.repl.incremental.XBigStrings;
+import redis.repl.incremental.XFlush;
 import redis.repl.incremental.XOneWalGroupPersist;
 import redis.repl.incremental.XWalV;
 import redis.task.ITask;
@@ -995,6 +996,8 @@ public class OneSlot {
         if (this.chunk != null) {
             this.chunk.resetAsFlush();
         }
+
+        appendBinlog(new XFlush());
     }
 
     void initFds(LibC libC) throws IOException {
