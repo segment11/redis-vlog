@@ -5,6 +5,7 @@ import io.activej.promise.Promise
 import io.activej.promise.Promises
 import io.activej.promise.SettablePromise
 import redis.BaseCommand
+import redis.ConfForSlot
 import redis.Debug
 import redis.reply.*
 
@@ -24,7 +25,7 @@ class ManageCommand extends BaseCommand {
         }
 
         def subCmd = new String(data[1])
-        if (subCmd == 'view-persist-key-count' || subCmd == 'view-slot-bucket-keys') {
+        if (subCmd in ['view-slot-bucket-key-count', 'view-slot-bucket-keys', 'update-kv-lru-max-size']) {
             if (data.length != 4) {
                 return r
             }
@@ -269,6 +270,33 @@ class ManageCommand extends BaseCommand {
             })
 
             return asyncReply
+        }
+
+        // eg: manage update-kv-lru-max-size 0 100
+        if (subCmd == 'update-kv-lru-max-size') {
+            if (data.length != 4) {
+                return ErrorReply.FORMAT
+            }
+
+            def slotBytes = data[2]
+            def lruMaxSizeBytes = data[3]
+
+            byte slot
+            int lruMaxSize
+
+            try {
+                slot = Byte.parseByte(new String(slotBytes))
+                lruMaxSize = Integer.parseInt(new String(lruMaxSizeBytes))
+            } catch (NumberFormatException ignored) {
+                return ErrorReply.SYNTAX
+            }
+
+            ConfForSlot.global.lruKeyAndCompressedValueEncoded.maxSize = lruMaxSize
+
+            def oneSlot = localPersist.oneSlot(slot)
+            oneSlot.initLRU(true)
+
+            return OKReply.INSTANCE
         }
 
         return NilReply.INSTANCE
