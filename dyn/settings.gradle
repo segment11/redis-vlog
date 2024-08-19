@@ -1,0 +1,4 @@
+rootProject.name = 'redis-vlog-dyn'
+
+include ':redis-vlog'
+project(':redis-vlog').projectDir = new File(settingsDir, '../')

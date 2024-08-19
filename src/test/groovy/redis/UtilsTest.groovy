@@ -3,15 +3,17 @@ package redis
 import spock.lang.Specification
 
 class UtilsTest extends Specification {
-    def "RightPad"() {
-        expect:
-        Utils.rightPad("abc", 'x', 5) == "abcxx"
-        Utils.rightPad("abcde", 'x', 5) == "abcde"
-    }
+    def 'test base'() {
+        given:
+        println Utils.projectPath('')
 
-    def "LeftPad"() {
         expect:
         Utils.leftPad("abc", 'x', 5) == "xxabc"
         Utils.leftPad("abcde", 'x', 5) == "abcde"
+
+        Utils.rightPad("abc", 'x', 5) == "abcxx"
+        Utils.rightPad("abcde", 'x', 5) == "abcde"
+
+        new File(Utils.projectPath('/src/main/java/redis/Utils.java')).exists()
     }
 }

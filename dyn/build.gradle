@@ -1,11 +1,11 @@
 plugins {
-    id 'jacoco'
-    id 'java'
     id 'groovy'
 }
 
 group = 'com.montplex'
 version = '1.0.0'
+
+final String artifactId = 'redis-vlog-dyn'
 
 repositories {
     maven {
@@ -14,8 +14,25 @@ repositories {
     mavenCentral()
 }
 
+sourceSets {
+    main {
+        groovy {
+            srcDirs = ['src']
+        }
+    }
+    test {
+        groovy {
+            srcDirs = ['test']
+        }
+    }
+}
+
 sourceCompatibility = 21
 targetCompatibility = 21
+
+compileGroovy {
+    groovyOptions.configurationScript = file("config.groovy")
+}
 
 def activejVersion = '6.0-beta2'
 
@@ -71,70 +88,11 @@ dependencies {
 
     implementation group: 'org.apache.lucene', name: 'lucene-core', version: '9.11.1'
 
-//    implementation project(':redis-vlog-agent')
+    implementation project(':redis-vlog')
 
-    testImplementation group: 'org.openjdk.jmh', name: 'jmh-core', version: '1.35'
-    testAnnotationProcessor group: 'org.openjdk.jmh', name: 'jmh-generator-annprocess', version: '1.35'
-
-    testImplementation group: 'org.openjdk.jol', name: 'jol-core', version: '0.17'
     testImplementation group: 'org.spockframework', name: 'spock-core', version: '2.3-groovy-4.0'
 }
 
 test {
     useJUnitPlatform()
-
-    maxHeapSize = '8G'
-    // parallel = true
-    forkEvery = 4
 }
-
-jacoco {
-    toolVersion = '0.8.12'
-}
-
-jacocoTestReport {
-    dependsOn test
-    reports {
-        xml.required = false
-        csv.required = false
-        html.outputLocation = layout.buildDirectory.dir('reports/jacocoHtml')
-    }
-}
-
-test.finalizedBy jacocoTestReport
-
-/*
-~/.jdks/azul-21/bin/java \
--Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=1g \
--agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:17379 \
--jar redis-vlog-1.0.0.jar
- */
-
-/*
-for debug
--agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:17379
- */
-
-jar {
-    manifest {
-        attributes "Main-Class": 'redis.MultiWorkerServer'
-    }
-//    exclude 'redis-vlog.properties'
-    from {
-        configurations.runtimeClasspath.collect {
-            it.isDirectory() ? it : zipTree(it)
-        }
-    }
-    zip64 true
-}
-
-tasks.withType(Jar) {
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-task copyDynScript(type: Copy) {
-    from './dyn/src'
-    into "$buildDir/libs/dyn/src"
-}
-
-jar.dependsOn copyDynScript

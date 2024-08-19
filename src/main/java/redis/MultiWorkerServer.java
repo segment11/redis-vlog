@@ -1,5 +1,6 @@
 package redis;
 
+import groovy.lang.GroovyClassLoader;
 import io.activej.async.callback.AsyncComputation;
 import io.activej.async.function.AsyncSupplier;
 import io.activej.bytebuf.ByteBuf;
@@ -37,6 +38,8 @@ import io.prometheus.client.hotspot.MemoryPoolsExports;
 import org.slf4j.Logger;
 import redis.decode.Request;
 import redis.decode.RequestDecoder;
+import redis.dyn.CachedGroovyClassLoader;
+import redis.dyn.RefreshLoader;
 import redis.persist.KeyBucket;
 import redis.persist.LocalPersist;
 import redis.persist.Wal;
@@ -44,6 +47,7 @@ import redis.reply.AsyncReply;
 import redis.reply.ErrorReply;
 import redis.reply.NilReply;
 import redis.reply.Reply;
+import redis.task.PrimaryTaskRunnable;
 import redis.task.TaskRunnable;
 
 import java.io.File;
@@ -85,6 +89,9 @@ public class MultiWorkerServer extends Launcher {
     @Inject
     SocketInspector socketInspector;
 
+    @Inject
+    RefreshLoader refreshLoader;
+
     static File dirFile(Config config) {
         var dir = config.get(ofString(), "dir", "/tmp/redis-vlog");
         var dirFile = new File(dir);
@@ -107,11 +114,14 @@ public class MultiWorkerServer extends Launcher {
     @Provides
     NioReactor primaryReactor(Config config) {
         // default 10ms
-        return Eventloop.builder()
+        var primaryEventloop = Eventloop.builder()
                 .withThreadName("primary")
                 .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
                 .initialize(Initializers.ofEventloop(config.getChild("eventloop.primary")))
                 .build();
+
+        this.primaryEventloop = primaryEventloop;
+        return primaryEventloop;
     }
 
     @Provides
@@ -313,6 +323,14 @@ public class MultiWorkerServer extends Launcher {
         return snowFlakes;
     }
 
+    @Provides
+    RefreshLoader refreshLoader() {
+        var classpath = Utils.projectPath("/dyn/src");
+        CachedGroovyClassLoader.getInstance().init(GroovyClassLoader.class.getClassLoader(), classpath, null);
+        return RefreshLoader.create(CachedGroovyClassLoader.getInstance().getGcl())
+                .addDir(Utils.projectPath("/dyn/src/redis"));
+    }
+
     @Override
     protected final Module getModule() {
         return combine(
@@ -334,6 +352,10 @@ public class MultiWorkerServer extends Launcher {
 
     @Inject
     TaskRunnable[] scheduleRunnableArray;
+
+    Eventloop primaryEventloop;
+
+    PrimaryTaskRunnable primaryScheduleRunnable;
 
     private void eventloopAsScheduler(Eventloop netWorkerEventloop, int index) {
         var taskRunnable = scheduleRunnableArray[index];
@@ -363,6 +385,17 @@ public class MultiWorkerServer extends Launcher {
             eventloopAsScheduler(netWorkerEventloop, i);
         }
         logger.info("Net worker eventloop scheduler started");
+
+        // start primary schedule
+        primaryScheduleRunnable = new PrimaryTaskRunnable(loopCount -> {
+            // load and execute groovy script if changed, every 10s
+            if (loopCount % 10 == 0) {
+                refreshLoader.refresh();
+            }
+        });
+        primaryScheduleRunnable.setPrimaryEventloop(primaryEventloop);
+        // interval 1s
+        primaryEventloop.delay(1000L, primaryScheduleRunnable);
 
         // fix slot thread id
         int slotNumber = configInject.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
@@ -395,6 +428,8 @@ public class MultiWorkerServer extends Launcher {
             for (var scheduleRunnable : scheduleRunnableArray) {
                 scheduleRunnable.stop();
             }
+
+            primaryScheduleRunnable.stop();
 
             if (socketInspector != null) {
                 socketInspector.socketMap.values().forEach(socket -> {

@@ -85,6 +85,19 @@ public abstract class BaseCommand {
         }
     }
 
+    // for dyn script execute
+    public String getCmd() {
+        return cmd;
+    }
+
+    public byte[][] getData() {
+        return data;
+    }
+
+    public ITcpSocket getSocket() {
+        return socket;
+    }
+
     // need final, for unit test, can change
     protected String cmd;
     protected byte[][] data;
