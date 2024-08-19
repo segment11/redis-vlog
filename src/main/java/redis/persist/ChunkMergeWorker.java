@@ -55,7 +55,7 @@ public class ChunkMergeWorker {
                 lruMemoryRequireMB,
                 slot);
         log.info("LRU prepare, type: {}, MB: {}, slot: {}", LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer, lruMemoryRequireMB, slot);
-        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer, lruMemoryRequireMB, false);
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer, slotStr, lruMemoryRequireMB, false);
     }
 
     private final List<CvWithKeyAndBucketIndexAndSegmentIndex> mergedCvList = new ArrayList<>(MERGED_CV_SIZE_THRESHOLD);

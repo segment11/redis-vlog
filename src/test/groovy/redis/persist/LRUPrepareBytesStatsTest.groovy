@@ -7,8 +7,8 @@ class LRUPrepareBytesStatsTest extends Specification {
         given:
         LRUPrepareBytesStats.list.clear()
 
-        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, 1024 * 1024, true)
-        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, 1024 * 1024, true)
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, 'key-bucket-0', 1024 * 1024, true)
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, 'chunk-data-0', 1024 * 1024, true)
 
         expect:
         LRUPrepareBytesStats.list.size() == 2
@@ -16,5 +16,10 @@ class LRUPrepareBytesStatsTest extends Specification {
         LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket) == 1024 * 1024
         LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_chunk_data) == 1024 * 1024
         LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.big_string) == 0
+
+        when:
+        LRUPrepareBytesStats.removeOne(LRUPrepareBytesStats.Type.fd_key_bucket, 'key-bucket-0')
+        then:
+        LRUPrepareBytesStats.list.size() == 1
     }
 }

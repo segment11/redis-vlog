@@ -348,8 +348,8 @@ class OneSlotTest extends Specification {
         expect:
         oneSlot.bigStringFiles != null
         oneSlot.bigStringDir != null
-        oneSlot.clearKvLRUByWalGroupIndex(0) == 0
-        oneSlot.clearKvLRUByWalGroupIndex(1) == 0
+        oneSlot.clearKvInTargetWalGroupIndexLRU(0) == 0
+        oneSlot.clearKvInTargetWalGroupIndexLRU(1) == 0
         oneSlot.dynConfig != null
         !oneSlot.readonly
         oneSlot.canRead
@@ -368,7 +368,7 @@ class OneSlotTest extends Specification {
         // just for log
         oneSlot.lruClearedCount = 9
         then:
-        oneSlot.clearKvLRUByWalGroupIndex(0) == 0
+        oneSlot.clearKvInTargetWalGroupIndexLRU(0) == 0
 
         when:
         oneSlot.readonly = false
@@ -383,8 +383,8 @@ class OneSlotTest extends Specification {
             oneSlot.get(key.bytes, s.bucketIndex(), s.keyHash())
         }
         then:
-        oneSlot.kvByWalGroupIndexCountTotal() > 0
-        oneSlot.clearKvLRUByWalGroupIndex(0) > 0
+        oneSlot.kvByWalGroupIndexLRUCountTotal() > 0
+        oneSlot.clearKvInTargetWalGroupIndexLRU(0) > 0
 
         when:
         def bigStringKey = 'kerry-test-big-string-key'
@@ -533,7 +533,7 @@ class OneSlotTest extends Specification {
         oneSlot.getExpireAt(firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash()) != null
 
         when:
-        oneSlot.clearKvLRUByWalGroupIndex(0)
+        oneSlot.clearKvInTargetWalGroupIndexLRU(0)
         then:
         oneSlot.getExpireAt(firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash()) != null
 
@@ -956,6 +956,43 @@ class OneSlotTest extends Specification {
         exception
 
         cleanup:
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test lru in memory size'() {
+        given:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        println 'lru in memory size: ' + oneSlot.lruInMemorySize()
+
+        when:
+        def cvList = Mock.prepareCompressedValueList(100)
+        for (cv in cvList) {
+            def encoded = cv.encode()
+            oneSlot.putKvInTargetWalGroupIndexLRUForTest(0, 'key:' + cv.seq, encoded)
+            oneSlot.putKvInTargetWalGroupIndexLRUForTest(1, 'key:' + cv.seq, encoded)
+        }
+        println 'lru in memory size: ' + oneSlot.lruInMemorySize()
+        then:
+        oneSlot.kvByWalGroupIndexLRUCountTotal() == 2 * (ConfForSlot.global.lruKeyAndCompressedValueEncoded.maxSize / Wal.calcWalGroupNumber()).intValue()
+        1 == 1
+
+        when:
+        ConfForSlot.global.lruKeyAndCompressedValueEncoded.maxSize *= 4
+        oneSlot.initLRU(true)
+        for (cv in cvList) {
+            def encoded = cv.encode()
+            oneSlot.putKvInTargetWalGroupIndexLRUForTest(0, 'key:' + cv.seq, encoded)
+            oneSlot.putKvInTargetWalGroupIndexLRUForTest(1, 'key:' + cv.seq, encoded)
+        }
+        then:
+        oneSlot.kvByWalGroupIndexLRUCountTotal() == 200
+
+        cleanup:
+        oneSlot.cleanUp()
         Consts.persistDir.deleteDir()
     }
 }

@@ -332,7 +332,7 @@ public class KeyLoader {
     }
 
     // not exact correct when split, just for test or debug, not public
-    ArrayList<KeyBucket> readKeyBuckets(int bucketIndex) {
+    public ArrayList<KeyBucket> readKeyBuckets(int bucketIndex) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         ArrayList<KeyBucket> keyBuckets = new ArrayList<>(splitNumber);
 
@@ -416,7 +416,7 @@ public class KeyLoader {
         xForBinlog.setSplitNumberAfterPut(inner.splitNumberTmp);
 
         if (oneSlot != null) {
-            oneSlot.clearKvLRUByWalGroupIndex(walGroupIndex);
+            oneSlot.clearKvInTargetWalGroupIndexLRU(walGroupIndex);
         }
     }
 

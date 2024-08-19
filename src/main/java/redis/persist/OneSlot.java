@@ -12,6 +12,7 @@ import io.netty.buffer.Unpooled;
 import jnr.posix.LibC;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
@@ -154,7 +155,7 @@ public class OneSlot {
         this.raf = new RandomAccessFile(walSharedFile, "rw");
         var lruMemoryRequireMBWriteInWal = walSharedFile.length() / 1024 / 1024;
         log.info("LRU prepare, type: {}, MB: {}, slot: {}", LRUPrepareBytesStats.Type.kv_write_in_wal, lruMemoryRequireMBWriteInWal, slot);
-        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_write_in_wal, (int) lruMemoryRequireMBWriteInWal, false);
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_write_in_wal, slotStr, (int) lruMemoryRequireMBWriteInWal, false);
 
         var walSharedFileShortValue = new File(slotDir, "wal-short-value.dat");
         if (!walSharedFileShortValue.exists()) {
@@ -168,7 +169,7 @@ public class OneSlot {
         this.rafShortValue = new RandomAccessFile(walSharedFileShortValue, "rw");
         var lruMemoryRequireMBWriteInWal2 = walSharedFileShortValue.length() / 1024 / 1024;
         log.info("LRU prepare, type: {}, short value, MB: {}, slot: {}", LRUPrepareBytesStats.Type.kv_write_in_wal, lruMemoryRequireMBWriteInWal2, slot);
-        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_write_in_wal, (int) lruMemoryRequireMBWriteInWal2, false);
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_write_in_wal, slotStr, (int) lruMemoryRequireMBWriteInWal2, false);
 
         long initMemoryN = 0;
         for (int i = 0; i < walGroupNumber; i++) {
@@ -181,24 +182,7 @@ public class OneSlot {
         log.info("Static memory init, type: {}, MB: {}, slot: {}", StaticMemoryPrepareBytesStats.Type.wal_cache_init, initMemoryMB, slot);
         StaticMemoryPrepareBytesStats.add(StaticMemoryPrepareBytesStats.Type.wal_cache_init, initMemoryMB, false);
 
-        // cache lru
-        int maxSizeForAllWalGroups = ConfForSlot.global.lruKeyAndCompressedValueEncoded.maxSize;
-        var maxSizeForEachWalGroup = maxSizeForAllWalGroups / walGroupNumber;
-        final var maybeOneCompressedValueEncodedLength = 200;
-        var lruMemoryRequireMBReadGroupByWalGroup = maxSizeForAllWalGroups * maybeOneCompressedValueEncodedLength / 1024 / 1024;
-        log.info("LRU max size for each wal group: {}, all wal group number: {}, maybe one compressed value encoded length is {}B, memory require: {}MB, slot: {}",
-                maxSizeForEachWalGroup,
-                walGroupNumber,
-                maybeOneCompressedValueEncodedLength,
-                lruMemoryRequireMBReadGroupByWalGroup,
-                slot);
-        log.info("LRU prepare, type: {}, MB: {}, slot: {}", LRUPrepareBytesStats.Type.kv_read_group_by_wal_group, lruMemoryRequireMBReadGroupByWalGroup, slot);
-        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_read_group_by_wal_group, lruMemoryRequireMBReadGroupByWalGroup, false);
-
-        for (int walGroupIndex = 0; walGroupIndex < walGroupNumber; walGroupIndex++) {
-            LRUMap<String, byte[]> lru = new LRUMap<>(maxSizeForEachWalGroup);
-            kvByWalGroupIndexLRU.put(walGroupIndex, lru);
-        }
+        initLRU(false);
 
         this.keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, slotDir, snowFlake, this);
 
@@ -210,6 +194,29 @@ public class OneSlot {
 
         this.initTasks();
         this.initMetricsCollect();
+    }
+
+    public void initLRU(boolean doRemoveForStats) {
+        int maxSizeForAllWalGroups = ConfForSlot.global.lruKeyAndCompressedValueEncoded.maxSize;
+        var maxSizeForEachWalGroup = maxSizeForAllWalGroups / walGroupNumber;
+        final var maybeOneCompressedValueEncodedLength = 200;
+        var lruMemoryRequireMBReadGroupByWalGroup = maxSizeForAllWalGroups * maybeOneCompressedValueEncodedLength / 1024 / 1024;
+        log.info("LRU max size for each wal group: {}, all wal group number: {}, maybe one compressed value encoded length is {}B, memory require: {}MB, slot: {}",
+                maxSizeForEachWalGroup,
+                walGroupNumber,
+                maybeOneCompressedValueEncodedLength,
+                lruMemoryRequireMBReadGroupByWalGroup,
+                slot);
+        log.info("LRU prepare, type: {}, MB: {}, slot: {}", LRUPrepareBytesStats.Type.kv_read_group_by_wal_group, lruMemoryRequireMBReadGroupByWalGroup, slot);
+        if (doRemoveForStats) {
+            LRUPrepareBytesStats.removeOne(LRUPrepareBytesStats.Type.kv_read_group_by_wal_group, slotStr);
+        }
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.kv_read_group_by_wal_group, slotStr, lruMemoryRequireMBReadGroupByWalGroup, false);
+
+        for (int walGroupIndex = 0; walGroupIndex < walGroupNumber; walGroupIndex++) {
+            LRUMap<String, byte[]> lru = new LRUMap<>(maxSizeForEachWalGroup);
+            kvByWalGroupIndexLRU.put(walGroupIndex, lru);
+        }
     }
 
     @Override
@@ -415,7 +422,7 @@ public class OneSlot {
 
     private final Map<Integer, LRUMap<String, byte[]>> kvByWalGroupIndexLRU = new HashMap<>();
 
-    int kvByWalGroupIndexCountTotal() {
+    public int kvByWalGroupIndexLRUCountTotal() {
         int n = 0;
         for (var lru : kvByWalGroupIndexLRU.values()) {
             n += lru.size();
@@ -423,9 +430,18 @@ public class OneSlot {
         return n;
     }
 
+    // perf bad, just for test or debug
+    public long lruInMemorySize() {
+        long size = 0;
+        for (var lru : kvByWalGroupIndexLRU.values()) {
+            size += RamUsageEstimator.sizeOfMap(lru);
+        }
+        return size;
+    }
+
     int lruClearedCount = 0;
 
-    int clearKvLRUByWalGroupIndex(int walGroupIndex) {
+    int clearKvInTargetWalGroupIndexLRU(int walGroupIndex) {
         var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
         if (lru == null) {
             return 0;
@@ -440,6 +456,15 @@ public class OneSlot {
             }
         }
         return n;
+    }
+
+    void putKvInTargetWalGroupIndexLRUForTest(int walGroupIndex, String key, byte[] cvEncoded) {
+        var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
+        if (lru == null) {
+            return;
+        }
+
+        lru.put(key, cvEncoded);
     }
 
     long kvLRUHitTotal = 0;
@@ -1585,7 +1610,7 @@ public class OneSlot {
                 map.put("kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
                 map.put("kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
                 map.put("kv_lru_hit_rate", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal / hitMissTotal, labelValues));
-                map.put("kv_lru_current_count_total", new SimpleGauge.ValueWithLabelValues((double) kvByWalGroupIndexCountTotal(), labelValues));
+                map.put("kv_lru_current_count_total", new SimpleGauge.ValueWithLabelValues((double) kvByWalGroupIndexLRUCountTotal(), labelValues));
             }
 
             if (kvLRUHitTotal > 0) {

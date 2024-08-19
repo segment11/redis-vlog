@@ -10,13 +10,17 @@ public class LRUPrepareBytesStats {
         fd_key_bucket, fd_chunk_data, big_string, kv_read_group_by_wal_group, kv_write_in_wal, chunk_segment_merged_cv_buffer
     }
 
-    record One(Type type, int lruMemoryRequireMB, boolean isExact) {
+    private record One(Type type, String key, int lruMemoryRequireMB, boolean isExact) {
     }
 
     static ArrayList<One> list = new ArrayList<>();
 
-    static void add(Type type, int lruMemoryRequireMB, boolean isExact) {
-        list.add(new One(type, lruMemoryRequireMB, isExact));
+    static void add(Type type, String key, int lruMemoryRequireMB, boolean isExact) {
+        list.add(new One(type, key, lruMemoryRequireMB, isExact));
+    }
+
+    static void removeOne(Type type, String key) {
+        list.removeIf(one -> one.type == type && one.key.equals(key));
     }
 
     static int sum() {

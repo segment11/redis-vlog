@@ -326,7 +326,7 @@ public class FdReadWrite {
             log.info("Chunk lru max size for one chunk fd: {}, one inner length: {}, memory require: {}MB, name: {}",
                     maxSize, oneInnerLength, lruMemoryRequireMB, name);
             log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_chunk_data, lruMemoryRequireMB, name);
-            LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, (int) lruMemoryRequireMB, true);
+            LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_chunk_data, name, (int) lruMemoryRequireMB, true);
 
             if (maxSize > 0) {
                 this.oneInnerBytesByIndexLRU = new LRUMap<>(maxSize);
@@ -342,7 +342,7 @@ public class FdReadWrite {
             log.info("Key bucket lru max size for one key bucket fd: {}, one inner length: {}， compress ratio maybe: {}, memory require: {}MB, name: {}",
                     maxSize, oneInnerLength, compressRatio, lruMemoryRequireMB, name);
             log.info("LRU prepare, type: {}, MB: {}, fd: {}", LRUPrepareBytesStats.Type.fd_key_bucket, lruMemoryRequireMB, name);
-            LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, (int) lruMemoryRequireMB, false);
+            LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.fd_key_bucket, name, (int) lruMemoryRequireMB, false);
 
             if (maxSize > 0) {
                 this.oneInnerBytesByIndexLRU = new LRUMap<>(maxSize);

@@ -59,7 +59,7 @@ public class BigStringFiles {
                 lruMemoryRequireMB,
                 slot);
         log.info("LRU prepare, type: {}, MB: {}, slot: {}", LRUPrepareBytesStats.Type.big_string, lruMemoryRequireMB, slot);
-        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.big_string, lruMemoryRequireMB, false);
+        LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.big_string, slotStr, lruMemoryRequireMB, false);
 
         this.bigStringBytesByUuidLRU = new LRUMap<>(maxSize);
         bigStringFilesCountGauge.labels(slotStr).set(0);
