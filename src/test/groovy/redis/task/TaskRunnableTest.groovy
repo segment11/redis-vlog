@@ -30,11 +30,11 @@ class TaskRunnableTest extends Specification {
         taskRunnable.netWorkerEventloop = eventloop
         taskRunnable.requestHandler = null
 
-
         when:
         Thread.start {
             Thread.currentThread().sleep(1000 * 2)
             taskRunnable.stop()
+            Thread.currentThread().sleep(1000 * 2)
             eventloop.breakEventloop()
         }
 
