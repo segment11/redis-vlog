@@ -16,19 +16,25 @@ repositories {
 
 sourceSets {
     main {
+        java {
+            srcDirs = ['src/main/java']
+        }
         groovy {
             srcDirs = ['dyn/src']
         }
         resources {
-            srcDirs = ['dyn/src']
+            srcDirs = ['src/main/resources']
         }
     }
     test {
+        java {
+            srcDirs = ['src/test/java']
+        }
         groovy {
             srcDirs = ['src/test/groovy', 'dyn/test']
         }
         resources {
-            srcDirs = ['src/test/resources', 'dyn/test']
+            srcDirs = ['src/test/resources']
         }
     }
 }
@@ -143,7 +149,7 @@ jar {
         attributes "Main-Class": 'redis.MultiWorkerServer'
     }
 //    exclude 'redis-vlog.properties'
-//    exclude 'redis.command.MasterCommand.class'
+    exclude 'redis.command.MasterCommand.class'
     from {
         configurations.runtimeClasspath.collect {
             it.isDirectory() ? it : zipTree(it)
