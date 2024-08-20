@@ -252,10 +252,10 @@ public enum ConfForSlot {
     }
 
     public enum ConfWal {
-        debugMode(32, 500, 500),
-        c1m(32, 500, 500),
-        c10m(32, 500, 500),
-        c100m(32, 500, 500);
+        debugMode(32, 200, 200),
+        c1m(32, 200, 200),
+        c10m(32, 200, 200),
+        c100m(32, 200, 200);
 
         ConfWal(int oneChargeBucketNumber, int valueSizeTrigger, int shortValueSizeTrigger) {
             this.oneChargeBucketNumber = oneChargeBucketNumber;
@@ -321,7 +321,6 @@ public enum ConfForSlot {
             }
 
             if (estimateOneValueLength <= 500) {
-                this.valueSizeTrigger = 200;
                 resetWalStaticValues(PAGE_SIZE * oneChargeBucketNumber / 2);
                 return;
             }
