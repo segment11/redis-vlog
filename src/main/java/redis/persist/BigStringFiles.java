@@ -3,6 +3,7 @@ package redis.persist;
 import io.prometheus.client.Gauge;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
@@ -13,7 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public class BigStringFiles {
+public class BigStringFiles implements InMemoryEstimate {
     private final byte slot;
     private final String slotStr;
     final File bigStringDir;
@@ -63,6 +64,17 @@ public class BigStringFiles {
 
         this.bigStringBytesByUuidLRU = new LRUMap<>(maxSize);
         bigStringFilesCountGauge.labels(slotStr).set(0);
+    }
+
+    @Override
+    public long estimate() {
+        if (ConfForSlot.global.pureMemory) {
+            return 0;
+        }
+
+        long size = 0;
+        size += RamUsageEstimator.sizeOfMap(bigStringBytesByUuidLRU);
+        return size;
     }
 
     public List<Long> getBigStringFileUuidList() {

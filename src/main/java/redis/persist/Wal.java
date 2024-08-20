@@ -21,7 +21,7 @@ import java.util.List;
 import static redis.CompressedValue.EXPIRE_NOW;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
-public class Wal {
+public class Wal implements InMemoryEstimate {
     public record V(long seq, int bucketIndex, long keyHash, long expireAt,
                     String key, byte[] cvEncoded, boolean isFromMerge) {
         boolean isRemove() {
@@ -135,8 +135,8 @@ public class Wal {
         if (!ConfForSlot.global.pureMemory) {
             var n1 = readWal(walSharedFile, delayToKeyBucketValues, false);
             var n2 = readWal(walSharedFileShortValue, delayToKeyBucketShortValues, true);
-            initMemoryN += RamUsageEstimator.shallowSizeOf(delayToKeyBucketValues);
-            initMemoryN += RamUsageEstimator.shallowSizeOf(delayToKeyBucketShortValues);
+            initMemoryN += RamUsageEstimator.sizeOfMap(delayToKeyBucketValues);
+            initMemoryN += RamUsageEstimator.sizeOfMap(delayToKeyBucketShortValues);
 
             // reduce log
             if (slot == 0 && groupIndex == 0) {
@@ -144,6 +144,15 @@ public class Wal {
                         slot, groupIndex, n1, n2, initMemoryN / 1024);
             }
         }
+    }
+
+    @Override
+    public long estimate() {
+        // skip primitive fields
+        long size = 0;
+        size += RamUsageEstimator.sizeOfMap(delayToKeyBucketValues);
+        size += RamUsageEstimator.sizeOfMap(delayToKeyBucketShortValues);
+        return size;
     }
 
     @Override

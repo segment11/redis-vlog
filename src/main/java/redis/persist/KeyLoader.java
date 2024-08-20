@@ -17,7 +17,7 @@ import java.util.*;
 
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
-public class KeyLoader {
+public class KeyLoader implements InMemoryEstimate {
     private static final int PAGE_NUMBER_PER_BUCKET = 1;
     public static final int KEY_BUCKET_ONE_COST_SIZE = PAGE_NUMBER_PER_BUCKET * PAGE_SIZE;
 
@@ -63,6 +63,20 @@ public class KeyLoader {
                 "slot=" + slot +
                 ", bucketsPerSlot=" + bucketsPerSlot +
                 '}';
+    }
+
+    @Override
+    public long estimate() {
+        long size = 0;
+        size += metaKeyBucketSplitNumber.estimate();
+        size += metaOneWalGroupSeq.estimate();
+        size += statKeyCountInBuckets.estimate();
+        for (var fdReadWrite : fdReadWriteArray) {
+            if (fdReadWrite != null) {
+                size += fdReadWrite.estimate();
+            }
+        }
+        return size;
     }
 
     private final byte slot;

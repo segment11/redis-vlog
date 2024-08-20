@@ -27,6 +27,7 @@ class BigStringFilesTest extends Specification {
         def bigStringFiles1 = new BigStringFiles(slot, tmpSlotDir1)
         def bigStringFiles11 = new BigStringFiles(slot, tmpSlotDir1)
         def bigStringFiles2 = new BigStringFiles(slot, tmpSlotDir2)
+        println bigStringFiles1.estimate()
 
         when:
         def isWriteOk = bigStringFiles1.writeBigStringBytes(1L, 'a', bigString.bytes)
@@ -52,6 +53,7 @@ class BigStringFilesTest extends Specification {
 
         ConfForSlot.global.pureMemory = true
         def bigStringFiles = new BigStringFiles(slot, null)
+        println bigStringFiles.estimate()
 
         when:
         def isWriteOk = bigStringFiles.writeBigStringBytes(1L, 'a', bigString.bytes)

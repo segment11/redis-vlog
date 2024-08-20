@@ -13,7 +13,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 // for slave check if key buckets need fetch from master, compare with seq
-public class MetaOneWalGroupSeq {
+public class MetaOneWalGroupSeq implements InMemoryEstimate {
     private static final String META_ONE_WAL_GROUP_SEQ_FILE = "meta_one_wal_group_seq.dat";
 
     final int walGroupNumber;
@@ -63,6 +63,11 @@ public class MetaOneWalGroupSeq {
         }
 
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
+    }
+
+    @Override
+    public long estimate() {
+        return allCapacity;
     }
 
     long get(int oneWalGroupIndex, byte splitIndex) {

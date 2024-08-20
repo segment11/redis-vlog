@@ -1,5 +1,6 @@
 package redis.persist;
 
+import org.apache.lucene.util.RamUsageEstimator;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +16,7 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-public class ChunkMergeWorker {
+public class ChunkMergeWorker implements InMemoryEstimate {
     private final byte slot;
     private final String slotStr;
     final OneSlot oneSlot;
@@ -264,6 +265,14 @@ public class ChunkMergeWorker {
         this.oneSlot = oneSlot;
 
         this.initMetricsCollect();
+    }
+
+    @Override
+    public long estimate() {
+        long size = 0;
+        size += RamUsageEstimator.sizeOfCollection(mergedCvList);
+        size += RamUsageEstimator.sizeOfCollection(mergedSegmentSet);
+        return size;
     }
 
     final static SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",

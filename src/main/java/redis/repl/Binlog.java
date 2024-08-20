@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
 import redis.persist.DynConfig;
+import redis.persist.InMemoryEstimate;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -16,7 +17,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 // before slave start receive data from master, master need start this binlog for slave catch up
-public class Binlog {
+public class Binlog implements InMemoryEstimate {
 
     private final byte slot;
     private final File binlogDir;
@@ -115,6 +116,16 @@ public class Binlog {
         this.forReadCacheSegmentMaxCount = ConfForSlot.global.confRepl.binlogForReadCacheSegmentMaxCount;
         this.tempAppendSegmentBytes = new byte[ConfForSlot.global.confRepl.binlogOneSegmentLength];
         this.tempAppendSegmentBuffer = ByteBuffer.wrap(tempAppendSegmentBytes);
+    }
+
+    @Override
+    public long estimate() {
+        long size = 0;
+        size += tempAppendSegmentBytes.length;
+        for (var one : latestAppendForReadCacheSegmentBytesSet) {
+            size += one.bytes.length;
+        }
+        return size;
     }
 
     int currentFileIndex = 0;

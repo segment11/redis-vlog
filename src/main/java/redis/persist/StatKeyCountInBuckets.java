@@ -12,7 +12,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-public class StatKeyCountInBuckets {
+public class StatKeyCountInBuckets implements InMemoryEstimate {
     private static final String STAT_KEY_BUCKET_LAST_UPDATE_COUNT_FILE = "stat_key_count_in_buckets.dat";
     // short is enough for one key bucket index total value count
     public static final int ONE_LENGTH = 2;
@@ -93,6 +93,11 @@ public class StatKeyCountInBuckets {
 
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
         log.info("Key count in buckets: {}, slot: {}", calcKeyCount(), slot);
+    }
+
+    @Override
+    public long estimate() {
+        return allCapacity;
     }
 
     private void updateKeyCountForTargetWalGroup(int walGroupIndex, int keyCount) {

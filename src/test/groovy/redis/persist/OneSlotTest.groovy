@@ -474,6 +474,7 @@ class OneSlotTest extends Specification {
         def localPersist = LocalPersist.instance
 //        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         def oneSlot = localPersist.oneSlot(slot)
+        println 'in memory size estimate: ' + oneSlot.estimate()
 
         and:
         def key = 'key'
@@ -529,6 +530,7 @@ class OneSlotTest extends Specification {
         2.times {
             oneSlot.get(firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash())
         }
+        println 'in memory size estimate: ' + oneSlot.estimate()
         then:
         oneSlot.getExpireAt(firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash()) != null
 
@@ -966,7 +968,7 @@ class OneSlotTest extends Specification {
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         def oneSlot = localPersist.oneSlot(slot)
 
-        println 'lru in memory size: ' + oneSlot.lruInMemorySize()
+        println 'lru in memory size: ' + oneSlot.inMemorySizeOfLRU()
 
         when:
         def cvList = Mock.prepareCompressedValueList(100)
@@ -975,7 +977,7 @@ class OneSlotTest extends Specification {
             oneSlot.putKvInTargetWalGroupIndexLRUForTest(0, 'key:' + cv.seq, encoded)
             oneSlot.putKvInTargetWalGroupIndexLRUForTest(1, 'key:' + cv.seq, encoded)
         }
-        println 'lru in memory size: ' + oneSlot.lruInMemorySize()
+        println 'lru in memory size: ' + oneSlot.inMemorySizeOfLRU()
         then:
         oneSlot.kvByWalGroupIndexLRUCountTotal() == 2 * (ConfForSlot.global.lruKeyAndCompressedValueEncoded.maxSize / Wal.calcWalGroupNumber()).intValue()
         1 == 1

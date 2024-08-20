@@ -46,6 +46,7 @@ class WalTest extends Specification {
         def wal2 = new Wal(slot, 1, raf, rafShortValue, snowFlake)
         println 'Wal: ' + wal
         println 'Wal2: ' + wal2
+        println 'in memory size estimate: ' + wal.estimate()
 
         expect:
         Wal.calWalGroupIndex(0) == 0
@@ -62,6 +63,7 @@ class WalTest extends Specification {
             def value2 = new String(cv2.compressedData)
             println "key: $key, cv2: $cv2, value2: $value2"
         }
+        println 'in memory size estimate: ' + wal.estimate()
         HashMap<String, Wal.V> toMap = [:]
         HashMap<String, Wal.V> toMap2 = [:]
         wal.readWal(rafShortValue, toMap, true)

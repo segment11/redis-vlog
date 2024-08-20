@@ -48,6 +48,7 @@ class KeyLoaderTest extends Specification {
         def oneKeyBucketLength = KeyLoader.KEY_BUCKET_ONE_COST_SIZE
         def oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
         println keyLoader
+        println 'in memory size estimate: ' + keyLoader.estimate()
         keyLoader.keyLoaderInnerGauge.collect()
 
         expect:
@@ -247,6 +248,7 @@ class KeyLoaderTest extends Specification {
         given:
         ConfForSlot.global.confBucket.initialSplitNumber = (byte) 1
         def keyLoader = prepareKeyLoader()
+        println 'in memory size estimate: ' + keyLoader.estimate()
 
         when:
         def encodeAsShortStringA = Mock.prepareShortStringCvEncoded('a', 'a')
@@ -280,6 +282,7 @@ class KeyLoaderTest extends Specification {
         keyLoader.getValueByKey(0, 'a'.bytes, 10L) == null
 
         cleanup:
+        println 'in memory size estimate: ' + keyLoader.estimate()
         keyLoader.flush()
         keyLoader.cleanUp()
     }

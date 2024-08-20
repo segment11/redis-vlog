@@ -7,6 +7,7 @@ import jnr.constants.platform.OpenFlags;
 import jnr.posix.LibC;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +29,7 @@ import static redis.persist.LocalPersist.PROTECTION;
 
 // need thread safe
 // need refactor to FdChunkSegments + FdKeyBuckets, todo
-public class FdReadWrite {
+public class FdReadWrite implements InMemoryEstimate {
 
     protected final Logger log = LoggerFactory.getLogger(this.getClass());
 
@@ -311,6 +312,40 @@ public class FdReadWrite {
             log.info("Static memory init, type: {}, MB: {}, name: {}", StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer, initMemoryMB, name);
             StaticMemoryPrepareBytesStats.add(StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer, initMemoryMB, false);
         }
+    }
+
+    @Override
+    public long estimate() {
+        long size = 0;
+        if (ConfForSlot.global.pureMemory) {
+            if (isChunkFd) {
+                for (var bytes : allBytesBySegmentIndexForOneChunkFd) {
+                    if (bytes != null) {
+                        size += bytes.length;
+                    }
+                }
+            } else {
+                for (var bytes : allBytesByOneWalGroupIndexForKeyBucketOneSplitIndex) {
+                    if (bytes != null) {
+                        size += bytes.length;
+                    }
+                }
+            }
+        } else {
+            size += oneInnerBuffer.capacity();
+            if (isChunkFd) {
+                size += writeSegmentBatchBuffer.capacity();
+                size += forReplBuffer.capacity();
+                size += readForMergeBatchBuffer.capacity();
+            } else {
+                size += forOneWalGroupBatchBuffer.capacity();
+            }
+
+            if (isLRUOn) {
+                size += RamUsageEstimator.sizeOfMap(oneInnerBytesByIndexLRU);
+            }
+        }
+        return size;
     }
 
     private void initLRU(boolean isChunkFd, int oneInnerLength) {

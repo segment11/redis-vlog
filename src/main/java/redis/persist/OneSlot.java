@@ -36,7 +36,7 @@ import static io.activej.config.converter.ConfigConverters.ofBoolean;
 import static redis.persist.Chunk.*;
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
-public class OneSlot {
+public class OneSlot implements InMemoryEstimate {
     // for unit test
     public OneSlot(byte slot, File slotDir, KeyLoader keyLoader, Wal wal) throws IOException {
         this.slot = slot;
@@ -194,6 +194,22 @@ public class OneSlot {
 
         this.initTasks();
         this.initMetricsCollect();
+    }
+
+    @Override
+    public long estimate() {
+        long size = 0;
+        size += inMemorySizeOfLRU();
+        size += keyLoader.estimate();
+        size += chunk.estimate();
+        size += bigStringFiles.estimate();
+        size += metaChunkSegmentFlagSeq.estimate();
+        size += chunkMergeWorker.estimate();
+        size += binlog.estimate();
+        for (var wal : walArray) {
+            size += wal.estimate();
+        }
+        return size;
     }
 
     public void initLRU(boolean doRemoveForStats) {
@@ -431,7 +447,7 @@ public class OneSlot {
     }
 
     // perf bad, just for test or debug
-    public long lruInMemorySize() {
+    public long inMemorySizeOfLRU() {
         long size = 0;
         for (var lru : kvByWalGroupIndexLRU.values()) {
             size += RamUsageEstimator.sizeOfMap(lru);

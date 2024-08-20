@@ -19,7 +19,7 @@ import java.util.*;
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 import static redis.persist.FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD;
 
-public class Chunk {
+public class Chunk implements InMemoryEstimate {
     private final int segmentNumberPerFd;
     private final byte fdPerChunk;
     final int maxSegmentIndex;
@@ -92,6 +92,17 @@ public class Chunk {
         this.segmentBatch = new SegmentBatch(slot, snowFlake);
 
         this.initMetricsCollect();
+    }
+
+    @Override
+    public long estimate() {
+        long size = 0;
+        for (var fdReadWrite : fdReadWriteArray) {
+            if (fdReadWrite != null) {
+                size += fdReadWrite.estimate();
+            }
+        }
+        return size;
     }
 
     private void initMetricsCollect() {

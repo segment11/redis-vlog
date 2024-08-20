@@ -39,6 +39,7 @@ class BinlogTest extends Specification {
         def binlog = new Binlog(slot, Consts.slotDir, dynConfig)
         println binlog.currentFileIndexAndOffset()
         println binlog.earliestFileIndexAndOffset()
+        println 'in memory size estimate: ' + binlog.estimate()
 
         final File slotDir2 = new File('/tmp/redis-vlog/test-persist/test-slot2')
         if (!slotDir2.exists()) {
@@ -260,6 +261,7 @@ class BinlogTest extends Specification {
         1 == 1
 
         cleanup:
+        println 'in memory size estimate: ' + binlog.estimate()
         binlog.clear()
         binlog.close()
         Consts.slotDir.deleteDir()

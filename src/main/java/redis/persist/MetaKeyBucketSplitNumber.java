@@ -12,7 +12,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-public class MetaKeyBucketSplitNumber {
+public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
     private static final String META_KEY_BUCKET_SPLIT_NUMBER_FILE = "meta_key_bucket_split_number.dat";
 
     final int allCapacity;
@@ -90,6 +90,11 @@ public class MetaKeyBucketSplitNumber {
         }
 
         this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
+    }
+
+    @Override
+    public long estimate() {
+        return allCapacity;
     }
 
     // for unit test

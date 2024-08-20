@@ -20,6 +20,8 @@ class ChunkMergeWorkerTest extends Specification {
         chunkMergeWorker.mergedSegmentCount = 1
         ChunkMergeWorker.innerGauge.collect()
 
+        println 'in memory size estimate: ' + chunkMergeWorker.estimate()
+
         def ms0 = new ChunkMergeWorker.MergedSegment(0, 1)
         def ms1 = new ChunkMergeWorker.MergedSegment(1, 1)
         println ms0
@@ -56,6 +58,7 @@ class ChunkMergeWorkerTest extends Specification {
         Debug.instance.logMerge = true
         chunkMergeWorker.logMergeCount = 1000
         chunkMergeWorker.removeMergedButNotPersistedAfterPersistWal([1], 1)
+        chunkMergeWorker.clearMergedCvListForTest()
         chunkMergeWorker.clearMergedSegmentSetForTest()
         then:
         chunkMergeWorker.mergedCvListSize == 0
@@ -103,6 +106,7 @@ class ChunkMergeWorkerTest extends Specification {
             chunkMergeWorker.addMergedSegment(segmentIndex + it + 1, 1)
         }
         chunkMergeWorker.persistFIFOMergedCvListIfBatchSizeOk()
+        println 'in memory size estimate: ' + chunkMergeWorker.estimate()
         then:
         chunkMergeWorker.mergedCvListSize == 0
         // once persist segment number: chunkMergeWorker.MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST

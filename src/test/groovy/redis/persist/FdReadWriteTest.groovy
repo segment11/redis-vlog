@@ -40,6 +40,7 @@ class FdReadWriteTest extends Specification {
         def fdChunk = new FdReadWrite('test', libC, oneFile1)
         fdChunk.initByteBuffers(true)
         println fdChunk
+        println 'in memory size estimate: ' + fdChunk.estimate()
 
         def fdKeyBucket = new FdReadWrite('test2', libC, oneFile2)
         fdKeyBucket.initByteBuffers(false)
@@ -47,6 +48,7 @@ class FdReadWriteTest extends Specification {
         fdKeyBucket.resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(walGroupNumber)
         fdKeyBucket.clearAllKeyBucketsInOneWalGroupToMemoryForTest(0)
         println fdKeyBucket
+        println 'in memory size estimate: ' + fdKeyBucket.estimate()
 
         fdChunk.afterFdPreadCompressCountTotal = 1
         fdChunk.readCountTotal = 1
@@ -220,8 +222,10 @@ class FdReadWriteTest extends Specification {
         ConfForSlot.global.pureMemory = true
         fdChunk = new FdReadWrite('test', libC, oneFile1)
         fdChunk.initByteBuffers(true)
+        println 'in memory size estimate: ' + fdChunk.estimate()
         fdKeyBucket = new FdReadWrite('test2', libC, oneFile2)
         fdKeyBucket.initByteBuffers(false)
+        println 'in memory size estimate: ' + fdKeyBucket.estimate()
         then:
         fdChunk.isTargetSegmentIndexNullInMemory(0)
 
@@ -235,6 +239,8 @@ class FdReadWriteTest extends Specification {
             array[i + loop] = f2
         }
         fdKeyBucket.writeSharedBytesForKeyBucketsInOneWalGroup(1 * oneChargeBucketNumber, new byte[oneChargeBucketNumber * segmentLength])
+        println 'in memory size estimate: ' + fdChunk.estimate()
+        println 'in memory size estimate: ' + fdKeyBucket.estimate()
         then:
         !fdChunk.isTargetSegmentIndexNullInMemory(0)
         array.every { it == segmentLength }

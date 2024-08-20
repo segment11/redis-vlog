@@ -456,6 +456,7 @@ class ChunkTest extends Specification {
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         def oneSlot = localPersist.oneSlot(slot)
         def chunk = oneSlot.chunk
+        println 'in memory size estimate: ' + chunk.estimate()
 
         def confChunk = ConfForSlot.global.confChunk
         int halfSegmentNumber = (confChunk.maxSegmentNumber() / 2).intValue()

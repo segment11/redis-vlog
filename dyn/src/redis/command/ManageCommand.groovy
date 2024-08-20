@@ -168,6 +168,8 @@ class ManageCommand extends BaseCommand {
             oneSlot.initLRU(true)
 
             return OKReply.INSTANCE
+        } else if (subSubCmd == 'in-memory-size-estimate') {
+            return new IntegerReply(oneSlot.estimate())
         }
 
         return ErrorReply.SYNTAX

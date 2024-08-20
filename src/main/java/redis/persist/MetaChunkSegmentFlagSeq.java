@@ -18,7 +18,7 @@ import java.util.List;
 import static redis.persist.Chunk.Flag;
 import static redis.persist.Chunk.NO_NEED_MERGE_SEGMENT_INDEX;
 
-public class MetaChunkSegmentFlagSeq {
+public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
     private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
     // flag byte + seq long + wal group index int
     public static final int ONE_LENGTH = 1 + 8 + 4;
@@ -115,6 +115,11 @@ public class MetaChunkSegmentFlagSeq {
         var initMemoryMB = allCapacity / 1024 / 1024;
         log.info("Static memory init, type: {}, MB: {}, slot: {}", StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq, initMemoryMB, slot);
         StaticMemoryPrepareBytesStats.add(StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq, initMemoryMB, true);
+    }
+
+    @Override
+    public long estimate() {
+        return allCapacity;
     }
 
     interface IterateCallBack {
