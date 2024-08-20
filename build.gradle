@@ -14,8 +14,31 @@ repositories {
     mavenCentral()
 }
 
+sourceSets {
+    main {
+        groovy {
+            srcDirs = ['dyn/src']
+        }
+        resources {
+            srcDirs = ['dyn/src']
+        }
+    }
+    test {
+        groovy {
+            srcDirs = ['src/test/groovy', 'dyn/test']
+        }
+        resources {
+            srcDirs = ['src/test/resources', 'dyn/test']
+        }
+    }
+}
+
 sourceCompatibility = 21
 targetCompatibility = 21
+
+compileGroovy {
+    groovyOptions.configurationScript = file("config.groovy")
+}
 
 def activejVersion = '6.0-beta2'
 
@@ -120,6 +143,7 @@ jar {
         attributes "Main-Class": 'redis.MultiWorkerServer'
     }
 //    exclude 'redis-vlog.properties'
+//    exclude 'redis.command.MasterCommand.class'
     from {
         configurations.runtimeClasspath.collect {
             it.isDirectory() ? it : zipTree(it)
