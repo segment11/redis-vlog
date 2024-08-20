@@ -51,6 +51,8 @@ class FdReadWriteTest extends Specification {
         println 'in memory size estimate: ' + fdKeyBucket.estimate()
 
         fdChunk.afterFdPreadCompressCountTotal = 1
+        fdChunk.afterFdPreadCompressBytesTotalLength = 100
+        fdChunk.afterFdPreadCompressedBytesTotalLength = 50
         fdChunk.readCountTotal = 1
         fdChunk.writeCountTotal = 1
         fdChunk.lruHitCounter = 1

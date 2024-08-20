@@ -114,7 +114,7 @@ public enum ConfForSlot {
         debugMode(4096, (byte) 1),
         c1m(KeyBucket.DEFAULT_BUCKETS_PER_SLOT, (byte) 1),
         c10m(KeyBucket.MAX_BUCKETS_PER_SLOT, (byte) 1),
-        c100m(KeyBucket.MAX_BUCKETS_PER_SLOT, (byte) 9);
+        c100m(KeyBucket.MAX_BUCKETS_PER_SLOT, (byte) 3);
 
         ConfBucket(int bucketsPerSlot, byte initialSplitNumber) {
             this.bucketsPerSlot = bucketsPerSlot;

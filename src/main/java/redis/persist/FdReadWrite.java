@@ -63,6 +63,10 @@ public class FdReadWrite implements InMemoryEstimate {
                 map.put("after_fd_pread_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) afterFdPreadCompressCountTotal, labelValues));
                 double avgUs = (double) afterFdPreadCompressTimeTotalUs / afterFdPreadCompressCountTotal;
                 map.put("after_fd_pread_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
+
+                // compress ratio
+                double compressRatio = (double) afterFdPreadCompressedBytesTotalLength / afterFdPreadCompressBytesTotalLength;
+                map.put("after_fd_pread_compress_ratio", new SimpleGauge.ValueWithLabelValues(compressRatio, labelValues));
             }
 
             if (keyBucketSharedBytesCompressCountTotal > 0) {
@@ -148,6 +152,9 @@ public class FdReadWrite implements InMemoryEstimate {
     // avg = this time / after fd pread compress count total
     private long afterFdPreadCompressTimeTotalUs;
     long afterFdPreadCompressCountTotal;
+
+    long afterFdPreadCompressBytesTotalLength;
+    long afterFdPreadCompressedBytesTotalLength;
 
     private long readBytesTotal;
     private long readTimeTotalUs;
@@ -489,6 +496,8 @@ public class FdReadWrite implements InMemoryEstimate {
                         var beginT = System.nanoTime();
                         var bytesDecompressedCached = Zstd.decompress(bytesCached, oneInnerLength);
                         var costT = (System.nanoTime() - beginT) / 1000;
+
+                        // stats
                         afterLRUReadDecompressTimeTotalUs += costT;
                         return bytesDecompressedCached;
                     }
@@ -520,11 +529,13 @@ public class FdReadWrite implements InMemoryEstimate {
         // clear buffer before read
         buffer.clear();
 
-        readCountTotal++;
         var beginT = System.nanoTime();
         var n = libC.pread(fd, buffer, readLength, offset);
         var costT = (System.nanoTime() - beginT) / 1000;
+
+        // stats
         readTimeTotalUs += costT;
+        readCountTotal++;
         readBytesTotal += n;
 
         if (n != readLength) {
@@ -545,8 +556,14 @@ public class FdReadWrite implements InMemoryEstimate {
                     var beginT2 = System.nanoTime();
                     var bytesCompressed = Zstd.compress(bytesRead);
                     var costT2 = (System.nanoTime() - beginT2) / 1000;
+
+                    // stats
                     afterFdPreadCompressTimeTotalUs += costT2;
                     afterFdPreadCompressCountTotal++;
+
+                    afterFdPreadCompressBytesTotalLength += bytesRead.length;
+                    afterFdPreadCompressedBytesTotalLength += bytesCompressed.length;
+
                     oneInnerBytesByIndexLRU.put(oneInnerIndex, bytesCompressed);
                 }
             }
@@ -576,11 +593,13 @@ public class FdReadWrite implements InMemoryEstimate {
         }
         buffer.rewind();
 
-        writeCountTotal++;
         var beginT = System.nanoTime();
         var n = libC.pwrite(fd, buffer, capacity, offset);
         var costT = (System.nanoTime() - beginT) / 1000;
+
+        // stats
         writeTimeTotalUs += costT;
+        writeCountTotal++;
         writeBytesTotal += n;
 
         if (n != capacity) {
