@@ -214,9 +214,7 @@ public class MultiWorkerServer extends Launcher {
             }
             var reply = targetHandler.handle(request, socket);
             if (reply instanceof AsyncReply) {
-                var promise = ((AsyncReply) reply).getSettablePromise();
-                // todo, consider exception
-                return promise.map(r -> request.isHttp() ? wrapHttpResponse(r) : r.buffer());
+                return transferAsyncReply(request, (AsyncReply) reply);
             } else {
                 return request.isHttp() ? Promise.of(wrapHttpResponse(reply)) : Promise.of(reply.buffer());
             }
@@ -244,10 +242,22 @@ public class MultiWorkerServer extends Launcher {
                 return null;
             }
             if (reply instanceof AsyncReply) {
-                return ((AsyncReply) reply).getSettablePromise().map(r -> request.isHttp() ? wrapHttpResponse(r) : r.buffer());
+                return transferAsyncReply(request, (AsyncReply) reply);
             } else {
                 return Promise.of(request.isHttp() ? wrapHttpResponse(reply) : reply.buffer());
             }
+        });
+    }
+
+    private Promise<ByteBuf> transferAsyncReply(Request request, AsyncReply reply) {
+        var promise = reply.getSettablePromise();
+        return promise.map((r, e) -> {
+            if (e != null) {
+                var errorReply = new ErrorReply(e.getMessage());
+                return request.isHttp() ? wrapHttpResponse(errorReply) : errorReply.buffer();
+            }
+
+            return request.isHttp() ? wrapHttpResponse(r) : r.buffer();
         });
     }
 
