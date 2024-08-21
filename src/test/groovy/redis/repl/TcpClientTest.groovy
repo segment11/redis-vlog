@@ -6,7 +6,7 @@ import io.activej.csp.consumer.ChannelConsumers
 import io.activej.csp.supplier.ChannelSuppliers
 import io.activej.eventloop.Eventloop
 import io.activej.net.SimpleServer
-import redis.ConfForSlot
+import redis.ConfForGlobal
 import redis.RequestHandler
 import redis.decode.RequestDecoder
 import redis.persist.Consts
@@ -21,7 +21,7 @@ class TcpClientTest extends Specification {
     def 'test connect and close'() {
         given:
         byte slot = 0
-        ConfForSlot.global.netListenAddresses = 'localhost:6380'
+        ConfForGlobal.netListenAddresses = 'localhost:6380'
 
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
