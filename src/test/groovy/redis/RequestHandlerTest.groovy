@@ -28,7 +28,7 @@ class RequestHandlerTest extends Specification {
         def snowFlake = new SnowFlake(1, 1)
         def requestHandler = new RequestHandler(workerId, netWorkers, slotNumber, snowFlake, Config.create())
         println requestHandler
-        requestHandler.sampleToTrainSizeGauge.collect()
+        requestHandler.requestHandlerGauge.collect()
 
         def config2 = Config.create().with('localTest', 'true')
         def requestHandler2 = new RequestHandler(workerId, netWorkers, slotNumber, snowFlake, config2)

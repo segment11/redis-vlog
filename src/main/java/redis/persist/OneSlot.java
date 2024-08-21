@@ -873,6 +873,8 @@ public class OneSlot implements InMemoryEstimate {
         var d = Zstd.decompressByteArray(decompressedBytes, 0, chunkSegmentLength,
                 tightBytesWithLength, subBlockOffset, subBlockLength);
         var costT = (System.nanoTime() - beginT) / 1000;
+
+        // stats
         segmentDecompressTimeTotalUs += costT;
         segmentDecompressCountTotal++;
 
@@ -1539,38 +1541,22 @@ public class OneSlot implements InMemoryEstimate {
     }
 
     // metrics
-    final static SimpleGauge walDelaySizeGauge = new SimpleGauge("wal_delay_size", "wal delay size",
-            "slot", "group_index");
-
-    final static SimpleGauge slotInnerGauge = new SimpleGauge("slot_inner", "slot inner",
+    final static SimpleGauge oneSlotGauge = new SimpleGauge("one_slot", "one slot",
             "slot");
 
     static {
-        walDelaySizeGauge.register();
-        slotInnerGauge.register();
+        oneSlotGauge.register();
     }
 
     long segmentDecompressTimeTotalUs = 0;
     long segmentDecompressCountTotal = 0;
 
     private void initMetricsCollect() {
-        walDelaySizeGauge.addRawGetter(() -> {
-            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            for (var wal : walArray) {
-                var labelValues = List.of(slotStr, String.valueOf(wal.groupIndex));
-                map.put("delay_values_size", new SimpleGauge.ValueWithLabelValues((double) wal.delayToKeyBucketValues.size(), labelValues));
-                map.put("delay_short_values_size", new SimpleGauge.ValueWithLabelValues((double) wal.delayToKeyBucketShortValues.size(), labelValues));
-            }
-            return map;
-        });
-
-        slotInnerGauge.addRawGetter(() -> {
+        oneSlotGauge.addRawGetter(() -> {
             var labelValues = List.of(slotStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            map.put("dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
-            map.put("last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
-            map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
+            map.put("slot_last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
 
             if (chunk != null) {
                 map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.segmentIndex, labelValues));
@@ -1578,16 +1564,27 @@ public class OneSlot implements InMemoryEstimate {
                 map.put("chunk_max_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.maxSegmentIndex, labelValues));
             }
 
+            map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
+
+            // only show first wal group
             var firstWalGroup = walArray[0];
-            map.put("first_wal_group_delay_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketValues.size(), labelValues));
-            map.put("first_wal_group_delay_short_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketShortValues.size(), labelValues));
-            map.put("first_wal_group_need_persist_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistCountTotal, labelValues));
-            map.put("first_wal_group_need_persist_kv_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistKvCountTotal, labelValues));
-            map.put("first_wal_group_need_persist_offset_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistOffsetTotal, labelValues));
+            map.put("wal_group_first_delay_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketValues.size(), labelValues));
+            map.put("wal_group_first_delay_short_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketShortValues.size(), labelValues));
+            map.put("wal_group_first_need_persist_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistCountTotal, labelValues));
+            map.put("wal_group_first_need_persist_kv_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistKvCountTotal, labelValues));
+            map.put("wal_group_first_need_persist_offset_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistOffsetTotal, labelValues));
 
             if (slot == 0) {
-                map.put("estimate_key_number", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.estimateKeyNumber, labelValues));
-                map.put("estimate_one_value_length", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.estimateOneValueLength, labelValues));
+                map.put("global_dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
+                // global config for one slot
+                map.put("global_estimate_key_number", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.estimateKeyNumber, labelValues));
+                map.put("global_estimate_one_value_length", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.estimateOneValueLength, labelValues));
+                map.put("global_slot_number", new SimpleGauge.ValueWithLabelValues((double) slotNumber, labelValues));
+                map.put("global_key_buckets_per_slot", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confBucket.bucketsPerSlot, labelValues));
+                map.put("global_chunk_segment_number_per_fd", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confChunk.segmentNumberPerFd, labelValues));
+                map.put("global_chunk_fd_per_chunk", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confChunk.fdPerChunk, labelValues));
+                map.put("global_chunk_segment_length", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confChunk.segmentLength, labelValues));
+                map.put("global_wal_one_charge_bucket_number", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confWal.oneChargeBucketNumber, labelValues));
 
                 map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket), labelValues));
@@ -1613,26 +1610,19 @@ public class OneSlot implements InMemoryEstimate {
                         (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq), labelValues));
                 map.put("static_memory_prepare_mb_fd_read_write_buffer_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer), labelValues));
-
-                var replPairAsSlave = getReplPairAsSlave(masterUuid);
-                if (replPairAsSlave != null) {
-                    map.put("repl_slave_catch_up_last_seq", new SimpleGauge.ValueWithLabelValues(
-                            (double) replPairAsSlave.getSlaveCatchUpLastSeq(), labelValues));
-                }
             }
 
             var hitMissTotal = kvLRUHitTotal + kvLRUMissTotal;
             if (hitMissTotal > 0) {
-                map.put("kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
-                map.put("kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
-                map.put("kv_lru_hit_rate", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal / hitMissTotal, labelValues));
-                map.put("kv_lru_current_count_total", new SimpleGauge.ValueWithLabelValues((double) kvByWalGroupIndexLRUCountTotal(), labelValues));
+                map.put("slot_kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
+                map.put("slot_kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
+                map.put("slot_kv_lru_hit_ratio", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal / hitMissTotal, labelValues));
+                map.put("slot_kv_lru_current_count_total", new SimpleGauge.ValueWithLabelValues((double) kvByWalGroupIndexLRUCountTotal(), labelValues));
             }
 
             if (kvLRUHitTotal > 0) {
-                map.put("kv_lru_cv_encoded_length_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUCvEncodedLengthTotal, labelValues));
                 var kvLRUCvEncodedLengthAvg = (double) kvLRUCvEncodedLengthTotal / kvLRUHitTotal;
-                map.put("kv_lru_cv_encoded_length_avg", new SimpleGauge.ValueWithLabelValues(kvLRUCvEncodedLengthAvg, labelValues));
+                map.put("slot_kv_lru_cv_encoded_length_avg", new SimpleGauge.ValueWithLabelValues(kvLRUCvEncodedLengthAvg, labelValues));
             }
 
             if (segmentDecompressCountTotal > 0) {
@@ -1640,6 +1630,12 @@ public class OneSlot implements InMemoryEstimate {
                 map.put("segment_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressCountTotal, labelValues));
                 double segmentDecompressedCostTAvg = (double) segmentDecompressTimeTotalUs / segmentDecompressCountTotal;
                 map.put("segment_decompress_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(segmentDecompressedCostTAvg, labelValues));
+            }
+
+            var replPairAsSlave = getReplPairAsSlave(masterUuid);
+            if (replPairAsSlave != null) {
+                map.put("repl_slave_catch_up_last_seq", new SimpleGauge.ValueWithLabelValues(
+                        (double) replPairAsSlave.getSlaveCatchUpLastSeq(), labelValues));
             }
 
             var replPairSize = replPairs.stream().filter(one -> !one.isSendBye()).count();

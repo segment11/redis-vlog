@@ -16,9 +16,9 @@ class ChunkMergeWorkerTest extends Specification {
         chunkMergeWorker.resetThreshold(Wal.calcWalGroupNumber())
         chunkMergeWorker.MERGED_CV_SIZE_THRESHOLD = 1000
 
-        ChunkMergeWorker.innerGauge.collect()
+        ChunkMergeWorker.mergedGauge.collect()
         chunkMergeWorker.mergedSegmentCount = 1
-        ChunkMergeWorker.innerGauge.collect()
+        ChunkMergeWorker.mergedGauge.collect()
 
         println 'in memory size estimate: ' + chunkMergeWorker.estimate()
 

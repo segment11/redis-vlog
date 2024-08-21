@@ -50,16 +50,9 @@ public class Chunk implements InMemoryEstimate {
                 '}';
     }
 
-    final static SimpleGauge chunkPersistGauge = new SimpleGauge("chunk_persist", "chunk persist segments",
-            "slot");
-
-    static {
-        chunkPersistGauge.register();
-    }
-
     long persistCountTotal;
     long persistCvCountTotal;
-    long updatePvmBatchCostTimeTotalUsTotal;
+    long updatePvmBatchCostTimeTotalUs;
 
     final OneSlot oneSlot;
     private final KeyLoader keyLoader;
@@ -103,25 +96,6 @@ public class Chunk implements InMemoryEstimate {
             }
         }
         return size;
-    }
-
-    private void initMetricsCollect() {
-        chunkPersistGauge.addRawGetter(() -> {
-            var labelValues = List.of(slotStr);
-
-            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            map.put("persist_count_total", new SimpleGauge.ValueWithLabelValues((double) persistCountTotal, labelValues));
-            map.put("persist_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) persistCvCountTotal, labelValues));
-
-            map.put("update_pvm_batch_cost_time_total_us_total", new SimpleGauge.ValueWithLabelValues((double) updatePvmBatchCostTimeTotalUsTotal, labelValues));
-
-            if (persistCountTotal > 0) {
-                map.put("persist_cv_count_avg", new SimpleGauge.ValueWithLabelValues((double) persistCvCountTotal / persistCountTotal, labelValues));
-                map.put("update_pvm_batch_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) updatePvmBatchCostTimeTotalUsTotal / persistCountTotal, labelValues));
-            }
-
-            return map;
-        });
     }
 
     void initFds(LibC libC) throws IOException {
@@ -497,7 +471,7 @@ public class Chunk implements InMemoryEstimate {
         var beginT = System.nanoTime();
         keyLoader.updatePvmListBatchAfterWriteSegments(walGroupIndex, pvmList, xForBinlog);
         var costT = (System.nanoTime() - beginT) / 1000;
-        updatePvmBatchCostTimeTotalUsTotal += costT;
+        updatePvmBatchCostTimeTotalUs += costT;
 
         // update meta, segment index for next time
         oneSlot.setMetaChunkSegmentIndex(segmentIndex);
@@ -760,5 +734,31 @@ public class Chunk implements InMemoryEstimate {
         if (fdLengths[fdIndex] < afterThisBatchOffset) {
             fdLengths[fdIndex] = afterThisBatchOffset;
         }
+    }
+
+    final static SimpleGauge chunkGauge = new SimpleGauge("chunk", "chunk",
+            "slot");
+
+    static {
+        chunkGauge.register();
+    }
+
+    private void initMetricsCollect() {
+        chunkGauge.addRawGetter(() -> {
+            var labelValues = List.of(slotStr);
+
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+
+            if (persistCountTotal > 0) {
+                map.put("chunk_persist_count_total", new SimpleGauge.ValueWithLabelValues((double) persistCountTotal, labelValues));
+                map.put("chunk_persist_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) persistCvCountTotal, labelValues));
+                map.put("chunk_persist_cv_count_avg", new SimpleGauge.ValueWithLabelValues((double) persistCvCountTotal / persistCountTotal, labelValues));
+
+                map.put("chunk_update_pvm_batch_cost_time_total_us", new SimpleGauge.ValueWithLabelValues((double) updatePvmBatchCostTimeTotalUs, labelValues));
+                map.put("chunk_update_pvm_batch_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) updatePvmBatchCostTimeTotalUs / persistCountTotal, labelValues));
+            }
+
+            return map;
+        });
     }
 }

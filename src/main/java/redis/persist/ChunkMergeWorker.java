@@ -275,15 +275,15 @@ public class ChunkMergeWorker implements InMemoryEstimate {
         return size;
     }
 
-    final static SimpleGauge innerGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
+    final static SimpleGauge mergedGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
             "slot");
 
     static {
-        innerGauge.register();
+        mergedGauge.register();
     }
 
     private void initMetricsCollect() {
-        innerGauge.addRawGetter(() -> {
+        mergedGauge.addRawGetter(() -> {
             var labelValues = List.of(slotStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
@@ -293,19 +293,19 @@ public class ChunkMergeWorker implements InMemoryEstimate {
                 double mergedSegmentCostTAvg = (double) mergedSegmentCostTimeTotalUs / mergedSegmentCount;
                 map.put("merged_segment_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(mergedSegmentCostTAvg, labelValues));
 
-                map.put("valid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) validCvCountTotal, labelValues));
-                map.put("invalid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) invalidCvCountTotal, labelValues));
+                map.put("merged_valid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) validCvCountTotal, labelValues));
+                map.put("merged_invalid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) invalidCvCountTotal, labelValues));
 
                 double validCvCountAvg = (double) validCvCountTotal / mergedSegmentCount;
-                map.put("valid_cv_count_avg", new SimpleGauge.ValueWithLabelValues(validCvCountAvg, labelValues));
+                map.put("merged_valid_cv_count_avg", new SimpleGauge.ValueWithLabelValues(validCvCountAvg, labelValues));
 
                 double validCvRate = (double) validCvCountTotal / (validCvCountTotal + invalidCvCountTotal);
-                map.put("valid_cv_rate", new SimpleGauge.ValueWithLabelValues(validCvRate, labelValues));
+                map.put("merged_valid_cv_ratio", new SimpleGauge.ValueWithLabelValues(validCvRate, labelValues));
             }
 
-            map.put("chunk_last_merged_segment_index", new SimpleGauge.ValueWithLabelValues((double) lastMergedSegmentIndex, labelValues));
-            map.put("chunk_merged_but_not_persisted_segment_count", new SimpleGauge.ValueWithLabelValues((double) mergedSegmentSet.size(), labelValues));
-            map.put("chunk_merged_but_not_persisted_cv_count", new SimpleGauge.ValueWithLabelValues((double) mergedCvList.size(), labelValues));
+            map.put("merged_last_merged_segment_index", new SimpleGauge.ValueWithLabelValues((double) lastMergedSegmentIndex, labelValues));
+            map.put("merged_but_not_persisted_segment_count", new SimpleGauge.ValueWithLabelValues((double) mergedSegmentSet.size(), labelValues));
+            map.put("merged_but_not_persisted_cv_count", new SimpleGauge.ValueWithLabelValues((double) mergedCvList.size(), labelValues));
 
             return map;
         });

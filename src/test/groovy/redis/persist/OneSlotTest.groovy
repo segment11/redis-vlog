@@ -336,14 +336,12 @@ class OneSlotTest extends Specification {
         def oneSlot2 = localPersist.oneSlot((byte) 1)
 
         and:
-        oneSlot.walDelaySizeGauge.collect()
-        oneSlot.slotInnerGauge.collect()
+        oneSlot.oneSlotGauge.collect()
         oneSlot.kvLRUHitTotal = 1
         oneSlot.segmentDecompressCountTotal = 1
         oneSlot.segmentDecompressTimeTotalUs = 10
-        oneSlot.walDelaySizeGauge.collect()
-        oneSlot.slotInnerGauge.collect()
-        oneSlot2.slotInnerGauge.collect()
+        oneSlot.oneSlotGauge.collect()
+        oneSlot2.oneSlotGauge.collect()
 
         expect:
         oneSlot.bigStringFiles != null

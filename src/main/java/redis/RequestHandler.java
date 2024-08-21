@@ -394,19 +394,19 @@ public class RequestHandler {
         return ErrorReply.FORMAT;
     }
 
-    final static SimpleGauge sampleToTrainSizeGauge = new SimpleGauge("sample_to_train_size", "sample to train size",
+    final static SimpleGauge requestHandlerGauge = new SimpleGauge("request_handler", "request handler",
             "worker_id");
 
     static {
-        sampleToTrainSizeGauge.register();
+        requestHandlerGauge.register();
     }
 
     private void initMetricsCollect() {
-        sampleToTrainSizeGauge.addRawGetter(() -> {
+        requestHandlerGauge.addRawGetter(() -> {
             var labelValues = List.of(workerIdStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            map.put("sample_to_train_size", new SimpleGauge.ValueWithLabelValues((double) sampleToTrainList.size(), labelValues));
+            map.put("request_sample_to_train_size", new SimpleGauge.ValueWithLabelValues((double) sampleToTrainList.size(), labelValues));
             return map;
         });
     }

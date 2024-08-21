@@ -16,9 +16,9 @@ class SegmentBatchTest extends Specification {
         def segmentBatch = new SegmentBatch(slot, snowFlake)
 
         segmentBatch.segmentBatchGauge.collect()
-        segmentBatch.segmentCompressCountTotal = 1
+        segmentBatch.compressCountTotal = 1
         segmentBatch.compressBytesTotal = 1
-        segmentBatch.batchSegmentCountTotal = 1
+        segmentBatch.batchCountTotal = 1
         segmentBatch.afterTightSegmentCountTotal = 1
         segmentBatch.segmentBatchGauge.collect()
 

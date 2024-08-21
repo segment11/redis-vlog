@@ -515,19 +515,19 @@ public class KeyLoader implements InMemoryEstimate {
         }
     }
 
-    final static SimpleGauge keyLoaderInnerGauge = new SimpleGauge("key_loader_inner", "key loader inner",
+    final static SimpleGauge keyLoaderGauge = new SimpleGauge("key_loader", "key loader",
             "slot");
 
     static {
-        keyLoaderInnerGauge.register();
+        keyLoaderGauge.register();
     }
 
     private void initMetricsCollect() {
-        keyLoaderInnerGauge.addRawGetter(() -> {
+        keyLoaderGauge.addRawGetter(() -> {
             var labelValues = List.of(slotStr);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            map.put("bucket_count", new SimpleGauge.ValueWithLabelValues((double) bucketsPerSlot, labelValues));
+            map.put("key_loader_bucket_count", new SimpleGauge.ValueWithLabelValues((double) bucketsPerSlot, labelValues));
             map.put("persist_key_count", new SimpleGauge.ValueWithLabelValues((double) getKeyCount(), labelValues));
             return map;
         });

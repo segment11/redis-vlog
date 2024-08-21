@@ -63,8 +63,8 @@ class ChunkTest extends Specification {
         when:
         chunk.persistCountTotal = 1
         chunk.persistCvCountTotal = 100
-        chunk.updatePvmBatchCostTimeTotalUsTotal = 100
-        Chunk.chunkPersistGauge.collect()
+        chunk.updatePvmBatchCostTimeTotalUs = 100
+        Chunk.chunkGauge.collect()
         def segmentNumberPerFd = confChunk.segmentNumberPerFd
         int halfSegmentNumber = (confChunk.maxSegmentNumber() / 2).intValue()
         chunk.cleanUp()

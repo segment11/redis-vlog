@@ -51,64 +51,75 @@ public class FdReadWrite implements InMemoryEstimate {
         this.initMetricsCollect(name);
     }
 
+    // for metrics
+    final static SimpleGauge fdReadWriteGauge = new SimpleGauge("fd_read_write", "chunk or key buckets file read write",
+            "name");
+
+    static {
+        fdReadWriteGauge.register();
+    }
+
     private void initMetricsCollect(String name) {
         fdReadWriteGauge.addRawGetter(() -> {
             var labelValues = List.of(name);
 
             var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            map.put("fd_length", new SimpleGauge.ValueWithLabelValues((double) writeIndex, labelValues));
+            map.put("fd_write_index", new SimpleGauge.ValueWithLabelValues((double) writeIndex, labelValues));
 
-            if (afterFdPreadCompressCountTotal > 0) {
-                map.put("after_fd_pread_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) afterFdPreadCompressTimeTotalUs, labelValues));
-                map.put("after_fd_pread_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) afterFdPreadCompressCountTotal, labelValues));
-                double avgUs = (double) afterFdPreadCompressTimeTotalUs / afterFdPreadCompressCountTotal;
-                map.put("after_fd_pread_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
+            if (afterPreadCompressCountTotal > 0) {
+                map.put("fd_after_pread_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) afterPreadCompressTimeTotalUs, labelValues));
+                map.put("fd_after_pread_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) afterPreadCompressCountTotal, labelValues));
+                double avgUs = (double) afterPreadCompressTimeTotalUs / afterPreadCompressCountTotal;
+                map.put("fd_after_pread_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
 
                 // compress ratio
-                double compressRatio = (double) afterFdPreadCompressedBytesTotalLength / afterFdPreadCompressBytesTotalLength;
-                map.put("after_fd_pread_compress_ratio", new SimpleGauge.ValueWithLabelValues(compressRatio, labelValues));
+                double compressRatio = (double) afterPreadCompressedBytesTotalLength / afterPreadCompressBytesTotalLength;
+                map.put("fd_after_pread_compress_ratio", new SimpleGauge.ValueWithLabelValues(compressRatio, labelValues));
             }
 
             if (keyBucketSharedBytesCompressCountTotal > 0) {
-                map.put("key_bucket_shared_bytes_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesCompressTimeTotalUs, labelValues));
-                map.put("key_bucket_shared_bytes_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesCompressCountTotal, labelValues));
+                map.put("fd_key_bucket_shared_bytes_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesCompressTimeTotalUs, labelValues));
+                map.put("fd_key_bucket_shared_bytes_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesCompressCountTotal, labelValues));
                 double avgUs = (double) keyBucketSharedBytesCompressTimeTotalUs / keyBucketSharedBytesCompressCountTotal;
-                map.put("key_bucket_shared_bytes_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
+                map.put("fd_key_bucket_shared_bytes_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
 
                 // compress ratio
                 double compressRatio = (double) keyBucketSharedBytesAfterCompressedBytesTotal / keyBucketSharedBytesBeforeCompressedBytesTotal;
-                map.put("key_bucket_shared_bytes_compress_ratio", new SimpleGauge.ValueWithLabelValues(compressRatio, labelValues));
+                map.put("fd_key_bucket_shared_bytes_compress_ratio", new SimpleGauge.ValueWithLabelValues(compressRatio, labelValues));
             }
 
             if (keyBucketSharedBytesDecompressCountTotal > 0) {
-                map.put("key_bucket_shared_bytes_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesDecompressTimeTotalUs, labelValues));
-                map.put("key_bucket_shared_bytes_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesDecompressCountTotal, labelValues));
+                map.put("fd_key_bucket_shared_bytes_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesDecompressTimeTotalUs, labelValues));
+                map.put("fd_key_bucket_shared_bytes_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) keyBucketSharedBytesDecompressCountTotal, labelValues));
                 double avgUs = (double) keyBucketSharedBytesDecompressTimeTotalUs / keyBucketSharedBytesDecompressCountTotal;
-                map.put("key_bucket_shared_bytes_decompress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
+                map.put("fd_key_bucket_shared_bytes_decompress_time_avg_us", new SimpleGauge.ValueWithLabelValues(avgUs, labelValues));
             }
 
             if (readCountTotal > 0) {
-                map.put("read_bytes_total", new SimpleGauge.ValueWithLabelValues((double) readBytesTotal, labelValues));
-                map.put("read_time_total_us", new SimpleGauge.ValueWithLabelValues((double) readTimeTotalUs, labelValues));
-                map.put("read_count_total", new SimpleGauge.ValueWithLabelValues((double) readCountTotal, labelValues));
-                map.put("read_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) readTimeTotalUs / readCountTotal, labelValues));
+                map.put("fd_read_bytes_total", new SimpleGauge.ValueWithLabelValues((double) readBytesTotal, labelValues));
+                map.put("fd_read_time_total_us", new SimpleGauge.ValueWithLabelValues((double) readTimeTotalUs, labelValues));
+                map.put("fd_read_count_total", new SimpleGauge.ValueWithLabelValues((double) readCountTotal, labelValues));
+                map.put("fd_read_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) readTimeTotalUs / readCountTotal, labelValues));
             }
 
             if (writeCountTotal > 0) {
-                map.put("write_bytes_total", new SimpleGauge.ValueWithLabelValues((double) writeBytesTotal, labelValues));
-                map.put("write_time_total_us", new SimpleGauge.ValueWithLabelValues((double) writeTimeTotalUs, labelValues));
-                map.put("write_count_total", new SimpleGauge.ValueWithLabelValues((double) writeCountTotal, labelValues));
-                map.put("write_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) writeTimeTotalUs / writeCountTotal, labelValues));
+                map.put("fd_write_bytes_total", new SimpleGauge.ValueWithLabelValues((double) writeBytesTotal, labelValues));
+                map.put("fd_write_time_total_us", new SimpleGauge.ValueWithLabelValues((double) writeTimeTotalUs, labelValues));
+                map.put("fd_write_count_total", new SimpleGauge.ValueWithLabelValues((double) writeCountTotal, labelValues));
+                map.put("fd_write_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) writeTimeTotalUs / writeCountTotal, labelValues));
             }
 
             if (lruHitCounter > 0) {
-                map.put("lru_hit_counter", new SimpleGauge.ValueWithLabelValues((double) lruHitCounter, labelValues));
+                map.put("fd_lru_hit_counter", new SimpleGauge.ValueWithLabelValues((double) lruHitCounter, labelValues));
 
-                map.put("after_lru_read_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) afterLRUReadDecompressTimeTotalUs, labelValues));
-                map.put("after_lru_read_decompress_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) afterLRUReadDecompressTimeTotalUs / lruHitCounter, labelValues));
+                map.put("fd_after_lru_read_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) afterLRUReadDecompressTimeTotalUs, labelValues));
+                map.put("fd_after_lru_read_decompress_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) afterLRUReadDecompressTimeTotalUs / lruHitCounter, labelValues));
+
+                var hitMissTotal = lruHitCounter + lruMissCounter;
+                map.put("fd_lru_hit_ratio", new SimpleGauge.ValueWithLabelValues((double) lruHitCounter / hitMissTotal, labelValues));
             }
             if (lruMissCounter > 0) {
-                map.put("lru_miss_counter", new SimpleGauge.ValueWithLabelValues((double) lruMissCounter, labelValues));
+                map.put("fd_lru_miss_counter", new SimpleGauge.ValueWithLabelValues((double) lruMissCounter, labelValues));
             }
 
             return map;
@@ -137,24 +148,15 @@ public class FdReadWrite implements InMemoryEstimate {
                 '}';
     }
 
-    // for metrics
-    final static SimpleGauge fdReadWriteGauge = new SimpleGauge("fd_read_write", "chunk or key buckets file read write",
-            "name");
-
-    static {
-        fdReadWriteGauge.register();
-    }
-
     // metric stats
     // avg = this time / cache hit count
     private long afterLRUReadDecompressTimeTotalUs;
 
     // avg = this time / after fd pread compress count total
-    private long afterFdPreadCompressTimeTotalUs;
-    long afterFdPreadCompressCountTotal;
-
-    long afterFdPreadCompressBytesTotalLength;
-    long afterFdPreadCompressedBytesTotalLength;
+    private long afterPreadCompressTimeTotalUs;
+    long afterPreadCompressCountTotal;
+    long afterPreadCompressBytesTotalLength;
+    long afterPreadCompressedBytesTotalLength;
 
     private long readBytesTotal;
     private long readTimeTotalUs;
@@ -558,11 +560,11 @@ public class FdReadWrite implements InMemoryEstimate {
                     var costT2 = (System.nanoTime() - beginT2) / 1000;
 
                     // stats
-                    afterFdPreadCompressTimeTotalUs += costT2;
-                    afterFdPreadCompressCountTotal++;
+                    afterPreadCompressTimeTotalUs += costT2;
+                    afterPreadCompressCountTotal++;
 
-                    afterFdPreadCompressBytesTotalLength += bytesRead.length;
-                    afterFdPreadCompressedBytesTotalLength += bytesCompressed.length;
+                    afterPreadCompressBytesTotalLength += bytesRead.length;
+                    afterPreadCompressedBytesTotalLength += bytesCompressed.length;
 
                     oneInnerBytesByIndexLRU.put(oneInnerIndex, bytesCompressed);
                 }
