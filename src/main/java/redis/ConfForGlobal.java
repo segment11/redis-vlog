@@ -23,4 +23,10 @@ public class ConfForGlobal {
     // for repl leader select
     public static String zookeeperConnectString;
     public static String zookeeperRootPath;
+    public static boolean canBeLeader = true;
+    // for cascade replication
+    public static boolean isAsSlaveOfSlave = false;
+
+    public static final String LEADER_LATCH_PATH = "/leader_latch";
+    public static final String LEADER_LISTEN_ADDRESS_PATH = "/leader_listen_address";
 }

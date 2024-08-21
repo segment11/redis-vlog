@@ -13,6 +13,8 @@ import redis.repl.Repl;
 import redis.repl.ReplPair;
 import redis.repl.ReplType;
 import redis.repl.content.*;
+import redis.reply.BulkReply;
+import redis.reply.ErrorReply;
 import redis.reply.NilReply;
 import redis.reply.Reply;
 
@@ -32,10 +34,49 @@ public class XGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
+        // x_get_first_slave_listen_address slot 0
+        if ("x_get_first_slave_listen_address".equals(cmd)) {
+            if (data.length != 3) {
+                return slotWithKeyHashList;
+            }
+
+            var slotBytes = data[2];
+            byte slot;
+            try {
+                slot = Byte.parseByte(new String(slotBytes));
+            } catch (NumberFormatException ignored) {
+                return slotWithKeyHashList;
+            }
+
+            slotWithKeyHashList.add(new SlotWithKeyHash(slot, 0, 0L));
+            return slotWithKeyHashList;
+        }
+
         return slotWithKeyHashList;
     }
 
     public Reply handle() {
+        if ("x_get_first_slave_listen_address".equals(cmd)) {
+            if (data.length != 3) {
+                return ErrorReply.FORMAT;
+            }
+
+            if (slotWithKeyHashListParsed.isEmpty()) {
+                return ErrorReply.SYNTAX;
+            }
+
+            var slot = slotWithKeyHashListParsed.getFirst().slot();
+
+            var oneSlot = localPersist.oneSlot(slot);
+            var replPair = oneSlot.getFirstReplPairAsMaster();
+
+            if (replPair == null) {
+                return NilReply.INSTANCE;
+            } else {
+                return new BulkReply(replPair.getHostAndPort().getBytes());
+            }
+        }
+
         return NilReply.INSTANCE;
     }
 
@@ -63,6 +104,7 @@ public class XGroup extends BaseCommand {
             if (replType.isSlaveSend) {
                 this.replPair = oneSlot.getReplPairAsMaster(slaveUuid);
             } else {
+                // slave uuid == self one slot master uuid
                 this.replPair = oneSlot.getReplPairAsSlave(slaveUuid);
 
                 if (this.replPair == null) {

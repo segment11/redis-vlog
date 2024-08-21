@@ -85,6 +85,7 @@ class OneSlotTest extends Specification {
         oneSlot.masterUuid > 0
         !oneSlot.isAsSlave()
         oneSlot.getReplPairAsSlave(11L) == null
+        oneSlot.getOnlyOneReplPairAsSlave() == null
 
         when:
         def persistConfig2 = Config.create().with('volumeDirsBySlot',
@@ -123,6 +124,7 @@ class OneSlotTest extends Specification {
         then:
         oneSlot.replPairs.size() == 4
         oneSlot.delayNeedCloseReplPairs.size() == 0
+        oneSlot.firstReplPairAsMaster != null
         oneSlot.getReplPairAsMaster(11L) != null
         oneSlot.getReplPairAsSlave(11L) == null
         oneSlot.isAsSlave()
@@ -130,7 +132,8 @@ class OneSlotTest extends Specification {
         when:
         replPairAsSlave0.sendByeForTest = true
         replPairAsSlave1.sendByeForTest = false
-        oneSlot.removeReplPairAsSlave()
+        oneSlot.removeReplPairAsSlave(true)
+        oneSlot.removeReplPairAsSlave(false)
         then:
         oneSlot.delayNeedCloseReplPairs.size() == 1
 
@@ -192,6 +195,7 @@ class OneSlotTest extends Specification {
         then:
         oneSlot.getReplPairAsMaster(11L) == null
         oneSlot.getReplPairAsSlave(oneSlot.masterUuid) != null
+        oneSlot.onlyOneReplPairAsSlave != null
 
         when:
         oneSlot.replPairs.clear()

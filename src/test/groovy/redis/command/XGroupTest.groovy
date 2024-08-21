@@ -1,9 +1,7 @@
 package redis.command
 
 import io.netty.buffer.Unpooled
-import redis.ConfForSlot
-import redis.Dict
-import redis.DictMap
+import redis.*
 import redis.persist.*
 import redis.repl.*
 import redis.repl.Repl.ReplReply
@@ -12,6 +10,8 @@ import redis.repl.content.Hi
 import redis.repl.content.Ping
 import redis.repl.content.Pong
 import redis.repl.incremental.XWalV
+import redis.reply.BulkReply
+import redis.reply.ErrorReply
 import redis.reply.NilReply
 import spock.lang.Specification
 
@@ -29,6 +29,117 @@ class XGroupTest extends Specification {
     private byte[][] mockData(ReplReply reply) {
         def nettyBuf = Unpooled.wrappedBuffer(reply.buffer().array())
         Repl.decode(nettyBuf)
+    }
+
+    def 'test parse slot'() {
+        given:
+        def data3 = new byte[3][]
+
+        and:
+        data3[2] = '0'.bytes
+
+        when:
+        def sList = XGroup.parseSlots('x_get_first_slave_listen_address', data3, slotNumber)
+        then:
+        sList.size() == 1
+
+        when:
+        data3[2] = 'a'.bytes
+        sList = XGroup.parseSlots('x_get_first_slave_listen_address', data3, slotNumber)
+        then:
+        sList.size() == 0
+
+        when:
+        def data1 = new byte[1][]
+        sList = XGroup.parseSlots('x_get_first_slave_listen_address', data1, slotNumber)
+        then:
+        sList.size() == 0
+
+        when:
+        sList = XGroup.parseSlots('xxx', data3, slotNumber)
+        then:
+        sList.size() == 0
+    }
+
+    def 'test handle'() {
+        given:
+        def data1 = new byte[1][]
+
+        def xGroup = new XGroup('x_get_first_slave_listen_address', data1, null)
+        xGroup.from(BaseCommand.mockAGroup())
+
+        when:
+        def reply = xGroup.handle()
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        def data3 = new byte[3][]
+        data3[1] = 'slot'.bytes
+        data3[2] = '0'.bytes
+        xGroup.data = data3
+        xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_get_first_slave_listen_address', data3, slotNumber)
+        reply = xGroup.handle()
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        xGroup.cmd = 'zzz'
+        reply = xGroup.handle()
+        then:
+        reply == NilReply.INSTANCE
+    }
+
+    def 'test get first slave listen address'() {
+        given:
+        def data3 = new byte[3][]
+        data3[1] = 'slot'.bytes
+        data3[2] = '0'.bytes
+
+        def xGroup = new XGroup('x_get_first_slave_listen_address', data3, null)
+        xGroup.from(BaseCommand.mockAGroup())
+        xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_get_first_slave_listen_address', data3, slotNumber)
+
+        and:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        when:
+        def reply = xGroup.handle()
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        oneSlot.createIfNotExistReplPairAsMaster(11L, 'localhost', 6380)
+        reply = xGroup.handle()
+        then:
+        reply instanceof BulkReply
+        new String(((BulkReply) reply).raw) == 'localhost:6380'
+
+        when:
+        xGroup.slotWithKeyHashListParsed = []
+        reply = xGroup.handle()
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        def data1 = new byte[1][]
+        xGroup.data = data1
+        reply = xGroup.handle()
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        xGroup.cmd = 'xxx'
+        reply = xGroup.handle()
+        then:
+        reply == NilReply.INSTANCE
+
+        cleanup:
+        oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 
     def 'test as master'() {
@@ -51,7 +162,7 @@ class XGroupTest extends Specification {
         xGroup.handleRepl() == null
 
         when:
-        ConfForSlot.global.netListenAddresses = 'localhost:6379'
+        ConfForGlobal.netListenAddresses = 'localhost:6379'
 
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
@@ -399,7 +510,7 @@ class XGroupTest extends Specification {
 
     def 'test as slave'() {
         given:
-        ConfForSlot.global.netListenAddresses = 'localhost:6380'
+        ConfForGlobal.netListenAddresses = 'localhost:6380'
         ConfForSlot.global.confChunk.REPL_EMPTY_BYTES_FOR_ONCE_WRITE = new byte[FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * 4096]
 
         LocalPersistTest.prepareLocalPersist()

@@ -289,7 +289,8 @@ public class OneSlot implements InMemoryEstimate {
         return replPair;
     }
 
-    public void removeReplPairAsSlave() throws IOException {
+    public boolean removeReplPairAsSlave(boolean resetReadonly) throws IOException {
+        boolean isSelfSlave = false;
         for (var replPair : replPairs) {
             if (replPair.isAsMaster()) {
                 continue;
@@ -301,8 +302,16 @@ public class OneSlot implements InMemoryEstimate {
 
             replPair.bye();
             addDelayNeedCloseReplPair(replPair);
+            isSelfSlave = true;
         }
 
+        if (resetReadonly) {
+            resetReadonlyFalseAsMaster();
+        }
+        return isSelfSlave;
+    }
+
+    public void resetReadonlyFalseAsMaster() throws IOException {
         if (isReadonly()) {
             setReadonly(false);
         }
@@ -321,13 +330,17 @@ public class OneSlot implements InMemoryEstimate {
                 continue;
             }
 
-            if (replPair.getSlaveUuid() != slaveUuid) {
+            if (slaveUuid != -1L && replPair.getSlaveUuid() != slaveUuid) {
                 continue;
             }
 
             return replPair;
         }
         return null;
+    }
+
+    public ReplPair getFirstReplPairAsMaster() {
+        return getReplPairAsMaster(-1L);
     }
 
     public ReplPair getReplPairAsSlave(long slaveUuid) {
@@ -347,6 +360,10 @@ public class OneSlot implements InMemoryEstimate {
             return replPair;
         }
         return null;
+    }
+
+    public ReplPair getOnlyOneReplPairAsSlave() {
+        return getReplPairAsMaster(masterUuid);
     }
 
     public ReplPair createIfNotExistReplPairAsMaster(long slaveUuid, String host, int port) {

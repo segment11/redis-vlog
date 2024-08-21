@@ -1,16 +1,14 @@
 
 package redis.command;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.CompressedValue;
-import redis.ConfForSlot;
-import redis.clients.jedis.Jedis;
 import redis.persist.LocalPersist;
+import redis.repl.LeaderSelector;
 import redis.reply.*;
 import redis.type.RedisHashKeys;
 
@@ -231,35 +229,17 @@ public class SGroup extends BaseCommand {
         var hostBytes = data[1];
         var portBytes = data[2];
 
-        var firstOneSlot = localPersist.currentThreadFirstOneSlot();
+        var leaderSelector = LeaderSelector.getInstance();
 
         var isNoOne = "no".equalsIgnoreCase(new String(hostBytes));
         if (isNoOne) {
-            // check if self is already slave of another master
-            if (!firstOneSlot.isAsSlave()) {
-                return new ErrorReply("not slave of another master");
-            }
-
-            Promise<Void>[] promises = new Promise[slotNumber];
-            for (int i = 0; i < slotNumber; i++) {
-                var oneSlot = localPersist.oneSlot((byte) i);
-                promises[i] = oneSlot.asyncRun(() -> {
-                    oneSlot.removeReplPairAsSlave();
-
-                    // reset as master
-                    oneSlot.persistMergingOrMergedSegmentsButNotPersisted();
-                    oneSlot.checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
-                    oneSlot.getMergedSegmentIndexEndLastTime();
-                });
-            }
-
             SettablePromise<Reply> finalPromise = new SettablePromise<>();
             var asyncReply = new AsyncReply(finalPromise);
 
-            Promises.all(promises).whenComplete((r, e) -> {
+            leaderSelector.resetAsMaster(true, (e) -> {
                 if (e != null) {
                     log.error("slaveof error: {}", e.getMessage());
-                    finalPromise.setException(e);
+                    finalPromise.set(new ErrorReply(e.getMessage()));
                     return;
                 }
 
@@ -285,46 +265,13 @@ public class SGroup extends BaseCommand {
             return new ErrorReply("invalid port");
         }
 
-        // check if self is already slave of another master
-        if (firstOneSlot.isAsSlave()) {
-            return new ErrorReply("already slave of another master");
-        }
-
-        Jedis jedis = null;
-        try {
-            jedis = new Jedis(host, port);
-            var pong = jedis.ping();
-            log.info("Slave of {}:{} pong: {}", host, port, pong);
-            var jsonStr = jedis.get(XGroup.CONF_FOR_SLOT_KEY);
-
-            var map = ConfForSlot.global.slaveCanMatchCheckValues();
-            var objectMapper = new ObjectMapper();
-            var jsonStrLocal = objectMapper.writeValueAsString(map);
-
-            if (!jsonStr.equals(jsonStrLocal)) {
-                return new ErrorReply("slave can not match check values");
-            }
-        } catch (Exception e) {
-            return new ErrorReply("connect failed");
-        } finally {
-            if (jedis != null) {
-                jedis.close();
-            }
-        }
-
-        Promise<Void>[] promises = new Promise[slotNumber];
-        for (int i = 0; i < slotNumber; i++) {
-            var oneSlot = localPersist.oneSlot((byte) i);
-            promises[i] = oneSlot.asyncRun(() -> oneSlot.createReplPairAsSlave(host, port));
-        }
-
         SettablePromise<Reply> finalPromise = new SettablePromise<>();
         var asyncReply = new AsyncReply(finalPromise);
 
-        Promises.all(promises).whenComplete((r, e) -> {
+        leaderSelector.resetAsSlave(true, host, port, (e) -> {
             if (e != null) {
                 log.error("slaveof error: {}", e.getMessage());
-                finalPromise.setException(e);
+                finalPromise.set(new ErrorReply(e.getMessage()));
                 return;
             }
 

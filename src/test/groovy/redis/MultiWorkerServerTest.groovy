@@ -243,6 +243,7 @@ class MultiWorkerServerTest extends Specification {
                 .with("net.listenAddresses", "localhost:7379")
                 .with("debugMode", "true")
                 .with("pureMemory", "true")
+                .with("zookeeperConnectString", 'localhost:2181')
                 .with("bucket.bucketsPerSlot", cc.confBucket.bucketsPerSlot.toString())
                 .with("bucket.initialSplitNumber", cc.confBucket.initialSplitNumber.toString())
                 .with("bucket.lruPerFd.maxSize", cc.confBucket.lruPerFd.maxSize.toString())

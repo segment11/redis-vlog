@@ -36,6 +36,7 @@ import io.prometheus.client.hotspot.BufferPoolsExports;
 import io.prometheus.client.hotspot.GarbageCollectorExports;
 import io.prometheus.client.hotspot.MemoryPoolsExports;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import redis.decode.Request;
 import redis.decode.RequestDecoder;
 import redis.dyn.CachedGroovyClassLoader;
@@ -43,6 +44,8 @@ import redis.dyn.RefreshLoader;
 import redis.persist.KeyBucket;
 import redis.persist.LocalPersist;
 import redis.persist.Wal;
+import redis.repl.LeaderSelector;
+import redis.repl.support.JedisPoolHolder;
 import redis.reply.AsyncReply;
 import redis.reply.ErrorReply;
 import redis.reply.NilReply;
@@ -91,6 +94,8 @@ public class MultiWorkerServer extends Launcher {
 
     @Inject
     RefreshLoader refreshLoader;
+
+    private final Logger log = LoggerFactory.getLogger(getClass());
 
     static File dirFile(Config config) {
         var dir = config.get(ofString(), "dir", "/tmp/redis-vlog");
@@ -210,6 +215,7 @@ public class MultiWorkerServer extends Launcher {
             var reply = targetHandler.handle(request, socket);
             if (reply instanceof AsyncReply) {
                 var promise = ((AsyncReply) reply).getSettablePromise();
+                // todo, consider exception
                 return promise.map(r -> request.isHttp() ? wrapHttpResponse(r) : r.buffer());
             } else {
                 return request.isHttp() ? Promise.of(wrapHttpResponse(reply)) : Promise.of(reply.buffer());
@@ -392,6 +398,10 @@ public class MultiWorkerServer extends Launcher {
             if (loopCount % 10 == 0) {
                 refreshLoader.refresh();
             }
+
+            if (loopCount % 5 == 0) {
+                doReplLeaderSelect();
+            }
         });
         primaryScheduleRunnable.setPrimaryEventloop(primaryEventloop);
         // interval 1s
@@ -413,6 +423,62 @@ public class MultiWorkerServer extends Launcher {
         logger.info("Prometheus jvm hotspot metrics registered");
     }
 
+    // run in primary eventloop
+    private void doReplLeaderSelect() {
+        var leaderSelector = LeaderSelector.getInstance();
+        var masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress();
+
+        if (masterListenAddress == null) {
+            return;
+        }
+
+        if (ConfForGlobal.netListenAddresses.equals(masterListenAddress)) {
+            // self become master
+            leaderSelector.resetAsMaster(false, (e) -> {
+                if (e != null) {
+                    logger.error("Reset as master failed", e);
+                } else {
+                    logger.info("Reset as master success");
+                }
+            });
+            return;
+        }
+
+        // self become slave
+        var array = masterListenAddress.split(":");
+        var host = array[0];
+        var port = Integer.parseInt(array[1]);
+
+        if (!ConfForGlobal.isAsSlaveOfSlave) {
+            // connect to master
+            leaderSelector.resetAsSlave(false, host, port, (e) -> {
+                if (e != null) {
+                    logger.error("Reset as slave failed", e);
+                } else {
+                    logger.info("Reset as slave success");
+                }
+            });
+        } else {
+            // connect to master's first slave
+            var firstSlaveListenAddress = leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort(host, port);
+            if (firstSlaveListenAddress == null) {
+                log.warn("First slave listen address is null, master host: {}, master port: {}", host, port);
+            } else {
+                var arraySlave = firstSlaveListenAddress.split(":");
+                var hostSlave = arraySlave[0];
+                var portSlave = Integer.parseInt(arraySlave[1]);
+
+                leaderSelector.resetAsSlave(false, hostSlave, portSlave, (e) -> {
+                    if (e != null) {
+                        logger.error("Reset as slave failed", e);
+                    } else {
+                        logger.info("Reset as slave success");
+                    }
+                });
+            }
+        }
+    }
+
     @Override
     protected void run() throws Exception {
         awaitShutdown();
@@ -428,6 +494,9 @@ public class MultiWorkerServer extends Launcher {
             for (var scheduleRunnable : scheduleRunnableArray) {
                 scheduleRunnable.stop();
             }
+
+            LeaderSelector.getInstance().closeAll();
+            JedisPoolHolder.getInstance().closeAll();
 
             primaryScheduleRunnable.stop();
 
@@ -471,9 +540,11 @@ public class MultiWorkerServer extends Launcher {
 
             ConfForGlobal.pureMemory = config.get(ofBoolean(), "pureMemory", false);
 
-            if (config.hasChild("repl.zookeeperConnectString")) {
-                ConfForGlobal.zookeeperConnectString = config.get(ofString(), "repl.zookeeperConnectString");
-                ConfForGlobal.zookeeperRootPath = config.get(ofString(), "repl.zookeeperRootPath", "/redis-vlog");
+            if (config.getChild("zookeeperConnectString").hasValue()) {
+                ConfForGlobal.zookeeperConnectString = config.get(ofString(), "zookeeperConnectString");
+                ConfForGlobal.zookeeperRootPath = config.get(ofString(), "zookeeperRootPath", "/redis-vlog");
+                ConfForGlobal.canBeLeader = config.get(ofBoolean(), "canBeLeader", true);
+                ConfForGlobal.isAsSlaveOfSlave = config.get(ofBoolean(), "isAsSlaveOfSlave", false);
             }
 
             DictMap.TO_COMPRESS_MIN_DATA_LENGTH = config.get(toInt, "toCompressMinDataLength", 64);
