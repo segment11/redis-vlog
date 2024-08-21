@@ -243,6 +243,26 @@ class BinlogTest extends Specification {
         binlog.currentFileOffset == 0
 
         when:
+        binlog.moveToNextSegment()
+        then:
+        binlog.currentFileIndex == 6
+        binlog.currentFileOffset == 0
+
+        when:
+        binlog.currentFileOffset = 1
+        binlog.moveToNextSegment()
+        then:
+        binlog.currentFileIndex == 6
+        binlog.currentFileOffset == oneSegmentLength
+
+        when:
+        binlog.currentFileOffset = oneFileMaxLength - oneSegmentLength + 1
+        binlog.moveToNextSegment()
+        then:
+        binlog.currentFileIndex == 7
+        binlog.currentFileOffset == 0
+
+        when:
         exception = false
         oneSegmentBytes = new byte[oneSegmentLength + 1]
         try {

@@ -289,7 +289,7 @@ public class OneSlot implements InMemoryEstimate {
         return replPair;
     }
 
-    public boolean removeReplPairAsSlave(boolean resetReadonly) throws IOException {
+    public boolean removeReplPairAsSlave() {
         boolean isSelfSlave = false;
         for (var replPair : replPairs) {
             if (replPair.isAsMaster()) {
@@ -305,9 +305,6 @@ public class OneSlot implements InMemoryEstimate {
             isSelfSlave = true;
         }
 
-        if (resetReadonly) {
-            resetReadonlyFalseAsMaster();
-        }
         return isSelfSlave;
     }
 

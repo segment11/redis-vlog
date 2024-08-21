@@ -185,7 +185,7 @@ public class LeaderSelector {
             var oneSlot = localPersist.oneSlot((byte) i);
             promises[i] = oneSlot.asyncRun(() -> {
                 // always true
-                var isSelfSlave = oneSlot.removeReplPairAsSlave(false);
+                var isSelfSlave = oneSlot.removeReplPairAsSlave();
 
                 if (isSelfSlave) {
                     // reset as master
@@ -194,6 +194,7 @@ public class LeaderSelector {
                     oneSlot.getMergedSegmentIndexEndLastTime();
                 }
 
+                oneSlot.getBinlog().moveToNextSegment();
                 oneSlot.resetReadonlyFalseAsMaster();
             });
         }
@@ -229,7 +230,11 @@ public class LeaderSelector {
             Promise<Void>[] promises = new Promise[ConfForGlobal.slotNumber];
             for (int i = 0; i < ConfForGlobal.slotNumber; i++) {
                 var oneSlot = localPersist.oneSlot((byte) i);
-                promises[i] = oneSlot.asyncRun(() -> oneSlot.removeReplPairAsSlave(false));
+                // still is a slave, need not reset readonly
+                promises[i] = oneSlot.asyncRun(() -> {
+                    oneSlot.removeReplPairAsSlave();
+                    oneSlot.getBinlog().moveToNextSegment();
+                });
             }
 
             Promises.all(promises).whenComplete((r, e) -> {

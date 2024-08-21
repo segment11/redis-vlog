@@ -142,6 +142,21 @@ public class Binlog implements InMemoryEstimate {
         return new FileIndexAndOffset(fileIndex(file), 0);
     }
 
+    public void moveToNextSegment() throws IOException {
+        var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
+        var mod = currentFileOffset % oneSegmentLength;
+        if (mod != 0) {
+            currentFileOffset += oneSegmentLength - mod;
+            tempAppendSegmentBuffer.clear();
+        }
+
+        var oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
+        var isLastSegment = currentFileOffset == oneFileMaxLength;
+        if (isLastSegment) {
+            createAndUseNextFile();
+        }
+    }
+
     private static final String FILE_NAME_PREFIX = "binlog-";
 
     private String fileName() {

@@ -132,8 +132,7 @@ class OneSlotTest extends Specification {
         when:
         replPairAsSlave0.sendByeForTest = true
         replPairAsSlave1.sendByeForTest = false
-        oneSlot.removeReplPairAsSlave(true)
-        oneSlot.removeReplPairAsSlave(false)
+        oneSlot.removeReplPairAsSlave()
         then:
         oneSlot.delayNeedCloseReplPairs.size() == 1
 
