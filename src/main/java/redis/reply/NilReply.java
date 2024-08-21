@@ -3,6 +3,9 @@ package redis.reply;
 import io.activej.bytebuf.ByteBuf;
 
 public class NilReply implements Reply {
+    private NilReply() {
+    }
+
     public static final NilReply INSTANCE = new NilReply();
 
     private static final byte[] NIL = new BulkReply().buffer().asArray();

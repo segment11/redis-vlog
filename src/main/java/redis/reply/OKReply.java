@@ -3,6 +3,9 @@ package redis.reply;
 import io.activej.bytebuf.ByteBuf;
 
 public class OKReply implements Reply {
+    private OKReply() {
+    }
+
     public static final OKReply INSTANCE = new OKReply();
 
     private static final byte[] OK = new byte[]{'+', 'O', 'K', '\r', '\n'};
