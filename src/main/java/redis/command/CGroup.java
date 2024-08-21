@@ -4,12 +4,13 @@ package redis.command;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
-import redis.MultiWorkerServer;
+import redis.dyn.CachedGroovyClassLoader;
+import redis.dyn.RefreshLoader;
 import redis.persist.LocalPersist;
 import redis.reply.*;
 
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class CGroup extends BaseCommand {
     public CGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -83,43 +84,11 @@ public class CGroup extends BaseCommand {
             return ErrorReply.FORMAT;
         }
 
-        var subCommand = new String(data[1]).toLowerCase();
-        if ("help".equals(subCommand)) {
-            // todo
-        }
+        var scriptText = RefreshLoader.getScriptText("/dyn/src/script/ConfigCommandHandle.groovy");
 
-        if ("set".equals(subCommand)) {
-            if (data.length < 4) {
-                return ErrorReply.SYNTAX;
-            }
-
-            var configKey = new String(data[2]).toLowerCase();
-            var configValue = new String(data[3]);
-
-            if ("max_connections".equals(configKey)) {
-                int maxConnections;
-                try {
-                    maxConnections = Integer.parseInt(configValue);
-                } catch (NumberFormatException e) {
-                    return ErrorReply.INVALID_INTEGER;
-                }
-                MultiWorkerServer.staticGlobalV.socketInspector.setMaxConnections(maxConnections);
-                log.warn("Global config set max_connections={}", maxConnections);
-
-                var oneSlot = localPersist.currentThreadFirstOneSlot();
-                try {
-                    oneSlot.getDynConfig().update(configKey, maxConnections);
-                } catch (IOException e) {
-                    log.error("Global config update dyn config error", e);
-                    return new ErrorReply("update dyn config error: " + e.getMessage());
-                }
-                return OKReply.INSTANCE;
-            } else {
-                // todo
-            }
-        }
-
-        return OKReply.INSTANCE;
+        var variables = new HashMap<String, Object>();
+        variables.put("cGroup", this);
+        return (Reply) CachedGroovyClassLoader.getInstance().eval(scriptText, variables);
     }
 
     Reply copy() {

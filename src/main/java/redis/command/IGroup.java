@@ -3,11 +3,14 @@ package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
 import redis.BaseCommand;
+import redis.dyn.CachedGroovyClassLoader;
+import redis.dyn.RefreshLoader;
 import redis.reply.ErrorReply;
 import redis.reply.NilReply;
 import redis.reply.Reply;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class IGroup extends BaseCommand {
     public IGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -75,6 +78,22 @@ public class IGroup extends BaseCommand {
             return dGroup.decrBy(0, -by);
         }
 
+        if ("info".equals(cmd)) {
+            return info();
+        }
+
         return NilReply.INSTANCE;
+    }
+
+    private Reply info() {
+        if (data.length != 1 && data.length != 2) {
+            return ErrorReply.FORMAT;
+        }
+
+        var scriptText = RefreshLoader.getScriptText("/dyn/src/script/InfoCommandHandle.groovy");
+
+        var variables = new HashMap<String, Object>();
+        variables.put("iGroup", this);
+        return (Reply) CachedGroovyClassLoader.getInstance().eval(scriptText, variables);
     }
 }

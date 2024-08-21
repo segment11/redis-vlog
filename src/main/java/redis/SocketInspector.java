@@ -42,6 +42,10 @@ public class SocketInspector implements TcpSocket.Inspector {
 
     private int maxConnections = 1000;
 
+    public int getMaxConnections() {
+        return maxConnections;
+    }
+
     public synchronized void setMaxConnections(int maxConnections) {
         this.maxConnections = maxConnections;
     }

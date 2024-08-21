@@ -60,6 +60,14 @@ class IGroupTest extends Specification {
         reply == ErrorReply.FORMAT
 
         when:
+        def data3 = new byte[3][]
+        iGroup.cmd = 'info'
+        iGroup.data = data3
+        reply = iGroup.handle()
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
         iGroup.cmd = 'zzz'
         reply = iGroup.handle()
         then:
