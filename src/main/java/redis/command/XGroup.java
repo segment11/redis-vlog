@@ -876,7 +876,7 @@ public class XGroup extends BaseCommand {
         var lastUpdatedOffset = buffer.getLong();
 
         if (needFetchOffset == 0) {
-            log.warn("Repl master handle catch up from new binlog file, slot={}, slave uuid={}, {}, need fetch file index={}, offset={}",
+            log.debug("Repl master handle catch up from new binlog file, slot={}, slave uuid={}, {}, need fetch file index={}, offset={}",
                     slot, replPair.getSlaveUuid(), replPair.getHostAndPort(), needFetchFileIndex, needFetchOffset);
         }
 
