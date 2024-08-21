@@ -406,11 +406,17 @@ public class MultiWorkerServer extends Launcher {
         primaryScheduleRunnable = new PrimaryTaskRunnable(loopCount -> {
             // load and execute groovy script if changed, every 10s
             if (loopCount % 10 == 0) {
+                // will not throw exception
                 refreshLoader.refresh();
             }
 
             if (loopCount % 5 == 0) {
-                doReplLeaderSelect();
+                // need catch exception, or will not delay run task
+                try {
+                    doReplLeaderSelect();
+                } catch (Exception e) {
+                    log.error("Repl leader select error", e);
+                }
             }
         });
         primaryScheduleRunnable.setPrimaryEventloop(primaryEventloop);
@@ -448,7 +454,7 @@ public class MultiWorkerServer extends Launcher {
                 if (e != null) {
                     logger.error("Reset as master failed", e);
                 } else {
-                    logger.info("Reset as master success");
+                    logger.debug("Reset as master success");
                 }
             });
             return;
@@ -465,7 +471,7 @@ public class MultiWorkerServer extends Launcher {
                 if (e != null) {
                     logger.error("Reset as slave failed", e);
                 } else {
-                    logger.info("Reset as slave success");
+                    logger.debug("Reset as slave success");
                 }
             });
         } else {

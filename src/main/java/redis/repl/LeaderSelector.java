@@ -80,7 +80,13 @@ public class LeaderSelector {
             // set listen address to zookeeper leader listen address path
             var listenAddress = ConfForGlobal.netListenAddresses;
             try {
-                client.create().withMode(CreateMode.EPHEMERAL).forPath(path, listenAddress.getBytes());
+                var stat = client.checkExists().forPath(path);
+                if (stat == null) {
+                    client.create().withMode(CreateMode.EPHEMERAL).forPath(path, listenAddress.getBytes());
+                } else {
+                    // update
+                    client.setData().forPath(path, listenAddress.getBytes());
+                }
 
                 if (isLeaderLoopCount % 10 == 0) {
                     log.info("Repl set master listen address to zookeeper: {}", listenAddress);
@@ -116,7 +122,7 @@ public class LeaderSelector {
 //            }
 
             var listenAddress = new String(data);
-            log.info("Repl get master listen address from zookeeper: {}", listenAddress);
+            log.debug("Repl get master listen address from zookeeper: {}", listenAddress);
             return listenAddress;
         } catch (Exception e) {
             // need not stack trace
@@ -171,20 +177,36 @@ public class LeaderSelector {
         close();
     }
 
+    // run in primary eventloop
     public void resetAsMaster(boolean returnExceptionIfAlreadyIsMaster, Consumer<Exception> callback) {
         var localPersist = LocalPersist.getInstance();
 
         // when support cluster, need to check all slots, todo
-        var firstOneSlot = localPersist.currentThreadFirstOneSlot();
-        if (!firstOneSlot.isAsSlave()) {
-            // already is master
-            if (returnExceptionIfAlreadyIsMaster) {
-                callback.accept(new IllegalStateException("Repl already is master"));
-            } else {
-                callback.accept(null);
+        var firstOneSlot = localPersist.oneSlots()[0];
+        var pp = firstOneSlot.asyncCall(firstOneSlot::isAsSlave);
+
+        pp.whenComplete((isAsSlave, e) -> {
+            if (e != null) {
+                callback.accept(e);
+                return;
             }
-            return;
-        }
+
+            if (!isAsSlave) {
+                // already is master
+                if (returnExceptionIfAlreadyIsMaster) {
+                    callback.accept(new IllegalStateException("Repl already is master"));
+                } else {
+                    callback.accept(null);
+                }
+                return;
+            }
+
+            resetAsMasterNextStep(callback);
+        });
+    }
+
+    private static void resetAsMasterNextStep(Consumer<Exception> callback) {
+        var localPersist = LocalPersist.getInstance();
 
         Promise<Void>[] promises = new Promise[ConfForGlobal.slotNumber];
         for (int i = 0; i < ConfForGlobal.slotNumber; i++) {
@@ -210,52 +232,60 @@ public class LeaderSelector {
         });
     }
 
+    // run in primary eventloop
     public void resetAsSlave(boolean returnExceptionIfAlreadyIsSlave, String host, int port, Consumer<Exception> callback) {
         var localPersist = LocalPersist.getInstance();
 
         // when support cluster, need to check all slots, todo
-        boolean needCloseOldReplPairAsSlave = false;
-        var firstOneSlot = localPersist.currentThreadFirstOneSlot();
-        if (firstOneSlot.isAsSlave()) {
-            if (returnExceptionIfAlreadyIsSlave) {
-                callback.accept(new IllegalStateException("Repl already is slave"));
+        var firstOneSlot = localPersist.oneSlots()[0];
+        var pp = firstOneSlot.asyncCall(firstOneSlot::getOnlyOneReplPairAsSlave);
+
+        pp.whenComplete((replPair, e) -> {
+            if (e != null) {
+                callback.accept(e);
                 return;
             }
 
-            // must not be null
-            var replPair = firstOneSlot.getOnlyOneReplPairAsSlave();
-            if (replPair.getHostAndPort().equals(host + ":" + port)) {
-                // already is slave of target host and port
-                log.debug("Repl already is slave of target host and port: {}:{}", host, port);
-                callback.accept(null);
-                return;
-            } else {
-                needCloseOldReplPairAsSlave = true;
-            }
-        }
-
-        if (needCloseOldReplPairAsSlave) {
-            Promise<Void>[] promises = new Promise[ConfForGlobal.slotNumber];
-            for (int i = 0; i < ConfForGlobal.slotNumber; i++) {
-                var oneSlot = localPersist.oneSlot((byte) i);
-                // still is a slave, need not reset readonly
-                promises[i] = oneSlot.asyncRun(() -> {
-                    oneSlot.removeReplPairAsSlave();
-                    oneSlot.getBinlog().moveToNextSegment();
-                });
-            }
-
-            Promises.all(promises).whenComplete((r, e) -> {
-                if (e != null) {
-                    callback.accept(e);
+            boolean needCloseOldReplPairAsSlave = false;
+            if (replPair != null) {
+                if (returnExceptionIfAlreadyIsSlave) {
+                    callback.accept(new IllegalStateException("Repl already is slave"));
                     return;
                 }
 
+                if (replPair.getHostAndPort().equals(host + ":" + port)) {
+                    // already is slave of target host and port
+                    log.debug("Repl already is slave of target host and port: {}:{}", host, port);
+                    callback.accept(null);
+                    return;
+                } else {
+                    needCloseOldReplPairAsSlave = true;
+                }
+            }
+
+            if (needCloseOldReplPairAsSlave) {
+                Promise<Void>[] promises = new Promise[ConfForGlobal.slotNumber];
+                for (int i = 0; i < ConfForGlobal.slotNumber; i++) {
+                    var oneSlot = localPersist.oneSlot((byte) i);
+                    // still is a slave, need not reset readonly
+                    promises[i] = oneSlot.asyncRun(() -> {
+                        oneSlot.removeReplPairAsSlave();
+                        oneSlot.getBinlog().moveToNextSegment();
+                    });
+                }
+
+                Promises.all(promises).whenComplete((r, ee) -> {
+                    if (ee != null) {
+                        callback.accept(ee);
+                        return;
+                    }
+
+                    makeSelfAsSlave(host, port, callback);
+                });
+            } else {
                 makeSelfAsSlave(host, port, callback);
-            });
-        } else {
-            makeSelfAsSlave(host, port, callback);
-        }
+            }
+        });
     }
 
     // in primary eventloop
