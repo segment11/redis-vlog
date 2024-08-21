@@ -189,8 +189,8 @@ public class ReplPair {
     }
 
     public boolean bye() {
+        isSendBye = true;
         if (tcpClient != null) {
-            isSendBye = true;
             return tcpClient.bye();
         }
         return false;

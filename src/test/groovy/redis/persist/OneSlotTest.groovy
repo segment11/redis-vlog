@@ -128,6 +128,12 @@ class OneSlotTest extends Specification {
         oneSlot.getReplPairAsMaster(11L) != null
         oneSlot.getReplPairAsSlave(11L) == null
         oneSlot.isAsSlave()
+        oneSlot.slaveReplPairListSelfAsMaster.size() == 2
+
+        when:
+        replPairAsMaster0.sendByeForTest = true
+        then:
+        oneSlot.slaveReplPairListSelfAsMaster.size() == 1
 
         when:
         replPairAsSlave0.sendByeForTest = true

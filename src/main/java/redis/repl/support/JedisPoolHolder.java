@@ -56,7 +56,7 @@ public class JedisPoolHolder {
         cached.clear();
     }
 
-    public static Object useRedisPool(JedisPool jedisPool, JedisCallback callback) {
+    public static Object exe(JedisPool jedisPool, JedisCallback callback) {
         Jedis jedis = jedisPool.getResource();
         try {
             return callback.call(jedis);

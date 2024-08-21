@@ -258,12 +258,32 @@ public class OneSlot implements InMemoryEstimate {
     public boolean isAsSlave() {
         boolean isAsSlave = false;
         for (var replPair : replPairs) {
-            if (!replPair.isSendBye() && !replPair.isAsMaster()) {
-                isAsSlave = true;
-                break;
+            if (replPair.isSendBye()) {
+                continue;
             }
+
+            if (replPair.isAsMaster()) {
+                continue;
+            }
+
+            isAsSlave = true;
+            break;
         }
         return isAsSlave;
+    }
+
+    public ArrayList<ReplPair> getSlaveReplPairListSelfAsMaster() {
+        ArrayList<ReplPair> list = new ArrayList<>();
+        for (var replPair : replPairs) {
+            if (replPair.isSendBye()) {
+                continue;
+            }
+
+            if (replPair.isAsMaster()) {
+                list.add(replPair);
+            }
+        }
+        return list;
     }
 
     final LinkedList<ReplPair> delayNeedCloseReplPairs = new LinkedList<>();
@@ -292,11 +312,11 @@ public class OneSlot implements InMemoryEstimate {
     public boolean removeReplPairAsSlave() {
         boolean isSelfSlave = false;
         for (var replPair : replPairs) {
-            if (replPair.isAsMaster()) {
+            if (replPair.isSendBye()) {
                 continue;
             }
 
-            if (replPair.isSendBye()) {
+            if (replPair.isAsMaster()) {
                 continue;
             }
 
@@ -319,11 +339,11 @@ public class OneSlot implements InMemoryEstimate {
 
     public ReplPair getReplPairAsMaster(long slaveUuid) {
         for (var replPair : replPairs) {
-            if (!replPair.isAsMaster()) {
+            if (replPair.isSendBye()) {
                 continue;
             }
 
-            if (replPair.isSendBye()) {
+            if (!replPair.isAsMaster()) {
                 continue;
             }
 
@@ -342,11 +362,11 @@ public class OneSlot implements InMemoryEstimate {
 
     public ReplPair getReplPairAsSlave(long slaveUuid) {
         for (var replPair : replPairs) {
-            if (replPair.isAsMaster()) {
+            if (replPair.isSendBye()) {
                 continue;
             }
 
-            if (replPair.isSendBye()) {
+            if (replPair.isAsMaster()) {
                 continue;
             }
 
@@ -360,7 +380,7 @@ public class OneSlot implements InMemoryEstimate {
     }
 
     public ReplPair getOnlyOneReplPairAsSlave() {
-        return getReplPairAsMaster(masterUuid);
+        return getReplPairAsSlave(masterUuid);
     }
 
     public ReplPair createIfNotExistReplPairAsMaster(long slaveUuid, String host, int port) {

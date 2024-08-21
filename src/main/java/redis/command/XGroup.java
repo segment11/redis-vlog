@@ -81,6 +81,8 @@ public class XGroup extends BaseCommand {
     }
 
     public static final String CONF_FOR_SLOT_KEY = "x_conf_for_slot";
+    // raw redis, use 'info replication'
+    public static final String GET_FIRST_SLAVE_LISTEN_ADDRESS_KEY = "x_get_first_slave_listen_address";
 
     public void setReplPair(ReplPair replPair) {
         this.replPair = replPair;

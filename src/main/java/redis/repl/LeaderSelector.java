@@ -7,6 +7,7 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.recipes.leader.LeaderLatch;
 import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,9 +15,9 @@ import redis.ConfForGlobal;
 import redis.ConfForSlot;
 import redis.command.XGroup;
 import redis.persist.LocalPersist;
-import redis.repl.support.ExtendProtocolCommand;
 import redis.repl.support.JedisPoolHolder;
 
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class LeaderSelector {
@@ -34,11 +35,7 @@ public class LeaderSelector {
 
     private CuratorFramework client;
 
-    public CuratorFramework getClient() {
-        return client;
-    }
-
-    public synchronized void connect() {
+    synchronized void connect() {
         var connectString = ConfForGlobal.zookeeperConnectString;
         if (connectString == null) {
             log.debug("Repl zookeeper connect string is null, leader select will not work");
@@ -83,13 +80,15 @@ public class LeaderSelector {
             // set listen address to zookeeper leader listen address path
             var listenAddress = ConfForGlobal.netListenAddresses;
             try {
-                client.setData().forPath(path, listenAddress.getBytes());
+                client.create().withMode(CreateMode.EPHEMERAL).forPath(path, listenAddress.getBytes());
 
                 if (isLeaderLoopCount % 10 == 0) {
                     log.info("Repl set master listen address to zookeeper: {}", listenAddress);
                 }
             } catch (Exception e) {
-                log.error("Repl set master listen address to zookeeper failed", e);
+                // need not stack trace
+                log.error("Repl set master listen address to zookeeper failed: " + e.getMessage());
+                return null;
             }
 
             isLeaderLoopCount++;
@@ -99,27 +98,34 @@ public class LeaderSelector {
         }
     }
 
+    void removeTargetPathForTest() throws Exception {
+        var path = ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LISTEN_ADDRESS_PATH;
+        client.delete().forPath(path);
+        log.info("Repl remove master listen address from zookeeper: {}", path);
+    }
+
     @Nullable
     private String getMasterListenAddressAsSlave() {
         var path = ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LISTEN_ADDRESS_PATH;
 
         try {
             var data = client.getData().forPath(path);
-            if (data == null) {
-                log.warn("Repl get master listen address from zookeeper failed, data is null");
-                return null;
-            }
+//            if (data == null) {
+//                log.warn("Repl get master listen address from zookeeper failed, data is null");
+//                return null;
+//            }
 
             var listenAddress = new String(data);
             log.info("Repl get master listen address from zookeeper: {}", listenAddress);
             return listenAddress;
         } catch (Exception e) {
-            log.error("Repl get master listen address from zookeeper failed", e);
+            // need not stack trace
+            log.error("Repl get master listen address from zookeeper failed: " + e.getMessage());
             return null;
         }
     }
 
-    public synchronized void close() {
+    private synchronized void close() {
         if (client != null) {
             client.close();
             log.info("Repl zookeeper client closed");
@@ -128,24 +134,22 @@ public class LeaderSelector {
 
     private LeaderLatch leaderLatch;
 
-    public synchronized boolean startLeaderLatch() {
+    synchronized boolean startLeaderLatch() {
         if (leaderLatch != null) {
             log.debug("Repl leader latch already started");
             return true;
         }
 
-        if (client == null) {
-            log.warn("Repl leader latch start failed, zookeeper client not started");
-            return false;
-        }
-
+        // client must not be null
         leaderLatch = new LeaderLatch(client, ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LATCH_PATH);
         try {
             leaderLatch.start();
             log.info("Repl leader latch started");
+            leaderLatch.await(10, TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
-            log.error("Repl leader latch start failed", e);
+            // need not stack trace
+            log.error("Repl leader latch start failed: " + e.getMessage());
             return false;
         }
     }
@@ -156,7 +160,8 @@ public class LeaderSelector {
                 leaderLatch.close();
                 log.info("Repl leader latch closed");
             } catch (Exception e) {
-                log.error("Repl leader latch close failed", e);
+                // need not stack trace
+                log.error("Repl leader latch close failed: " + e.getMessage());
             }
         }
     }
@@ -172,8 +177,9 @@ public class LeaderSelector {
         // when support cluster, need to check all slots, todo
         var firstOneSlot = localPersist.currentThreadFirstOneSlot();
         if (!firstOneSlot.isAsSlave()) {
+            // already is master
             if (returnExceptionIfAlreadyIsMaster) {
-                callback.accept(new IllegalStateException("already is master"));
+                callback.accept(new IllegalStateException("Repl already is master"));
             } else {
                 callback.accept(null);
             }
@@ -212,14 +218,16 @@ public class LeaderSelector {
         var firstOneSlot = localPersist.currentThreadFirstOneSlot();
         if (firstOneSlot.isAsSlave()) {
             if (returnExceptionIfAlreadyIsSlave) {
-                callback.accept(new IllegalStateException("already is slave"));
+                callback.accept(new IllegalStateException("Repl already is slave"));
                 return;
             }
 
             // must not be null
             var replPair = firstOneSlot.getOnlyOneReplPairAsSlave();
             if (replPair.getHostAndPort().equals(host + ":" + port)) {
-                // already slave of target host and port
+                // already is slave of target host and port
+                log.debug("Repl already is slave of target host and port: {}:{}", host, port);
+                callback.accept(null);
                 return;
             } else {
                 needCloseOldReplPairAsSlave = true;
@@ -250,12 +258,14 @@ public class LeaderSelector {
         }
     }
 
+    // in primary eventloop
     private void makeSelfAsSlave(String host, int port, Consumer<Exception> callback) {
         try {
             var jedisPool = JedisPoolHolder.getInstance().create(host, port, null, 5000);
-            var jsonStr = (String) JedisPoolHolder.useRedisPool(jedisPool, jedis -> {
+            // may be null
+            var jsonStr = (String) JedisPoolHolder.exe(jedisPool, jedis -> {
                 var pong = jedis.ping();
-                log.info("Slave of {}:{} pong: {}", host, port, pong);
+                log.info("Repl slave of {}:{} pong: {}", host, port, pong);
                 return jedis.get(XGroup.CONF_FOR_SLOT_KEY);
             });
 
@@ -263,11 +273,12 @@ public class LeaderSelector {
             var objectMapper = new ObjectMapper();
             var jsonStrLocal = objectMapper.writeValueAsString(map);
 
-            if (!jsonStr.equals(jsonStrLocal)) {
-                callback.accept(new IllegalStateException("slave can not match check values"));
+            if (!jsonStrLocal.equals(jsonStr)) {
+                callback.accept(new IllegalStateException("Repl slave can not match check values"));
             }
         } catch (Exception e) {
             callback.accept(e);
+            return;
         }
 
         var localPersist = LocalPersist.getInstance();
@@ -275,7 +286,10 @@ public class LeaderSelector {
         Promise<Void>[] promises = new Promise[ConfForGlobal.slotNumber];
         for (int i = 0; i < ConfForGlobal.slotNumber; i++) {
             var oneSlot = localPersist.oneSlot((byte) i);
-            promises[i] = oneSlot.asyncRun(() -> oneSlot.createReplPairAsSlave(host, port));
+            promises[i] = oneSlot.asyncRun(() -> {
+                oneSlot.createReplPairAsSlave(host, port);
+                oneSlot.getBinlog().moveToNextSegment();
+            });
         }
 
         Promises.all(promises).whenComplete((r, e) -> {
@@ -285,12 +299,6 @@ public class LeaderSelector {
 
     public String getFirstSlaveListenAddressByMasterHostAndPort(String host, int port) {
         var jedisPool = JedisPoolHolder.getInstance().create(host, port, null, 5000);
-        return (String) JedisPoolHolder.useRedisPool(jedisPool, jedis -> {
-            var rBytes = (byte[]) jedis.sendCommand(new ExtendProtocolCommand("x_get_first_slave_listen_address"), "slot".getBytes(), "0".getBytes());
-            if (rBytes == null) {
-                return null;
-            }
-            return new String(rBytes);
-        });
+        return (String) JedisPoolHolder.exe(jedisPool, jedis -> jedis.get(XGroup.GET_FIRST_SLAVE_LISTEN_ADDRESS_KEY));
     }
 }
