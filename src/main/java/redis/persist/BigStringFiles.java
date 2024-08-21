@@ -6,6 +6,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.ConfForGlobal;
 import redis.ConfForSlot;
 
 import java.io.File;
@@ -35,7 +36,7 @@ public class BigStringFiles implements InMemoryEstimate {
 
     public BigStringFiles(byte slot, File slotDir) throws IOException {
         this.slot = slot;
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             log.warn("Pure memory mode, big string files will not be used, slot: {}", slot);
             this.slotStr = null;
             this.bigStringDir = null;
@@ -68,7 +69,7 @@ public class BigStringFiles implements InMemoryEstimate {
 
     @Override
     public long estimate() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return 0;
         }
 
@@ -79,7 +80,7 @@ public class BigStringFiles implements InMemoryEstimate {
 
     public List<Long> getBigStringFileUuidList() {
         var list = new ArrayList<Long>();
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             for (var entry : allBytesByUuid.entrySet()) {
                 list.add(entry.getKey());
             }
@@ -98,7 +99,7 @@ public class BigStringFiles implements InMemoryEstimate {
     }
 
     public byte[] getBigStringBytes(long uuid, boolean doLRUCache) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return allBytesByUuid.get(uuid);
         }
 
@@ -131,7 +132,7 @@ public class BigStringFiles implements InMemoryEstimate {
     }
 
     public boolean writeBigStringBytes(long uuid, String key, byte[] bytes) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             allBytesByUuid.put(uuid, bytes);
             return true;
         }
@@ -147,7 +148,7 @@ public class BigStringFiles implements InMemoryEstimate {
     }
 
     public boolean deleteBigStringFileIfExist(long uuid) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             allBytesByUuid.remove(uuid);
             return true;
         }

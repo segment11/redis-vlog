@@ -3,10 +3,7 @@ package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
 import org.apache.commons.io.FileUtils;
-import redis.BaseCommand;
-import redis.ConfForSlot;
-import redis.Dict;
-import redis.DictMap;
+import redis.*;
 import redis.persist.FdReadWrite;
 import redis.persist.KeyLoader;
 import redis.persist.OneSlot;
@@ -100,7 +97,7 @@ public class XGroup extends BaseCommand {
                 }
 
                 replPair.setLastPingGetTimestamp(System.currentTimeMillis());
-                yield Repl.reply(slot, replPair, pong, new Pong(ConfForSlot.global.netListenAddresses));
+                yield Repl.reply(slot, replPair, pong, new Pong(ConfForGlobal.netListenAddresses));
             }
             case pong -> {
                 // client received pong from server
@@ -130,7 +127,7 @@ public class XGroup extends BaseCommand {
                 }
 
                 oneSlot.addDelayNeedCloseReplPair(replPair);
-                yield Repl.reply(slot, replPair, ReplType.byeBye, new Pong(ConfForSlot.global.netListenAddresses));
+                yield Repl.reply(slot, replPair, ReplType.byeBye, new Pong(ConfForGlobal.netListenAddresses));
             }
             case byeBye -> {
                 // client received bye from server

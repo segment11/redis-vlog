@@ -8,22 +8,9 @@ class ConfForSlotTest extends Specification {
         ConfForSlot.global = ConfForSlot.from(1_000_000)
         def c = ConfForSlot.global
         println c.slaveCanMatchCheckValues()
-        c.netListenAddresses = null
 
-        expect:
-        c.estimateKeyNumber == 1_000_000
-        c.estimateOneValueLength == 200
-
-        c.isValueSetUseCompression
-        c.isOnDynTrainDictForCompression
-
-        c.netListenAddresses == null
         c.lruBigString.maxSize == 1000
         c.lruKeyAndCompressedValueEncoded.maxSize == 100_000
-        !c.pureMemory
-        c.slotNumber == 1
-        c.netWorkers == 1
-        c.eventLoopIdleMillis == 10
         println c
 
         c.confBucket.bucketsPerSlot == 65536
@@ -72,7 +59,7 @@ class ConfForSlotTest extends Specification {
         c.confChunk.mark()
 
         when:
-        ConfForSlot.global.isValueSetUseCompression = true
+        ConfForGlobal.isValueSetUseCompression = true
         c.confChunk.resetByOneValueLength(200)
         println c.confChunk
         then:
@@ -80,7 +67,7 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confChunk.reset()
-        ConfForSlot.global.isValueSetUseCompression = false
+        ConfForGlobal.isValueSetUseCompression = false
         c.confChunk.resetByOneValueLength(200)
         println c.confChunk
         then:
@@ -88,7 +75,7 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confChunk.reset()
-        ConfForSlot.global.isValueSetUseCompression = true
+        ConfForGlobal.isValueSetUseCompression = true
         c.confChunk.resetByOneValueLength(500)
         println c.confChunk
         then:
@@ -96,7 +83,7 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confChunk.reset()
-        ConfForSlot.global.isValueSetUseCompression = false
+        ConfForGlobal.isValueSetUseCompression = false
         c.confChunk.resetByOneValueLength(500)
         println c.confChunk
         then:
@@ -104,7 +91,7 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confChunk.reset()
-        ConfForSlot.global.isValueSetUseCompression = true
+        ConfForGlobal.isValueSetUseCompression = true
         c.confChunk.resetByOneValueLength(1000)
         println c.confChunk
         then:
@@ -112,7 +99,7 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confChunk.reset()
-        ConfForSlot.global.isValueSetUseCompression = false
+        ConfForGlobal.isValueSetUseCompression = false
         c.confChunk.resetByOneValueLength(1000)
         println c.confChunk
         then:
@@ -120,7 +107,7 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confChunk.reset()
-        ConfForSlot.global.isValueSetUseCompression = true
+        ConfForGlobal.isValueSetUseCompression = true
         c.confChunk.resetByOneValueLength(2000)
         println c.confChunk
         then:
@@ -128,7 +115,7 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confChunk.reset()
-        ConfForSlot.global.isValueSetUseCompression = false
+        ConfForGlobal.isValueSetUseCompression = false
         c.confChunk.resetByOneValueLength(2000)
         println c.confChunk
         then:
@@ -136,16 +123,16 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confChunk.reset()
-        ConfForSlot.global.isValueSetUseCompression = true
-        c.confChunk.resetByOneValueLength(ConfForSlot.MAX_ESTIMATE_ONE_VALUE_LENGTH)
+        ConfForGlobal.isValueSetUseCompression = true
+        c.confChunk.resetByOneValueLength(ConfForGlobal.MAX_ESTIMATE_ONE_VALUE_LENGTH)
         println c.confChunk
         then:
         1 == 1
 
         when:
         c.confChunk.reset()
-        ConfForSlot.global.isValueSetUseCompression = false
-        c.confChunk.resetByOneValueLength(ConfForSlot.MAX_ESTIMATE_ONE_VALUE_LENGTH)
+        ConfForGlobal.isValueSetUseCompression = false
+        c.confChunk.resetByOneValueLength(ConfForGlobal.MAX_ESTIMATE_ONE_VALUE_LENGTH)
         println c.confChunk
         then:
         1 == 1
@@ -154,7 +141,7 @@ class ConfForSlotTest extends Specification {
         c.confChunk.reset()
         boolean exception = false
         try {
-            c.confChunk.resetByOneValueLength(ConfForSlot.MAX_ESTIMATE_ONE_VALUE_LENGTH + 1)
+            c.confChunk.resetByOneValueLength(ConfForGlobal.MAX_ESTIMATE_ONE_VALUE_LENGTH + 1)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -199,7 +186,7 @@ class ConfForSlotTest extends Specification {
 
         when:
         c.confWal.reset()
-        c.confWal.resetByOneValueLength(ConfForSlot.MAX_ESTIMATE_ONE_VALUE_LENGTH)
+        c.confWal.resetByOneValueLength(ConfForGlobal.MAX_ESTIMATE_ONE_VALUE_LENGTH)
         println c.confWal
         then:
         1 == 1
@@ -208,7 +195,7 @@ class ConfForSlotTest extends Specification {
         c.confWal.reset()
         boolean exception = false
         try {
-            c.confWal.resetByOneValueLength(ConfForSlot.MAX_ESTIMATE_ONE_VALUE_LENGTH + 1)
+            c.confWal.resetByOneValueLength(ConfForGlobal.MAX_ESTIMATE_ONE_VALUE_LENGTH + 1)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -217,10 +204,13 @@ class ConfForSlotTest extends Specification {
         exception
 
         when:
-        c.pureMemory = true
+        ConfForGlobal.pureMemory = true
         c.confWal.resetByOneValueLength(100)
         println c.confWal
         then:
         1 == 1
+
+        cleanup:
+        ConfForGlobal.pureMemory = false
     }
 }

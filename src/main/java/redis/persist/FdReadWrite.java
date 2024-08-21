@@ -11,6 +11,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.ConfForGlobal;
 import redis.ConfForSlot;
 import redis.StaticMemoryPrepareBytesStats;
 import redis.metric.SimpleGauge;
@@ -35,7 +36,7 @@ public class FdReadWrite implements InMemoryEstimate {
 
     public FdReadWrite(String name, LibC libC, File file) throws IOException {
         this.name = name;
-        if (!ConfForSlot.global.pureMemory) {
+        if (!ConfForGlobal.pureMemory) {
             if (!file.exists()) {
                 FileUtils.touch(file);
             }
@@ -271,7 +272,7 @@ public class FdReadWrite implements InMemoryEstimate {
 
         initLRU(isChunkFd, oneInnerLength);
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             if (isChunkFd) {
                 var segmentNumberPerFd = ConfForSlot.global.confChunk.segmentNumberPerFd;
                 this.allBytesBySegmentIndexForOneChunkFd = new byte[segmentNumberPerFd][];
@@ -326,7 +327,7 @@ public class FdReadWrite implements InMemoryEstimate {
     @Override
     public long estimate() {
         long size = 0;
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             if (isChunkFd) {
                 for (var bytes : allBytesBySegmentIndexForOneChunkFd) {
                     if (bytes != null) {
@@ -358,7 +359,7 @@ public class FdReadWrite implements InMemoryEstimate {
     }
 
     private void initLRU(boolean isChunkFd, int oneInnerLength) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             log.warn("Pure memory mode, not use lru cache, name: {}", name);
             return;
         }
@@ -663,7 +664,7 @@ public class FdReadWrite implements InMemoryEstimate {
     }
 
     public byte[] readOneInner(int oneInnerIndex, boolean isRefreshLRUCache) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return readOneInnerBatchFromMemory(oneInnerIndex, 1);
         }
 
@@ -672,7 +673,7 @@ public class FdReadWrite implements InMemoryEstimate {
 
     // segmentCount may < BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE, when one slot read segments in the same wal group before batch update key buckets
     public byte[] readSegmentsForMerge(int beginSegmentIndex, int segmentCount) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return readOneInnerBatchFromMemory(beginSegmentIndex, segmentCount);
         }
 
@@ -680,7 +681,7 @@ public class FdReadWrite implements InMemoryEstimate {
     }
 
     public byte[] readBatchForRepl(int oneInnerIndex) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return readOneInnerBatchFromMemory(oneInnerIndex, REPL_ONCE_SEGMENT_COUNT_PREAD);
         }
 
@@ -688,7 +689,7 @@ public class FdReadWrite implements InMemoryEstimate {
     }
 
     public byte[] readKeyBucketsSharedBytesInOneWalGroup(int beginBucketIndex) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return readOneInnerBatchFromMemory(beginBucketIndex, ConfForSlot.global.confWal.oneChargeBucketNumber);
         }
 
@@ -774,7 +775,7 @@ public class FdReadWrite implements InMemoryEstimate {
             throw new IllegalArgumentException("Write bytes length must be less than one inner length");
         }
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return writeOneInnerBatchToMemory(oneInnerIndex, bytes, 0);
         }
 
@@ -791,7 +792,7 @@ public class FdReadWrite implements InMemoryEstimate {
             throw new IllegalArgumentException("Batch write bytes length not match once batch write segment count");
         }
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return writeOneInnerBatchToMemory(segmentIndex, bytes, 0);
         }
 
@@ -817,7 +818,7 @@ public class FdReadWrite implements InMemoryEstimate {
             throw new IllegalArgumentException("Batch write bytes length not match one charge bucket number in one wal group");
         }
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
             setSharedBytesCompressToMemory(sharedBytes, walGroupIndex);
             return sharedBytes.length;

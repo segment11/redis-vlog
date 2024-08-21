@@ -3,6 +3,7 @@ package redis.persist
 import jnr.ffi.LibraryLoader
 import jnr.posix.LibC
 import org.apache.commons.io.FileUtils
+import redis.ConfForGlobal
 import redis.ConfForSlot
 import spock.lang.Specification
 
@@ -32,7 +33,7 @@ class FdReadWriteTest extends Specification {
 
         // chunk segment length same with one key bucket cost length
         ConfForSlot.global.confChunk.segmentLength = KeyLoader.KEY_BUCKET_ONE_COST_SIZE
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         ConfForSlot.global.confChunk.lruPerFd.maxSize = 10
         ConfForSlot.global.confBucket.lruPerFd.maxSize = 10
 
@@ -221,7 +222,7 @@ class FdReadWriteTest extends Specification {
         fdKeyBucket.truncate()
         fdKeyBucket.cleanUp()
 
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         fdChunk = new FdReadWrite('test', libC, oneFile1)
         fdChunk.initByteBuffers(true)
         println 'in memory size estimate: ' + fdChunk.estimate()
@@ -367,6 +368,6 @@ class FdReadWriteTest extends Specification {
         oneFile2.delete()
         oneFile11.delete()
         oneFile22.delete()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
     }
 }

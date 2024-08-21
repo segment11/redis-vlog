@@ -3,6 +3,7 @@ package redis.persist;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.ConfForGlobal;
 import redis.ConfForSlot;
 import redis.StaticMemoryPrepareBytesStats;
 import redis.repl.SlaveNeedReplay;
@@ -61,7 +62,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
         }
 
         var offset = beginBucketIndex * ONE_LENGTH;
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             inMemoryCachedByteBuffer.position(offset).put(bytes);
             return;
         }
@@ -88,7 +89,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
         this.inMemoryCachedBytes = new byte[allCapacity];
         fillSegmentFlagInit(inMemoryCachedBytes);
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
             return;
         }
@@ -304,7 +305,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
     @SlaveNeedReplay
     @SlaveReplay
     void clear() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             fillSegmentFlagInit(inMemoryCachedBytes);
             System.out.println("Meta chunk segment flag seq clear done, set init flags.");
             return;
@@ -323,7 +324,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
     }
 
     void cleanUp() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return;
         }
 

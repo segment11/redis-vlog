@@ -493,7 +493,7 @@ class BaseCommandTest extends Specification {
         inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().numberValue() == 1
 
         when:
-        ConfForSlot.global.isValueSetUseCompression = false
+        ConfForGlobal.isValueSetUseCompression = false
         c.byPassGetSet = inMemoryGetSet
         c.set(key.bytes, longValueBytes, sKey, 0, CompressedValue.NO_EXPIRE)
         then:
@@ -506,7 +506,7 @@ class BaseCommandTest extends Specification {
         inMemoryGetSet.getBuf(slot, key.bytes, sKey.bucketIndex(), sKey.keyHash()).cv().compressedLength == longValueBytes.length
 
         when:
-        ConfForSlot.global.isValueSetUseCompression = true
+        ConfForGlobal.isValueSetUseCompression = true
         c.byPassGetSet = inMemoryGetSet
         c.set(key.bytes, longValueBytes, sKey, 0, CompressedValue.NO_EXPIRE)
         then:

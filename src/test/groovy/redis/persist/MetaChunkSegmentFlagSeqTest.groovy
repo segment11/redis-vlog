@@ -1,11 +1,11 @@
 package redis.persist
 
+import redis.ConfForGlobal
 import redis.ConfForSlot
 import spock.lang.Specification
 
 import static redis.persist.Chunk.NO_NEED_MERGE_SEGMENT_INDEX
 import static redis.persist.Consts.getSlotDir
-import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE
 
 class MetaChunkSegmentFlagSeqTest extends Specification {
     final byte slot = 0
@@ -27,7 +27,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         one.getOneBatch(0, 1024) == oneBatchBytes
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         one.overwriteOneBatch(oneBatchBytes, 0, 1024)
         then:
         one.getOneBatch(0, 1024) == oneBatchBytes
@@ -47,13 +47,13 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         cleanup:
         one.clear()
         one.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         slotDir.deleteDir()
     }
 
     def 'test read write seq'() {
         given:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         when:
@@ -65,7 +65,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         segmentFlag.walGroupIndex() == 0
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         def one2 = new MetaChunkSegmentFlagSeq(slot, slotDir)
         one2.setSegmentMergeFlag(10, Chunk.Flag.merging, 1L, 0)
         def segmentFlag2 = one2.getSegmentMergeFlag(10)
@@ -75,18 +75,18 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         segmentFlag2.walGroupIndex() == 0
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         one.clear()
         one.cleanUp()
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         one2.clear()
         one2.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
     }
 
     def 'test read write seq pure memory'() {
         given:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
 
         def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
@@ -111,7 +111,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         cleanup:
         one.clear()
         one.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
     }
 
     def 'test read batch for repl'() {
@@ -119,7 +119,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
         when:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         List<Long> seqLongList = []
         10.times {
             seqLongList << (it as Long)
@@ -129,7 +129,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         one.getSegmentSeqListBatchForRepl(10, 10) == seqLongList
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         seqLongList.clear()
         10.times {
             seqLongList << (it as Long)
@@ -141,7 +141,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         cleanup:
         one.clear()
         one.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
     }
 
     // need shell:
@@ -179,7 +179,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
 
     def 'test iterate and find'() {
         given:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
 
         // c1m
         def confChunk = ConfForSlot.global.confChunk
@@ -251,7 +251,7 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
 
     def 'test get merged segment index'() {
         given:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
 
         def one = new MetaChunkSegmentFlagSeq(slot, slotDir)
 
@@ -288,6 +288,6 @@ class MetaChunkSegmentFlagSeqTest extends Specification {
         i3 == NO_NEED_MERGE_SEGMENT_INDEX
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
     }
 }

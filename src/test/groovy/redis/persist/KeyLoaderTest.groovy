@@ -2,10 +2,7 @@ package redis.persist
 
 import jnr.ffi.LibraryLoader
 import jnr.posix.LibC
-import redis.CompressedValue
-import redis.ConfForSlot
-import redis.KeyHash
-import redis.SnowFlake
+import redis.*
 import redis.repl.incremental.XOneWalGroupPersist
 import spock.lang.Specification
 
@@ -239,7 +236,7 @@ class KeyLoaderTest extends Specification {
         metaSplitNumberBytes == keyLoader.getMetaKeyBucketSplitNumberBytesToSlaveExists()
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         keyLoader.flush()
         keyLoader.cleanUp()
     }
@@ -347,7 +344,7 @@ class KeyLoaderTest extends Specification {
         keyLoader.readKeyBucketForSingleKey(0, (byte) 1, (byte) 3, false) == null
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         def walGroupNumber = Wal.calcWalGroupNumber()
         def splitNumberArray = new byte[oneChargeBucketNumber]
         splitNumberArray[0] = (byte) 3
@@ -366,7 +363,7 @@ class KeyLoaderTest extends Specification {
         keyLoader.readKeyBucketForSingleKey(0, (byte) 2, (byte) 3, false) != null
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         keyLoader.flush()
         keyLoader.cleanUp()
     }

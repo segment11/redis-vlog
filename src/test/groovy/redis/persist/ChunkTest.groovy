@@ -2,6 +2,7 @@ package redis.persist
 
 import jnr.ffi.LibraryLoader
 import jnr.posix.LibC
+import redis.ConfForGlobal
 import redis.ConfForSlot
 import redis.SnowFlake
 import redis.repl.incremental.XOneWalGroupPersist
@@ -362,7 +363,7 @@ class ChunkTest extends Specification {
         r.size() > 0
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         chunk.fdReadWriteArray[0].initByteBuffers(true)
         println 'mock pure memory chunk append segments bytes, fd: ' + chunk.fdReadWriteArray[0].name
         for (frw in oneSlot.keyLoader.fdReadWriteArray) {
@@ -388,7 +389,7 @@ class ChunkTest extends Specification {
         chunk.segmentIndex == 0
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         chunk.cleanUp()
         oneSlot.keyLoader.flush()
         oneSlot.keyLoader.cleanUp()
@@ -429,7 +430,7 @@ class ChunkTest extends Specification {
         exception
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         for (fdReadWrite in chunk.fdReadWriteArray) {
             fdReadWrite.initByteBuffers(true)
         }
@@ -444,7 +445,7 @@ class ChunkTest extends Specification {
         1 == 1
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         localPersist.cleanUp()
         Consts.persistDir.deleteDir()
     }

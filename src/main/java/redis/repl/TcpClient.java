@@ -8,7 +8,7 @@ import io.activej.eventloop.Eventloop;
 import io.activej.net.socket.tcp.TcpSocket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.ConfForSlot;
+import redis.ConfForGlobal;
 import redis.RequestHandler;
 import redis.command.XGroup;
 import redis.decode.RequestDecoder;
@@ -69,13 +69,13 @@ public class TcpClient {
     }
 
     public boolean ping() {
-        return write(ReplType.ping, new Ping(ConfForSlot.global.netListenAddresses));
+        return write(ReplType.ping, new Ping(ConfForGlobal.netListenAddresses));
     }
 
     public boolean bye() {
         log.warn("Repl slave send bye to server: {}, slot: {}", replPair.getHostAndPort(), slot);
         System.out.println("Repl slave send bye to server: " + replPair.getHostAndPort() + ", slot: " + slot);
-        return write(ReplType.bye, new Ping(ConfForSlot.global.netListenAddresses));
+        return write(ReplType.bye, new Ping(ConfForGlobal.netListenAddresses));
     }
 
     public void connect(String host, int port, Callable<ByteBuf> connectedCallback) {

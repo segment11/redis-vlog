@@ -116,7 +116,7 @@ public class MultiWorkerServer extends Launcher {
         // default 10ms
         var primaryEventloop = Eventloop.builder()
                 .withThreadName("primary")
-                .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
+                .withIdleInterval(Duration.ofMillis(ConfForGlobal.eventLoopIdleMillis))
                 .initialize(Initializers.ofEventloop(config.getChild("eventloop.primary")))
                 .build();
 
@@ -129,7 +129,7 @@ public class MultiWorkerServer extends Launcher {
     NioReactor workerReactor(@WorkerId int workerId, OptionalDependency<ThrottlingController> throttlingController, Config config) {
         var netHandleEventloop = Eventloop.builder()
                 .withThreadName("net-worker-" + workerId)
-                .withIdleInterval(Duration.ofMillis(ConfForSlot.global.eventLoopIdleMillis))
+                .withIdleInterval(Duration.ofMillis(ConfForGlobal.eventLoopIdleMillis))
                 .initialize(ofEventloop(config.getChild("net.eventloop.worker")))
                 .withInspector(throttlingController.orElse(null))
                 .build();
@@ -454,28 +454,33 @@ public class MultiWorkerServer extends Launcher {
 
         @Provides
         ConfForSlot confForSlot(Config config) {
+            // global conf
             long estimateKeyNumber = config.get(ofLong(), "estimateKeyNumber", 1_000_000L);
             int estimateOneValueLength = config.get(toInt, "estimateOneValueLength", 200);
-            var c = ConfForSlot.from(estimateKeyNumber);
-            c.estimateOneValueLength = estimateOneValueLength;
+            ConfForGlobal.estimateKeyNumber = estimateKeyNumber;
+            ConfForGlobal.estimateOneValueLength = estimateOneValueLength;
 
             boolean isValueSetUseCompression = config.get(ofBoolean(), "isValueSetUseCompression", true);
             boolean isOnDynTrainDictForCompression = config.get(ofBoolean(), "isOnDynTrainDictForCompression", true);
-            c.isValueSetUseCompression = isValueSetUseCompression;
-            c.isOnDynTrainDictForCompression = isOnDynTrainDictForCompression;
+            ConfForGlobal.isValueSetUseCompression = isValueSetUseCompression;
+            ConfForGlobal.isOnDynTrainDictForCompression = isOnDynTrainDictForCompression;
+
+            ConfForGlobal.netListenAddresses = config.get(ofString(), "net.listenAddresses");
+            logger.info("Net listen addresses: {}", ConfForGlobal.netListenAddresses);
+            ConfForGlobal.eventLoopIdleMillis = config.get(toInt, "eventloop.idleMillis", 10);
+
+            ConfForGlobal.pureMemory = config.get(ofBoolean(), "pureMemory", false);
+
+            if (config.hasChild("repl.zookeeperConnectString")) {
+                ConfForGlobal.zookeeperConnectString = config.get(ofString(), "repl.zookeeperConnectString");
+                ConfForGlobal.zookeeperRootPath = config.get(ofString(), "repl.zookeeperRootPath", "/redis-vlog");
+            }
 
             DictMap.TO_COMPRESS_MIN_DATA_LENGTH = config.get(toInt, "toCompressMinDataLength", 64);
 
+            // one slot config
+            var c = ConfForSlot.from(estimateKeyNumber);
             ConfForSlot.global = c;
-
-            c.netListenAddresses = config.get(ofString(), "net.listenAddresses");
-            logger.info("Net listen addresses: {}", c.netListenAddresses);
-
-            if (config.hasChild("pureMemory")) {
-                c.pureMemory = config.get(ofBoolean(), "pureMemory");
-            }
-
-            c.eventLoopIdleMillis = config.get(toInt, "eventloop.idleMillis", 10);
 
             boolean debugMode = config.get(ofBoolean(), "debugMode", false);
             if (debugMode) {
@@ -582,7 +587,7 @@ public class MultiWorkerServer extends Launcher {
             if (slotNumber != 1 && slotNumber % 2 != 0) {
                 throw new IllegalArgumentException("Slot number should be 1 or even");
             }
-            confForSlot.slotNumber = (short) slotNumber;
+            ConfForGlobal.slotNumber = (short) slotNumber;
 
             int netWorkers = config.get(toInt, "netWorkers", 1);
             if (netWorkers > MAX_NET_WORKERS) {
@@ -592,7 +597,7 @@ public class MultiWorkerServer extends Launcher {
             if (netWorkers >= cpuNumber) {
                 throw new IllegalArgumentException("Net workers should be less than cpu number");
             }
-            confForSlot.netWorkers = (byte) netWorkers;
+            ConfForGlobal.netWorkers = (byte) netWorkers;
 
             var dirFile = dirFile(config);
 

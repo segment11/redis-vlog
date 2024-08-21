@@ -1,5 +1,6 @@
 package redis.persist
 
+import redis.ConfForGlobal
 import redis.ConfForSlot
 import spock.lang.Specification
 
@@ -10,7 +11,7 @@ class MetaOneWalGroupSeqTest extends Specification {
 
     def 'test set and get'() {
         given:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
 
         def one = new MetaOneWalGroupSeq(slot, slotDir)
         println 'in memory size estimate: ' + one.estimate()
@@ -31,7 +32,7 @@ class MetaOneWalGroupSeqTest extends Specification {
         when:
         one2.clear()
         one2.cleanUp()
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         def one3 = new MetaOneWalGroupSeq(slot, slotDir)
         one3.set(0, (byte) 0, 1L)
         then:
@@ -40,7 +41,7 @@ class MetaOneWalGroupSeqTest extends Specification {
         cleanup:
         one3.clear()
         one3.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         slotDir.deleteDir()
     }
 }

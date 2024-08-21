@@ -3,6 +3,7 @@ package redis.persist
 import io.netty.buffer.Unpooled
 import org.apache.commons.io.FileUtils
 import redis.CompressedValue
+import redis.ConfForGlobal
 import redis.ConfForSlot
 import redis.SnowFlake
 import spock.lang.Specification
@@ -14,7 +15,7 @@ class WalTest extends Specification {
 
     def 'put and get'() {
         given:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         ConfForSlot.global = ConfForSlot.debugMode
 
         def file = new File(Consts.slotDir, 'test-raf.wal')
@@ -126,7 +127,7 @@ class WalTest extends Specification {
         // repl
         // repl export exists batch to slave
         when:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         def toSlaveExistsBytes = wal.toSlaveExistsOneWalGroupBytes()
         then:
         toSlaveExistsBytes.length == 16 + Wal.ONE_GROUP_BUFFER_SIZE * 2
@@ -173,14 +174,14 @@ class WalTest extends Specification {
         1 == 1
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         wal.putFromX(v1, true, wal.writePositionShortValue)
         wal.putFromX(v1, false, wal.writePosition)
         then:
         1 == 1
 
         when:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         wal.clearValues()
         wal.clearShortValues()
         then:
@@ -198,7 +199,7 @@ class WalTest extends Specification {
 
     def 'test value change to short value'() {
         given:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
 
         def snowFlake = new SnowFlake(1, 1)
         def wal = new Wal(slot, 0, null, null, snowFlake)
@@ -306,7 +307,7 @@ class WalTest extends Specification {
         wal.keyCount == 0
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         Wal.ONE_GROUP_BUFFER_SIZE = 64 * 1024
     }
 }

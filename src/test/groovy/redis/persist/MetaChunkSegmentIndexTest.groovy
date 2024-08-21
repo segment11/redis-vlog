@@ -1,6 +1,6 @@
 package redis.persist
 
-import redis.ConfForSlot
+import redis.ConfForGlobal
 import redis.repl.Binlog
 import spock.lang.Specification
 
@@ -16,7 +16,7 @@ class MetaChunkSegmentIndexTest extends Specification {
 
         when:
         one2.cleanUp()
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         def two = new MetaChunkSegmentIndex(slot, slotDir)
         then:
         two.get() == one.get()
@@ -25,13 +25,13 @@ class MetaChunkSegmentIndexTest extends Specification {
         one.clear()
         one.cleanUp()
         two.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         slotDir.deleteDir()
     }
 
     def 'test set and get'() {
         given:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         def one = new MetaChunkSegmentIndex(slot, slotDir)
 
         when:
@@ -68,7 +68,7 @@ class MetaChunkSegmentIndexTest extends Specification {
         one.get() == 0
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         def one2 = new MetaChunkSegmentIndex(slot, slotDir)
         one2.set(10)
         then:
@@ -80,11 +80,11 @@ class MetaChunkSegmentIndexTest extends Specification {
         one2.isExistsDataAllFetched()
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         one.cleanUp()
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         one2.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         slotDir.deleteDir()
     }
 }

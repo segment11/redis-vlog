@@ -1,7 +1,7 @@
 package redis.persist
 
 import org.apache.commons.io.FileUtils
-import redis.ConfForSlot
+import redis.ConfForGlobal
 import spock.lang.Specification
 
 import java.nio.file.Files
@@ -23,7 +23,7 @@ class BigStringFilesTest extends Specification {
             tmpSlotDir2.mkdirs()
         }
 
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         def bigStringFiles1 = new BigStringFiles(slot, tmpSlotDir1)
         def bigStringFiles11 = new BigStringFiles(slot, tmpSlotDir1)
         def bigStringFiles2 = new BigStringFiles(slot, tmpSlotDir2)
@@ -51,7 +51,7 @@ class BigStringFilesTest extends Specification {
         given:
         def bigString = 'a' * 10000
 
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         def bigStringFiles = new BigStringFiles(slot, null)
         println bigStringFiles.estimate()
 
@@ -68,14 +68,14 @@ class BigStringFilesTest extends Specification {
         bigStringFiles.getBigStringFileUuidList().size() == 0
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
     }
 
     def 'test write io exception'() {
         given:
         def noPermitDir = new File('/usr/tmp-slot-dir')
 
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
 
         when:
         boolean exception = false

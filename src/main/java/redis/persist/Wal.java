@@ -3,10 +3,7 @@ package redis.persist;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.CompressedValue;
-import redis.ConfForSlot;
-import redis.Debug;
-import redis.SnowFlake;
+import redis.*;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
 
@@ -132,7 +129,7 @@ public class Wal implements InMemoryEstimate {
         this.delayToKeyBucketValues = new HashMap<>();
         this.delayToKeyBucketShortValues = new HashMap<>();
 
-        if (!ConfForSlot.global.pureMemory) {
+        if (!ConfForGlobal.pureMemory) {
             var n1 = readWal(walSharedFile, delayToKeyBucketValues, false);
             var n2 = readWal(walSharedFileShortValue, delayToKeyBucketShortValues, true);
             initMemoryN += RamUsageEstimator.sizeOfMap(delayToKeyBucketValues);
@@ -259,7 +256,7 @@ public class Wal implements InMemoryEstimate {
     private void resetWal(boolean isShortValue) {
         var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
 
-        if (!ConfForSlot.global.pureMemory) {
+        if (!ConfForGlobal.pureMemory) {
             var raf = isShortValue ? walSharedFileShortValue : walSharedFile;
             try {
                 raf.seek(targetGroupBeginOffset);
@@ -362,7 +359,7 @@ public class Wal implements InMemoryEstimate {
 
     // slave catch up master binlog, replay wal, need update write position, be careful
     public void putFromX(V v, boolean isValueShort, int offset) {
-        if (!ConfForSlot.global.pureMemory) {
+        if (!ConfForGlobal.pureMemory) {
             var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
             putVToFile(v, isValueShort, offset, targetGroupBeginOffset);
 
@@ -412,7 +409,7 @@ public class Wal implements InMemoryEstimate {
 
         var bulkLoad = Debug.getInstance().bulkLoad;
         // bulk load need not wal write
-        if (!ConfForSlot.global.pureMemory && !bulkLoad) {
+        if (!ConfForGlobal.pureMemory && !bulkLoad) {
             putVToFile(v, isValueShort, offset, targetGroupBeginOffset);
         }
         if (isValueShort) {

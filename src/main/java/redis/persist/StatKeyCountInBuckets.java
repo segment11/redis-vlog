@@ -3,6 +3,7 @@ package redis.persist;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.ConfForGlobal;
 import redis.ConfForSlot;
 import redis.repl.SlaveReplay;
 
@@ -41,7 +42,7 @@ public class StatKeyCountInBuckets implements InMemoryEstimate {
             throw new IllegalArgumentException("Repl stat key count in buckets, bytes length not match");
         }
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             inMemoryCachedByteBuffer.position(0).put(bytes);
             calcKeyCount();
             return;
@@ -69,7 +70,7 @@ public class StatKeyCountInBuckets implements InMemoryEstimate {
         // max 512KB * 2 = 1MB
         this.inMemoryCachedBytes = new byte[allCapacity];
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
             return;
         }
@@ -124,7 +125,7 @@ public class StatKeyCountInBuckets implements InMemoryEstimate {
     }
 
     static void writeToRaf(int offset, byte[] tmpBytes, ByteBuffer inMemoryCachedByteBuffer, RandomAccessFile raf) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             inMemoryCachedByteBuffer.put(offset, tmpBytes);
             return;
         }
@@ -170,7 +171,7 @@ public class StatKeyCountInBuckets implements InMemoryEstimate {
     }
 
     void clear() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             Arrays.fill(inMemoryCachedBytes, (byte) 0);
             Arrays.fill(keyCountInOneWalGroup, 0);
             totalKeyCountCached = 0;
@@ -191,7 +192,7 @@ public class StatKeyCountInBuckets implements InMemoryEstimate {
     }
 
     void cleanUp() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return;
         }
 

@@ -3,7 +3,7 @@ package redis.persist;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.ConfForSlot;
+import redis.ConfForGlobal;
 import redis.repl.Binlog;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
@@ -31,7 +31,7 @@ public class MetaChunkSegmentIndex {
         // 8 bytes for master binlog offset long
         this.inMemoryCachedBytes = new byte[4 + 8 + 4 + 4 + 8];
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
             return;
         }
@@ -60,7 +60,7 @@ public class MetaChunkSegmentIndex {
 
     @SlaveNeedReplay
     void set(int segmentIndex) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             this.inMemoryCachedByteBuffer.putInt(0, segmentIndex);
             return;
         }
@@ -81,7 +81,7 @@ public class MetaChunkSegmentIndex {
 
     void setAll(int segmentIndex, long masterUuid, boolean isExistsDataAllFetched,
                 int masterBinlogFileIndex, long masterBinlogOffset) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             this.inMemoryCachedByteBuffer.putInt(0, segmentIndex);
             this.inMemoryCachedByteBuffer.putLong(4, masterUuid);
             this.inMemoryCachedByteBuffer.putInt(12, isExistsDataAllFetched ? 1 : 0);
@@ -130,7 +130,7 @@ public class MetaChunkSegmentIndex {
     }
 
     void cleanUp() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return;
         }
 

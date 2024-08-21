@@ -3,6 +3,7 @@ package redis.persist;
 import jnr.posix.LibC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.ConfForGlobal;
 import redis.ConfForSlot;
 import redis.Debug;
 import redis.SnowFlake;
@@ -366,7 +367,7 @@ public class Chunk implements InMemoryEstimate {
         // never cross fd files because prepare batch segments to write
         var fdReadWrite = fdReadWriteArray[fdIndex];
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             isNewAppendAfterBatch = fdReadWrite.isTargetSegmentIndexNullInMemory(segmentIndexTargetFd);
             for (var segment : segments) {
                 var bytes = segment.tightBytesWithLength();
@@ -665,7 +666,7 @@ public class Chunk implements InMemoryEstimate {
 
     @SlaveReplay
     public void writeSegmentsFromMasterExists(byte[] bytes, int segmentIndex, int segmentCount) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             var fdIndex = targetFdIndex(segmentIndex);
             var segmentIndexTargetFd = targetSegmentIndexTargetFd(segmentIndex);
 

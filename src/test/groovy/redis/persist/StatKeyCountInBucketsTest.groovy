@@ -1,5 +1,6 @@
 package redis.persist
 
+import redis.ConfForGlobal
 import redis.ConfForSlot
 import spock.lang.Specification
 
@@ -33,7 +34,7 @@ class StatKeyCountInBucketsTest extends Specification {
         one.keyCount == one.allCapacity / 2
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         one.overwriteInMemoryCachedBytes(bytes0)
         then:
         one.inMemoryCachedBytes.length == one.allCapacity
@@ -55,13 +56,13 @@ class StatKeyCountInBucketsTest extends Specification {
         one.clear()
         one.cleanUp()
         two.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         slotDir.deleteDir()
     }
 
     def 'test set and get'() {
         given:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         def one = new StatKeyCountInBuckets(slot, slotDir)
 
         when:
@@ -82,7 +83,7 @@ class StatKeyCountInBucketsTest extends Specification {
         one1.keyCount == 30
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         def one2 = new StatKeyCountInBuckets(slot, slotDir)
         one2.setKeyCountBatch(0, 0, keyCountArray)
         then:
@@ -100,14 +101,14 @@ class StatKeyCountInBucketsTest extends Specification {
         one2.keyCount == 60
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         one.clear()
         one.cleanUp()
         one1.cleanUp()
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         one2.clear()
         one2.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         slotDir.deleteDir()
     }
 }

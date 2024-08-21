@@ -1,6 +1,6 @@
 package redis.persist
 
-import redis.ConfForSlot
+import redis.ConfForGlobal
 import spock.lang.Specification
 
 import static redis.persist.Consts.getSlotDir
@@ -25,7 +25,7 @@ class MetaKeyBucketSplitNumberTest extends Specification {
         one.inMemoryCachedBytes.length == one.allCapacity
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         one.overwriteInMemoryCachedBytes(bytes0)
         then:
         one.inMemoryCachedBytes.length == one.allCapacity
@@ -51,13 +51,13 @@ class MetaKeyBucketSplitNumberTest extends Specification {
         one.clear()
         one.cleanUp()
         two.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         slotDir.deleteDir()
     }
 
     def 'test set and get'() {
         given:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
 
         def one = new MetaKeyBucketSplitNumber(slot, slotDir)
 //        println one.inMemoryCachedBytes
@@ -81,7 +81,7 @@ class MetaKeyBucketSplitNumberTest extends Specification {
         one.getBatch(10, 3) == splitNumberArray
 
         when:
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         def one2 = new MetaKeyBucketSplitNumber(slot, slotDir)
         one2.setForTest(10, (byte) 3)
         one2.setForTest(20, (byte) 9)
@@ -106,13 +106,13 @@ class MetaKeyBucketSplitNumberTest extends Specification {
         maxSplitNumber == 27
 
         cleanup:
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         one.clear()
         one.cleanUp()
-        ConfForSlot.global.pureMemory = true
+        ConfForGlobal.pureMemory = true
         one2.clear()
         one2.cleanUp()
-        ConfForSlot.global.pureMemory = false
+        ConfForGlobal.pureMemory = false
         slotDir.deleteDir()
     }
 }

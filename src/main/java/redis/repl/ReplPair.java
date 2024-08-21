@@ -3,7 +3,7 @@ package redis.repl;
 import io.activej.eventloop.Eventloop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.ConfForSlot;
+import redis.ConfForGlobal;
 import redis.RequestHandler;
 import redis.repl.content.Hello;
 
@@ -171,7 +171,7 @@ public class ReplPair {
 //                log.warn("Repl pair init as slave: close old connection, target host: {}, port: {}, slot: {}", host, port, slot);
 //            }
 
-            var replContent = new Hello(slaveUuid, ConfForSlot.global.netListenAddresses);
+            var replContent = new Hello(slaveUuid, ConfForGlobal.netListenAddresses);
 
             tcpClient = new TcpClient(slot, eventloop, requestHandler, this);
             tcpClient.connect(host, port, () -> Repl.buffer(slaveUuid, slot, ReplType.hello, replContent));

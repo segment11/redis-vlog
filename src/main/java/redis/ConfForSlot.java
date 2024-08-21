@@ -9,6 +9,7 @@ import redis.persist.Wal;
 
 import java.util.HashMap;
 
+import static redis.ConfForGlobal.*;
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
 public enum ConfForSlot {
@@ -17,27 +18,12 @@ public enum ConfForSlot {
 
     public static Logger log = LoggerFactory.getLogger(ConfForSlot.class);
 
-    public long estimateKeyNumber;
-    public int estimateOneValueLength = DEFAULT_ESTIMATE_ONE_VALUE_LENGTH;
-    private static final int DEFAULT_ESTIMATE_ONE_VALUE_LENGTH = 200;
-    static final int MAX_ESTIMATE_ONE_VALUE_LENGTH = 4000;
-
-    public boolean isValueSetUseCompression = true;
-    public boolean isOnDynTrainDictForCompression = true;
-
-    public String netListenAddresses;
-
     public final ConfBucket confBucket;
     public final ConfChunk confChunk;
     public final ConfWal confWal;
     public final ConfLru lruBigString = new ConfLru(1000);
     public final ConfLru lruKeyAndCompressedValueEncoded = new ConfLru(100_000);
     public final ConfRepl confRepl = new ConfRepl();
-
-    public boolean pureMemory = false;
-    public short slotNumber = 1;
-    public byte netWorkers = 1;
-    public int eventLoopIdleMillis = 10;
 
     public static ConfForSlot from(long estimateKeyNumber) {
         if (estimateKeyNumber <= 100_000L) {
@@ -69,8 +55,6 @@ public enum ConfForSlot {
     public static ConfForSlot global = c1m;
 
     ConfForSlot(long estimateKeyNumber) {
-        this.estimateKeyNumber = estimateKeyNumber;
-
         if (estimateKeyNumber == 100_000L) {
             this.confChunk = ConfChunk.debugMode;
             this.confBucket = ConfBucket.debugMode;
@@ -193,7 +177,7 @@ public enum ConfForSlot {
             // when call this method, chunk segment length will not be changed
             REPL_EMPTY_BYTES_FOR_ONCE_WRITE = new byte[FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD * segmentLength];
 
-            boolean isValueSetUseCompression1 = ConfForSlot.global.isValueSetUseCompression;
+            boolean isValueSetUseCompression1 = ConfForGlobal.isValueSetUseCompression;
             // if not use compression, chunk files number need to be doubled
             if (!isValueSetUseCompression1) {
                 this.fdPerChunk = (byte) (2 * this.fdPerChunk);
@@ -206,14 +190,17 @@ public enum ConfForSlot {
 
             if (estimateOneValueLength <= 500) {
                 Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 8 : 16;
-                this.fdPerChunk = (byte) (2 * this.fdPerChunk);
+                if (!ConfForGlobal.pureMemory) {
+                    this.fdPerChunk = (byte) (2 * this.fdPerChunk);
+                }
                 return;
             }
 
             if (estimateOneValueLength <= 1000) {
                 this.segmentNumberPerFd = this.segmentNumberPerFd / 4;
                 this.segmentLength = PAGE_SIZE * 4;
-                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 4 * this.fdPerChunk * (isValueSetUseCompression1 ? 1 : 2));
+
+                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, (ConfForGlobal.pureMemory ? 2 : 4) * this.fdPerChunk * (isValueSetUseCompression1 ? 1 : 2));
 
                 Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 8 : 16;
                 return;
@@ -222,7 +209,7 @@ public enum ConfForSlot {
             if (estimateOneValueLength <= 2000) {
                 this.segmentNumberPerFd = this.segmentNumberPerFd / 8;
                 this.segmentLength = PAGE_SIZE * 8;
-                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 8 * this.fdPerChunk * (isValueSetUseCompression1 ? 1 : 2));
+                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, (ConfForGlobal.pureMemory ? 4 : 8) * this.fdPerChunk * (isValueSetUseCompression1 ? 1 : 2));
 
                 Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 8 : 16;
                 return;
@@ -231,7 +218,7 @@ public enum ConfForSlot {
             if (estimateOneValueLength <= MAX_ESTIMATE_ONE_VALUE_LENGTH) {
                 this.segmentNumberPerFd = this.segmentNumberPerFd / 16;
                 this.segmentLength = PAGE_SIZE * 16;
-                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, 16 * this.fdPerChunk * (isValueSetUseCompression1 ? 1 : 2));
+                this.fdPerChunk = (byte) Math.min(MAX_FD_PER_CHUNK, (ConfForGlobal.pureMemory ? 8 : 16) * this.fdPerChunk * (isValueSetUseCompression1 ? 1 : 2));
 
                 Chunk.ONCE_PREPARE_SEGMENT_COUNT_FOR_MERGE = isValueSetUseCompression1 ? 8 : 16;
                 return;
@@ -306,7 +293,7 @@ public enum ConfForSlot {
         }
 
         public void resetByOneValueLength(int estimateOneValueLength) {
-            if (ConfForSlot.global.pureMemory) {
+            if (ConfForGlobal.pureMemory) {
                 // save memory in wal batch cache, todo, change here
                 this.valueSizeTrigger = 50;
                 this.shortValueSizeTrigger = 50;

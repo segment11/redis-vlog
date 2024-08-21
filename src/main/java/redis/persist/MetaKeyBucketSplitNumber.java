@@ -3,6 +3,7 @@ package redis.persist;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.ConfForGlobal;
 import redis.ConfForSlot;
 import redis.repl.SlaveReplay;
 
@@ -36,7 +37,7 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
             throw new IllegalArgumentException("Repl meta key bucket split number, bytes length not match");
         }
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             inMemoryCachedByteBuffer.position(0).put(bytes);
             return;
         }
@@ -61,7 +62,7 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
         this.inMemoryCachedBytes = new byte[allCapacity];
         Arrays.fill(inMemoryCachedBytes, initialSplitNumber);
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
             return;
         }
@@ -99,7 +100,7 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
 
     // for unit test
     void setForTest(int bucketIndex, byte splitNumber) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             inMemoryCachedByteBuffer.put(bucketIndex, splitNumber);
             return;
         }
@@ -115,7 +116,7 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
     }
 
     void setBatch(int beginBucketIndex, byte[] splitNumberArray) {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             inMemoryCachedByteBuffer.position(beginBucketIndex).put(splitNumberArray);
             return;
         }
@@ -152,7 +153,7 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
     }
 
     void clear() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             Arrays.fill(inMemoryCachedBytes, initialSplitNumber);
             return;
         }
@@ -169,7 +170,7 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
     }
 
     public void cleanUp() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return;
         }
 

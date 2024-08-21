@@ -3,7 +3,7 @@ package redis.persist;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.ConfForSlot;
+import redis.ConfForGlobal;
 import redis.repl.SlaveNeedReplay;
 
 import java.io.File;
@@ -34,7 +34,7 @@ public class MetaOneWalGroupSeq implements InMemoryEstimate {
         // max 8 * 512K / 16 * 9 = 2304KB
         this.inMemoryCachedBytes = new byte[allCapacity];
 
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             this.inMemoryCachedByteBuffer = ByteBuffer.wrap(inMemoryCachedBytes);
             return;
         }
@@ -78,7 +78,7 @@ public class MetaOneWalGroupSeq implements InMemoryEstimate {
     @SlaveNeedReplay
     void set(int oneWalGroupIndex, byte splitIndex, long seq) {
         var offset = 8 * oneWalGroupIndex + 8 * walGroupNumber * splitIndex;
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             inMemoryCachedByteBuffer.putLong(offset, seq);
             return;
         }
@@ -93,7 +93,7 @@ public class MetaOneWalGroupSeq implements InMemoryEstimate {
     }
 
     void clear() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             Arrays.fill(inMemoryCachedBytes, (byte) 0);
             return;
         }
@@ -109,7 +109,7 @@ public class MetaOneWalGroupSeq implements InMemoryEstimate {
     }
 
     public void cleanUp() {
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             return;
         }
 

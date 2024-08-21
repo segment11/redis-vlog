@@ -2,6 +2,7 @@ package redis.persist;
 
 import jnr.posix.LibC;
 import org.slf4j.Logger;
+import redis.ConfForGlobal;
 import redis.ConfForSlot;
 import redis.KeyHash;
 import redis.SnowFlake;
@@ -300,7 +301,7 @@ public class KeyLoader implements InMemoryEstimate {
         }
 
         var bytes = fdReadWrite.readOneInner(bucketIndex, isRefreshLRUCache);
-        if (ConfForSlot.global.pureMemory) {
+        if (ConfForGlobal.pureMemory) {
             // shared bytes
             var position = getPositionInSharedBytes(bucketIndex);
             if (!isBytesValidAsKeyBucket(bytes, position)) {
@@ -358,7 +359,7 @@ public class KeyLoader implements InMemoryEstimate {
             }
 
             var bytes = fdReadWrite.readOneInner(bucketIndex, false);
-            if (ConfForSlot.global.pureMemory) {
+            if (ConfForGlobal.pureMemory) {
                 // shared bytes
                 var position = getPositionInSharedBytes(bucketIndex);
                 if (!isBytesValidAsKeyBucket(bytes, position)) {

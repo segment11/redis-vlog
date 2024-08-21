@@ -169,7 +169,7 @@ public class ChunkMergeJob {
 
         // read all segments to memory, then compare with key buckets
         int chunkSegmentLength = ConfForSlot.global.confChunk.segmentLength;
-        var tmpCapacity = chunkSegmentLength / ConfForSlot.global.estimateOneValueLength * BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
+        var tmpCapacity = chunkSegmentLength / ConfForGlobal.estimateOneValueLength * BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
         ArrayList<CvWithKeyAndSegmentOffset> cvList = new ArrayList<>(tmpCapacity);
 
         var beginT = System.nanoTime();

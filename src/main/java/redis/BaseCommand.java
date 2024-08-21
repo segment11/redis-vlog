@@ -587,7 +587,7 @@ public abstract class BaseCommand {
 
         Dict dict = null;
         boolean isTypeString = CompressedValue.isTypeString(spType);
-        if (isTypeString && ConfForSlot.global.isValueSetUseCompression && valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH) {
+        if (isTypeString && ConfForGlobal.isValueSetUseCompression && valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH) {
             // use global dict first
             if (Dict.GLOBAL_ZSTD_DICT.hasDictBytes()) {
                 dict = Dict.GLOBAL_ZSTD_DICT;
@@ -601,7 +601,7 @@ public abstract class BaseCommand {
             }
         }
 
-        if (ConfForSlot.global.isValueSetUseCompression &&
+        if (ConfForGlobal.isValueSetUseCompression &&
                 valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH &&
                 (CompressedValue.preferCompress(spType) || dict != null)) {
             var beginT = System.nanoTime();
@@ -638,7 +638,7 @@ public abstract class BaseCommand {
             compressStats.compressedTotalLength += cv.compressedLength;
             compressStats.compressedCostTimeTotalUs += costT;
 
-            if (ConfForSlot.global.isOnDynTrainDictForCompression) {
+            if (ConfForGlobal.isOnDynTrainDictForCompression) {
                 if (dict == Dict.SELF_ZSTD_DICT) {
                     // add train sample list
                     if (sampleToTrainList.size() < trainSampleListMaxSize) {
@@ -678,7 +678,7 @@ public abstract class BaseCommand {
                 }
             }
 
-            if (ConfForSlot.global.isValueSetUseCompression && ConfForSlot.global.isOnDynTrainDictForCompression) {
+            if (ConfForGlobal.isValueSetUseCompression && ConfForGlobal.isOnDynTrainDictForCompression) {
                 // add train sample list
                 if (sampleToTrainList.size() < trainSampleListMaxSize) {
                     if (valueBytes.length >= DictMap.TO_COMPRESS_MIN_DATA_LENGTH) {
