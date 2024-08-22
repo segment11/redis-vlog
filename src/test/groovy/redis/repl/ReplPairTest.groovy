@@ -61,6 +61,7 @@ class ReplPairTest extends Specification {
         println replPairAsSlave.statsCountForReplTypeAsString
 
         replPairAsSlave.slaveCatchUpLastSeq = 1000L
+        replPairAsSlave.increaseFetchedBytesLength(1000)
 
         expect:
         replPairAsMaster.slot == slot
@@ -69,8 +70,10 @@ class ReplPairTest extends Specification {
         replPairAsMaster.masterUuid == 0L
         replPairAsMaster.lastPingGetTimestamp == 0L
         replPairAsSlave.slaveCatchUpLastSeq == 1000L
+        replPairAsSlave.fetchedBytesLengthTotal == 1000L
         !replPairAsMaster.sendBye
         !replPairAsMaster.ping()
+        !replPairAsMaster.write(ReplType.ping, null)
         !replPairAsMaster.bye()
         !replPairAsMaster.write(ReplType.ping, null)
         !replPairAsMaster.toFetchBigStringUuidList

@@ -1694,6 +1694,8 @@ public class OneSlot implements InMemoryEstimate {
             if (replPairAsSlave != null) {
                 map.put("repl_slave_catch_up_last_seq", new SimpleGauge.ValueWithLabelValues(
                         (double) replPairAsSlave.getSlaveCatchUpLastSeq(), labelValues));
+                map.put("repl_slave_fetched_bytes_total", new SimpleGauge.ValueWithLabelValues(
+                        (double) replPairAsSlave.getFetchedBytesLengthTotal(), labelValues));
             }
 
             var replPairSize = replPairs.stream().filter(one -> !one.isSendBye()).count();

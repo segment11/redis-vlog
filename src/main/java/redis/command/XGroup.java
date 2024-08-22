@@ -121,6 +121,7 @@ public class XGroup extends BaseCommand {
 
         if (replPair != null) {
             replPair.increaseStatsCountForReplType(replType);
+            replPair.increaseFetchedBytesLength(contentBytes.length);
         }
 
         return switch (replType) {

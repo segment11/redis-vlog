@@ -122,6 +122,16 @@ public class ReplPair {
         this.slaveCatchUpLastSeq = slaveCatchUpLastSeq;
     }
 
+    private long fetchedBytesLengthTotal;
+
+    public long getFetchedBytesLengthTotal() {
+        return fetchedBytesLengthTotal;
+    }
+
+    public void increaseFetchedBytesLength(int fetchedBytesLength) {
+        fetchedBytesLengthTotal += fetchedBytesLength;
+    }
+
     // change 3 -> 5 or 10
     private final boolean[] linkUpFlagArray = new boolean[3];
 
