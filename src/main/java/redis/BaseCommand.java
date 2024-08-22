@@ -103,12 +103,12 @@ public abstract class BaseCommand {
     protected byte[][] data;
     protected ITcpSocket socket;
 
-    // for unit test
+    @ForTestMethod
     public void setCmd(String cmd) {
         this.cmd = cmd;
     }
 
-    // for unit test
+    @ForTestMethod
     public void setData(byte[][] data) {
         this.data = data;
     }
@@ -128,7 +128,7 @@ public abstract class BaseCommand {
     protected byte workerId;
     protected byte netWorkers;
 
-    // for unit test
+    @ForTestMethod
     public short getSlotNumber() {
         return slotNumber;
     }
@@ -143,15 +143,17 @@ public abstract class BaseCommand {
     protected TrainSampleJob trainSampleJob;
     protected List<TrainSampleJob.TrainSampleKV> sampleToTrainList;
 
-    // for unit test
+    @ForTestMethod
     public void setLocalTest(boolean localTest) {
         this.localTest = localTest;
     }
 
+    @ForTestMethod
     public void setLocalTestRandomValueList(ArrayList<byte[]> localTestRandomValueList) {
         this.localTestRandomValueList = localTestRandomValueList;
     }
 
+    @ForTestMethod
     public ArrayList<byte[]> getLocalTestRandomValueList() {
         return localTestRandomValueList;
     }
@@ -162,12 +164,12 @@ public abstract class BaseCommand {
 
     protected ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed;
 
-    // for unit test
+    @ForTestMethod
     public ArrayList<SlotWithKeyHash> getSlotWithKeyHashListParsed() {
         return slotWithKeyHashListParsed;
     }
 
-    // for unit test
+    @ForTestMethod
     public void setSlotWithKeyHashListParsed(ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed) {
         this.slotWithKeyHashListParsed = slotWithKeyHashListParsed;
     }

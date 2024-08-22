@@ -7,6 +7,7 @@ import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.CompressedValue;
+import redis.ForTestMethod;
 import redis.reply.*;
 import redis.type.RedisZSet;
 
@@ -769,7 +770,7 @@ public class ZGroup extends BaseCommand {
         return zdiff(data, isInter, isUnion, null);
     }
 
-    // for unit test
+    @ForTestMethod
     void addDstKeyBytesForStoreForTest(byte[] dstKeyBytes) {
         var data2 = new byte[data.length + 1][];
         data2[0] = data[0];

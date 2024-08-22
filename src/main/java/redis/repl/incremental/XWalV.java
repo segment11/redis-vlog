@@ -1,6 +1,7 @@
 package redis.repl.incremental;
 
 import redis.CompressedValue;
+import redis.ForTestMethod;
 import redis.persist.LocalPersist;
 import redis.persist.Wal;
 import redis.repl.BinlogContent;
@@ -31,7 +32,7 @@ public class XWalV implements BinlogContent {
         this.offset = offset;
     }
 
-    // for unit test
+    @ForTestMethod
     public XWalV(Wal.V v) {
         this(v, true, 0);
     }

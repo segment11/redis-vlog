@@ -37,7 +37,7 @@ import static redis.persist.Chunk.*;
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
 public class OneSlot implements InMemoryEstimate {
-    // for unit test
+    @ForTestMethod
     public OneSlot(byte slot, File slotDir, KeyLoader keyLoader, Wal wal) throws IOException {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
@@ -63,12 +63,15 @@ public class OneSlot implements InMemoryEstimate {
         this.binlog = null;
     }
 
-    // for unit test, only for local persist one slot array
+    // only for local persist one slot array
+    @ForTestMethod
+    // onl
     OneSlot(byte slot) {
         this(slot, null);
     }
 
-    // for unit test, only for async run/call
+    // only for async run/call
+    @ForTestMethod
     OneSlot(byte slot, Eventloop eventloop) {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);

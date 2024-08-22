@@ -2,10 +2,7 @@ package redis.persist;
 
 import jnr.posix.LibC;
 import org.slf4j.Logger;
-import redis.ConfForGlobal;
-import redis.ConfForSlot;
-import redis.KeyHash;
-import redis.SnowFlake;
+import redis.*;
 import redis.metric.SimpleGauge;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
@@ -26,8 +23,8 @@ public class KeyLoader implements InMemoryEstimate {
     // one split index one file
     static final int MAX_KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
-    // for unit test
-    public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake) {
+    @ForTestMethod
+    KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake) {
         this(slot, bucketsPerSlot, slotDir, snowFlake, null);
     }
 

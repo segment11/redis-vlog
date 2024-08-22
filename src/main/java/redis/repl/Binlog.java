@@ -6,6 +6,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.ForTestMethod;
 import redis.persist.DynConfig;
 import redis.persist.InMemoryEstimate;
 
@@ -128,12 +129,12 @@ public class Binlog implements InMemoryEstimate {
         return size;
     }
 
-    // for unit test
+    @ForTestMethod
     int getCurrentFileIndex() {
         return currentFileIndex;
     }
 
-    // for unit test
+    @ForTestMethod
     long getCurrentFileOffset() {
         return currentFileOffset;
     }
