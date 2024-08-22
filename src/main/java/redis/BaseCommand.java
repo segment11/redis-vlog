@@ -16,7 +16,6 @@ import redis.reply.Reply;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 import static redis.CompressedValue.NO_EXPIRE;
 import static redis.CompressedValue.NULL_DICT_SEQ;
@@ -738,12 +737,15 @@ public abstract class BaseCommand {
         if (!trainSampleCacheDict.isEmpty()) {
             // train success, set dict in this worker
             for (var entry : trainSampleCacheDict.entrySet()) {
+                var keyPrefix = entry.getKey();
                 var dict = entry.getValue();
-                var oldDict = dictMap.putDict(entry.getKey(), dict);
-                if (oldDict != null) {
-                    // keep old dict in persist, because may be used by other worker
-                    dictMap.putDict(entry.getKey() + new Random().nextInt(100), oldDict);
-                }
+                dictMap.putDict(keyPrefix, dict);
+//                var oldDict = dictMap.putDict(keyPrefix, dict);
+//                if (oldDict != null) {
+//                    // keep old dict in persist, because may be used by other worker
+//                    // when start server, early dict will be overwritten by new dict with same key prefix, need not persist again?
+//                    dictMap.putDict(keyPrefix + "_" + new Random().nextInt(10000), oldDict);
+//                }
             }
         }
 

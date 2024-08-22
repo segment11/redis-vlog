@@ -245,6 +245,12 @@ class ManageCommand extends BaseCommand {
             trainSampleCacheDict.each { keyPrefix, dict ->
                 // will overwrite same key prefix dict exists
                 dictMap.putDict(keyPrefix, dict)
+//                def oldDict = dictMap.putDict(keyPrefix, dict)
+//                if (oldDict != null) {
+//                    // keep old dict in persist, because may be used by other worker
+//                    // when start server, early dict will be overwritten by new dict with same key prefix, need not persist again?
+//                    dictMap.putDict(keyPrefix + '_' + new Random().nextInt(10000), oldDict)
+//                }
             }
 
             return new IntegerReply(trainSampleCacheDict.size())
