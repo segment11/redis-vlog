@@ -1,6 +1,7 @@
 package redis;
 
 import io.activej.bytebuf.ByteBuf;
+import io.activej.eventloop.Eventloop;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.net.socket.tcp.TcpSocket;
 import io.prometheus.client.Gauge;
@@ -16,12 +17,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SocketInspector implements TcpSocket.Inspector {
     private final Logger log = LoggerFactory.getLogger(SocketInspector.class);
 
+    Eventloop[] netWorkerEventloopArray;
+
     final ConcurrentHashMap<InetSocketAddress, TcpSocket> socketMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, ConcurrentHashMap<ITcpSocket, Integer>> subscribeByChannel = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ConcurrentHashMap<ITcpSocket, Long>> subscribeByChannel = new ConcurrentHashMap<>();
 
     public int subscribe(String channel, ITcpSocket socket) {
         var sockets = subscribeByChannel.computeIfAbsent(channel, k -> new ConcurrentHashMap<>());
-        sockets.put(socket, 0);
+        sockets.put(socket, Thread.currentThread().threadId());
         return sockets.size();
     }
 
@@ -36,7 +39,11 @@ public class SocketInspector implements TcpSocket.Inspector {
         return sockets == null ? 0 : sockets.size();
     }
 
-    public int publish(String channel, Reply reply, boolean doWrite) {
+    public interface PublishWriteSocketCallback {
+        void doWithSocket(ITcpSocket socket, Reply reply);
+    }
+
+    public int publish(String channel, Reply reply, PublishWriteSocketCallback callback) {
         var sockets = subscribeByChannel.get(channel);
         if (sockets == null) {
             return 0;
@@ -44,8 +51,15 @@ public class SocketInspector implements TcpSocket.Inspector {
 
         for (var map : sockets.entrySet()) {
             var socket = map.getKey();
-            if (doWrite) {
-                socket.write(reply.buffer());
+            var threadId = map.getValue();
+            if (Thread.currentThread().threadId() == threadId) {
+                callback.doWithSocket(socket, reply);
+            } else {
+                for (var eventloop : netWorkerEventloopArray) {
+                    if (eventloop.getEventloopThread().threadId() == threadId) {
+                        eventloop.execute(() -> callback.doWithSocket(socket, reply));
+                    }
+                }
             }
         }
         return sockets.size();

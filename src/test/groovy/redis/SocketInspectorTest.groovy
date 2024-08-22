@@ -1,10 +1,14 @@
 package redis
 
+import io.activej.async.callback.AsyncComputation
+import io.activej.common.function.SupplierEx
+import io.activej.eventloop.Eventloop
 import io.activej.net.socket.tcp.TcpSocket
 import redis.reply.BulkReply
 import spock.lang.Specification
 
 import java.nio.channels.SocketChannel
+import java.time.Duration
 
 class SocketInspectorTest extends Specification {
     def 'test connect'() {
@@ -52,9 +56,30 @@ class SocketInspectorTest extends Specification {
         def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
                 new InetSocketAddress('localhost', 46379), null)
 
+        and:
+        def eventloop = Eventloop.builder()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        def eventloop2 = Eventloop.builder()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        eventloop.keepAlive(true)
+        eventloop2.keepAlive(true)
+        Thread.start {
+            eventloop.run()
+        }
+        Thread.start {
+            eventloop2.run()
+        }
+        Thread.sleep(1000)
+
+        inspector.netWorkerEventloopArray = [eventloop2, eventloop]
+
         when:
         def channel = 'test_channel'
-        def n = inspector.publish(channel, new BulkReply('test_message'.bytes), false)
+        def channel2 = 'test_channel2'
+        def messageReply = new BulkReply('test_message'.bytes)
+        def n = inspector.publish(channel, messageReply, (s, r) -> { })
         then:
         n == 0
         inspector.subscribeSocketCount(channel) == 0
@@ -66,22 +91,36 @@ class SocketInspectorTest extends Specification {
         inspector.subscribeSocketCount(channel) == 1
 
         when:
+        // in eventloop thread
+        SupplierEx<Integer> supplierEx = () -> inspector.subscribe(channel2, socket)
+        eventloop.submit(AsyncComputation.of(supplierEx)).get()
+        then:
+        inspector.subscribeSocketCount(channel2) == 1
+
+        when:
         n = inspector.unsubscribe(channel, socket)
         then:
         n == 0
 
         when:
-        n = inspector.publish(channel, new BulkReply('test_message'.bytes), false)
+        n = inspector.publish(channel, messageReply, (s, r) -> { })
+        def n2 = inspector.publish(channel2, messageReply, (s, r) -> {
+            println 'async callback to write message to target socket'
+        })
         then:
         n == 0
+        n2 == 1
 
         when:
         inspector.subscribe(channel, socket)
-        n = inspector.publish(channel, new BulkReply('test_message'.bytes), false)
+        n = inspector.publish(channel, messageReply, (s, r) -> { })
         then:
         n == 1
 
         cleanup:
+        Thread.sleep(1000)
+        eventloop.breakEventloop()
+        eventloop2.breakEventloop()
         inspector.clearAll()
     }
 }

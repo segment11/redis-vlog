@@ -45,16 +45,6 @@ public class PGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-        if ("publish".equals(cmd)) {
-            if (data.length != 3) {
-                return slotWithKeyHashList;
-            }
-            var channelBytes = data[1];
-            var slotWithKeyHash = slot(channelBytes, slotNumber);
-            slotWithKeyHashList.add(slotWithKeyHash);
-            return slotWithKeyHashList;
-        }
-
         return slotWithKeyHashList;
     }
 
@@ -118,7 +108,9 @@ public class PGroup extends BaseCommand {
         replies[1] = new BulkReply(message.getBytes());
         replies[2] = new IntegerReply(n);
 
-        socketInInspector.publish(new String(data[1]), new MultiBulkReply(replies), true);
+        socketInInspector.publish(new String(data[1]), new MultiBulkReply(replies), (s, r) -> {
+            s.write(r.buffer());
+        });
         return new IntegerReply(n);
     }
 }

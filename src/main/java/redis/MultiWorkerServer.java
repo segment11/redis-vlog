@@ -430,6 +430,7 @@ public class MultiWorkerServer extends Launcher {
             localPersist.fixSlotThreadId((byte) slot, netWorkerThreadIds[i]);
         }
 
+        socketInspector.netWorkerEventloopArray = netWorkerEventloopArray;
         localPersist.setSocketInspector(socketInspector);
 
         // metrics
