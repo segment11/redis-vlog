@@ -1,7 +1,9 @@
 # About
+
 A redis compatible kv store, base on slot and hash buckets.
 
 # Features
+
 - Redis protocol compatible
 - Slot based sharding
 - Hash buckets for each slot
@@ -15,8 +17,10 @@ A redis compatible kv store, base on slot and hash buckets.
 - Auto failover, Redis sentinel compatible
 - Prometheus' metrics support
 - Http api support
+- LRU cache support
 
 # Architecture
+
 ## Dict based compression
 
 ![dict-based-value](./doc/dict-based-value.png)
@@ -30,10 +34,13 @@ A redis compatible kv store, base on slot and hash buckets.
 ![auto-failover](./doc/auto-failover.png)
 
 ## Hash buckets for each slot and pure memory mode
+
 todo
 
 # Redis command support
+
 ## string
+
 - [√] APPEND
 - [√] COPY
 - [√] DECR
@@ -69,6 +76,7 @@ todo
 - [√] TTL
 
 ## hash
+
 - [√] HDEL
 - [√] HEXISTS
 - [√] HGET
@@ -86,6 +94,7 @@ todo
 - [√] HVALS
 
 ## list
+
 - [√] LINDEX
 - [√] LINSERT
 - [√] LLEN
@@ -104,6 +113,7 @@ todo
 - [√] RPUSHX
 
 ## set
+
 - [√] SADD
 - [√] SCARD
 - [√] SDIFF
@@ -122,6 +132,7 @@ todo
 - [√] SUNIONSTORE
 
 ## sorted set
+
 - [√] ZADD
 - [√] ZCARD
 - [√] ZCOUNT
@@ -157,13 +168,18 @@ TIPS:
 Refer to class redis.command.AGroup - redis.command.ZGroup for all supported commands.
 
 # Quick start
+
 ## Build
+
 ### Prepare the environment:
+
 - JDK 21
 - Gradle 8.x
 
 ### Change configuration:
+
 - edit src/main/resources/redis-vlog.properties
+
 ```properties
 ###
 #pureMemory=false
@@ -236,25 +252,30 @@ kv.lru.maxSize=1000000
 ```
 
 ### Build the project:
+
 ```shell
 gradle jar
 ```
 
 ### Run the project:
+
 ```shell
 cd build/libs
 java -Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m -jar redis-vlog-1.0.0.jar
 ```
 
 ### Test the project:
+
 ```shell
 redis-cli -p 7379
 ```
 
 ### View metrics:
+
 - http://localhost:7379/?metrics
 
 ### Test auto failover:
+
 - prepare zookeeper
 - start one instance and change repl zookeeper connect string
 - start another instance and change listen port to 7380
@@ -264,7 +285,79 @@ redis-cli -p 7379
 - start the first instance, view logs
 - wait for the first instance to become a slave, view logs
 
+# Performance
+
+## Environment:
+
+- CPU: Intel(R) Core(TM) i5-10400 CPU @ 2.90GHz
+- Memory: Speed: 2667 MT/s, Type: DDR4, Size: 16GB
+- SSD: Samsung SSD 970 EVO Plus 500GB, fio 4k random read 230K IOPS
+- OS: Ubuntu 20.04.3 LTS
+- Redis benchmark: redis-benchmark 6.2.5
+
+TIPS: Use fio to test your disk performance, for example:
+
+```shell
+fio --name=randread --ioengine=libaio --iodepth=32 --rw=randread --bs=4k --direct=1 --size=1G --numjobs=1 --runtime=60
+```
+
+## Single thread
+
+### configuration
+
+- slotNumber=1
+- netWorkers=1
+- estimateKeyNumber=10000000
+- estimateOneValueLength=200
+- kv.lru.maxSize=1000000
+
+### run command
+```shell
+java -Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m -jar redis-vlog-1.0.0.jar
+```
+
+### test set
+
+- redis-benchmark -p 7379 -c 1 -r 10000000 -n 10000000 -d 200 -t set -P 2
+- qps ~= 35000
+- 99.9% latency ~= 1.5ms, 99.99% latency ~= 8ms
+
+### test get
+
+- redis-benchmark -p 7379 -c 1 -r 1000000 -n 1000000 -d 200 -t get
+- when cache at the beginning hit 0%, qps ~= 6000
+- when cache finally hit 100%, qps ~= 40000
+- when cache hit 50%, qps ~= 20000-30000
+- 99.9% latency < 1ms, 99.99% latency ~= 2ms
+
+## Multi thread
+
+### configuration
+
+- slotNumber=4
+- netWorkers=4
+- estimateKeyNumber=10000000
+- estimateOneValueLength=200
+- kv.lru.maxSize=1000000
+
+### run command
+```shell
+# need remove old data
+rm -rf /tmp/redis-vlog/persist
+java -Xmx4g -Xms4g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=128m -jar redis-vlog-1.0.0.jar
+```
+
+### test set
+
+- redis-benchmark -p 7379 -c 4 -r 40000000 -n 40000000 -d 200 -t set -P 2
+- todo
+
+### test get
+- redis-benchmark -p 7379 -c 4 -r 10000000 -n 10000000 -d 200 -t get
+- todo
+
 # Contact
+
 - Email: kerry@montplex.com
 - Wechat: key232323
 
