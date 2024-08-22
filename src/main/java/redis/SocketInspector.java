@@ -7,37 +7,48 @@ import io.prometheus.client.Gauge;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.reply.Reply;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SocketInspector implements TcpSocket.Inspector {
     private final Logger log = LoggerFactory.getLogger(SocketInspector.class);
 
     final ConcurrentHashMap<InetSocketAddress, TcpSocket> socketMap = new ConcurrentHashMap<>();
-    private final HashMap<ITcpSocket, Byte> clientDBSelected = new HashMap<>();
+    private final ConcurrentHashMap<String, ConcurrentHashMap<ITcpSocket, Integer>> subscribeByChannel = new ConcurrentHashMap<>();
 
-    public Byte getDBSelected(ITcpSocket socket) {
-        return clientDBSelected.get(socket);
+    public int subscribe(String channel, ITcpSocket socket) {
+        var sockets = subscribeByChannel.computeIfAbsent(channel, k -> new ConcurrentHashMap<>());
+        sockets.put(socket, 0);
+        return sockets.size();
     }
 
-    public void setDBSelected(ITcpSocket socket, byte db) {
-        clientDBSelected.put(socket, db);
+    public int unsubscribe(String channel, ITcpSocket socket) {
+        var sockets = subscribeByChannel.computeIfAbsent(channel, k -> new ConcurrentHashMap<>());
+        sockets.remove(socket);
+        return sockets.size();
     }
 
-    static final String EXTEND_KEY_PREFIX = "_/";
+    public int subscribeSocketCount(String channel) {
+        var sockets = subscribeByChannel.get(channel);
+        return sockets == null ? 0 : sockets.size();
+    }
 
-    public String addExtendKeyPrefixByDBSelected(ITcpSocket socket, String rawKey) {
-        var db = getDBSelected(socket);
-        if (db == null) {
-            return rawKey;
+    public int publish(String channel, Reply reply, boolean doWrite) {
+        var sockets = subscribeByChannel.get(channel);
+        if (sockets == null) {
+            return 0;
         }
-        if (db == 0) {
-            return rawKey;
+
+        for (var map : sockets.entrySet()) {
+            var socket = map.getKey();
+            if (doWrite) {
+                socket.write(reply.buffer());
+            }
         }
-        return EXTEND_KEY_PREFIX + db + "_" + rawKey;
+        return sockets.size();
     }
 
     private int maxConnections = 1000;
@@ -112,7 +123,9 @@ public class SocketInspector implements TcpSocket.Inspector {
         log.info("On disconnect, remote address: {}", remoteAddress);
         AfterAuthFlagHolder.remove(remoteAddress);
         socketMap.remove(remoteAddress);
-        clientDBSelected.remove(socket);
+
+        // remove from subscribe by channel
+        subscribeByChannel.forEach((channel, sockets) -> sockets.remove(socket));
 
         connectedCountGauge.dec();
     }
@@ -123,6 +136,8 @@ public class SocketInspector implements TcpSocket.Inspector {
     }
 
     public void clearAll() {
+        subscribeByChannel.clear();
+
         socketMap.clear();
     }
 }
