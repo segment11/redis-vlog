@@ -154,6 +154,7 @@ public class Binlog implements InMemoryEstimate {
         return new FileIndexAndOffset(fileIndex(file), 0);
     }
 
+    @ForTestMethod
     void resetCurrentFileOffsetForTest(long offset) {
         this.currentFileOffset = offset;
         this.clearByteBuffer();

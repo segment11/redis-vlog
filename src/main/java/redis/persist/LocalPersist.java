@@ -8,6 +8,7 @@ import jnr.posix.LibC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfVolumeDirsForSlot;
+import redis.ForTestMethod;
 import redis.SnowFlake;
 import redis.SocketInspector;
 
@@ -61,6 +62,7 @@ public class LocalPersist {
         return oneSlots[0].slot();
     }
 
+    @ForTestMethod
     public void addOneSlotForTest(byte slot, Eventloop eventloop) {
         try {
             Thread.sleep(100);

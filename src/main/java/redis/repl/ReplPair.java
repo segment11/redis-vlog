@@ -4,6 +4,7 @@ import io.activej.eventloop.Eventloop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
+import redis.ForTestMethod;
 import redis.RequestHandler;
 import redis.repl.content.Hello;
 
@@ -184,6 +185,7 @@ public class ReplPair {
         return isSendBye;
     }
 
+    @ForTestMethod
     public void setSendByeForTest(boolean isSendBye) {
         this.isSendBye = isSendBye;
     }

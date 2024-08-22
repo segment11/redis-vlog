@@ -112,6 +112,7 @@ public abstract class BaseCommand {
         this.data = data;
     }
 
+    @ForTestMethod
     public void setSocketForTest(ITcpSocket socket) {
         this.socket = socket;
     }

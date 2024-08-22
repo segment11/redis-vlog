@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.Debug;
+import redis.ForTestMethod;
 import redis.metric.SimpleGauge;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.incremental.XOneWalGroupPersist;
@@ -69,6 +70,7 @@ public class ChunkMergeWorker implements InMemoryEstimate {
         return mergedCvList.size();
     }
 
+    @ForTestMethod
     void clearMergedCvListForTest() {
         mergedCvList.clear();
     }
@@ -107,6 +109,7 @@ public class ChunkMergeWorker implements InMemoryEstimate {
         return mergedSegmentSet.first().segmentIndex;
     }
 
+    @ForTestMethod
     void clearMergedSegmentSetForTest() {
         mergedSegmentSet.clear();
     }

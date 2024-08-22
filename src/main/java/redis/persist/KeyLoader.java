@@ -131,6 +131,7 @@ public class KeyLoader implements InMemoryEstimate {
         log.warn("Repl overwrite meta key bucket split number bytes from master exists, slot: {}", slot);
     }
 
+    @ForTestMethod
     void setMetaKeyBucketSplitNumberForTest(int bucketIndex, byte splitNumber) {
         if (bucketIndex < 0 || bucketIndex >= bucketsPerSlot) {
             throw new IllegalArgumentException("Bucket index out of range, slot: " + slot + ", begin bucket index: " + bucketIndex);
@@ -330,6 +331,7 @@ public class KeyLoader implements InMemoryEstimate {
     }
 
     // not exact correct when split, just for test or debug, not public
+    @ForTestMethod
     void putValueByKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash, long expireAt, long seq, byte[] valueBytes) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);
@@ -387,6 +389,7 @@ public class KeyLoader implements InMemoryEstimate {
         return sb.toString();
     }
 
+    @ForTestMethod
     private void updateKeyBucketInnerForTest(int bucketIndex, KeyBucket keyBucket, boolean isRefreshLRUCache) {
         var bytes = keyBucket.encode(true);
         var splitIndex = keyBucket.splitIndex;
@@ -477,6 +480,7 @@ public class KeyLoader implements InMemoryEstimate {
     }
 
     // use wal delay remove instead of remove immediately
+    @ForTestMethod
     boolean removeSingleKeyForTest(int bucketIndex, byte[] keyBytes, long keyHash) {
         var splitNumber = metaKeyBucketSplitNumber.get(bucketIndex);
         var splitIndex = KeyHash.splitIndex(keyHash, splitNumber, bucketIndex);

@@ -1,5 +1,6 @@
 package redis.repl.incremental;
 
+import redis.ForTestMethod;
 import redis.persist.Chunk;
 import redis.persist.LocalPersist;
 import redis.repl.BinlogContent;
@@ -13,10 +14,12 @@ public class XOneWalGroupPersist implements BinlogContent {
     private boolean clearWalAfterApply;
     private final int walGroupIndex;
 
+    @ForTestMethod
     public void setShortValueForTest(boolean isShortValue) {
         this.isShortValue = isShortValue;
     }
 
+    @ForTestMethod
     public void setClearWalAfterApplyForTest(boolean clearWalAfterApply) {
         this.clearWalAfterApply = clearWalAfterApply;
     }
