@@ -195,6 +195,7 @@ class OneSlotTest extends Specification {
         oneSlot.getReplPairAsMaster(11L) == null
 
         when:
+        replPairAsSlave0.sendByeForTest = false
         oneSlot.replPairs.clear()
         oneSlot.replPairs.add(replPairAsSlave0)
         then:
@@ -1003,5 +1004,34 @@ class OneSlotTest extends Specification {
         cleanup:
         oneSlot.cleanUp()
         Consts.persistDir.deleteDir()
+    }
+
+    def 'test pure memory mode change chunk segment flag'() {
+        given:
+        ConfForGlobal.pureMemory = true
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+        def chunk = oneSlot.chunk
+
+        when:
+        chunk.writeSegmentToTargetSegmentIndex(new byte[4096], 0)
+        oneSlot.setSegmentMergeFlag(0, Chunk.Flag.merged, 1L, 0)
+        ArrayList<Long> seqList = [1L]
+        oneSlot.setSegmentMergeFlagBatch(0, 1, Chunk.Flag.merged, seqList, 0)
+        then:
+        chunk.preadOneSegment(0) != null
+
+        when:
+        oneSlot.setSegmentMergeFlag(0, Chunk.Flag.merged_and_persisted, 1L, 0)
+        oneSlot.setSegmentMergeFlagBatch(0, 1, Chunk.Flag.merged_and_persisted, seqList, 0)
+        then:
+        chunk.preadOneSegment(0) == null
+
+        cleanup:
+        oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
+        ConfForGlobal.pureMemory = false
     }
 }

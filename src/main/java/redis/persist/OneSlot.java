@@ -511,6 +511,7 @@ public class OneSlot implements InMemoryEstimate {
         return n;
     }
 
+    @ForTestMethod
     void putKvInTargetWalGroupIndexLRUForTest(int walGroupIndex, String key, byte[] cvEncoded) {
         var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
         if (lru == null) {
@@ -1488,11 +1489,26 @@ public class OneSlot implements InMemoryEstimate {
     public void setSegmentMergeFlag(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex) {
         checkSegmentIndex(segmentIndex);
         metaChunkSegmentFlagSeq.setSegmentMergeFlag(segmentIndex, flag, segmentSeq, walGroupIndex);
+
+        if (ConfForGlobal.pureMemory) {
+            if (flag.canReuse()) {
+                chunk.clearOneSegmentForPureMemoryModeAfterMergedAndPersisted(segmentIndex);
+            }
+        }
     }
 
     void setSegmentMergeFlagBatch(int beginSegmentIndex, int segmentCount, Flag flag, List<Long> segmentSeqList, int walGroupIndex) {
         checkBeginSegmentIndex(beginSegmentIndex, segmentCount);
         metaChunkSegmentFlagSeq.setSegmentMergeFlagBatch(beginSegmentIndex, segmentCount, flag, segmentSeqList, walGroupIndex);
+
+        if (ConfForGlobal.pureMemory) {
+            if (flag.canReuse()) {
+                for (int i = 0; i < segmentCount; i++) {
+                    var segmentIndex = beginSegmentIndex + i;
+                    chunk.clearOneSegmentForPureMemoryModeAfterMergedAndPersisted(segmentIndex);
+                }
+            }
+        }
     }
 
     int doMergeJob(ArrayList<Integer> needMergeSegmentIndexList) {

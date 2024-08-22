@@ -176,6 +176,12 @@ class ChunkTest extends Specification {
         then:
         chunk.segmentIndex == halfSegmentNumber
 
+        when:
+        chunk.resetAsFlush()
+        then:
+        chunk.segmentIndex == 0
+        chunk.mergedSegmentIndexEndLastTime == Chunk.NO_NEED_MERGE_SEGMENT_INDEX
+
         cleanup:
         oneSlot.metaChunkSegmentFlagSeq.clear()
         oneSlot.metaChunkSegmentFlagSeq.cleanUp()
@@ -226,6 +232,14 @@ class ChunkTest extends Specification {
         chunk.reuseSegments(false, 3, false)
         then:
         chunk.segmentIndex == 2
+
+        when:
+        chunk.segmentIndex = 0
+        5.times {
+            oneSlot.metaChunkSegmentFlagSeq.setSegmentMergeFlag(0 + it, Chunk.Flag.new_write, 1L, 0)
+        }
+        then:
+        !chunk.reuseSegments(true, 5, false)
 
         cleanup:
         oneSlot.metaChunkSegmentFlagSeq.clear()
@@ -387,6 +401,11 @@ class ChunkTest extends Specification {
         chunk.writeSegmentToTargetSegmentIndex(new byte[4096], 0)
         then:
         chunk.segmentIndex == 0
+
+        when:
+        chunk.clearOneSegmentForPureMemoryModeAfterMergedAndPersisted(0)
+        then:
+        chunk.preadOneSegment(0) == null
 
         cleanup:
         ConfForGlobal.pureMemory = false

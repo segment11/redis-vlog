@@ -231,6 +231,7 @@ class FdReadWriteTest extends Specification {
         println 'in memory size estimate: ' + fdKeyBucket.estimate()
         then:
         fdChunk.isTargetSegmentIndexNullInMemory(0)
+        fdChunk.clearTargetSegmentIndexInMemory(0)
 
         when:
         loop.times { i ->

@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
+import redis.ForTestMethod;
 import redis.StaticMemoryPrepareBytesStats;
 import redis.metric.SimpleGauge;
 import redis.repl.SlaveNeedReplay;
@@ -214,6 +215,7 @@ public class FdReadWrite implements InMemoryEstimate {
     // for key bucket, compressed, need compress before set here and decompress after read from here
     private byte[][] allBytesByOneWalGroupIndexForKeyBucketOneSplitIndex;
 
+    @ForTestMethod
     void resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(int walGroupNumber) {
         this.allBytesByOneWalGroupIndexForKeyBucketOneSplitIndex = new byte[walGroupNumber][];
     }
@@ -260,6 +262,10 @@ public class FdReadWrite implements InMemoryEstimate {
 
     boolean isTargetSegmentIndexNullInMemory(int segmentIndex) {
         return allBytesBySegmentIndexForOneChunkFd[segmentIndex] == null;
+    }
+
+    void clearTargetSegmentIndexInMemory(int segmentIndex) {
+        allBytesBySegmentIndexForOneChunkFd[segmentIndex] = null;
     }
 
     // chunk fd is by relative segment index, key bucket fd is by bucket index
@@ -696,6 +702,7 @@ public class FdReadWrite implements InMemoryEstimate {
         return readInnerByBuffer(beginBucketIndex, forOneWalGroupBatchBuffer, false);
     }
 
+    @ForTestMethod
     public void clearOneKeyBucketToMemoryForTest(int bucketIndex) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
         var sharedBytes = getSharedBytesDecompressFromMemory(walGroupIndex);
@@ -710,11 +717,13 @@ public class FdReadWrite implements InMemoryEstimate {
         setSharedBytesCompressToMemory(sharedBytes, walGroupIndex);
     }
 
+    @ForTestMethod
     public void clearKeyBucketsToMemoryForTest(int bucketIndex) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
         clearAllKeyBucketsInOneWalGroupToMemoryForTest(walGroupIndex);
     }
 
+    @ForTestMethod
     public void clearAllKeyBucketsInOneWalGroupToMemoryForTest(int walGroupIndex) {
         setSharedBytesCompressToMemory(null, walGroupIndex);
     }

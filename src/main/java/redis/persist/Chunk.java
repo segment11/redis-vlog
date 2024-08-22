@@ -151,6 +151,14 @@ public class Chunk implements InMemoryEstimate {
         return fdReadWrite.readOneInner(segmentIndexTargetFd, true);
     }
 
+    void clearOneSegmentForPureMemoryModeAfterMergedAndPersisted(int targetSegmentIndex) {
+        var fdIndex = targetFdIndex(targetSegmentIndex);
+        var segmentIndexTargetFd = targetSegmentIndexTargetFd(targetSegmentIndex);
+
+        var fdReadWrite = fdReadWriteArray[fdIndex];
+        fdReadWrite.clearTargetSegmentIndexInMemory(segmentIndexTargetFd);
+    }
+
     // begin with 0
     // -1 means not init
     int segmentIndex = -1;
