@@ -7,7 +7,10 @@ import io.activej.promise.SettablePromise
 import redis.BaseCommand
 import redis.ConfForSlot
 import redis.Debug
+import redis.TrainSampleJob
 import redis.reply.*
+
+import static redis.TrainSampleJob.MIN_TRAIN_SAMPLE_SIZE
 
 @CompileStatic
 class ManageCommand extends BaseCommand {
@@ -218,6 +221,33 @@ class ManageCommand extends BaseCommand {
             }
 
             return new BulkReply(sb.toString().bytes)
+        }
+
+        if (subSubCmd == 'train-new-dict') {
+            // manage dict train-new-dict keyPrefix sampleValue1 sampleValue2 ...
+            if (data.length <= 4 + MIN_TRAIN_SAMPLE_SIZE) {
+                return new ErrorReply('Train sample value count too small')
+            }
+
+            def keyPrefixGiven = new String(data[3])
+
+            List<TrainSampleJob.TrainSampleKV> sampleToTrainList = []
+            for (int i = 4; i < data.length; i++) {
+                sampleToTrainList << new TrainSampleJob.TrainSampleKV(null, keyPrefixGiven, 0L, data[i])
+            }
+
+            def trainSampleJob = new TrainSampleJob(workerId)
+            trainSampleJob.resetSampleToTrainList(sampleToTrainList)
+            def trainSampleResult = trainSampleJob.train()
+
+            def trainSampleCacheDict = trainSampleResult.cacheDict()
+            log.warn 'Train new dict result, sample value count: {}, dict count: {}', data.length - 4, trainSampleCacheDict.size()
+            trainSampleCacheDict.each { keyPrefix, dict ->
+                // will overwrite same key prefix dict exists
+                dictMap.putDict(keyPrefix, dict)
+            }
+
+            return new IntegerReply(trainSampleCacheDict.size())
         }
 
         if (subSubCmd == 'output-dict-bytes') {

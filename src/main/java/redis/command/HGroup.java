@@ -4,18 +4,15 @@ package redis.command;
 import io.activej.net.socket.tcp.ITcpSocket;
 import redis.BaseCommand;
 import redis.CompressedValue;
-import redis.TrainSampleJob;
 import redis.reply.*;
 import redis.type.RedisHashKeys;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Random;
 
 import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
-import static redis.TrainSampleJob.MIN_TRAIN_SAMPLE_SIZE;
 
 public class HGroup extends BaseCommand {
     public HGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -97,10 +94,6 @@ public class HGroup extends BaseCommand {
 
         if ("hvals".equals(cmd)) {
             return hvals();
-        }
-
-        if ("h_field_dict_train".equals(cmd)) {
-            return h_field_dict_train();
         }
 
         return NilReply.INSTANCE;
@@ -620,38 +613,5 @@ public class HGroup extends BaseCommand {
             replies[i++] = fieldValueBytes == null ? NilReply.INSTANCE : new BulkReply(fieldValueBytes);
         }
         return new MultiBulkReply(replies);
-    }
-
-    Reply h_field_dict_train() {
-        if (data.length < 2) {
-            return ErrorReply.FORMAT;
-        }
-
-        if (data.length <= 2 + MIN_TRAIN_SAMPLE_SIZE) {
-            return new ErrorReply("Train sample size too small");
-        }
-
-        var keyPrefixGiven = new String(data[1]);
-
-        List<TrainSampleJob.TrainSampleKV> sampleToTrainList = new ArrayList<>();
-        for (int i = 2; i < data.length; i++) {
-            sampleToTrainList.add(new TrainSampleJob.TrainSampleKV(null, keyPrefixGiven, 0L, data[i]));
-        }
-
-        var trainSampleJob = new TrainSampleJob(workerId);
-        trainSampleJob.resetSampleToTrainList(sampleToTrainList);
-        var trainSampleResult = trainSampleJob.train();
-
-//        if (trainSampleResult == null) {
-//            return new ErrorReply("Train sample fail");
-//        }
-
-        var trainSampleCacheDict = trainSampleResult.cacheDict();
-        for (var entry : trainSampleCacheDict.entrySet()) {
-            var dict = entry.getValue();
-            dictMap.putDict(entry.getKey(), dict);
-        }
-
-        return new IntegerReply(trainSampleCacheDict.size());
     }
 }

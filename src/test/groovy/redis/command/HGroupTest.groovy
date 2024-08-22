@@ -1,11 +1,8 @@
 package redis.command
 
-import org.apache.commons.io.FileUtils
 import redis.BaseCommand
 import redis.CompressedValue
-import redis.DictMap
 import redis.mock.InMemoryGetSet
-import redis.persist.Consts
 import redis.persist.Mock
 import redis.reply.*
 import redis.type.RedisHashKeys
@@ -36,7 +33,6 @@ class HGroupTest extends Specification {
         def sHsetnxList = HGroup.parseSlots('hsetnx', data2, slotNumber)
         def sHstrlenList = HGroup.parseSlots('hstrlen', data2, slotNumber)
         def sHvalsList = HGroup.parseSlots('hvals', data2, slotNumber)
-        def sHFieldDictTrainList = HGroup.parseSlots('h_field_dict_train', data2, slotNumber)
         def sList = HGroup.parseSlots('hxxx', data2, slotNumber)
         then:
         sHdelList.size() == 1
@@ -54,7 +50,6 @@ class HGroupTest extends Specification {
         sHsetnxList.size() == 1
         sHstrlenList.size() == 1
         sHvalsList.size() == 1
-        sHFieldDictTrainList.size() == 0
         sList.size() == 0
 
         when:
@@ -164,12 +159,6 @@ class HGroupTest extends Specification {
 
         when:
         hGroup.cmd = 'hvals'
-        reply = hGroup.handle()
-        then:
-        reply == ErrorReply.FORMAT
-
-        when:
-        hGroup.cmd = 'h_field_dict_train'
         reply = hGroup.handle()
         then:
         reply == ErrorReply.FORMAT
@@ -901,48 +890,5 @@ class HGroupTest extends Specification {
         reply = hGroup.hvals()
         then:
         reply == ErrorReply.KEY_TOO_LONG
-    }
-
-    def 'test h_field_dict_train'() {
-        given:
-        FileUtils.forceMkdir(Consts.testDir)
-
-        def dictMap = DictMap.instance
-        dictMap.initDictMap(Consts.testDir)
-        if (dictMap.dictSize() > 1) {
-            dictMap.clearAll()
-        }
-
-        and:
-        def data13 = new byte[13][]
-        data13[1] = 'key:'.bytes
-        11.times {
-            data13[it + 2] = ('aaaaabbbbbccccc' * 5).bytes
-        }
-
-        def hGroup = new HGroup('h_field_dict_train', data13, null)
-        hGroup.from(BaseCommand.mockAGroup())
-
-        when:
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('h_field_dict_train', data13, hGroup.slotNumber)
-        def reply = hGroup.h_field_dict_train()
-        then:
-        reply instanceof IntegerReply
-        ((IntegerReply) reply).integer == 1
-        dictMap.dictSize() == 1
-
-        when:
-        def data10 = new byte[10][]
-        data10[1] = 'key:'.bytes
-        hGroup.data = data10
-        hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('h_field_dict_train', data10, hGroup.slotNumber)
-        reply = hGroup.h_field_dict_train()
-        then:
-        reply instanceof ErrorReply
-
-        cleanup:
-        dictMap.clearAll()
-        dictMap.close()
-        Consts.testDir.deleteDir()
     }
 }

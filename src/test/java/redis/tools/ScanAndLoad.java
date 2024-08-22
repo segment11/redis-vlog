@@ -2,8 +2,8 @@ package redis.tools;
 
 import redis.clients.jedis.DefaultJedisClientConfig;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.commands.ProtocolCommand;
 import redis.clients.jedis.params.ScanParams;
+import redis.repl.support.ExtendProtocolCommand;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -27,13 +27,6 @@ public class ScanAndLoad {
 
         final String key = "system:configParamsName:long_rent";
         jedisTo.set(key, jedis.get(key));
-    }
-
-    private static class TrainDictCommand implements ProtocolCommand {
-        @Override
-        public byte[] getRaw() {
-            return "h_field_dict_train".getBytes();
-        }
     }
 
     private static void scanAndTrainHashFieldDicts() {
@@ -75,12 +68,16 @@ public class ScanAndLoad {
                                 fieldList.add(value);
 
                                 if (fieldList.size() == 100) {
-                                    var params = new String[fieldList.size() + 1];
-                                    params[0] = field;
+                                    var params = new String[fieldList.size() + 3];
+                                    params[0] = "dict";
+                                    params[1] = "train-new-dict";
+                                    // key prefix
+                                    params[2] = field;
+                                    // sample values
                                     for (int i = 0; i < fieldList.size(); i++) {
-                                        params[i + 1] = fieldList.get(i);
+                                        params[i + 3] = fieldList.get(i);
                                     }
-                                    var trainDictResult = jedisTo.sendCommand(new TrainDictCommand(), params);
+                                    var trainDictResult = jedisTo.sendCommand(new ExtendProtocolCommand("manage"), params);
                                     System.out.println("Train dict result: " + trainDictResult);
                                     fieldList.clear();
                                 }

@@ -288,7 +288,32 @@ class ManageCommandTest extends Specification {
         reply instanceof BulkReply
 
         when:
+        // train new dict
+        def data15 = new byte[15][]
+        data15[1] = 'dict'.bytes
+        data15[2] = 'train-new-dict'.bytes
+        data15[3] = 'key:'.bytes
+        11.times {
+            data15[it + 4] = ('aaaaabbbbbccccc' * 5).bytes
+        }
+        manage.data = data15
+        reply = manage.dict()
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        def data14 = new byte[14][]
+        data14[1] = 'dict'.bytes
+        data14[2] = 'train-new-dict'.bytes
+        manage.data = data14
+        reply = manage.dict()
+        then:
+        reply instanceof ErrorReply
+
+        when:
         data3[2] = 'output-dict-bytes'.bytes
+        manage.data = data3
         reply = manage.dict()
         then:
         reply == ErrorReply.FORMAT
@@ -298,6 +323,12 @@ class ManageCommandTest extends Specification {
         reply = manage.dict()
         then:
         reply == ErrorReply.FORMAT
+
+        when:
+        data3[2] = 'xxx'.bytes
+        reply = manage.dict()
+        then:
+        reply == ErrorReply.SYNTAX
 
         when:
         def data1 = new byte[1][]
