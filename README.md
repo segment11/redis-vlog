@@ -263,3 +263,9 @@ redis-cli -p 7379
 - wait for the second instance to become a master, view logs
 - start the first instance, view logs
 - wait for the first instance to become a slave, view logs
+
+# Contact
+- Email: kerry@montplex.com
+- Wechat: key232323
+
+<img src="author_wechat.png" width="300px">
