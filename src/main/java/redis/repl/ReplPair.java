@@ -20,6 +20,15 @@ public class ReplPair {
 
     private final byte slot;
     private final boolean asMaster;
+
+    public String getHost() {
+        return host;
+    }
+
+    public int getPort() {
+        return port;
+    }
+
     private final String host;
     private final int port;
 
