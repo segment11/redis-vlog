@@ -461,7 +461,12 @@ public class OneSlot implements InMemoryEstimate {
 
     private final int chunkSegmentLength;
     final SnowFlake snowFlake;
-    final File slotDir;
+
+    private final File slotDir;
+
+    public File getSlotDir() {
+        return slotDir;
+    }
 
     private final BigStringFiles bigStringFiles;
 

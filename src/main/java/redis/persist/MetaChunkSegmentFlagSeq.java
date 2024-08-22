@@ -123,7 +123,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
         return allCapacity;
     }
 
-    interface IterateCallBack {
+    public interface IterateCallBack {
         void call(int segmentIndex, Flag flag, long segmentSeq, int walGroupIndex);
     }
 
@@ -175,7 +175,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
         return findSegmentIndexWithSegmentCount;
     }
 
-    void iterateRange(int beginSegmentIndex, int segmentCount, IterateCallBack callBack) {
+    public void iterateRange(int beginSegmentIndex, int segmentCount, IterateCallBack callBack) {
         var end = Math.min(beginSegmentIndex + segmentCount, maxSegmentNumber);
         for (int segmentIndex = beginSegmentIndex; segmentIndex < end; segmentIndex++) {
             var offset = segmentIndex * ONE_LENGTH;
@@ -188,7 +188,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
         }
     }
 
-    void iterateAll(IterateCallBack callBack) {
+    public void iterateAll(IterateCallBack callBack) {
         for (int segmentIndex = 0; segmentIndex < ConfForSlot.global.confChunk.maxSegmentNumber(); segmentIndex++) {
             var offset = segmentIndex * ONE_LENGTH;
 

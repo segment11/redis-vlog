@@ -1,6 +1,7 @@
 package redis.command
 
 import redis.BaseCommand
+import redis.ConfForSlot
 import redis.Dict
 import redis.DictMap
 import redis.persist.Consts
@@ -448,10 +449,72 @@ class ManageCommandTest extends Specification {
         reply == ErrorReply.FORMAT
 
         when:
+        data4[3] = 'view-in-memory-size-estimate'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply instanceof IntegerReply
+
+        when:
         data4[3] = 'xxx'.bytes
         reply = manage.manageInOneSlot()
         then:
         reply == ErrorReply.SYNTAX
+
+        when:
+        data4[2] = 'a'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply == ErrorReply.INVALID_INTEGER
+
+        when:
+        def data6 = new byte[6][]
+        data6[1] = 'slot'.bytes
+        data6[2] = '0'.bytes
+        data6[3] = 'output-chunk-segment-flag-to-file'.bytes
+        data6[4] = '0'.bytes
+        data6[5] = '0'.bytes
+        manage.data = data6
+        reply = manage.manageInOneSlot()
+        then:
+        reply == OKReply.INSTANCE
+
+        when:
+        data6[5] = '1024'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply == OKReply.INSTANCE
+
+        when:
+        data6[4] = ConfForSlot.global.confChunk.maxSegmentNumber().toString().bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply instanceof ErrorReply
+
+        when:
+        data6[4] = '-1'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data6[4] = 'a'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply == ErrorReply.INVALID_INTEGER
+
+        when:
+        data6[4] = '0'.bytes
+        data6[5] = 'a'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply == ErrorReply.INVALID_INTEGER
+
+        when:
+        data5[3] = 'output-chunk-segment-flag-to-file'.bytes
+        manage.data = data5
+        reply = manage.manageInOneSlot()
+        then:
+        reply == ErrorReply.FORMAT
 
         when:
         def data1 = new byte[1][]

@@ -4,10 +4,12 @@ import groovy.transform.CompileStatic
 import io.activej.promise.Promise
 import io.activej.promise.Promises
 import io.activej.promise.SettablePromise
+import org.apache.commons.io.FileUtils
 import redis.BaseCommand
 import redis.ConfForSlot
 import redis.Debug
 import redis.TrainSampleJob
+import redis.persist.Chunk
 import redis.reply.*
 
 import static redis.TrainSampleJob.MIN_TRAIN_SAMPLE_SIZE
@@ -93,7 +95,7 @@ class ManageCommand extends BaseCommand {
         try {
             slot = Byte.parseByte(new String(slotBytes))
         } catch (NumberFormatException ignored) {
-            return ErrorReply.SYNTAX
+            return ErrorReply.INVALID_INTEGER
         }
 
         int bucketIndex = -1
@@ -171,8 +173,59 @@ class ManageCommand extends BaseCommand {
             oneSlot.initLRU(true)
 
             return OKReply.INSTANCE
-        } else if (subSubCmd == 'in-memory-size-estimate') {
+        } else if (subSubCmd == 'view-in-memory-size-estimate') {
             return new IntegerReply(oneSlot.estimate())
+        } else if (subSubCmd == 'output-chunk-segment-flag-to-file') {
+            // manage slot 0 output-chunk-segment-flag-to-file 0 1024
+            if (data.length != 6) {
+                return ErrorReply.FORMAT
+            }
+
+            def beginSegmentIndexBytes = data[4]
+            def segmentCountBytes = data[5]
+            int beginSegmentIndex
+            int segmentCount
+
+            try {
+                beginSegmentIndex = Integer.parseInt(new String(beginSegmentIndexBytes))
+                segmentCount = Integer.parseInt(new String(segmentCountBytes))
+            } catch (NumberFormatException ignored) {
+                return ErrorReply.INVALID_INTEGER
+            }
+
+            if (beginSegmentIndex < 0) {
+                return ErrorReply.SYNTAX
+            }
+
+            def maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber()
+            if (beginSegmentIndex >= maxSegmentNumber) {
+                return new ErrorReply('begin segment index need less than ' + maxSegmentNumber)
+            }
+
+            def isIterateAll = segmentCount <= 0
+
+            def outputDir = new File(oneSlot.slotDir, 'debug')
+            FileUtils.forceMkdir(outputDir)
+
+            if (isIterateAll) {
+                final String outputFileName = 'chunk_segment_flag.txt'
+                new File(outputDir, outputFileName).withWriter { writer ->
+                    writer.writeLine Chunk.Flag.values().collect { it.name() + ':' + it.flagByte() }.join(',')
+                    oneSlot.metaChunkSegmentFlagSeq.iterateAll { segmentIndex, flag, seq, walGroupIndex ->
+                        writer.writeLine("$segmentIndex, $flag, $seq, $walGroupIndex")
+                    }
+                }
+            } else {
+                final String outputFileName = 'chunk_segment_flag_range.txt'
+                new File(outputDir, outputFileName).withWriter { writer ->
+                    writer.writeLine Chunk.Flag.values().collect { it.name() + ':' + it.flagByte() }.join(',')
+                    oneSlot.metaChunkSegmentFlagSeq.iterateRange(beginSegmentIndex, segmentCount) { segmentIndex, flag, seq, walGroupIndex ->
+                        writer.writeLine("$segmentIndex, $flag, $seq, $walGroupIndex")
+                    }
+                }
+            }
+
+            return OKReply.INSTANCE
         }
 
         return ErrorReply.SYNTAX
