@@ -93,7 +93,6 @@ class LocalPersistTest extends Specification {
 
         expect:
         localPersist.oneSlots().length == 1
-        localPersist.firstSlot() == slot
 
         when:
         localPersist.socketInspector = null

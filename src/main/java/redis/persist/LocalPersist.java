@@ -58,10 +58,6 @@ public class LocalPersist {
         return oneSlots[slot];
     }
 
-    public byte firstSlot() {
-        return oneSlots[0].slot();
-    }
-
     @ForTestMethod
     public void addOneSlotForTest(byte slot, Eventloop eventloop) {
         try {

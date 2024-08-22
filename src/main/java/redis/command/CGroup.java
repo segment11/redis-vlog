@@ -36,8 +36,8 @@ public class CGroup extends BaseCommand {
 
         if ("config".equals(cmd)) {
             // config always use the first slot
-            var firstSlot = LocalPersist.getInstance().firstSlot();
-            slotWithKeyHashList.add(new SlotWithKeyHash(firstSlot, 0, 1L));
+            var firstOneSlot = LocalPersist.getInstance().currentThreadFirstOneSlot();
+            slotWithKeyHashList.add(new SlotWithKeyHash(firstOneSlot.slot(), 0, 1L));
             return slotWithKeyHashList;
         }
 
