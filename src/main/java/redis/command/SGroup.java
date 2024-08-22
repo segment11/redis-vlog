@@ -7,12 +7,14 @@ import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
 import redis.CompressedValue;
-import redis.persist.LocalPersist;
+import redis.dyn.CachedGroovyClassLoader;
+import redis.dyn.RefreshLoader;
 import redis.repl.LeaderSelector;
 import redis.reply.*;
 import redis.type.RedisHashKeys;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.regex.Pattern;
@@ -81,17 +83,14 @@ public class SGroup extends BaseCommand {
             return slotWithKeyHashList;
         }
 
-        if ("select".equals(cmd)) {
-            // select always use the first slot
-            var firstSlot = LocalPersist.getInstance().firstSlot();
-            slotWithKeyHashList.add(new SlotWithKeyHash(firstSlot, 0, 1L));
-            return slotWithKeyHashList;
-        }
-
         return slotWithKeyHashList;
     }
 
     public Reply handle() {
+        if ("sentinel".equals(cmd)) {
+            return sentinel();
+        }
+
         if ("set".equals(cmd)) {
             return set(data);
         }
@@ -198,6 +197,10 @@ public class SGroup extends BaseCommand {
             return srem();
         }
 
+        if ("subscribe".equals(cmd)) {
+            return subscribe();
+        }
+
         if ("sunion".equals(cmd)) {
             return sdiff(false, true);
         }
@@ -211,6 +214,18 @@ public class SGroup extends BaseCommand {
         }
 
         return NilReply.INSTANCE;
+    }
+
+    Reply sentinel() {
+        if (data.length < 2) {
+            return ErrorReply.FORMAT;
+        }
+
+        var scriptText = RefreshLoader.getScriptText("/dyn/src/script/SentinelCommandHandle.groovy");
+
+        var variables = new HashMap<String, Object>();
+        variables.put("sGroup", this);
+        return (Reply) CachedGroovyClassLoader.getInstance().eval(scriptText, variables);
     }
 
     private static final String IPV4_REGEX =
@@ -496,23 +511,7 @@ public class SGroup extends BaseCommand {
     }
 
     Reply select() {
-        if (data.length != 2) {
-            return ErrorReply.FORMAT;
-        }
-
-        int index;
-        try {
-            index = Integer.parseInt(new String(data[1]));
-        } catch (NumberFormatException e) {
-            return ErrorReply.NOT_INTEGER;
-        }
-        if (index < 0 || index >= 16) {
-            return ErrorReply.INVALID_INTEGER;
-        }
-
-        localPersist.getSocketInspector().setDBSelected(socket, (byte) index);
-        log.warn("Select db index: {}", index);
-        return OKReply.INSTANCE;
+        return ErrorReply.NOT_SUPPORT;
     }
 
     Reply sadd() {
@@ -1264,5 +1263,30 @@ public class SGroup extends BaseCommand {
 
         setByKeyBytes(rhk, keyBytes, slotWithKeyHash);
         return new IntegerReply(removed);
+    }
+
+    Reply subscribe() {
+        if (data.length < 2) {
+            return ErrorReply.FORMAT;
+        }
+
+        var channels = new ArrayList<String>(data.length - 1);
+        for (int i = 1; i < data.length; i++) {
+            var channel = new String(data[i]);
+            channels.add(channel);
+        }
+
+        var socketInInspector = localPersist.getSocketInspector();
+
+        var replies = new Reply[channels.size() * 3];
+        int j = 0;
+        for (var channel : channels) {
+            replies[j++] = new BulkReply("subscribe".getBytes());
+            replies[j++] = new BulkReply(channel.getBytes());
+            var size = socketInInspector.subscribe(channel, socket);
+            replies[j++] = new IntegerReply(size);
+        }
+
+        return new MultiBulkReply(replies);
     }
 }

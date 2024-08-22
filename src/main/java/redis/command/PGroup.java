@@ -3,9 +3,7 @@ package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
 import redis.BaseCommand;
-import redis.reply.ErrorReply;
-import redis.reply.NilReply;
-import redis.reply.Reply;
+import redis.reply.*;
 
 import java.util.ArrayList;
 
@@ -43,6 +41,16 @@ public class PGroup extends BaseCommand {
             }
             var keyBytes = data[1];
             var slotWithKeyHash = slot(keyBytes, slotNumber);
+            slotWithKeyHashList.add(slotWithKeyHash);
+            return slotWithKeyHashList;
+        }
+
+        if ("publish".equals(cmd)) {
+            if (data.length != 3) {
+                return slotWithKeyHashList;
+            }
+            var channelBytes = data[1];
+            var slotWithKeyHash = slot(channelBytes, slotNumber);
             slotWithKeyHashList.add(slotWithKeyHash);
             return slotWithKeyHashList;
         }
@@ -86,6 +94,31 @@ public class PGroup extends BaseCommand {
             return sGroup.set(dd);
         }
 
+        if ("publish".equals(cmd)) {
+            return publish();
+        }
+
         return NilReply.INSTANCE;
+    }
+
+    Reply publish() {
+        if (data.length != 3) {
+            return ErrorReply.FORMAT;
+        }
+
+        var socketInInspector = localPersist.getSocketInspector();
+
+        var channel = new String(data[1]);
+        var message = new String(data[2]);
+
+        var n = socketInInspector.subscribeSocketCount(channel);
+
+        var replies = new Reply[3];
+        replies[0] = new BulkReply(channel.getBytes());
+        replies[1] = new BulkReply(message.getBytes());
+        replies[2] = new IntegerReply(n);
+
+        socketInInspector.publish(new String(data[1]), new MultiBulkReply(replies), true);
+        return new IntegerReply(n);
     }
 }

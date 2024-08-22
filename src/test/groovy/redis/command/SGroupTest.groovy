@@ -60,12 +60,10 @@ sunionstore
         LocalPersist.instance.addOneSlotForTest2(slot)
         def sSintercardList = SGroup.parseSlots('sintercard', data4, slotNumber)
         def sSmoveList = SGroup.parseSlots('smove', data4, slotNumber)
-        def sSelectList = SGroup.parseSlots('select', data4, slotNumber)
         def sList = SGroup.parseSlots('sxxx', data4, slotNumber)
         then:
         sSintercardList.size() == 2
         sSmoveList.size() == 2
-        sSelectList.size() == 1
         sList.size() == 0
 
         when:
@@ -151,8 +149,6 @@ sunionstore
 
     def 'test set'() {
         given:
-        final byte slot = 0
-
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = 'value'.bytes
@@ -339,8 +335,6 @@ sunionstore
 
     def 'test setex'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = '10'.bytes
@@ -362,8 +356,6 @@ sunionstore
 
     def 'test setnx'() {
         given:
-        final byte slot = 0
-
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = 'value'.bytes
@@ -395,8 +387,6 @@ sunionstore
 
     def 'test setrange'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = '1'.bytes
@@ -480,8 +470,6 @@ sunionstore
 
     def 'test strlen'() {
         given:
-        final byte slot = 0
-
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
 
@@ -522,44 +510,14 @@ sunionstore
         sGroup.byPassGetSet = inMemoryGetSet
         sGroup.from(BaseCommand.mockAGroup())
 
-        and:
-        def localPersist = LocalPersist.instance
-        localPersist.socketInspector = new SocketInspector()
-        localPersist.addOneSlotForTest2(slot)
-        def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
-                new InetSocketAddress('localhost', 46379), null)
-        sGroup.socketForTest = socket
-
         when:
-        sGroup.slotWithKeyHashListParsed = SGroup.parseSlots('select', data2, sGroup.slotNumber)
         def reply = sGroup.select()
         then:
-        reply == OKReply.INSTANCE
-        localPersist.socketInspector.getDBSelected(socket) == (byte) 1
-
-        when:
-        data2[1] = '-1'.bytes
-        reply = sGroup.select()
-        then:
-        reply == ErrorReply.INVALID_INTEGER
-
-        when:
-        data2[1] = '16'.bytes
-        reply = sGroup.select()
-        then:
-        reply == ErrorReply.INVALID_INTEGER
-
-        when:
-        data2[1] = 'a'.bytes
-        reply = sGroup.select()
-        then:
-        reply == ErrorReply.NOT_INTEGER
+        reply == ErrorReply.NOT_SUPPORT
     }
 
     def 'test sadd'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = '1'.bytes
@@ -651,8 +609,6 @@ sunionstore
 
     def 'test scard'() {
         given:
-        final byte slot = 0
-
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
 
@@ -697,8 +653,6 @@ sunionstore
 
     def 'test sdiff'() {
         given:
-        final byte slot = 0
-
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = 'b'.bytes
@@ -869,8 +823,6 @@ sunionstore
 
     def 'test sdiffstore'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'dst'.bytes
         data4[2] = 'a'.bytes
@@ -1090,8 +1042,6 @@ sunionstore
 
     def 'test sintercard'() {
         given:
-        final byte slot = 0
-
         def data6 = new byte[6][]
         data6[1] = '2'.bytes
         data6[2] = 'a'.bytes
@@ -1290,8 +1240,6 @@ sunionstore
 
     def 'test sismember'() {
         given:
-        final byte slot = 0
-
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = '1'.bytes
@@ -1345,8 +1293,6 @@ sunionstore
 
     def 'test smembers'() {
         given:
-        final byte slot = 0
-
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
 
@@ -1393,8 +1339,6 @@ sunionstore
 
     def 'test smismember'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = '1'.bytes
@@ -1452,8 +1396,6 @@ sunionstore
 
     def 'test smove'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = 'b'.bytes
@@ -1566,8 +1508,6 @@ sunionstore
 
     def 'test srandmember'() {
         given:
-        final byte slot = 0
-
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = '1'.bytes
@@ -1676,8 +1616,6 @@ sunionstore
 
     def 'test srem'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = '1'.bytes
@@ -1738,5 +1676,33 @@ sunionstore
         reply = sGroup.srem()
         then:
         reply == ErrorReply.KEY_TOO_LONG
+    }
+
+    def 'test subscribe'() {
+        given:
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'b'.bytes
+        data4[3] = 'c'.bytes
+
+        def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
+                new InetSocketAddress('localhost', 46379), null)
+
+        def sGroup = new SGroup('subscribe', data4, socket)
+        sGroup.from(BaseCommand.mockAGroup())
+
+        when:
+        LocalPersist.instance.socketInspector = new SocketInspector()
+        def reply = sGroup.subscribe()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 3 * 3
+
+        when:
+        def data1 = new byte[1][]
+        sGroup.data = data1
+        reply = sGroup.subscribe()
+        then:
+        reply == ErrorReply.FORMAT
     }
 }

@@ -1,8 +1,15 @@
 package redis.command
 
+import io.activej.net.socket.tcp.TcpSocket
 import redis.BaseCommand
+import redis.SocketInspector
+import redis.persist.LocalPersist
+import redis.reply.ErrorReply
+import redis.reply.MultiBulkReply
 import redis.reply.NilReply
 import spock.lang.Specification
+
+import java.nio.channels.SocketChannel
 
 class UGroupTest extends Specification {
     def 'test parse slot'() {
@@ -23,12 +30,46 @@ class UGroupTest extends Specification {
         given:
         def data1 = new byte[1][]
 
-        def uGroup = new UGroup('incr', data1, null)
+        def uGroup = new UGroup('unsubscribe', data1, null)
         uGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = uGroup.handle()
         then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        uGroup.cmd = 'ux'
+        reply = uGroup.handle()
+        then:
         reply == NilReply.INSTANCE
+    }
+
+    def 'test subscribe'() {
+        given:
+        def data4 = new byte[4][]
+        data4[1] = 'a'.bytes
+        data4[2] = 'b'.bytes
+        data4[3] = 'c'.bytes
+
+        def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
+                new InetSocketAddress('localhost', 46379), null)
+
+        def uGroup = new UGroup('unsubscribe', data4, socket)
+        uGroup.from(BaseCommand.mockAGroup())
+
+        when:
+        LocalPersist.instance.socketInspector = new SocketInspector()
+        def reply = uGroup.unsubscribe()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 3 * 3
+
+        when:
+        def data1 = new byte[1][]
+        uGroup.data = data1
+        reply = uGroup.unsubscribe()
+        then:
+        reply == ErrorReply.FORMAT
     }
 }
