@@ -128,8 +128,19 @@ public class Binlog implements InMemoryEstimate {
         return size;
     }
 
-    int currentFileIndex = 0;
-    long currentFileOffset = 0;
+    // for unit test
+    int getCurrentFileIndex() {
+        return currentFileIndex;
+    }
+
+    // for unit test
+    long getCurrentFileOffset() {
+        return currentFileOffset;
+    }
+
+    private int currentFileIndex = 0;
+
+    private long currentFileOffset = 0;
 
     public FileIndexAndOffset currentFileIndexAndOffset() {
         return new FileIndexAndOffset(currentFileIndex, currentFileOffset);
@@ -142,18 +153,58 @@ public class Binlog implements InMemoryEstimate {
         return new FileIndexAndOffset(fileIndex(file), 0);
     }
 
+    void resetCurrentFileOffsetForTest(long offset) {
+        this.currentFileOffset = offset;
+        this.clearByteBuffer();
+        this.tempAppendSegmentBuffer.position((int) (offset % ConfForSlot.global.confRepl.binlogOneSegmentLength));
+    }
+
+    static class PaddingBinlogContent implements BinlogContent {
+        private final byte[] paddingBytes;
+
+        public PaddingBinlogContent(byte[] paddingBytes) {
+            this.paddingBytes = paddingBytes;
+        }
+
+        @Override
+        public Type type() {
+            // need not decode
+            return null;
+        }
+
+        @Override
+        public int encodedLength() {
+            return paddingBytes.length;
+        }
+
+        @Override
+        public byte[] encodeWithType() {
+            return paddingBytes;
+        }
+
+        @Override
+        public void apply(byte slot, ReplPair replPair) {
+            // do nothing
+        }
+    }
+
     public void moveToNextSegment() throws IOException {
         var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
         var mod = currentFileOffset % oneSegmentLength;
         if (mod != 0) {
-            currentFileOffset += oneSegmentLength - mod;
-            tempAppendSegmentBuffer.clear();
-        }
+            var paddingN = oneSegmentLength - mod;
+            var paddingBytes = new byte[(int) paddingN];
+            var paddingContent = new PaddingBinlogContent(paddingBytes);
+            append(paddingContent);
+        } else {
+            currentFileOffset += oneSegmentLength;
+            clearByteBuffer();
 
-        var oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
-        var isLastSegment = currentFileOffset == oneFileMaxLength;
-        if (isLastSegment) {
-            createAndUseNextFile();
+            var oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
+            var isLastSegment = currentFileOffset == oneFileMaxLength;
+            if (isLastSegment) {
+                createAndUseNextFile();
+            }
         }
     }
 
@@ -169,6 +220,15 @@ public class Binlog implements InMemoryEstimate {
 
     private final byte[] tempAppendSegmentBytes;
     private final ByteBuffer tempAppendSegmentBuffer;
+
+    private void clearByteBuffer() {
+        var position = tempAppendSegmentBuffer.position();
+        if (position > 0) {
+            tempAppendSegmentBuffer.clear();
+
+            Arrays.fill(tempAppendSegmentBytes, 0, position, (byte) 0);
+        }
+    }
 
     private void addForReadCacheSegmentBytes(int fileIndex, long offset, byte[] givenBytes) {
         // copy one
@@ -209,15 +269,10 @@ public class Binlog implements InMemoryEstimate {
                     slot + ", encoded length: " + encoded.length);
         }
 
-        var beforeAppendFileOffset = currentFileOffset;
-        var beforeAppendSegmentIndex = beforeAppendFileOffset / oneSegmentLength;
-        var afterAppendFileOffset = beforeAppendFileOffset + encoded.length;
-        var afterAppendSegmentIndex = afterAppendFileOffset / oneSegmentLength;
-
-        var isCrossSegment = beforeAppendSegmentIndex != afterAppendSegmentIndex;
+        var isCrossSegment = tempAppendSegmentBuffer.position() + encoded.length > oneSegmentLength;
         if (isCrossSegment) {
             // need padding
-            var padding = new byte[(int) (oneSegmentLength - beforeAppendFileOffset % oneSegmentLength)];
+            var padding = new byte[(int) (oneSegmentLength - currentFileOffset % oneSegmentLength)];
 
             raf.seek(currentFileOffset);
             raf.write(padding);
@@ -225,15 +280,11 @@ public class Binlog implements InMemoryEstimate {
 
             tempAppendSegmentBuffer.put(padding);
             addForReadCacheSegmentBytes(currentFileIndex, currentFileOffset - oneSegmentLength, null);
-            tempAppendSegmentBuffer.clear();
-            Arrays.fill(tempAppendSegmentBytes, (byte) 0);
+            clearByteBuffer();
 
-            beforeAppendFileOffset = currentFileOffset;
-            afterAppendFileOffset = beforeAppendFileOffset + encoded.length;
-        }
-
-        if (afterAppendFileOffset > oneFileMaxLength) {
-            createAndUseNextFile();
+            if (currentFileOffset == oneFileMaxLength) {
+                createAndUseNextFile();
+            }
         }
 
         raf.seek(currentFileOffset);
@@ -241,6 +292,13 @@ public class Binlog implements InMemoryEstimate {
         currentFileOffset += encoded.length;
 
         tempAppendSegmentBuffer.put(encoded);
+
+        if (currentFileOffset == oneFileMaxLength) {
+            addForReadCacheSegmentBytes(currentFileIndex, currentFileOffset - oneSegmentLength, null);
+            clearByteBuffer();
+
+            createAndUseNextFile();
+        }
     }
 
     // self as slave, but also as master to another slave, need do binlog just same as master
@@ -263,6 +321,7 @@ public class Binlog implements InMemoryEstimate {
             // because when master reset, self will write binlog from wal
             // need margin so can use a new beginning segment
             currentFileOffset = toFileOffset + binlogOneSegmentLength;
+            clearByteBuffer();
 
             var isLastSegment = currentFileOffset == oneFileMaxLength;
             if (isLastSegment) {
@@ -287,6 +346,7 @@ public class Binlog implements InMemoryEstimate {
                 // need margin so can use a new beginning segment
                 currentFileIndex = toFileIndex;
                 currentFileOffset = toFileOffset + binlogOneSegmentLength;
+                clearByteBuffer();
                 raf = prevRaf;
 
                 var isLastSegment = currentFileOffset == oneFileMaxLength;

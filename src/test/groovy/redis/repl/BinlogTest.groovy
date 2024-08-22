@@ -75,7 +75,7 @@ class BinlogTest extends Specification {
         when:
         def oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength
         def oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
-        binlog.currentFileOffset = oneFileMaxLength - 1
+        binlog.resetCurrentFileOffsetForTest  oneFileMaxLength - 1
         for (v in vList[0..9]) {
             binlog.append(new XWalV(v))
         }
@@ -86,15 +86,15 @@ class BinlogTest extends Specification {
         binlog.readPrevRafOneSegment(1, 0).length < oneSegmentLength
 
         when:
-        binlog.currentFileOffset = oneSegmentLength - 1
+        binlog.resetCurrentFileOffsetForTest oneSegmentLength - 1
         for (v in vList[0..9]) {
             binlog.append(new XWalV(v))
         }
-        binlog.currentFileOffset = oneSegmentLength * 2 - 1
+        binlog.resetCurrentFileOffsetForTest oneSegmentLength * 2 - 1
         for (v in vList[0..9]) {
             binlog.append(new XWalV(v))
         }
-        binlog.currentFileOffset = oneSegmentLength * 3 - 1
+        binlog.resetCurrentFileOffsetForTest oneSegmentLength * 3 - 1
         for (v in vList[0..9]) {
             binlog.append(new XWalV(v))
         }
@@ -107,7 +107,7 @@ class BinlogTest extends Specification {
 
         when:
         def lastAppendFileOffset = binlog.currentFileOffset
-        binlog.currentFileOffset = oneSegmentLength * 4
+        binlog.resetCurrentFileOffsetForTest oneSegmentLength * 4
         then:
         binlog.readCurrentRafOneSegment(oneSegmentLength * 3).length > 0
 
@@ -155,7 +155,7 @@ class BinlogTest extends Specification {
 
         when:
         ConfForSlot.global.confRepl.binlogFileKeepMaxCount = 1
-        binlog.currentFileOffset = oneFileMaxLength - 1
+        binlog.resetCurrentFileOffsetForTest oneFileMaxLength - 1
         // trigger remove old file
         for (v in vList[0..9]) {
             binlog.append(new XWalV(v))
@@ -243,20 +243,29 @@ class BinlogTest extends Specification {
         binlog.currentFileOffset == 0
 
         when:
-        binlog.moveToNextSegment()
+        // test padding binlog content
+        def paddingBinlogContent = new Binlog.PaddingBinlogContent(new byte[10])
+        paddingBinlogContent.apply(slot, null)
         then:
-        binlog.currentFileIndex == 6
-        binlog.currentFileOffset == 0
+        paddingBinlogContent.type() == null
+        paddingBinlogContent.encodedLength() == 10
+        paddingBinlogContent.encodeWithType().length == 10
 
         when:
-        binlog.currentFileOffset = 1
         binlog.moveToNextSegment()
         then:
         binlog.currentFileIndex == 6
         binlog.currentFileOffset == oneSegmentLength
 
         when:
-        binlog.currentFileOffset = oneFileMaxLength - oneSegmentLength + 1
+        binlog.resetCurrentFileOffsetForTest oneSegmentLength + 1
+        binlog.moveToNextSegment()
+        then:
+        binlog.currentFileIndex == 6
+        binlog.currentFileOffset == oneSegmentLength * 2
+
+        when:
+        binlog.resetCurrentFileOffsetForTest oneFileMaxLength - oneSegmentLength + 1
         binlog.moveToNextSegment()
         then:
         binlog.currentFileIndex == 7
