@@ -54,6 +54,39 @@ public class ReplPair {
         return asMaster == replPair.asMaster && port == replPair.port && host.equals(replPair.host);
     }
 
+    @Override
+    public String toString() {
+        if (asMaster) {
+            return "ReplPair{" +
+                    "slot=" + slot +
+                    ", asMaster=" + asMaster +
+                    ", host='" + host + '\'' +
+                    ", port=" + port +
+                    ", masterUuid=" + masterUuid +
+                    ", slaveUuid=" + slaveUuid +
+                    ", lastPingGetTimestamp=" + lastPingGetTimestamp +
+                    ", isLinkUp=" + isLinkUp() +
+                    '}';
+        } else {
+            return "ReplPair{" +
+                    "slot=" + slot +
+                    ", asMaster=" + asMaster +
+                    ", host='" + host + '\'' +
+                    ", port=" + port +
+                    ", masterUuid=" + masterUuid +
+                    ", slaveUuid=" + slaveUuid +
+                    ", lastPongGetTimestamp=" + lastPongGetTimestamp +
+                    ", slaveCatchUpLastSeq=" + slaveCatchUpLastSeq +
+                    ", fetchedBytesLengthTotal=" + fetchedBytesLengthTotal +
+                    ", isMasterReadonly=" + isMasterReadonly +
+                    ", isAllCaughtUp=" + isAllCaughtUp +
+                    ", isLinkUp=" + isLinkUp() +
+                    ", isMasterCanNotConnect=" + isMasterCanNotConnect +
+                    ", lastGetCatchUpResponseMillis=" + lastGetCatchUpResponseMillis +
+                    '}';
+        }
+    }
+
     public boolean isAsMaster() {
         return asMaster;
     }
@@ -139,6 +172,37 @@ public class ReplPair {
 
     public void increaseFetchedBytesLength(int fetchedBytesLength) {
         fetchedBytesLengthTotal += fetchedBytesLength;
+    }
+
+    // for slave check if it can fail over as master
+    private boolean isMasterReadonly;
+
+    public boolean isMasterReadonly() {
+        return isMasterReadonly;
+    }
+
+    public void setMasterReadonly(boolean masterReadonly) {
+        isMasterReadonly = masterReadonly;
+    }
+
+    private boolean isAllCaughtUp;
+
+    public boolean isAllCaughtUp() {
+        return isAllCaughtUp;
+    }
+
+    public void setAllCaughtUp(boolean allCaughtUp) {
+        isAllCaughtUp = allCaughtUp;
+    }
+
+    private boolean isMasterCanNotConnect;
+
+    public boolean isMasterCanNotConnect() {
+        return isMasterCanNotConnect;
+    }
+
+    public void setMasterCanNotConnect(boolean masterCanNotConnect) {
+        isMasterCanNotConnect = masterCanNotConnect;
     }
 
     // change 3 -> 5 or 10
@@ -244,6 +308,26 @@ public class ReplPair {
             tcpClient.close();
             tcpClient = null;
         }
+    }
+
+    private long disconnectTimeMillis;
+
+    public long getDisconnectTimeMillis() {
+        return disconnectTimeMillis;
+    }
+
+    public void setDisconnectTimeMillis(long disconnectTimeMillis) {
+        this.disconnectTimeMillis = disconnectTimeMillis;
+    }
+
+    private long putToDelayListToRemoveTimeMillis;
+
+    public long getPutToDelayListToRemoveTimeMillis() {
+        return putToDelayListToRemoveTimeMillis;
+    }
+
+    public void setPutToDelayListToRemoveTimeMillis(long putToDelayListToRemoveTimeMillis) {
+        this.putToDelayListToRemoveTimeMillis = putToDelayListToRemoveTimeMillis;
     }
 
     // as slave delay pull incremental big string file from master when catch up

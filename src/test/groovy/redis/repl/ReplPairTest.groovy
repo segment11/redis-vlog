@@ -7,7 +7,9 @@ import io.activej.csp.supplier.ChannelSuppliers
 import io.activej.eventloop.Eventloop
 import io.activej.net.SimpleServer
 import redis.ConfForGlobal
+import redis.MultiWorkerServer
 import redis.RequestHandler
+import redis.SocketInspector
 import redis.decode.RequestDecoder
 import redis.persist.Consts
 import redis.persist.LocalPersist
@@ -44,6 +46,8 @@ class ReplPairTest extends Specification {
 
         def replPairAsMaster = mockAsMaster()
         def replPairAsSlave = mockAsSlave()
+        println replPairAsMaster
+        println replPairAsSlave
         for (replType in ReplType.values()) {
             replPairAsMaster.increaseStatsCountForReplType(replType)
             replPairAsSlave.increaseStatsCountForReplType(replType)
@@ -62,15 +66,26 @@ class ReplPairTest extends Specification {
 
         replPairAsSlave.slaveCatchUpLastSeq = 1000L
         replPairAsSlave.increaseFetchedBytesLength(1000)
+        replPairAsSlave.masterReadonly = false
+        replPairAsSlave.allCaughtUp = false
+        replPairAsSlave.disconnectTimeMillis = System.currentTimeMillis()
+        replPairAsSlave.putToDelayListToRemoveTimeMillis = System.currentTimeMillis()
 
         expect:
         replPairAsMaster.slot == slot
+        replPairAsMaster.host == 'localhost'
+        replPairAsMaster.port == 6379
         replPairAsMaster.hostAndPort == 'localhost:6379'
         replPairAsMaster.asMaster
         replPairAsMaster.masterUuid == 0L
         replPairAsMaster.lastPingGetTimestamp == 0L
         replPairAsSlave.slaveCatchUpLastSeq == 1000L
         replPairAsSlave.fetchedBytesLengthTotal == 1000L
+        !replPairAsSlave.masterReadonly
+        !replPairAsSlave.allCaughtUp
+        replPairAsSlave.disconnectTimeMillis > 0
+        replPairAsSlave.putToDelayListToRemoveTimeMillis > 0
+
         !replPairAsMaster.sendBye
         !replPairAsMaster.ping()
         !replPairAsMaster.write(ReplType.ping, null)
@@ -125,10 +140,12 @@ class ReplPairTest extends Specification {
         replPairAsMaster.doFetchingBigStringUuidList.size() == 0
 
         when:
+        replPairAsSlave.masterCanNotConnect = false
         def millis = System.currentTimeMillis() - 1000L
         replPairAsSlave.lastGetCatchUpResponseMillis = millis
         then:
         replPairAsSlave.lastGetCatchUpResponseMillis == millis
+        !replPairAsSlave.masterCanNotConnect
 
         when:
         replPairAsSlave.initAsSlave(null, null)
@@ -136,6 +153,7 @@ class ReplPairTest extends Specification {
         !replPairAsSlave.isLinkUp()
 
         when:
+        MultiWorkerServer.STATIC_GLOBAL_V.socketInspector = new SocketInspector()
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
 
@@ -159,7 +177,7 @@ class ReplPairTest extends Specification {
                 .withListenAddress(new InetSocketAddress('localhost', 6380))
                 .withAcceptOnce()
                 .build()
-        Thread.sleep(100)
+        Thread.sleep(1000)
         server.listen()
         def requestHandler = new RequestHandler((byte) 0, (byte) 1, (short) 1, null, Config.create())
         replPairAsSlave.initAsSlave(eventloopCurrent, requestHandler)

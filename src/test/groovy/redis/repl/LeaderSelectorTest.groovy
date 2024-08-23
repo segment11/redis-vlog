@@ -164,6 +164,72 @@ class LeaderSelectorTest extends Specification {
         }
         r = future.get()
         then:
+        !r
+
+        when:
+        var replPairAsSlave = oneSlot.onlyOneReplPairAsSlave
+        replPairAsSlave.masterCanNotConnect = true
+        future = new CompletableFuture()
+        leaderSelector.resetAsMaster(false) { e ->
+            if (e != null) {
+                println e.message
+                future.complete(false)
+            } else {
+                future.complete(true)
+            }
+        }
+        r = future.get()
+        then:
+        r
+
+        when:
+        oneSlot.createReplPairAsSlave('localhost', 7379)
+        replPairAsSlave = oneSlot.onlyOneReplPairAsSlave
+        replPairAsSlave.masterCanNotConnect = false
+        replPairAsSlave.masterReadonly = true
+        replPairAsSlave.allCaughtUp = false
+        future = new CompletableFuture()
+        leaderSelector.resetAsMaster(false) { e ->
+            if (e != null) {
+                println e.message
+                future.complete(false)
+            } else {
+                future.complete(true)
+            }
+        }
+        r = future.get()
+        then:
+        !r
+
+        when:
+        replPairAsSlave.masterReadonly = false
+        future = new CompletableFuture()
+        leaderSelector.resetAsMaster(false) { e ->
+            if (e != null) {
+                println e.message
+                future.complete(false)
+            } else {
+                future.complete(true)
+            }
+        }
+        r = future.get()
+        then:
+        !r
+
+        when:
+        replPairAsSlave.masterReadonly = true
+        replPairAsSlave.allCaughtUp = true
+        future = new CompletableFuture()
+        leaderSelector.resetAsMaster(false) { e ->
+            if (e != null) {
+                println e.message
+                future.complete(false)
+            } else {
+                future.complete(true)
+            }
+        }
+        r = future.get()
+        then:
         r
 
         cleanup:
@@ -220,7 +286,7 @@ class LeaderSelectorTest extends Specification {
         var objectMapper = new ObjectMapper();
         var jsonStr = objectMapper.writeValueAsString(map)
         try {
-            var jedisPool = JedisPoolHolder.getInstance().create('localhost', 6379, null, 5000);
+            var jedisPool = JedisPoolHolder.instance.create('localhost', 6379)
             JedisPoolHolder.exe(jedisPool) { jedis ->
                 jedis.set(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," +
                         XGroup.CONF_FOR_SLOT_KEY,
@@ -254,7 +320,7 @@ class LeaderSelectorTest extends Specification {
 
         when:
         if (doThisCase) {
-            var jedisPool = JedisPoolHolder.getInstance().create('localhost', 6379, null, 5000);
+            var jedisPool = JedisPoolHolder.instance.create('localhost', 6379);
             JedisPoolHolder.exe(jedisPool) { jedis ->
                 jedis.set(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," +
                         XGroup.CONF_FOR_SLOT_KEY,

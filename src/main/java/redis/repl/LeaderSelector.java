@@ -32,7 +32,7 @@ public class LeaderSelector {
         return instance;
     }
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger log = LoggerFactory.getLogger(LeaderSelector.class);
 
     private CuratorFramework client;
 
@@ -247,15 +247,29 @@ public class LeaderSelector {
         for (int i = 0; i < ConfForGlobal.slotNumber; i++) {
             var oneSlot = localPersist.oneSlot((byte) i);
             promises[i] = oneSlot.asyncRun(() -> {
-                // always true
-                var isSelfSlave = oneSlot.removeReplPairAsSlave();
+                var replPairAsSlave = oneSlot.getOnlyOneReplPairAsSlave();
 
-                if (isSelfSlave) {
-                    // reset as master
-                    oneSlot.persistMergingOrMergedSegmentsButNotPersisted();
-                    oneSlot.checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
-                    oneSlot.getMergedSegmentIndexEndLastTime();
+                boolean canResetSelfAsMaster = false;
+                if (replPairAsSlave.isMasterCanNotConnect()) {
+                    canResetSelfAsMaster = true;
+                } else {
+                    if (replPairAsSlave.isMasterReadonly() && replPairAsSlave.isAllCaughtUp()) {
+                        canResetSelfAsMaster = true;
+                    }
                 }
+
+                if (!canResetSelfAsMaster) {
+                    log.warn("Repl slave can not reset as master, slot: {}", replPairAsSlave.getSlot());
+                    XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPairAsSlave);
+                    throw new IllegalStateException("Repl slave can not reset as master, slot: " + replPairAsSlave.getSlot());
+                }
+
+                oneSlot.removeReplPairAsSlave();
+
+                // reset as master
+                oneSlot.persistMergingOrMergedSegmentsButNotPersisted();
+                oneSlot.checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
+                oneSlot.getMergedSegmentIndexEndLastTime();
 
                 oneSlot.getBinlog().moveToNextSegment();
                 oneSlot.resetReadonlyFalseAsMaster();
@@ -332,9 +346,9 @@ public class LeaderSelector {
     // in primary eventloop
     private void makeSelfAsSlave(String host, int port, Consumer<Exception> callback) {
         try {
-            var jedisPool = JedisPoolHolder.getInstance().create(host, port, null, 5000);
+            var jedisPool = JedisPoolHolder.getInstance().create(host, port);
             // may be null
-            var jsonStr = (String) JedisPoolHolder.exe(jedisPool, jedis -> {
+            var jsonStr = JedisPoolHolder.exe(jedisPool, jedis -> {
                 var pong = jedis.ping();
                 log.info("Repl slave of {}:{} pong: {}", host, port, pong);
                 return jedis.get(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," + XGroup.CONF_FOR_SLOT_KEY);
@@ -375,8 +389,8 @@ public class LeaderSelector {
             return masterAddressLocalForTest;
         }
 
-        var jedisPool = JedisPoolHolder.getInstance().create(host, port, null, 5000);
-        return (String) JedisPoolHolder.exe(jedisPool, jedis ->
+        var jedisPool = JedisPoolHolder.getInstance().create(host, port);
+        return JedisPoolHolder.exe(jedisPool, jedis ->
                 // refer to XGroup handle
                 // key will be transferred to x_repl slot 0 get_first_slave_listen_address, refer to request handler
                 jedis.get(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ",slot," + slot + "," +
