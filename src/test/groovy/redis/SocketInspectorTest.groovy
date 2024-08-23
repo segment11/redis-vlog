@@ -4,6 +4,7 @@ import io.activej.async.callback.AsyncComputation
 import io.activej.common.function.SupplierEx
 import io.activej.eventloop.Eventloop
 import io.activej.net.socket.tcp.TcpSocket
+import redis.repl.ReplPairTest
 import redis.reply.BulkReply
 import spock.lang.Specification
 
@@ -33,6 +34,14 @@ class SocketInspectorTest extends Specification {
         inspector.lookup(SocketInspector.class) == null
 
         when:
+        socket.userData = ReplPairTest.mockAsSlave()
+        inspector.onConnect(socket)
+        inspector.onDisconnect(socket)
+        then:
+        1 == 1
+
+        when:
+        socket.userData = null
         inspector.maxConnections = 1
         println inspector.maxConnections
         boolean exception = false

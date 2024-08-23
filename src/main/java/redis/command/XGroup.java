@@ -5,16 +5,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.activej.net.socket.tcp.ITcpSocket;
 import org.apache.commons.io.FileUtils;
+import org.slf4j.LoggerFactory;
 import redis.*;
-import redis.persist.FdReadWrite;
-import redis.persist.KeyLoader;
-import redis.persist.OneSlot;
-import redis.persist.Wal;
+import redis.persist.*;
 import redis.repl.Binlog;
 import redis.repl.Repl;
 import redis.repl.ReplPair;
 import redis.repl.ReplType;
 import redis.repl.content.*;
+import redis.repl.support.JedisPoolHolder;
 import redis.reply.BulkReply;
 import redis.reply.ErrorReply;
 import redis.reply.NilReply;
@@ -104,9 +103,45 @@ public class XGroup extends BaseCommand {
             }
         }
 
+        if (CATCH_UP.equals(subCmd2)) {
+            // x_repl slot 0 x_catch_up long int long long
+            if (data.length != 8) {
+                return ErrorReply.SYNTAX;
+            }
+
+            var slot = slotWithKeyHashListParsed.getFirst().slot();
+            var oneSlot = localPersist.oneSlot(slot);
+            var replPairAsMaster = oneSlot.getFirstReplPairAsMaster();
+
+            if (replPairAsMaster == null) {
+                // ignore
+                log.warn("Repl master repl pair not found, maybe already closed, slot: {}", slot);
+            }
+
+            var lastUpdatedMasterUuid = Long.parseLong(new String(data[4]));
+            var lastUpdatedFileIndex = Integer.parseInt(new String(data[5]));
+            var marginLastUpdatedOffset = Long.parseLong(new String(data[6]));
+            var lastUpdatedOffset = Long.parseLong(new String(data[7]));
+
+            var contentBytes = toMasterCatchUpRequestBytes(lastUpdatedMasterUuid, lastUpdatedFileIndex, marginLastUpdatedOffset, lastUpdatedOffset);
+
+            try {
+                var reply = catch_up(slot, contentBytes);
+                if (reply.isReplType(error)) {
+                    return new ErrorReply(new String(reply.buf().array()));
+                }
+
+                return new BulkReply(reply.buf().array());
+            } catch (Exception e) {
+                log.error("Repl master handle x_repl x_catch_up error, slot: " + slot, e);
+                return new ErrorReply(e.getMessage());
+            }
+        }
+
         return NilReply.INSTANCE;
     }
 
+    public static final String CATCH_UP = "x_catch_up";
     public static final String CONF_FOR_SLOT_KEY = "x_conf_for_slot";
     // raw redis, use 'info replication'
     public static final String GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD = "x_get_first_slave_listen_address";
@@ -183,12 +218,18 @@ public class XGroup extends BaseCommand {
             }
             case pong -> {
                 // client received pong from server
+                assert replPair != null;
                 replPair.setLastPongGetTimestamp(System.currentTimeMillis());
 
-                var millis = replPair.getLastGetCatchUpResponseMillis();
-                if (millis != 0 && System.currentTimeMillis() - millis > 1000 * 10) {
-                    // trigger catch up
-                    s_catch_up(slot, new byte[1]);
+                var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
+                if (metaChunkSegmentIndex.isExistsDataAllFetched()) {
+                    var millis = replPair.getLastGetCatchUpResponseMillis();
+                    // if 5s
+                    if (millis != 0 && System.currentTimeMillis() - millis > 1000 * 5) {
+                        // trigger catch up
+                        // content bytes length == 2 means do not reset master readonly flag
+                        s_catch_up(slot, new byte[2]);
+                    }
                 }
 
                 yield Repl.emptyReply();
@@ -196,7 +237,7 @@ public class XGroup extends BaseCommand {
             case hello -> hello(slot, contentBytes);
             case hi -> hi(slot, contentBytes);
             case ok -> {
-                log.info("Repl handle ok: slave uuid={}, {}", slaveUuid, replPair.getHostAndPort());
+                log.info("Repl handle ok: slave uuid={}, message={}", slaveUuid, new String(contentBytes));
                 yield Repl.emptyReply();
             }
             case bye -> {
@@ -280,14 +321,18 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, hi, content);
     }
 
-    private RawBytesContent toMasterCatchUp(long binlogMasterUuid, int lastUpdatedFileIndex, long marginLastUpdatedOffset, long lastUpdatedOffset) {
+    private static RawBytesContent toMasterCatchUp(long binlogMasterUuid, int lastUpdatedFileIndex, long marginLastUpdatedOffset, long lastUpdatedOffset) {
+        return new RawBytesContent(toMasterCatchUpRequestBytes(binlogMasterUuid, lastUpdatedFileIndex, marginLastUpdatedOffset, lastUpdatedOffset));
+    }
+
+    private static byte[] toMasterCatchUpRequestBytes(long binlogMasterUuid, int lastUpdatedFileIndex, long marginLastUpdatedOffset, long lastUpdatedOffset) {
         var requestBytes = new byte[8 + 4 + 8 + 8];
         var requestBuffer = ByteBuffer.wrap(requestBytes);
         requestBuffer.putLong(binlogMasterUuid);
         requestBuffer.putInt(lastUpdatedFileIndex);
         requestBuffer.putLong(marginLastUpdatedOffset);
         requestBuffer.putLong(lastUpdatedOffset);
-        return new RawBytesContent(requestBytes);
+        return requestBytes;
     }
 
     Repl.ReplReply hi(byte slot, byte[] contentBytes) {
@@ -959,12 +1004,15 @@ public class XGroup extends BaseCommand {
             return Repl.error(slot, replPair, errorMessage);
         }
 
+        var isMasterReadonlyByte = oneSlot.isReadonly() ? (byte) 1 : (byte) 0;
+        var onlyReadonlyResponseContent = new RawBytesContent(new byte[]{isMasterReadonlyByte});
+
         var binlog = oneSlot.getBinlog();
         if (needFetchOffset != lastUpdatedOffset) {
             // check if slave already catch up to last binlog segment offset
             var fo = binlog.currentFileIndexAndOffset();
             if (fo.fileIndex() == needFetchFileIndex && fo.offset() == lastUpdatedOffset) {
-                return Repl.reply(slot, replPair, ReplType.s_catch_up, EmptyContent.INSTANCE);
+                return Repl.reply(slot, replPair, ReplType.s_catch_up, onlyReadonlyResponseContent);
             }
         }
 
@@ -978,14 +1026,19 @@ public class XGroup extends BaseCommand {
             return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
         }
 
+        // all fetched
         if (readSegmentBytes == null) {
-            return Repl.reply(slot, replPair, ReplType.s_catch_up, EmptyContent.INSTANCE);
+            return Repl.reply(slot, replPair, ReplType.s_catch_up, onlyReadonlyResponseContent);
         }
 
         var currentFileIndexAndOffset = binlog.currentFileIndexAndOffset();
 
-        var responseBytes = new byte[4 + 8 + 4 + 8 + 4 + readSegmentBytes.length];
+        // 1 byte for readonly
+        // 4 bytes for need fetch file index, 8 bytes for need fetch offset
+        // 4 bytes for current file index, 8 bytes for current offset
+        var responseBytes = new byte[1 + 4 + 8 + 4 + 8 + 4 + readSegmentBytes.length];
         var responseBuffer = ByteBuffer.wrap(responseBytes);
+        responseBuffer.put(isMasterReadonlyByte);
         responseBuffer.putInt(needFetchFileIndex);
         responseBuffer.putLong(needFetchOffset);
         responseBuffer.putInt(currentFileIndexAndOffset.fileIndex());
@@ -1010,17 +1063,29 @@ public class XGroup extends BaseCommand {
         var lastUpdatedOffset = lastUpdatedFileIndexAndOffset.offset();
 
         // master has no more binlog to catch up, delay to catch up again
-        if (EmptyContent.isEmpty(contentBytes)) {
-            // use margin file offset
-            var marginLastUpdatedOffset = Binlog.marginFileOffset(lastUpdatedOffset);
-            var content = toMasterCatchUp(binlogMasterUuid, lastUpdatedFileIndex, marginLastUpdatedOffset, lastUpdatedOffset);
-            oneSlot.delayRun(1000, () -> {
-                replPair.write(ReplType.catch_up, content);
-            });
+        if (contentBytes.length == 1 || contentBytes.length == 2) {
+            boolean resetMasterReadonlyByContentBytes = contentBytes.length == 1;
+            boolean isMasterReadonly = false;
+            if (resetMasterReadonlyByContentBytes) {
+                // only 1 byte for readonly
+                isMasterReadonly = contentBytes[0] == 1;
+                replPair.setMasterReadonly(isMasterReadonly);
+                replPair.setAllCaughtUp(true);
+            }
+
+            if (!isMasterReadonly) {
+                // use margin file offset
+                var marginLastUpdatedOffset = Binlog.marginFileOffset(lastUpdatedOffset);
+                var content = toMasterCatchUp(binlogMasterUuid, lastUpdatedFileIndex, marginLastUpdatedOffset, lastUpdatedOffset);
+                oneSlot.delayRun(1000, () -> {
+                    replPair.write(ReplType.catch_up, content);
+                });
+            }
             return Repl.emptyReply();
         }
 
         var buffer = ByteBuffer.wrap(contentBytes);
+        var isMasterReadonly = buffer.get() == 1;
         var fetchedFileIndex = buffer.getInt();
         var fetchedOffset = buffer.getLong();
 
@@ -1030,6 +1095,9 @@ public class XGroup extends BaseCommand {
         var readSegmentLength = buffer.getInt();
         var readSegmentBytes = new byte[readSegmentLength];
         buffer.get(readSegmentBytes);
+
+        replPair.setMasterReadonly(isMasterReadonly);
+        replPair.setAllCaughtUp(currentOffset == fetchedOffset);
 
         // only when self is as slave but also as master, need to write binlog
         try {
@@ -1116,5 +1184,77 @@ public class XGroup extends BaseCommand {
         } else {
             return Repl.reply(slot, replPair, ReplType.catch_up, content);
         }
+    }
+
+
+    public static void tryCatchUpAgainAfterSlaveTcpClientClosed(ReplPair replPairAsSlave) {
+        var log = LoggerFactory.getLogger(XGroup.class);
+
+        final var targetSlot = replPairAsSlave.getSlot();
+        var oneSlot = LocalPersist.getInstance().oneSlot(targetSlot);
+        oneSlot.asyncRun(() -> {
+            var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
+
+            var isExistsDataAllFetched = metaChunkSegmentIndex.isExistsDataAllFetched();
+            if (!isExistsDataAllFetched) {
+                log.warn("Repl slave try catch up again after slave tcp client close, but exists data not all fetched, slot: {}", targetSlot);
+                return;
+            }
+
+            var lastUpdatedMasterUuid = metaChunkSegmentIndex.getMasterUuid();
+            if (lastUpdatedMasterUuid != replPairAsSlave.getMasterUuid()) {
+                log.warn("Repl slave try catch up again after slave tcp client close, but master uuid not match, slot: {}", targetSlot);
+                return;
+            }
+
+            var lastUpdatedFileIndexAndOffset = metaChunkSegmentIndex.getMasterBinlogFileIndexAndOffset();
+            var lastUpdatedFileIndex = lastUpdatedFileIndexAndOffset.fileIndex();
+            var lastUpdatedOffset = lastUpdatedFileIndexAndOffset.offset();
+
+            var marginLastUpdatedOffset = Binlog.marginFileOffset(lastUpdatedOffset);
+
+            // use jedis to get data sync, because need try to connect to master
+            var jedisPool = JedisPoolHolder.getInstance().create(replPairAsSlave.getHost(), replPairAsSlave.getPort());
+            try {
+                var resultBytes = JedisPoolHolder.exe(jedisPool, jedis -> {
+                    var pong = jedis.ping();
+                    log.info("Repl slave try ping after slave tcp client close, to {}, pong: {}", replPairAsSlave.getHostAndPort(), pong);
+                    // get data from master
+                    // refer RequestHandler.transferDataForXGroup
+                    return jedis.get(
+                            (
+                                    XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ","
+                                            + "slot,"
+                                            + targetSlot + ","
+                                            + CATCH_UP + ","
+                                            + lastUpdatedMasterUuid + ","
+                                            + lastUpdatedFileIndex + ","
+                                            + marginLastUpdatedOffset + ","
+                                            + lastUpdatedOffset
+                            ).getBytes()
+                    );
+                });
+
+                var xGroup = new XGroup("", null, null);
+                xGroup.replPair = replPairAsSlave;
+                xGroup.s_catch_up(targetSlot, resultBytes);
+
+                if (replPairAsSlave.isAllCaughtUp()) {
+                    log.warn("Repl slave try catch up again, is all caught up!!!, slot: {}", targetSlot);
+                } else {
+                    log.warn("Repl slave try catch up again, is not!!! all caught up!!!, slot: {}", targetSlot);
+                    // todo, try to loop if not all caught up
+                }
+            } catch (Exception e) {
+                log.error("Repl slave try catch up again after slave tcp client close error", e);
+                replPairAsSlave.setMasterCanNotConnect(true);
+            }
+        }).whenComplete((v, e) -> {
+            if (e != null) {
+                log.error("Repl slave try catch up again after slave tcp client close error", e);
+            } else {
+                log.info("Repl slave try catch up again after slave tcp client close done");
+            }
+        });
     }
 }

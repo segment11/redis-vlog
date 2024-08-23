@@ -292,6 +292,7 @@ public class OneSlot implements InMemoryEstimate {
     final LinkedList<ReplPair> delayNeedCloseReplPairs = new LinkedList<>();
 
     public void addDelayNeedCloseReplPair(ReplPair replPair) {
+        replPair.setPutToDelayListToRemoveTimeMillis(System.currentTimeMillis());
         delayNeedCloseReplPairs.add(replPair);
     }
 
@@ -725,16 +726,20 @@ public class OneSlot implements InMemoryEstimate {
                 }
 
                 if (!delayNeedCloseReplPairs.isEmpty()) {
-                    var needCloseReplPair = delayNeedCloseReplPairs.pop();
-                    needCloseReplPair.close();
+                    var first = delayNeedCloseReplPairs.getFirst();
+                    // delay 10s as slave will try to fetch data by jedis sync get
+                    if (System.currentTimeMillis() - first.getPutToDelayListToRemoveTimeMillis() > 1000 * 10) {
+                        var needCloseReplPair = delayNeedCloseReplPairs.pop();
+                        needCloseReplPair.close();
 
-                    var it = replPairs.iterator();
-                    while (it.hasNext()) {
-                        var replPair = it.next();
-                        if (replPair.equals(needCloseReplPair)) {
-                            it.remove();
-                            log.warn("Remove repl pair after bye, to server: {}, slot: {}", replPair.getHostAndPort(), slot);
-                            break;
+                        var it = replPairs.iterator();
+                        while (it.hasNext()) {
+                            var replPair = it.next();
+                            if (replPair.equals(needCloseReplPair)) {
+                                it.remove();
+                                log.warn("Remove repl pair after bye, to server: {}, slot: {}", replPair.getHostAndPort(), slot);
+                                break;
+                            }
                         }
                     }
                 }

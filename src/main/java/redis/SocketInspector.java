@@ -8,6 +8,8 @@ import io.prometheus.client.Gauge;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.command.XGroup;
+import redis.repl.ReplPair;
 import redis.reply.Reply;
 
 import java.io.IOException;
@@ -83,14 +85,23 @@ public class SocketInspector implements TcpSocket.Inspector {
 
     @Override
     public void onConnect(TcpSocket socket) {
+        var userData = socket.getUserData();
+        if (userData instanceof ReplPair) {
+            // this socket is a slave connection master
+            // need not check max connections
+            var remoteAddress = socket.getRemoteAddress();
+            log.info("Inspector on repl connect, remote address: {}", remoteAddress);
+            return;
+        }
+
         if (socketMap.size() >= maxConnections) {
-            log.warn("Max connections reached: {}, close the socket", maxConnections);
+            log.warn("Inspector max connections reached: {}, close the socket", maxConnections);
             socket.close();
             return;
         }
 
         var remoteAddress = socket.getRemoteAddress();
-        log.info("On connect, remote address: {}", remoteAddress);
+        log.info("Inspector on connect, remote address: {}", remoteAddress);
         socketMap.put(remoteAddress, socket);
 
         connectedCountGauge.inc();
@@ -103,7 +114,7 @@ public class SocketInspector implements TcpSocket.Inspector {
 
     @Override
     public void onRead(TcpSocket socket, ByteBuf buf) {
-
+//        log.debug("Inspector on read, remote address: {}, buf size: {}", socket.getRemoteAddress(), buf.readRemaining());
     }
 
     @Override
@@ -134,7 +145,16 @@ public class SocketInspector implements TcpSocket.Inspector {
     @Override
     public void onDisconnect(TcpSocket socket) {
         var remoteAddress = socket.getRemoteAddress();
-        log.info("On disconnect, remote address: {}", remoteAddress);
+
+        var userData = socket.getUserData();
+        if (userData instanceof ReplPair replPair) {
+            log.info("Inspector on repl disconnect, remote address: {}", remoteAddress);
+            replPair.setDisconnectTimeMillis(System.currentTimeMillis());
+            XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair);
+            return;
+        }
+
+        log.info("Inspector on disconnect, remote address: {}", remoteAddress);
         AfterAuthFlagHolder.remove(remoteAddress);
         socketMap.remove(remoteAddress);
 

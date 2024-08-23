@@ -514,6 +514,13 @@ class XGroupTest extends Specification {
         r.isReplType(ReplType.s_catch_up)
 
         when:
+        oneSlot.readonly = true
+        r = x.handleRepl()
+        then:
+        // empty content return
+        r.isReplType(ReplType.s_catch_up)
+
+        when:
         def vList = Mock.prepareValueList(10)
         for (v in vList) {
             oneSlot.appendBinlog(new XWalV(v))
@@ -1018,8 +1025,10 @@ class XGroupTest extends Specification {
         for (v in vList) {
             n += new XWalV(v).encodedLength()
         }
-        contentBytes = new byte[4 + 8 + 4 + 8 + 4 + n]
+        contentBytes = new byte[1 + 4 + 8 + 4 + 8 + 4 + n]
         requestBuffer = ByteBuffer.wrap(contentBytes)
+        // is readonly flag
+        requestBuffer.put((byte) 0)
         // response binlog file index
         requestBuffer.putInt(0)
         // response binlog file offset
@@ -1040,8 +1049,9 @@ class XGroupTest extends Specification {
         r.isEmpty()
 
         when:
-        contentBytes = new byte[4 + 8 + 4 + 8 + 4 + binlogOneSegmentLength]
+        contentBytes = new byte[1 + 4 + 8 + 4 + 8 + 4 + binlogOneSegmentLength]
         requestBuffer = ByteBuffer.wrap(contentBytes)
+        requestBuffer.put((byte) 0)
         requestBuffer.putInt(0)
         requestBuffer.putLong(0)
         requestBuffer.putInt(0)
@@ -1062,7 +1072,7 @@ class XGroupTest extends Specification {
         oneSlot.metaChunkSegmentIndex.masterBinlogFileIndexAndOffset.offset() == binlogOneSegmentLength
 
         when:
-        requestBuffer.position(0)
+        requestBuffer.position(1)
         requestBuffer.putInt(0)
         requestBuffer.putLong(binlogOneSegmentLength)
         r = x.handleRepl()
@@ -1071,7 +1081,7 @@ class XGroupTest extends Specification {
         r.isReplType(ReplType.catch_up)
 
         when:
-        requestBuffer.position(0)
+        requestBuffer.position(1)
         requestBuffer.putInt(0)
         requestBuffer.putLong(0)
         requestBuffer.putInt(0)
@@ -1084,7 +1094,7 @@ class XGroupTest extends Specification {
         r.isEmpty()
 
         when:
-        requestBuffer.position(0)
+        requestBuffer.position(1)
         requestBuffer.putInt(0)
         requestBuffer.putLong(0)
         requestBuffer.putInt(1)
@@ -1097,8 +1107,16 @@ class XGroupTest extends Specification {
         r.isReplType(ReplType.catch_up)
 
         when:
+        // master readonly
+        contentBytes[0] = (byte) 1
+        r = x.handleRepl()
+        then:
+        // next batch
+        r.isReplType(ReplType.catch_up)
+
+        when:
         def binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength
-        requestBuffer.position(0)
+        requestBuffer.position(1)
         requestBuffer.putInt(0)
         requestBuffer.putLong(binlogOneFileMaxLength - binlogOneSegmentLength)
         requestBuffer.putInt(1)
@@ -1111,7 +1129,7 @@ class XGroupTest extends Specification {
         r.isEmpty()
 
         when:
-        requestBuffer.position(0)
+        requestBuffer.position(1)
         requestBuffer.putInt(0)
         requestBuffer.putLong(0)
         requestBuffer.putInt(1)
@@ -1124,9 +1142,60 @@ class XGroupTest extends Specification {
         r.isReplType(ReplType.error)
 
         when:
-        // empty from master, mean no new binlog
+        // only readonly flag from master, mean no more binlog bytes
         contentBytes = new byte[1]
+        contentBytes[0] = (byte) 1
         data4[3] = contentBytes
+        r = x.handleRepl()
+        then:
+        r.isEmpty()
+        oneSlot.onlyOneReplPairAsSlave.allCaughtUp && oneSlot.onlyOneReplPairAsSlave.masterReadonly
+
+        when:
+        // only readonly flag from master, mean no more binlog bytes
+        contentBytes[0] = (byte) 0
+        r = x.handleRepl()
+        then:
+        r.isEmpty()
+        oneSlot.onlyOneReplPairAsSlave.allCaughtUp && !oneSlot.onlyOneReplPairAsSlave.masterReadonly
+
+        when:
+        // skip reset readonly flag from master
+        contentBytes = new byte[2]
+        data4[3] = contentBytes
+        r = x.handleRepl()
+        then:
+        r.isEmpty()
+
+        when:
+        // pong, trigger catch up
+        data4[2][0] = ReplType.pong.code
+        contentBytes = new byte[0]
+        data4[3] = contentBytes
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, false, 0, 0L)
+        r = x.handleRepl()
+        then:
+        r.isEmpty()
+
+        when:
+        // pong, trigger catch up
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, 0L)
+        oneSlot.onlyOneReplPairAsSlave.lastGetCatchUpResponseMillis = 0
+        r = x.handleRepl()
+        then:
+        r.isEmpty()
+
+        when:
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, 0L)
+        // need no trigger catch up
+        oneSlot.onlyOneReplPairAsSlave.lastGetCatchUpResponseMillis = System.currentTimeMillis() - 1000
+        r = x.handleRepl()
+        then:
+        r.isEmpty()
+
+        when:
+        // trigger catch up
+        oneSlot.onlyOneReplPairAsSlave.lastGetCatchUpResponseMillis = System.currentTimeMillis() - 10000
         r = x.handleRepl()
         then:
         r.isEmpty()

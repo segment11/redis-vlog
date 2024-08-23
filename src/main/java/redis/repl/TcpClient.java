@@ -6,9 +6,11 @@ import io.activej.csp.consumer.ChannelConsumers;
 import io.activej.csp.supplier.ChannelSuppliers;
 import io.activej.eventloop.Eventloop;
 import io.activej.net.socket.tcp.TcpSocket;
+import io.activej.promise.Promise;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
+import redis.MultiWorkerServer;
 import redis.RequestHandler;
 import redis.command.XGroup;
 import redis.decode.RequestDecoder;
@@ -82,31 +84,41 @@ public class TcpClient {
         TcpSocket.connect(netWorkerEventloop, new InetSocketAddress(host, port))
                 .whenResult(socket -> {
                     log.info("Connected to server at {}:{}, slot: {}", host, port, slot);
+
+                    socket.setUserData(replPair);
+                    socket.setInspector(MultiWorkerServer.STATIC_GLOBAL_V.socketInspector);
+                    MultiWorkerServer.STATIC_GLOBAL_V.socketInspector.onConnect(socket);
+
                     sock = socket;
 
                     BinaryChannelSupplier.of(ChannelSuppliers.ofSocket(socket))
                             .decodeStream(new RequestDecoder())
-                            .map(pipeline -> {
+                            .mapAsync(pipeline -> {
                                 if (pipeline == null) {
                                     log.error("Repl slave request decode fail: pipeline is null");
                                     return null;
                                 }
 
-                                // no flush pipeline for repl
-                                var request = pipeline.getFirst();
-                                var xGroup = new XGroup(null, request.getData(), socket);
-                                xGroup.init(requestHandler, request);
-                                xGroup.setReplPair(replPair);
+                                Promise<ByteBuf>[] promiseN = new Promise[pipeline.size()];
+                                for (int i = 0; i < pipeline.size(); i++) {
+                                    var request = pipeline.get(i);
 
-                                try {
-                                    var reply = xGroup.handleRepl();
-                                    if (reply == null) {
-                                        log.error("Repl slave handle error: reply is null");
-                                        return null;
+                                    var xGroup = new XGroup(null, request.getData(), socket);
+                                    xGroup.init(requestHandler, request);
+                                    xGroup.setReplPair(replPair);
+
+                                    try {
+                                        var reply = xGroup.handleRepl();
+                                        promiseN[i] = Promise.of(reply.buffer());
+                                    } catch (Exception e) {
+                                        promiseN[i] = Promise.of(Repl.error(slot, replPair, "Repl slave handle error: " + e.getMessage()).buffer());
                                     }
-                                    return reply.buffer();
-                                } catch (Exception e) {
-                                    return Repl.error(slot, replPair, "Repl slave handle error: " + e.getMessage()).buffer();
+                                }
+
+                                if (pipeline.size() == 1) {
+                                    return promiseN[0];
+                                } else {
+                                    return MultiWorkerServer.allPipelineByteBuf(promiseN);
                                 }
                             })
                             .streamTo(ChannelConsumers.ofSocket(socket));
