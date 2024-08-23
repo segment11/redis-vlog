@@ -205,7 +205,7 @@ class RequestHandlerTest extends Specification {
         reply instanceof ErrorReply
 
         when:
-        getData2[1] = (XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ',' + XGroup.CONF_FOR_SLOT_KEY).bytes
+        getData2[1] = (XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ',' + XGroup.X_CONF_FOR_SLOT_AS_SUB_CMD).bytes
         RequestHandler.parseSlots(getRequest2)
         reply = requestHandler.handle(getRequest2, socket)
         then:

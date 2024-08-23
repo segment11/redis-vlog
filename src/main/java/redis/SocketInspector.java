@@ -150,7 +150,7 @@ public class SocketInspector implements TcpSocket.Inspector {
         if (userData instanceof ReplPair replPair) {
             log.info("Inspector on repl disconnect, remote address: {}", remoteAddress);
             replPair.setDisconnectTimeMillis(System.currentTimeMillis());
-            XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair);
+            XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair, null);
             return;
         }
 

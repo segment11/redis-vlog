@@ -260,7 +260,7 @@ public class LeaderSelector {
 
                 if (!canResetSelfAsMaster) {
                     log.warn("Repl slave can not reset as master, slot: {}", replPairAsSlave.getSlot());
-                    XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPairAsSlave);
+                    XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPairAsSlave, null);
                     throw new IllegalStateException("Repl slave can not reset as master, slot: " + replPairAsSlave.getSlot());
                 }
 
@@ -351,7 +351,7 @@ public class LeaderSelector {
             var jsonStr = JedisPoolHolder.exe(jedisPool, jedis -> {
                 var pong = jedis.ping();
                 log.info("Repl slave of {}:{} pong: {}", host, port, pong);
-                return jedis.get(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," + XGroup.CONF_FOR_SLOT_KEY);
+                return jedis.get(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," + XGroup.X_CONF_FOR_SLOT_AS_SUB_CMD);
             });
 
             var map = ConfForSlot.global.slaveCanMatchCheckValues();
@@ -394,7 +394,7 @@ public class LeaderSelector {
                 // refer to XGroup handle
                 // key will be transferred to x_repl slot 0 get_first_slave_listen_address, refer to request handler
                 jedis.get(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ",slot," + slot + "," +
-                        XGroup.GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD)
+                        XGroup.X_GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD)
         );
     }
 }

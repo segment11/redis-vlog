@@ -109,7 +109,7 @@ class XGroupTest extends Specification {
 
         when:
         def data2 = new byte[2][]
-        data2[1] = XGroup.CONF_FOR_SLOT_KEY.bytes
+        data2[1] = XGroup.X_CONF_FOR_SLOT_AS_SUB_CMD.bytes
         xGroup.data = data2
         xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_repl', data2, slotNumber)
         reply = xGroup.handle()
@@ -117,12 +117,12 @@ class XGroupTest extends Specification {
         reply instanceof BulkReply
     }
 
-    def 'test get first slave listen address'() {
+    def 'test handle2'() {
         given:
         def data4 = new byte[4][]
         data4[1] = 'slot'.bytes
         data4[2] = '0'.bytes
-        data4[3] = XGroup.GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD.bytes
+        data4[3] = XGroup.X_GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD.bytes
 
         def xGroup = new XGroup('x_repl', data4, null)
         xGroup.from(BaseCommand.mockAGroup())
@@ -147,10 +147,46 @@ class XGroupTest extends Specification {
         new String(((BulkReply) reply).raw) == 'localhost:6380'
 
         when:
+        data4[3] = 'x_catch_up'.bytes
+        reply = xGroup.handle()
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
         xGroup.slotWithKeyHashListParsed = []
         reply = xGroup.handle()
         then:
         reply == ErrorReply.SYNTAX
+
+        when:
+        def binlogOneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
+        def data9 = new byte[9][]
+        data9[1] = 'slot'.bytes
+        data9[2] = '0'.bytes
+        data9[3] = 'x_catch_up'.bytes
+        data9[4] = '10'.bytes
+        data9[5] = oneSlot.masterUuid.toString().bytes
+        data9[6] = '0'.bytes
+        data9[7] = binlogOneSegmentLength.toString().bytes
+        data9[8] = '0'.bytes
+        xGroup.data = data9
+        xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_repl', data9, slotNumber)
+        reply = xGroup.handle()
+        then:
+        reply instanceof BulkReply
+
+        when:
+        def replPairAsMaster = oneSlot.firstReplPairAsMaster
+        replPairAsMaster.bye()
+        reply = xGroup.handle()
+        then:
+        reply instanceof BulkReply
+
+        when:
+        data9[5] = '0'.bytes
+        reply = xGroup.handle()
+        then:
+        reply instanceof ErrorReply
 
         cleanup:
         oneSlot.cleanUp()
@@ -225,12 +261,15 @@ class XGroupTest extends Specification {
         // remove repl pair
         oneSlot.doTask(0)
         x.replPair = null
+        def replPairAsMaster = oneSlot.firstReplPairAsMaster
+        replPairAsMaster.bye()
         r = x.handleRepl()
         then:
         // empty
         r.isEmpty()
 
         when:
+        replPairAsMaster.sendByeForTest = false
         // master receive hello from slave, then create repl pair again
         data = mockData(replPairAsSlave, ReplType.hello, hello)
         x = new XGroup(null, data, null)
@@ -1203,6 +1242,64 @@ class XGroupTest extends Specification {
         cleanup:
         localPersist.cleanUp()
         dictMap.close()
+        Consts.persistDir.deleteDir()
+    }
+
+    def 'test try catch up again after slave tcp client closed'() {
+        given:
+        def replPair = ReplPairTest.mockAsSlave()
+
+        and:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        when:
+        var metaChunkSegmentIndex = oneSlot.metaChunkSegmentIndex
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(replPair.masterUuid, false, 0, 0L)
+        XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair)
+        then:
+        1 == 1
+
+        when:
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(replPair.masterUuid + 1, true, 0, 0L)
+        XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair)
+        then:
+        1 == 1
+
+        when:
+        // mock 10 wal values in binlog
+        int n = 0
+        def vList = Mock.prepareValueList(10)
+        for (v in vList) {
+            n += new XWalV(v).encodedLength()
+        }
+        def contentBytes = new byte[1 + 4 + 8 + 4 + 8 + 4 + n]
+        def requestBuffer = ByteBuffer.wrap(contentBytes)
+        // is readonly flag
+        requestBuffer.put((byte) 0)
+        // response binlog file index
+        requestBuffer.putInt(0)
+        // response binlog file offset
+        requestBuffer.putLong(0)
+        // current(latest) binlog file index
+        requestBuffer.putInt(0)
+        // current(latest) binlog file offset
+        requestBuffer.putLong(n)
+        // one segment bytes response
+        requestBuffer.putInt(n)
+        for (v in vList) {
+            def encoded = new XWalV(v).encodeWithType()
+            requestBuffer.put(encoded)
+        }
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(replPair.masterUuid, true, 0, 0L)
+        XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair, contentBytes)
+        then:
+        1 == 1
+
+        cleanup:
+        oneSlot.cleanUp()
         Consts.persistDir.deleteDir()
     }
 }

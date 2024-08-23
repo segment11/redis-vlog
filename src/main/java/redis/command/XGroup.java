@@ -69,7 +69,7 @@ public class XGroup extends BaseCommand {
 
         var subCmd = new String(data[1]);
 
-        if (CONF_FOR_SLOT_KEY.equals(subCmd)) {
+        if (X_CONF_FOR_SLOT_AS_SUB_CMD.equals(subCmd)) {
             // get x_repl x_conf_for_slot
             var map = ConfForSlot.global.slaveCanMatchCheckValues();
             var objectMapper = new ObjectMapper();
@@ -90,7 +90,7 @@ public class XGroup extends BaseCommand {
 
         var subCmd2 = new String(data[3]);
 
-        if (GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD.equals(subCmd2)) {
+        if (X_GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD.equals(subCmd2)) {
             // x_repl slot 0 get_first_slave_listen_address
             var slot = slotWithKeyHashListParsed.getFirst().slot();
             var oneSlot = localPersist.oneSlot(slot);
@@ -103,9 +103,9 @@ public class XGroup extends BaseCommand {
             }
         }
 
-        if (CATCH_UP.equals(subCmd2)) {
-            // x_repl slot 0 x_catch_up long int long long
-            if (data.length != 8) {
+        if (X_CATCH_UP_AS_SUB_CMD.equals(subCmd2)) {
+            // x_repl slot 0 x_catch_up long long int long long
+            if (data.length != 9) {
                 return ErrorReply.SYNTAX;
             }
 
@@ -114,17 +114,21 @@ public class XGroup extends BaseCommand {
             var replPairAsMaster = oneSlot.getFirstReplPairAsMaster();
 
             if (replPairAsMaster == null) {
-                // ignore
                 log.warn("Repl master repl pair not found, maybe already closed, slot: {}", slot);
+                // just mock one
+                var slaveUuid = Long.parseLong(new String(data[4]));
+                replPairAsMaster = new ReplPair(slot, true, "localhost", 7379);
+                replPairAsMaster.setSlaveUuid(slaveUuid);
             }
 
-            var lastUpdatedMasterUuid = Long.parseLong(new String(data[4]));
-            var lastUpdatedFileIndex = Integer.parseInt(new String(data[5]));
-            var marginLastUpdatedOffset = Long.parseLong(new String(data[6]));
-            var lastUpdatedOffset = Long.parseLong(new String(data[7]));
+            var lastUpdatedMasterUuid = Long.parseLong(new String(data[5]));
+            var lastUpdatedFileIndex = Integer.parseInt(new String(data[6]));
+            var marginLastUpdatedOffset = Long.parseLong(new String(data[7]));
+            var lastUpdatedOffset = Long.parseLong(new String(data[8]));
 
             var contentBytes = toMasterCatchUpRequestBytes(lastUpdatedMasterUuid, lastUpdatedFileIndex, marginLastUpdatedOffset, lastUpdatedOffset);
 
+            this.replPair = replPairAsMaster;
             try {
                 var reply = catch_up(slot, contentBytes);
                 if (reply.isReplType(error)) {
@@ -141,10 +145,10 @@ public class XGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    public static final String CATCH_UP = "x_catch_up";
-    public static final String CONF_FOR_SLOT_KEY = "x_conf_for_slot";
+    public static final String X_CATCH_UP_AS_SUB_CMD = "x_catch_up";
+    public static final String X_CONF_FOR_SLOT_AS_SUB_CMD = "x_conf_for_slot";
     // raw redis, use 'info replication'
-    public static final String GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD = "x_get_first_slave_listen_address";
+    public static final String X_GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD = "x_get_first_slave_listen_address";
     public static final String X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH = "x_repl";
 
     public void setReplPair(ReplPair replPair) {
@@ -1097,7 +1101,7 @@ public class XGroup extends BaseCommand {
         buffer.get(readSegmentBytes);
 
         replPair.setMasterReadonly(isMasterReadonly);
-        replPair.setAllCaughtUp(currentOffset == fetchedOffset);
+        replPair.setAllCaughtUp(currentOffset == fetchedOffset + readSegmentLength);
 
         // only when self is as slave but also as master, need to write binlog
         try {
@@ -1187,7 +1191,7 @@ public class XGroup extends BaseCommand {
     }
 
 
-    public static void tryCatchUpAgainAfterSlaveTcpClientClosed(ReplPair replPairAsSlave) {
+    public static void tryCatchUpAgainAfterSlaveTcpClientClosed(ReplPair replPairAsSlave, byte[] mockResultBytes) {
         var log = LoggerFactory.getLogger(XGroup.class);
 
         final var targetSlot = replPairAsSlave.getSlot();
@@ -1213,28 +1217,44 @@ public class XGroup extends BaseCommand {
 
             var marginLastUpdatedOffset = Binlog.marginFileOffset(lastUpdatedOffset);
 
-            // use jedis to get data sync, because need try to connect to master
-            var jedisPool = JedisPoolHolder.getInstance().create(replPairAsSlave.getHost(), replPairAsSlave.getPort());
-            try {
-                var resultBytes = JedisPoolHolder.exe(jedisPool, jedis -> {
-                    var pong = jedis.ping();
-                    log.info("Repl slave try ping after slave tcp client close, to {}, pong: {}", replPairAsSlave.getHostAndPort(), pong);
-                    // get data from master
-                    // refer RequestHandler.transferDataForXGroup
-                    return jedis.get(
-                            (
-                                    XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ","
-                                            + "slot,"
-                                            + targetSlot + ","
-                                            + CATCH_UP + ","
-                                            + lastUpdatedMasterUuid + ","
-                                            + lastUpdatedFileIndex + ","
-                                            + marginLastUpdatedOffset + ","
-                                            + lastUpdatedOffset
-                            ).getBytes()
-                    );
-                });
+            byte[] resultBytes = null;
+            if (mockResultBytes != null) {
+                resultBytes = mockResultBytes;
+            } else {
+                // use jedis to get data sync, because need try to connect to master
+                var jedisPool = JedisPoolHolder.getInstance().create(replPairAsSlave.getHost(), replPairAsSlave.getPort());
+                try {
+                    resultBytes = JedisPoolHolder.exe(jedisPool, jedis -> {
+                        var pong = jedis.ping();
+                        log.info("Repl slave try ping after slave tcp client close, to {}, pong: {}", replPairAsSlave.getHostAndPort(), pong);
+                        // get data from master
+                        // refer RequestHandler.transferDataForXGroup
+                        return jedis.get(
+                                (
+                                        XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ","
+                                                + "slot,"
+                                                + targetSlot + ","
+                                                + X_CATCH_UP_AS_SUB_CMD + ","
+                                                + replPairAsSlave.getSlaveUuid() + ","
+                                                + lastUpdatedMasterUuid + ","
+                                                + lastUpdatedFileIndex + ","
+                                                + marginLastUpdatedOffset + ","
+                                                + lastUpdatedOffset
+                                ).getBytes()
+                        );
+                    });
+                } catch (Exception e) {
+                    log.error("Repl slave try catch up again after slave tcp client close error", e);
+                    replPairAsSlave.setMasterCanNotConnect(true);
+                }
+            }
 
+            if (resultBytes == null) {
+                log.warn("Repl slave try catch up again after slave tcp client close, but get data from master is null, slot: {}", targetSlot);
+                return;
+            }
+
+            try {
                 var xGroup = new XGroup("", null, null);
                 xGroup.replPair = replPairAsSlave;
                 xGroup.s_catch_up(targetSlot, resultBytes);
@@ -1248,12 +1268,6 @@ public class XGroup extends BaseCommand {
             } catch (Exception e) {
                 log.error("Repl slave try catch up again after slave tcp client close error", e);
                 replPairAsSlave.setMasterCanNotConnect(true);
-            }
-        }).whenComplete((v, e) -> {
-            if (e != null) {
-                log.error("Repl slave try catch up again after slave tcp client close error", e);
-            } else {
-                log.info("Repl slave try catch up again after slave tcp client close done");
             }
         });
     }

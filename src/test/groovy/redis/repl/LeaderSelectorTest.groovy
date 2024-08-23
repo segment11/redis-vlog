@@ -289,10 +289,10 @@ class LeaderSelectorTest extends Specification {
             var jedisPool = JedisPoolHolder.instance.create('localhost', 6379)
             JedisPoolHolder.exe(jedisPool) { jedis ->
                 jedis.set(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," +
-                        XGroup.CONF_FOR_SLOT_KEY,
+                        XGroup.X_CONF_FOR_SLOT_AS_SUB_CMD,
                         jsonStr + 'xxx')
                 jedis.set(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ",slot,0," +
-                        XGroup.GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD,
+                        XGroup.X_GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD,
                         'localhost:6380')
             }
             doThisCase = true
@@ -323,7 +323,7 @@ class LeaderSelectorTest extends Specification {
             var jedisPool = JedisPoolHolder.instance.create('localhost', 6379);
             JedisPoolHolder.exe(jedisPool) { jedis ->
                 jedis.set(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," +
-                        XGroup.CONF_FOR_SLOT_KEY,
+                        XGroup.X_CONF_FOR_SLOT_AS_SUB_CMD,
                         jsonStr)
             }
             future = new CompletableFuture()
