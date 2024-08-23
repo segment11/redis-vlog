@@ -321,6 +321,8 @@ public class LeaderSelector {
             promises[i] = oneSlot.asyncRun(() -> {
                 oneSlot.createReplPairAsSlave(host, port);
                 oneSlot.getBinlog().moveToNextSegment();
+                // do not write binlog as slave
+                oneSlot.getDynConfig().setBinlogOn(false);
             });
         }
 
