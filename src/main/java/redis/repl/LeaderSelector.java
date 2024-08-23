@@ -61,6 +61,10 @@ public class LeaderSelector {
     private long isLeaderLoopCount = 0;
 
     public String tryConnectAndGetMasterListenAddress() {
+        return tryConnectAndGetMasterListenAddress(true);
+    }
+
+    public String tryConnectAndGetMasterListenAddress(boolean doStartLeaderLatch) {
         if (!isConnected()) {
             connect();
             return null;
@@ -70,12 +74,12 @@ public class LeaderSelector {
             return getMasterListenAddressAsSlave();
         }
 
-        var isStartOk = startLeaderLatch();
+        var isStartOk = !doStartLeaderLatch || startLeaderLatch();
         if (!isStartOk) {
             return null;
         }
 
-        if (leaderLatch.hasLeadership()) {
+        if (leaderLatch != null && leaderLatch.hasLeadership()) {
             var path = ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LISTEN_ADDRESS_PATH;
 
             // set listen address to zookeeper leader listen address path
@@ -148,6 +152,11 @@ public class LeaderSelector {
             return true;
         }
 
+        if (client == null) {
+            log.error("Repl leader latch start failed: client is null");
+            return false;
+        }
+
         // client must not be null
         leaderLatch = new LeaderLatch(client, ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LATCH_PATH);
         try {
@@ -167,6 +176,7 @@ public class LeaderSelector {
             try {
                 leaderLatch.close();
                 log.info("Repl leader latch closed");
+                leaderLatch = null;
             } catch (Exception e) {
                 // need not stack trace
                 log.error("Repl leader latch close failed: " + e.getMessage());
@@ -298,7 +308,7 @@ public class LeaderSelector {
             var jsonStr = (String) JedisPoolHolder.exe(jedisPool, jedis -> {
                 var pong = jedis.ping();
                 log.info("Repl slave of {}:{} pong: {}", host, port, pong);
-                return jedis.get(XGroup.CONF_FOR_SLOT_KEY);
+                return jedis.get(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," + XGroup.CONF_FOR_SLOT_KEY);
             });
 
             var map = ConfForSlot.global.slaveCanMatchCheckValues();
@@ -331,8 +341,13 @@ public class LeaderSelector {
         });
     }
 
-    public String getFirstSlaveListenAddressByMasterHostAndPort(String host, int port) {
+    public String getFirstSlaveListenAddressByMasterHostAndPort(String host, int port, byte slot) {
         var jedisPool = JedisPoolHolder.getInstance().create(host, port, null, 5000);
-        return (String) JedisPoolHolder.exe(jedisPool, jedis -> jedis.get(XGroup.GET_FIRST_SLAVE_LISTEN_ADDRESS_KEY));
+        return (String) JedisPoolHolder.exe(jedisPool, jedis ->
+                // refer to XGroup handle
+                // key will be transferred to x_repl slot 0 get_first_slave_listen_address, refer to request handler
+                jedis.get(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ",slot," + slot + "," +
+                        XGroup.GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD)
+        );
     }
 }

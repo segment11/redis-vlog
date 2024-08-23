@@ -413,7 +413,7 @@ public class MultiWorkerServer extends Launcher {
             if (loopCount % 5 == 0) {
                 // need catch exception, or will not delay run task
                 try {
-                    doReplLeaderSelect();
+                    doReplAfterLeaderSelect();
                 } catch (Exception e) {
                     log.error("Repl leader select error", e);
                 }
@@ -441,7 +441,7 @@ public class MultiWorkerServer extends Launcher {
     }
 
     // run in primary eventloop
-    private void doReplLeaderSelect() {
+    private void doReplAfterLeaderSelect() {
         var leaderSelector = LeaderSelector.getInstance();
         var masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress();
 
@@ -477,7 +477,8 @@ public class MultiWorkerServer extends Launcher {
             });
         } else {
             // connect to master's first slave
-            var firstSlaveListenAddress = leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort(host, port);
+            var firstOneSlot = LocalPersist.getInstance().oneSlots()[0];
+            var firstSlaveListenAddress = leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort(host, port, firstOneSlot.slot());
             if (firstSlaveListenAddress == null) {
                 log.warn("First slave listen address is null, master host: {}, master port: {}", host, port);
             } else {

@@ -1,6 +1,8 @@
 
 package redis.command;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.activej.net.socket.tcp.ITcpSocket;
 import org.apache.commons.io.FileUtils;
 import redis.*;
@@ -34,46 +36,71 @@ public class XGroup extends BaseCommand {
 
     public static ArrayList<SlotWithKeyHash> parseSlots(String cmd, byte[][] data, int slotNumber) {
         ArrayList<SlotWithKeyHash> slotWithKeyHashList = new ArrayList<>();
-        // x_get_first_slave_listen_address slot 0
-        if ("x_get_first_slave_listen_address".equals(cmd)) {
-            if (data.length != 3) {
-                return slotWithKeyHashList;
-            }
-
-            var slotBytes = data[2];
-            byte slot;
-            try {
-                slot = Byte.parseByte(new String(slotBytes));
-            } catch (NumberFormatException ignored) {
-                return slotWithKeyHashList;
-            }
-
-            slotWithKeyHashList.add(new SlotWithKeyHash(slot, 0, 0L));
+        // x_repl sub_cmd
+        if (data.length < 2) {
             return slotWithKeyHashList;
         }
 
+        var isHasSlotBytes = "slot".equals(new String(data[1]));
+        if (!isHasSlotBytes) {
+            return slotWithKeyHashList;
+        }
+
+        if (data.length < 4) {
+            return slotWithKeyHashList;
+        }
+
+        // x_repl slot 0 ***
+        var slotBytes = data[2];
+        byte slot;
+        try {
+            slot = Byte.parseByte(new String(slotBytes));
+        } catch (NumberFormatException ignored) {
+            return slotWithKeyHashList;
+        }
+
+        slotWithKeyHashList.add(new SlotWithKeyHash(slot, 0, 0L));
         return slotWithKeyHashList;
     }
 
     public Reply handle() {
-        if ("x_get_first_slave_listen_address".equals(cmd)) {
-            if (data.length != 3) {
-                return ErrorReply.FORMAT;
-            }
+        if (data.length < 2) {
+            return NilReply.INSTANCE;
+        }
 
-            if (slotWithKeyHashListParsed.isEmpty()) {
-                return ErrorReply.SYNTAX;
-            }
+        var subCmd = new String(data[1]);
 
+        if (CONF_FOR_SLOT_KEY.equals(subCmd)) {
+            // get x_repl x_conf_for_slot
+            var map = ConfForSlot.global.slaveCanMatchCheckValues();
+            var objectMapper = new ObjectMapper();
+            try {
+                var jsonStr = objectMapper.writeValueAsString(map);
+                return new BulkReply(jsonStr.getBytes());
+            } catch (JsonProcessingException e) {
+                return new ErrorReply(e.getMessage());
+            }
+        }
+
+        // has slot
+        // data.length >= 4, subCmd is 'slot'
+        // x_repl slot 0 ***
+        if (slotWithKeyHashListParsed.isEmpty()) {
+            return ErrorReply.SYNTAX;
+        }
+
+        var subCmd2 = new String(data[3]);
+
+        if (GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD.equals(subCmd2)) {
+            // x_repl slot 0 get_first_slave_listen_address
             var slot = slotWithKeyHashListParsed.getFirst().slot();
-
             var oneSlot = localPersist.oneSlot(slot);
-            var replPair = oneSlot.getFirstReplPairAsMaster();
+            var replPairAsMaster = oneSlot.getFirstReplPairAsMaster();
 
-            if (replPair == null) {
+            if (replPairAsMaster == null) {
                 return NilReply.INSTANCE;
             } else {
-                return new BulkReply(replPair.getHostAndPort().getBytes());
+                return new BulkReply(replPairAsMaster.getHostAndPort().getBytes());
             }
         }
 
@@ -82,7 +109,8 @@ public class XGroup extends BaseCommand {
 
     public static final String CONF_FOR_SLOT_KEY = "x_conf_for_slot";
     // raw redis, use 'info replication'
-    public static final String GET_FIRST_SLAVE_LISTEN_ADDRESS_KEY = "x_get_first_slave_listen_address";
+    public static final String GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD = "x_get_first_slave_listen_address";
+    public static final String X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH = "x_repl";
 
     public void setReplPair(ReplPair replPair) {
         this.replPair = replPair;
@@ -99,6 +127,15 @@ public class XGroup extends BaseCommand {
             log.error("Repl handle error: unknown repl type code: {}", data[2][0]);
             return null;
         }
+
+        try {
+            return handleReplInner(slot, replType, slaveUuid);
+        } catch (Exception e) {
+            return Repl.error(slot, slaveUuid, e.getMessage());
+        }
+    }
+
+    public Repl.ReplReply handleReplInner(byte slot, ReplType replType, long slaveUuid) {
         var contentBytes = data[3];
 
         var oneSlot = localPersist.oneSlot(slot);
@@ -344,20 +381,35 @@ public class XGroup extends BaseCommand {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
         var groupIndex = buffer.getInt();
+        var lastSeqAfterPut = buffer.getLong();
+        var lastSeqShortValueAfterPut = buffer.getLong();
 
         var walGroupNumber = Wal.calcWalGroupNumber();
         if (groupIndex < 0 || groupIndex >= walGroupNumber) {
-            log.error("Repl master update wal exists bytes error: group index out of range, slot: {}, group index: {}",
+            log.error("Repl master send wal exists bytes error: group index out of range, slot: {}, group index: {}",
                     slot, groupIndex);
-            return Repl.error(slot, replPair, "Repl master update wal exists bytes error: group index out of range");
-        }
-
-        if (groupIndex % 100 == 0) {
-            log.warn("Repl master fetch exists wal, slot: {}, group index: {}", slot, groupIndex);
+            return Repl.error(slot, replPair, "Repl master send wal exists bytes error: group index out of range");
         }
 
         var oneSlot = localPersist.oneSlot(slot);
         var targetWal = oneSlot.getWalByGroupIndex(groupIndex);
+
+        if (lastSeqAfterPut == targetWal.getLastSeqAfterPut() && lastSeqShortValueAfterPut == targetWal.getLastSeqShortValueAfterPut()) {
+            if (groupIndex % 100 == 0) {
+                log.warn("Repl master skip send wal exists bytes, slot: {}, group index: {}", slot, groupIndex);
+            }
+
+            // only reply group index, no need to send wal exists bytes
+            var responseBytes = new byte[4];
+            var responseBuffer = ByteBuffer.wrap(responseBytes);
+            responseBuffer.putInt(groupIndex);
+            return Repl.reply(slot, replPair, ReplType.s_exists_wal, new RawBytesContent(responseBytes));
+        } else {
+            if (groupIndex % 100 == 0) {
+                log.warn("Repl master will fetch exists wal, slot: {}, group index: {}", slot, groupIndex);
+            }
+        }
+
         try {
             var toSlaveBytes = targetWal.toSlaveExistsOneWalGroupBytes();
             return Repl.reply(slot, replPair, ReplType.s_exists_wal, new RawBytesContent(toSlaveBytes));
@@ -373,12 +425,19 @@ public class XGroup extends BaseCommand {
         var groupIndex = buffer.getInt();
 
         var oneSlot = localPersist.oneSlot(slot);
-        var targetWal = oneSlot.getWalByGroupIndex(groupIndex);
-        try {
-            targetWal.fromMasterExistsOneWalGroupBytes(contentBytes);
-        } catch (IOException e) {
-            log.error("Repl slave update wal exists bytes error, slot: " + slot + ", group index: " + groupIndex, e);
-            return Repl.error(slot, replPair, "Repl slave update wal exists bytes error: " + e.getMessage());
+        if (contentBytes.length > 4) {
+            var targetWal = oneSlot.getWalByGroupIndex(groupIndex);
+            try {
+                targetWal.fromMasterExistsOneWalGroupBytes(contentBytes);
+            } catch (IOException e) {
+                log.error("Repl slave update wal exists bytes error, slot: " + slot + ", group index: " + groupIndex, e);
+                return Repl.error(slot, replPair, "Repl slave update wal exists bytes error: " + e.getMessage());
+            }
+        } else {
+            // skip
+            if (groupIndex % 100 == 0) {
+                log.info("Repl slave skip update wal exists bytes, slot: {}, group index: {}", slot, groupIndex);
+            }
         }
 
         var walGroupNumber = Wal.calcWalGroupNumber();
@@ -389,19 +448,25 @@ public class XGroup extends BaseCommand {
             if (nextGroupIndex % 100 == 0) {
                 // delay
                 oneSlot.delayRun(1000, () -> {
-                    replPair.write(ReplType.exists_wal, requestExistsWal(nextGroupIndex));
+                    replPair.write(ReplType.exists_wal, requestExistsWal(oneSlot, nextGroupIndex));
                 });
                 return Repl.emptyReply();
             } else {
-                return Repl.reply(slot, replPair, ReplType.exists_wal, requestExistsWal(nextGroupIndex));
+                return Repl.reply(slot, replPair, ReplType.exists_wal, requestExistsWal(oneSlot, nextGroupIndex));
             }
         }
     }
 
-    private RawBytesContent requestExistsWal(int groupIndex) {
-        var requestBytes = new byte[4];
+    private RawBytesContent requestExistsWal(OneSlot oneSlot, int groupIndex) {
+        // 4 bytes int for group index, 8 bytes long for last seq, 8 bytes long for last seq of short value
+        var requestBytes = new byte[4 + 8 + 8];
         var requestBuffer = ByteBuffer.wrap(requestBytes);
         requestBuffer.putInt(groupIndex);
+
+        var targetWal = oneSlot.getWalByGroupIndex(groupIndex);
+        requestBuffer.putLong(targetWal.getLastSeqAfterPut());
+        requestBuffer.putLong(targetWal.getLastSeqShortValueAfterPut());
+
         return new RawBytesContent(requestBytes);
     }
 
@@ -483,7 +548,7 @@ public class XGroup extends BaseCommand {
         boolean isLastBatch = maxSegmentNumber == beginSegmentIndex + segmentCount;
         if (isLastBatch) {
             // next step, fetch exists wal
-            return Repl.reply(slot, replPair, exists_wal, requestExistsWal(0));
+            return Repl.reply(slot, replPair, exists_wal, requestExistsWal(oneSlot, 0));
         } else {
             var nextBatchBeginSegmentIndex = beginSegmentIndex + segmentCount;
             var nextBatchMetaBytes = oneSlot.getMetaChunkSegmentFlagSeq().getOneBatch(nextBatchBeginSegmentIndex, segmentCount);
@@ -908,7 +973,8 @@ public class XGroup extends BaseCommand {
             readSegmentBytes = binlog.readPrevRafOneSegment(needFetchFileIndex, needFetchOffset);
         } catch (IOException e) {
             var errorMessage = "Repl master handle error: read binlog file error";
-            log.error(errorMessage, e);
+            // need not exception stack trace
+            log.error(errorMessage + ": " + e.getMessage());
             return Repl.error(slot, replPair, errorMessage + ": " + e.getMessage());
         }
 

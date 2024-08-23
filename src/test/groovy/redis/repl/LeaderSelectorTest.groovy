@@ -1,6 +1,7 @@
 package redis.repl
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.apache.commons.net.telnet.TelnetClient
 import redis.ConfForGlobal
 import redis.ConfForSlot
 import redis.command.XGroup
@@ -27,6 +28,20 @@ class LeaderSelectorTest extends Specification {
         ConfForGlobal.zookeeperRootPath = '/redis-vlog/cluster-test'
         ConfForGlobal.netListenAddresses = 'localhost:7379'
 
+        boolean doThisCase = false
+        def tc = new TelnetClient(connectTimeout: 500)
+        try {
+            tc.connect('localhost', 2181)
+            doThisCase = true
+        } catch (Exception ignored) {
+        } finally {
+            tc.disconnect()
+        }
+        if (!doThisCase) {
+            ConfForGlobal.zookeeperConnectString = null
+            println 'zookeeper not running, skip'
+        }
+
         def masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
         // already connected, skip, for coverage
         leaderSelector.connect()
@@ -46,23 +61,36 @@ class LeaderSelectorTest extends Specification {
         if (masterListenAddress == null) {
             masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
         }
+        masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
         then:
-        masterListenAddress == ConfForGlobal.netListenAddresses
+        masterListenAddress == (doThisCase ? ConfForGlobal.netListenAddresses : null)
 
         when:
         ConfForGlobal.canBeLeader = false
         masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
         then:
-        masterListenAddress == ConfForGlobal.netListenAddresses
+        masterListenAddress == (doThisCase ? ConfForGlobal.netListenAddresses : null)
 
         when:
-        try {
-            leaderSelector.removeTargetPathForTest()
-            masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
-        } catch (Exception e) {
-            println e.message
-            masterListenAddress = null
+        String masterListenAddress2 = null
+        if (doThisCase) {
+            try {
+                leaderSelector.removeTargetPathForTest()
+                masterListenAddress2 = leaderSelector.tryConnectAndGetMasterListenAddress()
+            } catch (Exception e) {
+                println e.message
+                masterListenAddress2 = null
+            }
         }
+        then:
+        doThisCase ? (masterListenAddress2 == null) : (masterListenAddress2 == masterListenAddress)
+
+        when:
+        ConfForGlobal.canBeLeader = true
+        leaderSelector.closeLeaderLatch()
+        leaderSelector.closeLeaderLatch()
+        Thread.sleep(1000)
+        masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress(false)
         then:
         masterListenAddress == null
 
@@ -183,8 +211,12 @@ class LeaderSelectorTest extends Specification {
         try {
             var jedisPool = JedisPoolHolder.getInstance().create('localhost', 6379, null, 5000);
             JedisPoolHolder.exe(jedisPool) { jedis ->
-                jedis.set(XGroup.CONF_FOR_SLOT_KEY, jsonStr)
-                jedis.set(XGroup.GET_FIRST_SLAVE_LISTEN_ADDRESS_KEY, 'localhost:6380')
+                jedis.set(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," +
+                        XGroup.CONF_FOR_SLOT_KEY,
+                        jsonStr + 'xxx')
+                jedis.set(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ",slot,0," +
+                        XGroup.GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD,
+                        'localhost:6380')
             }
             doThisCase = true
         } catch (Exception e) {
@@ -203,9 +235,35 @@ class LeaderSelectorTest extends Specification {
             }
             r = future.get()
         } else {
+            r = false
+        }
+        then:
+        // json not match
+        !r
+
+        when:
+        if (doThisCase) {
+            var jedisPool = JedisPoolHolder.getInstance().create('localhost', 6379, null, 5000);
+            JedisPoolHolder.exe(jedisPool) { jedis ->
+                jedis.set(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + "," +
+                        XGroup.CONF_FOR_SLOT_KEY,
+                        jsonStr)
+            }
+            future = new CompletableFuture()
+            leaderSelector.resetAsSlave(false, 'localhost', 6379) { e ->
+                if (e != null) {
+                    println e.message
+                    future.complete(false)
+                } else {
+                    future.complete(true)
+                }
+            }
+            r = future.get()
+        } else {
             r = true
         }
         then:
+        // json match
         r
 
         when:
@@ -228,7 +286,7 @@ class LeaderSelectorTest extends Specification {
 
         when:
         def firstSlaveListenAddress = doThisCase ?
-                leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort('localhost', 6379) :
+                leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort('localhost', 6379, slot) :
                 'localhost:6380'
         then:
         firstSlaveListenAddress == 'localhost:6380'

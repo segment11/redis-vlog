@@ -165,6 +165,8 @@ class RequestHandlerTest extends Specification {
         when:
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         def key = 'key'
+        def sKey = BaseCommand.slot(key.bytes, slotNumber)
+        oneSlot.remove(key, sKey.bucketIndex(), sKey.keyHash())
         def getData2 = new byte[2][]
         getData2[0] = 'get'.bytes
         getData2[1] = key.bytes
@@ -182,7 +184,6 @@ class RequestHandlerTest extends Specification {
         reply == ErrorReply.KEY_TOO_LONG
 
         when:
-        def sKey = BaseCommand.slot(key.bytes, slotNumber)
         def cv = new CompressedValue()
         cv.compressedData = new byte[10]
         cv.compressedLength = 10
@@ -204,7 +205,8 @@ class RequestHandlerTest extends Specification {
         reply instanceof ErrorReply
 
         when:
-        getData2[1] = XGroup.CONF_FOR_SLOT_KEY.bytes
+        getData2[1] = (XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH + ',' + XGroup.CONF_FOR_SLOT_KEY).bytes
+        RequestHandler.parseSlots(getRequest2)
         reply = requestHandler.handle(getRequest2, socket)
         then:
         reply instanceof BulkReply

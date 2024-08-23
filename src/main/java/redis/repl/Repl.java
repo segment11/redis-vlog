@@ -56,6 +56,10 @@ public class Repl {
         return reply(slot, replPair, ReplType.error, new RawBytesContent(errorMessage.getBytes()));
     }
 
+    public static ReplReply error(byte slot, long slaveUuid, String errorMessage) {
+        return new ReplReply(buffer(slaveUuid, slot, ReplType.error, new RawBytesContent(errorMessage.getBytes())));
+    }
+
     public static ReplReply ok(byte slot, ReplPair replPair, String message) {
         return reply(slot, replPair, ReplType.ok, new RawBytesContent(message.getBytes()));
     }

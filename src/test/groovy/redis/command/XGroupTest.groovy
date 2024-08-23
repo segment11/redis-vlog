@@ -33,30 +33,43 @@ class XGroupTest extends Specification {
 
     def 'test parse slot'() {
         given:
-        def data3 = new byte[3][]
+        def data2 = new byte[2][]
 
         and:
-        data3[2] = '0'.bytes
+        data2[1] = 'sub_cmd'.bytes
 
         when:
-        def sList = XGroup.parseSlots('x_get_first_slave_listen_address', data3, slotNumber)
-        then:
-        sList.size() == 1
-
-        when:
-        data3[2] = 'a'.bytes
-        sList = XGroup.parseSlots('x_get_first_slave_listen_address', data3, slotNumber)
+        def sList = XGroup.parseSlots('x_repl', data2, slotNumber)
         then:
         sList.size() == 0
 
         when:
         def data1 = new byte[1][]
-        sList = XGroup.parseSlots('x_get_first_slave_listen_address', data1, slotNumber)
+        sList = XGroup.parseSlots('x_repl', data1, slotNumber)
         then:
         sList.size() == 0
 
         when:
-        sList = XGroup.parseSlots('xxx', data3, slotNumber)
+        def data4 = new byte[4][]
+        data4[1] = 'slot'.bytes
+        data4[2] = '0'.bytes
+        data4[3] = 'sub_cmd'.bytes
+        sList = XGroup.parseSlots('x_repl', data4, slotNumber)
+        then:
+        sList.size() == 1
+
+        when:
+        data4[2] = 'a'.bytes
+        sList = XGroup.parseSlots('x_repl', data4, slotNumber)
+        then:
+        // invalid int
+        sList.size() == 0
+
+        when:
+        def data3 = new byte[3][]
+        data3[1] = 'slot'.bytes
+        data3[2] = '0'.bytes
+        sList = XGroup.parseSlots('x_repl', data3, slotNumber)
         then:
         sList.size() == 0
     }
@@ -65,40 +78,55 @@ class XGroupTest extends Specification {
         given:
         def data1 = new byte[1][]
 
-        def xGroup = new XGroup('x_get_first_slave_listen_address', data1, null)
+        def xGroup = new XGroup('x_repl', data1, null)
         xGroup.from(BaseCommand.mockAGroup())
 
         when:
         def reply = xGroup.handle()
         then:
-        reply == ErrorReply.FORMAT
+        reply == NilReply.INSTANCE
+
+        when:
+        def data4 = new byte[4][]
+        data4[1] = 'slot'.bytes
+        data4[2] = '0'.bytes
+        data4[3] = 'xxx'.bytes
+        xGroup.data = data4
+        xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_repl', data4, slotNumber)
+        reply = xGroup.handle()
+        then:
+        reply == NilReply.INSTANCE
 
         when:
         def data3 = new byte[3][]
         data3[1] = 'slot'.bytes
         data3[2] = '0'.bytes
         xGroup.data = data3
-        xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_get_first_slave_listen_address', data3, slotNumber)
+        xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_repl', data3, slotNumber)
         reply = xGroup.handle()
         then:
-        reply == NilReply.INSTANCE
+        reply == ErrorReply.SYNTAX
 
         when:
-        xGroup.cmd = 'zzz'
+        def data2 = new byte[2][]
+        data2[1] = XGroup.CONF_FOR_SLOT_KEY.bytes
+        xGroup.data = data2
+        xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_repl', data2, slotNumber)
         reply = xGroup.handle()
         then:
-        reply == NilReply.INSTANCE
+        reply instanceof BulkReply
     }
 
     def 'test get first slave listen address'() {
         given:
-        def data3 = new byte[3][]
-        data3[1] = 'slot'.bytes
-        data3[2] = '0'.bytes
+        def data4 = new byte[4][]
+        data4[1] = 'slot'.bytes
+        data4[2] = '0'.bytes
+        data4[3] = XGroup.GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD.bytes
 
-        def xGroup = new XGroup('x_get_first_slave_listen_address', data3, null)
+        def xGroup = new XGroup('x_repl', data4, null)
         xGroup.from(BaseCommand.mockAGroup())
-        xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_get_first_slave_listen_address', data3, slotNumber)
+        xGroup.slotWithKeyHashListParsed = XGroup.parseSlots('x_repl', data4, slotNumber)
 
         and:
         LocalPersistTest.prepareLocalPersist()
@@ -124,19 +152,6 @@ class XGroupTest extends Specification {
         then:
         reply == ErrorReply.SYNTAX
 
-        when:
-        def data1 = new byte[1][]
-        xGroup.data = data1
-        reply = xGroup.handle()
-        then:
-        reply == ErrorReply.FORMAT
-
-        when:
-        xGroup.cmd = 'xxx'
-        reply = xGroup.handle()
-        then:
-        reply == NilReply.INSTANCE
-
         cleanup:
         oneSlot.cleanUp()
         Consts.persistDir.deleteDir()
@@ -154,11 +169,12 @@ class XGroupTest extends Specification {
         data4[2] = new byte[1]
         // no exist repl type
         data4[2][0] = (byte) -10
+
         def xGroup = new XGroup(null, data4, null)
 
         expect:
         XGroup.parseSlots(null, data4, slotNumber).size() == 0
-        xGroup.handle() == NilReply.INSTANCE
+        // invalid repl type
         xGroup.handleRepl() == null
 
         when:
@@ -258,19 +274,64 @@ class XGroupTest extends Specification {
         // response exists wal
         when:
         data4[2][0] = ReplType.exists_wal.code
-        contentBytes = new byte[4]
+        contentBytes = new byte[4 + 8 + 8]
         requestBuffer = ByteBuffer.wrap(contentBytes)
         // wal group index
         requestBuffer.putInt(0)
+        requestBuffer.putLong(0L)
+        requestBuffer.putLong(0L)
         data4[3] = contentBytes
+        r = x.handleRepl()
+        then:
+        // skip
+        r.isReplType(ReplType.s_exists_wal)
+
+        when:
+        requestBuffer.position(0)
+        // no log, skip
+        requestBuffer.putInt(99)
+        r = x.handleRepl()
+        then:
+        r.isReplType(ReplType.s_exists_wal)
+
+        when:
+        requestBuffer.position(4)
+        requestBuffer.putLong(1L)
+        r = x.handleRepl()
+        then:
+        // no skip
+        r.isReplType(ReplType.s_exists_wal)
+
+        when:
+        requestBuffer.position(4)
+        requestBuffer.putLong(0L)
+        requestBuffer.putLong(1L)
+        r = x.handleRepl()
+        then:
+        // no skip
+        r.isReplType(ReplType.s_exists_wal)
+
+        when:
+        requestBuffer.position(4)
+        requestBuffer.putLong(1L)
+        requestBuffer.putLong(1L)
+        r = x.handleRepl()
+        then:
+        // no skip
+        r.isReplType(ReplType.s_exists_wal)
+
+        when:
+        requestBuffer.position(0)
+        // no log, no skip
+        requestBuffer.putInt(99)
         r = x.handleRepl()
         then:
         r.isReplType(ReplType.s_exists_wal)
 
         when:
         requestBuffer.position(0)
-        // no log
-        requestBuffer.putInt(99)
+        // trigger log, no skip
+        requestBuffer.putInt(100)
         r = x.handleRepl()
         then:
         r.isReplType(ReplType.s_exists_wal)
@@ -479,29 +540,34 @@ class XGroupTest extends Specification {
 
         when:
         requestBuffer.position(8)
-        // file index not match master binlog current file index
+        // file index not match master binlog current file index, read fail
         requestBuffer.putInt(1)
         requestBuffer.putLong(0)
         requestBuffer.putLong(oneSlot.binlog.currentFileIndexAndOffset().offset())
         r = x.handleRepl()
         then:
+        r.isReplType(ReplType.error)
+
+        when:
+        // mock as binlog file index match
+        def binlogOneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
+        def binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength
+        (binlogOneFileMaxLength / binlogOneSegmentLength).intValue().times {
+            oneSlot.binlog.moveToNextSegment()
+        }
+        r = x.handleRepl()
+        then:
         r.isReplType(ReplType.s_catch_up)
 
         when:
-        boolean exception = false
         requestBuffer.position(0)
         requestBuffer.putLong(oneSlot.masterUuid)
         requestBuffer.putInt(0)
         // not margin
         requestBuffer.putLong(1)
-        try {
-            x.handleRepl()
-        } catch (IllegalArgumentException e) {
-            println e.message
-            exception = true
-        }
+        r = x.handleRepl()
         then:
-        exception
+        r.isReplType(ReplType.error)
 
         cleanup:
         localPersist.cleanUp()
@@ -584,8 +650,8 @@ class XGroupTest extends Specification {
 
         when:
         // last updated offset margined
-        def binlogOneSegmentLengthTmp = ConfForSlot.global.confRepl.binlogOneSegmentLength
-        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, binlogOneSegmentLengthTmp)
+        def binlogOneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
+        metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, binlogOneSegmentLength)
         r = x.handleRepl()
         then:
         r.isReplType(ReplType.catch_up)
@@ -703,12 +769,26 @@ class XGroupTest extends Specification {
         r.isReplType(ReplType.exists_wal)
 
         when:
-        requestBuffer.position(0)
+        // skip, no log
+        contentBytes = new byte[4]
+        requestBuffer = ByteBuffer.wrap(contentBytes)
         requestBuffer.putInt(99)
+        data4[3] = contentBytes
         r = x.handleRepl()
         then:
         // delay fetch next batch
         r.isEmpty()
+
+        when:
+        // skip, trigger log
+        contentBytes = new byte[4]
+        requestBuffer = ByteBuffer.wrap(contentBytes)
+        requestBuffer.putInt(100)
+        data4[3] = contentBytes
+        r = x.handleRepl()
+        then:
+        // next batch
+        r.isReplType(ReplType.exists_wal)
 
         when:
         // last batch
@@ -960,7 +1040,6 @@ class XGroupTest extends Specification {
         r.isEmpty()
 
         when:
-        def binlogOneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
         contentBytes = new byte[4 + 8 + 4 + 8 + 4 + binlogOneSegmentLength]
         requestBuffer = ByteBuffer.wrap(contentBytes)
         requestBuffer.putInt(0)
@@ -1032,7 +1111,6 @@ class XGroupTest extends Specification {
         r.isEmpty()
 
         when:
-        boolean exception = false
         requestBuffer.position(0)
         requestBuffer.putInt(0)
         requestBuffer.putLong(0)
@@ -1041,14 +1119,9 @@ class XGroupTest extends Specification {
         requestBuffer.putInt(1)
         requestBuffer.put((byte) 0)
         metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(masterUuid, true, 0, 0)
-        try {
-            x.handleRepl()
-        } catch (IllegalStateException e) {
-            println e.message
-            exception = true
-        }
+        r = x.handleRepl()
         then:
-        exception
+        r.isReplType(ReplType.error)
 
         when:
         // empty from master, mean no new binlog

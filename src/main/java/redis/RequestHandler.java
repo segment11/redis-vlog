@@ -1,7 +1,5 @@
 package redis;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.luben.zstd.Zstd;
 import io.activej.config.Config;
 import io.activej.net.socket.tcp.ITcpSocket;
@@ -136,6 +134,19 @@ public class RequestHandler {
         } else if (firstByte == 'f' || firstByte == 'F') {
             slotWithKeyHashList = FGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'g' || firstByte == 'G') {
+            if (GET_COMMAND.equals(cmd)) {
+                if (data.length >= 2) {
+                    var keyBytes = data[1];
+                    var key = new String(keyBytes);
+                    if (key.startsWith(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH)) {
+                        var dataTransfer = transferDataForXGroup(key);
+                        var slotWithKeyHashListForXGroup = XGroup.parseSlots(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH, dataTransfer, request.getSlotNumber());
+                        request.setSlotWithKeyHashList(slotWithKeyHashListForXGroup);
+                        return;
+                    }
+                }
+            }
+
             slotWithKeyHashList = GGroup.parseSlots(cmd, data, request.getSlotNumber());
         } else if (firstByte == 'h' || firstByte == 'H') {
             slotWithKeyHashList = HGroup.parseSlots(cmd, data, request.getSlotNumber());
@@ -181,6 +192,17 @@ public class RequestHandler {
     }
 
     private static final byte[] URL_QUERY_METRICS_FIRST_PARAM_BYTES = "metrics".getBytes();
+
+    private static byte[][] transferDataForXGroup(String keyAsData) {
+        // eg. get x_repl,sub_cmd,sub_sub_cmd,***
+        // transfer data to: x_repl sub_cmd sub_sub_cmd ***
+        var array = keyAsData.split(",");
+        var dataTransfer = new byte[array.length][];
+        for (int i = 0; i < array.length; i++) {
+            dataTransfer[i] = array[i].getBytes();
+        }
+        return dataTransfer;
+    }
 
     Reply handle(@NotNull Request request, ITcpSocket socket) {
         if (isStopped) {
@@ -273,15 +295,17 @@ public class RequestHandler {
                 return ErrorReply.KEY_TOO_LONG;
             }
 
-            // for slave can connect to master, check values
             var key = new String(keyBytes);
-            if (key.equals(XGroup.CONF_FOR_SLOT_KEY)) {
-                var map = ConfForSlot.global.slaveCanMatchCheckValues();
-                var objectMapper = new ObjectMapper();
+            if (key.startsWith(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH)) {
+                // dispatch to XGroup
+                // eg. get x_repl,sub_cmd,sub_sub_cmd,***
+                var dataTransfer = transferDataForXGroup(key);
+                // transfer data to: x_repl sub_cmd sub_sub_cmd ***
+                var xGroup = new XGroup(XGroup.X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH, dataTransfer, socket).init(this, request);
                 try {
-                    var jsonStr = objectMapper.writeValueAsString(map);
-                    return new BulkReply(jsonStr.getBytes());
-                } catch (JsonProcessingException e) {
+                    return xGroup.handle();
+                } catch (Exception e) {
+                    log.error("XGroup handle error", e);
                     return new ErrorReply(e.getMessage());
                 }
             }
