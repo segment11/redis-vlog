@@ -417,6 +417,10 @@ public class Binlog implements InMemoryEstimate {
     }
 
     RandomAccessFile prevRaf(int fileIndex, boolean createIfNotExists) {
+        if (fileIndex < 0) {
+            throw new IllegalArgumentException("Repl read binlog prev raf, file index must be >= 0");
+        }
+
         return prevRafByFileIndex.computeIfAbsent(fileIndex, k -> {
             var file = new File(binlogDir, FILE_NAME_PREFIX + fileIndex);
             if (!file.exists()) {
@@ -448,7 +452,7 @@ public class Binlog implements InMemoryEstimate {
 
     public byte[] readPrevRafOneSegment(int fileIndex, long offset) throws IOException {
         if (fileIndex < 0) {
-            return null;
+            throw new IllegalArgumentException("Repl read binlog segment bytes, file index must be >= 0");
         }
 
         var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
@@ -474,6 +478,7 @@ public class Binlog implements InMemoryEstimate {
             throw new IOException("Repl read binlog segment bytes, file not exist, file index: " + fileIndex);
         }
 
+        // when?, need check
         if (prevRaf.length() <= offset) {
             return null;
         }

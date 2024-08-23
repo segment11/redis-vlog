@@ -59,14 +59,35 @@ class BinlogTest extends Specification {
             binlog2.append(new XWalV(v))
         }
         then:
-        binlog.prevRaf(-1) == null
-        binlog.readPrevRafOneSegment(-1, 0) == null
+        1 == 1
 
         when:
         boolean exception = false
         try {
-            binlog.readPrevRafOneSegment(1, 0) == null
+            binlog.readPrevRafOneSegment(1, 0)
         } catch (IOException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        try {
+            binlog.readPrevRafOneSegment(-1, 0)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        try {
+            binlog.prevRaf(-1) == null
+        } catch (IllegalArgumentException e) {
             println e.message
             exception = true
         }
