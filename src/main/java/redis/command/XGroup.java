@@ -1101,7 +1101,7 @@ public class XGroup extends BaseCommand {
         buffer.get(readSegmentBytes);
 
         replPair.setMasterReadonly(isMasterReadonly);
-        replPair.setAllCaughtUp(currentOffset == fetchedOffset + readSegmentLength);
+        replPair.setAllCaughtUp(fetchedFileIndex == currentFileIndex && currentOffset == fetchedOffset + readSegmentLength);
 
         // only when self is as slave but also as master, need to write binlog
         try {
