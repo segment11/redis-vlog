@@ -37,6 +37,7 @@ class BinlogTest extends Specification {
         dynConfig.binlogOn = true
         dynConfig2.binlogOn = false
         def binlog = new Binlog(slot, Consts.slotDir, dynConfig)
+        println binlog
         println binlog.currentFileIndexAndOffset()
         println binlog.earliestFileIndexAndOffset()
         println 'in memory size estimate: ' + binlog.estimate()
@@ -75,7 +76,7 @@ class BinlogTest extends Specification {
         when:
         def oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength
         def oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
-        binlog.resetCurrentFileOffsetForTest  oneFileMaxLength - 1
+        binlog.resetCurrentFileOffsetForTest oneFileMaxLength - 1
         for (v in vList[0..9]) {
             binlog.append(new XWalV(v))
         }

@@ -143,6 +143,18 @@ public class Binlog implements InMemoryEstimate {
 
     private long currentFileOffset = 0;
 
+    @Override
+    public String toString() {
+        return "Binlog{" +
+                "slot=" + slot +
+                ", binlogDir=" + binlogDir +
+                ", currentFileIndex=" + currentFileIndex +
+                ", currentFileOffset=" + currentFileOffset +
+                ", latestAppendForReadCacheSegmentBytesSet.size=" + latestAppendForReadCacheSegmentBytesSet.size() +
+                ", prevRafByFileIndex.size=" + prevRafByFileIndex.size() +
+                '}';
+    }
+
     public FileIndexAndOffset currentFileIndexAndOffset() {
         return new FileIndexAndOffset(currentFileIndex, currentFileOffset);
     }
