@@ -52,9 +52,19 @@ public class TrainSampleJob {
 
     private static ArrayList<String> keyPrefixGroupList = new ArrayList<>();
 
-    // overwrite or add all
     public synchronized static void setKeyPrefixGroupList(ArrayList<String> keyPrefixGroupList) {
+        // longer first
+        keyPrefixGroupList.sort((a, b) -> b.length() - a.length());
         TrainSampleJob.keyPrefixGroupList = keyPrefixGroupList;
+    }
+
+    public synchronized static void addKeyPrefixGroupIfNotExist(String keyPrefixGroup) {
+        if (keyPrefixGroupList.contains(keyPrefixGroup)) {
+            return;
+        }
+        keyPrefixGroupList.add(keyPrefixGroup);
+        // longer first
+        keyPrefixGroupList.sort((a, b) -> b.length() - a.length());
     }
 
     private Dict trainNewDict(List<TrainSampleKV> list) {

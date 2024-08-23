@@ -73,6 +73,8 @@ public class DictMap {
             }
         }
 
+        TrainSampleJob.addKeyPrefixGroupIfNotExist(keyPrefix);
+
         cacheDictBySeq.put(dict.seq, dict);
         return cacheDict.put(keyPrefix, dict);
     }
@@ -156,6 +158,12 @@ public class DictMap {
 
         log.info("Dict map init, map size: {}, seq map size: {}, n: {}, loaded seq list: {}",
                 cacheDict.size(), cacheDictBySeq.size(), n, loadedSeqList);
+
+        // add exists dict key prefix as train sample key prefix group, so new request values can use exist dict directly
+        for (var entry : cacheDict.entrySet()) {
+            var keyPrefix = entry.getKey();
+            TrainSampleJob.addKeyPrefixGroupIfNotExist(keyPrefix);
+        }
 
         Dict.resetGlobalDictBytesByFile(new File(dirFile, Dict.GLOBAL_DICT_FILE_NAME), false);
     }

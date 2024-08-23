@@ -9,8 +9,11 @@ class TrainSampleJobTest extends Specification {
         given:
         TrainSampleJob.dictKeyPrefixEndIndex = 6
 
+        TrainSampleJob.addKeyPrefixGroupIfNotExist 'key:'
+        TrainSampleJob.addKeyPrefixGroupIfNotExist 'key2:'
         TrainSampleJob.keyPrefix('test.xxx.yyy') == 'test.xxx'
-        TrainSampleJob.keyPrefixGroupList = ['key:']
+        TrainSampleJob.keyPrefixGroupList = ['key:', 'key2:']
+        TrainSampleJob.addKeyPrefixGroupIfNotExist 'key:'
 
         expect:
         TrainSampleJob.keyPrefix('key:1234567890') == 'key:'
