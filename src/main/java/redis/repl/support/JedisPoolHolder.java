@@ -2,6 +2,7 @@ package redis.repl.support;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.ConfForGlobal;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
@@ -25,7 +26,7 @@ public class JedisPoolHolder {
 
     private final Logger log = LoggerFactory.getLogger(JedisPoolHolder.class);
 
-    public synchronized JedisPool create(String host, int port, String password, int timeoutMills) {
+    public synchronized JedisPool create(String host, int port) {
         var key = host + ":" + port;
         var client = cached.get(key);
         if (client != null) {
@@ -42,7 +43,7 @@ public class JedisPoolHolder {
         conf.setTestOnReturn(true);
         conf.setTestWhileIdle(true);
 
-        var one = new JedisPool(conf, host, port, timeoutMills, password);
+        var one = new JedisPool(conf, host, port, ConfForGlobal.JEDIS_POOL_CONNECT_TIMEOUT_MILLIS, ConfForGlobal.PASSWORD);
         log.info("Create jedis pool for {}:{}", host, port);
         cached.put(key, one);
         return one;
@@ -56,7 +57,7 @@ public class JedisPoolHolder {
         cached.clear();
     }
 
-    public static Object exe(JedisPool jedisPool, JedisCallback callback) {
+    public static <R> R exe(JedisPool jedisPool, JedisCallback<R> callback) {
         Jedis jedis = jedisPool.getResource();
         try {
             return callback.call(jedis);

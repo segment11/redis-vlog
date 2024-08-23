@@ -7,8 +7,8 @@ class JedisPoolHolderTest extends Specification {
         given:
         def holder = JedisPoolHolder.instance
 
-        def jedisPool = holder.create('localhost', 6379, null, 5000)
-        def jedisPool2 = holder.create('localhost', 6379, null, 5000)
+        def jedisPool = holder.create('localhost', 6379)
+        def jedisPool2 = holder.create('localhost', 6379)
 
         expect:
         jedisPool == jedisPool2
@@ -19,7 +19,7 @@ class JedisPoolHolderTest extends Specification {
             r = JedisPoolHolder.exe(jedisPool) { jedis ->
                 jedis.set('test', 'test')
                 jedis.get('test')
-            } as String
+            }
         } catch (Exception e) {
             // may redis server not started
             println e.message
