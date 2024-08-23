@@ -15,6 +15,7 @@ public class ConfForGlobal {
 
     public static String netListenAddresses;
 
+    public static String dirPath = "/tmp/redis-vlog";
     public static boolean pureMemory = false;
     public static short slotNumber = 1;
     public static byte netWorkers = 1;

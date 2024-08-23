@@ -62,6 +62,18 @@ class MultiWorkerServerTest extends Specification {
         m.getBusinessLogicModule() != null
 
         when:
+        MultiWorkerServer.MAIN_ARGS = ['/etc/redis-vlog.properties']
+        m.config()
+        then:
+        1 == 1
+
+        when:
+        MultiWorkerServer.MAIN_ARGS = []
+        m.config()
+        then:
+        1 == 1
+
+        when:
         def httpReply = m.wrapHttpResponse(new BulkReply('xxx'.bytes))
         def httpResponseBody = new String(httpReply.array())
         then:

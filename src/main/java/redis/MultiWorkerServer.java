@@ -98,8 +98,11 @@ public class MultiWorkerServer extends Launcher {
     private static final Logger log = LoggerFactory.getLogger(MultiWorkerServer.class);
 
     static File dirFile(Config config) {
-        var dir = config.get(ofString(), "dir", "/tmp/redis-vlog");
-        var dirFile = new File(dir);
+        var dirPath = config.get(ofString(), "dir", "/tmp/redis-vlog");
+        ConfForGlobal.dirPath = dirPath;
+        log.warn("Global config, dirPath: " + dirPath);
+
+        var dirFile = new File(dirPath);
         if (!dirFile.exists()) {
             boolean isOk = dirFile.mkdirs();
             if (!isOk) {
@@ -316,12 +319,21 @@ public class MultiWorkerServer extends Launcher {
 
     static final int PORT = 7379;
 
+    static String[] MAIN_ARGS;
+
     @Provides
     Config config() {
+        String givenConfigFilePath;
+        if (MAIN_ARGS != null && MAIN_ARGS.length > 0) {
+            givenConfigFilePath = MAIN_ARGS[0];
+        } else {
+            givenConfigFilePath = "/etc/" + PROPERTIES_FILE;
+        }
+
         return Config.create()
                 .with("net.listenAddresses", Config.ofValue(ofInetSocketAddress(), new InetSocketAddress(PORT)))
                 .overrideWith(ofClassPathProperties(PROPERTIES_FILE, true))
-                .overrideWith(ofProperties("/etc/" + PROPERTIES_FILE, true))
+                .overrideWith(ofProperties(givenConfigFilePath, true))
                 .overrideWith(ofSystemProperties("redis-vlog-config"));
     }
 
@@ -547,22 +559,35 @@ public class MultiWorkerServer extends Launcher {
             ConfForGlobal.estimateKeyNumber = estimateKeyNumber;
             ConfForGlobal.estimateOneValueLength = estimateOneValueLength;
 
+            log.warn("Global config, estimateKeyNumber: " + estimateKeyNumber);
+            log.warn("Global config, estimateOneValueLength: " + estimateOneValueLength);
+
             boolean isValueSetUseCompression = config.get(ofBoolean(), "isValueSetUseCompression", true);
             boolean isOnDynTrainDictForCompression = config.get(ofBoolean(), "isOnDynTrainDictForCompression", true);
             ConfForGlobal.isValueSetUseCompression = isValueSetUseCompression;
             ConfForGlobal.isOnDynTrainDictForCompression = isOnDynTrainDictForCompression;
 
+            log.warn("Global config, isValueSetUseCompression: " + isValueSetUseCompression);
+            log.warn("Global config, isOnDynTrainDictForCompression: " + isOnDynTrainDictForCompression);
+
             ConfForGlobal.netListenAddresses = config.get(ofString(), "net.listenAddresses", "localhost:" + PORT);
             logger.info("Net listen addresses: {}", ConfForGlobal.netListenAddresses);
             ConfForGlobal.eventLoopIdleMillis = config.get(toInt, "eventloop.idleMillis", 10);
+            log.warn("Global config, eventLoopIdleMillis: " + ConfForGlobal.eventLoopIdleMillis);
 
             ConfForGlobal.pureMemory = config.get(ofBoolean(), "pureMemory", false);
+            log.warn("Global config, pureMemory: " + ConfForGlobal.pureMemory);
 
             if (config.getChild("zookeeperConnectString").hasValue()) {
                 ConfForGlobal.zookeeperConnectString = config.get(ofString(), "zookeeperConnectString");
                 ConfForGlobal.zookeeperRootPath = config.get(ofString(), "zookeeperRootPath", "/redis-vlog");
                 ConfForGlobal.canBeLeader = config.get(ofBoolean(), "canBeLeader", true);
                 ConfForGlobal.isAsSlaveOfSlave = config.get(ofBoolean(), "isAsSlaveOfSlave", false);
+
+                log.warn("Global config, zookeeperConnectString: " + ConfForGlobal.zookeeperConnectString);
+                log.warn("Global config, zookeeperRootPath: " + ConfForGlobal.zookeeperRootPath);
+                log.warn("Global config, canBeLeader: " + ConfForGlobal.canBeLeader);
+                log.warn("Global config, isAsSlaveOfSlave: " + ConfForGlobal.isAsSlaveOfSlave);
             }
 
             DictMap.TO_COMPRESS_MIN_DATA_LENGTH = config.get(toInt, "toCompressMinDataLength", 64);
@@ -672,6 +697,7 @@ public class MultiWorkerServer extends Launcher {
                 throw new IllegalArgumentException("Slot number should be 1 or even");
             }
             ConfForGlobal.slotNumber = (short) slotNumber;
+            log.warn("Global config, slotNumber: " + ConfForGlobal.slotNumber);
 
             int netWorkers = config.get(toInt, "netWorkers", 1);
             if (netWorkers > MAX_NET_WORKERS) {
@@ -688,6 +714,7 @@ public class MultiWorkerServer extends Launcher {
                 throw new IllegalArgumentException("Slot number should be multiple of net workers");
             }
             ConfForGlobal.netWorkers = (byte) netWorkers;
+            log.warn("Global config, netWorkers: " + ConfForGlobal.netWorkers);
 
             var dirFile = dirFile(config);
 
@@ -744,6 +771,7 @@ public class MultiWorkerServer extends Launcher {
     }
 
     public static void main(String[] args) throws Exception {
+        MAIN_ARGS = args;
         Launcher launcher = new MultiWorkerServer();
         launcher.launch(args);
     }

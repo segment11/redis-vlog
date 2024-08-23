@@ -263,6 +263,10 @@ gradle jar
 cd build/libs
 java -Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m -jar redis-vlog-1.0.0.jar
 ```
+TIPS: You can use an exist config file:
+```shell
+java -Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m -jar redis-vlog-1.0.0.jar /tmp/redis-vlog7380.properties
+```
 
 ### Test the project:
 

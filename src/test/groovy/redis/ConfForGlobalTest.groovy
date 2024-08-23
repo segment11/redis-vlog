@@ -14,6 +14,7 @@ class ConfForGlobalTest extends Specification {
 
         println ConfForGlobal.netListenAddresses
 
+        println ConfForGlobal.dirPath
         println ConfForGlobal.pureMemory
         println ConfForGlobal.slotNumber
         println ConfForGlobal.netWorkers
@@ -21,6 +22,11 @@ class ConfForGlobalTest extends Specification {
 
         println ConfForGlobal.zookeeperConnectString
         println ConfForGlobal.zookeeperRootPath
+        println ConfForGlobal.canBeLeader
+        println ConfForGlobal.isAsSlaveOfSlave
+
+        println ConfForGlobal.LEADER_LATCH_PATH
+        println ConfForGlobal.LEADER_LISTEN_ADDRESS_PATH
 
         expect:
         1 == 1
