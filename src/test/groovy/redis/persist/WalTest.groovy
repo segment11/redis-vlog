@@ -53,9 +53,12 @@ class WalTest extends Specification {
         Wal.calWalGroupIndex(0) == 0
         Wal.calWalGroupIndex(ConfForSlot.global.confWal.oneChargeBucketNumber) == 1
         Wal.calcWalGroupNumber() == 4096 / 32
+        wal.lastSeqAfterPut == 0
+        wal.lastSeqShortValueAfterPut == 0
 
         when:
-        Mock.prepareValueList(10).each { v ->
+        def vList = Mock.prepareValueList(10)
+        vList.each { v ->
             def key = v.key()
             wal.put(true, key, v)
 
@@ -73,6 +76,7 @@ class WalTest extends Specification {
         then:
         toMap.size() == 10
         wal.keyCount == 10
+        wal.lastSeqShortValueAfterPut == vList[-1].seq()
 
         when:
         def vBytes = new byte[2]
@@ -130,7 +134,7 @@ class WalTest extends Specification {
         ConfForGlobal.pureMemory = false
         def toSlaveExistsBytes = wal.toSlaveExistsOneWalGroupBytes()
         then:
-        toSlaveExistsBytes.length == 16 + Wal.ONE_GROUP_BUFFER_SIZE * 2
+        toSlaveExistsBytes.length == 32 + Wal.ONE_GROUP_BUFFER_SIZE * 2
 
         // repl import exists batch from master
         when:
@@ -187,6 +191,8 @@ class WalTest extends Specification {
         then:
         wal.delayToKeyBucketValues.size() == 0
         wal.delayToKeyBucketShortValues.size() == 0
+        wal.lastSeqAfterPut == 0
+        wal.lastSeqShortValueAfterPut == 0
 
         cleanup:
         wal.clear()

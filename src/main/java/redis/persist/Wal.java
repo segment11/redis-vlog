@@ -208,6 +208,19 @@ public class Wal implements InMemoryEstimate {
     @SlaveNeedReplay
     HashMap<String, V> delayToKeyBucketShortValues;
 
+    public long getLastSeqAfterPut() {
+        return lastSeqAfterPut;
+    }
+
+    public long getLastSeqShortValueAfterPut() {
+        return lastSeqShortValueAfterPut;
+    }
+
+    @SlaveNeedReplay
+    private long lastSeqAfterPut;
+    @SlaveNeedReplay
+    private long lastSeqShortValueAfterPut;
+
     public int getKeyCount() {
         return delayToKeyBucketValues.size() + delayToKeyBucketShortValues.size();
     }
@@ -233,6 +246,7 @@ public class Wal implements InMemoryEstimate {
     private int readBytesToList(HashMap<String, V> toMap, boolean isShortValue, byte[] bufferBytes, int offset, int length) throws IOException {
         int n = 0;
         int position = 0;
+        long lastSeq = 0;
         var is = new DataInputStream(new ByteArrayInputStream(bufferBytes, offset, length));
         while (true) {
             var v = V.decode(is);
@@ -241,14 +255,17 @@ public class Wal implements InMemoryEstimate {
             }
 
             toMap.put(v.key, v);
+            lastSeq = v.seq;
             position += v.encodeLength();
             n++;
         }
 
         if (isShortValue) {
             writePositionShortValue = position;
+            lastSeqShortValueAfterPut = lastSeq;
         } else {
             writePosition = position;
+            lastSeqAfterPut = lastSeq;
         }
         return n;
     }
@@ -269,8 +286,10 @@ public class Wal implements InMemoryEstimate {
         // reset write position
         if (isShortValue) {
             writePositionShortValue = 0;
+            lastSeqShortValueAfterPut = 0L;
         } else {
             writePosition = 0;
+            lastSeqAfterPut = 0L;
         }
     }
 
@@ -358,6 +377,7 @@ public class Wal implements InMemoryEstimate {
     long needPersistOffsetTotal = 0;
 
     // slave catch up master binlog, replay wal, need update write position, be careful
+    @SlaveReplay
     public void putFromX(V v, boolean isValueShort, int offset) {
         if (!ConfForGlobal.pureMemory) {
             var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
@@ -375,9 +395,13 @@ public class Wal implements InMemoryEstimate {
         if (isValueShort) {
             delayToKeyBucketShortValues.put(v.key, v);
             delayToKeyBucketValues.remove(v.key);
+
+            lastSeqShortValueAfterPut = v.seq;
         } else {
             delayToKeyBucketValues.put(v.key, v);
             delayToKeyBucketShortValues.remove(v.key);
+
+            lastSeqAfterPut = v.seq;
         }
     }
 
@@ -422,6 +446,8 @@ public class Wal implements InMemoryEstimate {
             delayToKeyBucketShortValues.put(key, v);
             delayToKeyBucketValues.remove(key);
 
+            lastSeqShortValueAfterPut = v.seq;
+
             boolean needPersist = delayToKeyBucketShortValues.size() >= ConfForSlot.global.confWal.shortValueSizeTrigger;
             if (needPersist) {
                 needPersistCountTotal++;
@@ -433,6 +459,8 @@ public class Wal implements InMemoryEstimate {
 
         delayToKeyBucketValues.put(key, v);
         delayToKeyBucketShortValues.remove(key);
+
+        lastSeqAfterPut = v.seq;
 
         boolean needPersist = delayToKeyBucketValues.size() >= ConfForSlot.global.confWal.valueSizeTrigger;
         if (needPersist) {
@@ -448,9 +476,10 @@ public class Wal implements InMemoryEstimate {
         // encoded length
         // 4 bytes for group index
         // 4 bytes for one group buffer size
-        // 4 bytes for write position, both value and short
+        // 4 bytes for value write position and short value write position
+        // 8 bytes for last seq and short value last seq
         // value encoded + short value encoded
-        int n = 4 + 4 + 4 * 2 + ONE_GROUP_BUFFER_SIZE * 2;
+        int n = 4 + 4 + 4 * 2 + 8 * 2 + ONE_GROUP_BUFFER_SIZE * 2;
 
         var bytes = new byte[n];
         var buffer = ByteBuffer.wrap(bytes);
@@ -458,6 +487,8 @@ public class Wal implements InMemoryEstimate {
         buffer.putInt(ONE_GROUP_BUFFER_SIZE);
         buffer.putInt(writePosition);
         buffer.putInt(writePositionShortValue);
+        buffer.putLong(lastSeqAfterPut);
+        buffer.putLong(lastSeqShortValueAfterPut);
 
         var targetGroupBeginOffset = ONE_GROUP_BUFFER_SIZE * groupIndex;
 
@@ -487,6 +518,9 @@ public class Wal implements InMemoryEstimate {
 
         writePosition = buffer.getInt();
         writePositionShortValue = buffer.getInt();
+
+        lastSeqAfterPut = buffer.getLong();
+        lastSeqShortValueAfterPut = buffer.getLong();
 
         var targetGroupBeginOffset = oneGroupBufferSize * groupIndex1;
 
