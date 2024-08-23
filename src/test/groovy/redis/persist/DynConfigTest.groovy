@@ -56,7 +56,7 @@ class DynConfigTest extends Specification {
 
         // reload from file
         when:
-        MultiWorkerServer.staticGlobalV.socketInspector = new SocketInspector()
+        MultiWorkerServer.STATIC_GLOBAL_V.socketInspector = new SocketInspector()
         config = new DynConfig(slot, tmpFile)
         config.update('max_connections', 100)
         then:

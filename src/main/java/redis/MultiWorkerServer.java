@@ -290,6 +290,10 @@ public class MultiWorkerServer extends Launcher {
             promiseN[i] = promiseI;
         }
 
+        return allPipelineByteBuf(promiseN);
+    }
+
+    public static Promise<ByteBuf> allPipelineByteBuf(Promise<ByteBuf>[] promiseN) {
         return Promises.toArray(ByteBuf.class, promiseN)
                 .map(bufs -> {
                     int totalN = 0;
@@ -575,6 +579,8 @@ public class MultiWorkerServer extends Launcher {
             ConfForGlobal.eventLoopIdleMillis = config.get(toInt, "eventloop.idleMillis", 10);
             log.warn("Global config, eventLoopIdleMillis: " + ConfForGlobal.eventLoopIdleMillis);
 
+            ConfForGlobal.PASSWORD = config.get(ofString(), "password", null);
+
             ConfForGlobal.pureMemory = config.get(ofBoolean(), "pureMemory", false);
             log.warn("Global config, pureMemory: " + ConfForGlobal.pureMemory);
 
@@ -765,7 +771,7 @@ public class MultiWorkerServer extends Launcher {
 
             var r = new SocketInspector();
             r.setMaxConnections(maxConnections);
-            MultiWorkerServer.staticGlobalV.socketInspector = r;
+            MultiWorkerServer.STATIC_GLOBAL_V.socketInspector = r;
             return r;
         }
     }
@@ -780,5 +786,5 @@ public class MultiWorkerServer extends Launcher {
         public SocketInspector socketInspector;
     }
 
-    public static StaticGlobalV staticGlobalV = new StaticGlobalV();
+    public static final StaticGlobalV STATIC_GLOBAL_V = new StaticGlobalV();
 }

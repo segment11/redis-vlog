@@ -21,7 +21,8 @@ import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import static io.activej.config.converter.ConfigConverters.*;
+import static io.activej.config.converter.ConfigConverters.ofBoolean;
+import static io.activej.config.converter.ConfigConverters.ofInteger;
 
 public class RequestHandler {
     private final Logger log = LoggerFactory.getLogger(this.getClass());
@@ -78,7 +79,7 @@ public class RequestHandler {
         this.slotNumber = slotNumber;
         this.snowFlake = snowFlake;
 
-        this.password = config.get(ofString(), "password", null);
+        this.password = ConfForGlobal.PASSWORD;
 
         var toInt = ofInteger();
         this.localTest = config.get(ofBoolean(), "localTest", false);

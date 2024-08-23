@@ -9,6 +9,9 @@ public class ConfForGlobal {
     public static int estimateOneValueLength = DEFAULT_ESTIMATE_ONE_VALUE_LENGTH;
     static final int MAX_ESTIMATE_ONE_VALUE_LENGTH = 4000;
 
+    public static final int JEDIS_POOL_CONNECT_TIMEOUT_MILLIS = 1000;
+    public static String PASSWORD;
+
     // compression
     public static boolean isValueSetUseCompression = true;
     public static boolean isOnDynTrainDictForCompression = true;

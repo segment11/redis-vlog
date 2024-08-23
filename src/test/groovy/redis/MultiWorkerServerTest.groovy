@@ -51,7 +51,7 @@ class MultiWorkerServerTest extends Specification {
         expect:
         dirFile2.exists()
         dirFile3.exists()
-        m.staticGlobalV.socketInspector == null
+        m.STATIC_GLOBAL_V.socketInspector == null
         m.primaryReactor(config) != null
         m.workerReactor(workerId0, OptionalDependency.empty(), config) != null
         // need use activej inject mock, todo

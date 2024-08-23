@@ -35,7 +35,7 @@ public class DynConfig {
         @Override
         public void afterUpdate(String key, Object value) {
             if ("max_connections".equals(key)) {
-                MultiWorkerServer.staticGlobalV.socketInspector.setMaxConnections((int) value);
+                MultiWorkerServer.STATIC_GLOBAL_V.socketInspector.setMaxConnections((int) value);
                 log.warn("Global config set max_connections={}, slot: {}", value, currentSlot);
             }
             // todo

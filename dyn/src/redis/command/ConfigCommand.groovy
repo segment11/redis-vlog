@@ -56,7 +56,7 @@ class ConfigCommand extends BaseCommand {
                 return ErrorReply.INVALID_INTEGER
             }
 
-            MultiWorkerServer.staticGlobalV.socketInspector.setMaxConnections(maxConnections)
+            MultiWorkerServer.STATIC_GLOBAL_V.socketInspector.setMaxConnections(maxConnections)
             log.warn "Global config set max_connections={}", maxConnections
 
             def firstOneSlot = localPersist.currentThreadFirstOneSlot()
@@ -82,7 +82,7 @@ class ConfigCommand extends BaseCommand {
         def configKey = new String(data[2]).toLowerCase()
         if ('max_connections' == configKey) {
             def firstOneSlot = localPersist.currentThreadFirstOneSlot()
-            def maxConnections = MultiWorkerServer.staticGlobalV.socketInspector.maxConnections
+            def maxConnections = MultiWorkerServer.STATIC_GLOBAL_V.socketInspector.maxConnections
             return new BulkReply(maxConnections.toString().bytes)
         } else {
             // todo
