@@ -24,9 +24,20 @@ class LeaderSelectorTest extends Specification {
         leaderSelector.tryConnectAndGetMasterListenAddress() == null
 
         when:
+        def testListenAddress = 'localhost:7379'
+        leaderSelector.masterAddressLocalForTest = testListenAddress
+        then:
+        leaderSelector.masterAddressLocalForTest == testListenAddress
+        leaderSelector.tryConnectAndGetMasterListenAddress() == testListenAddress
+        leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort('localhost', 6379, slot) == testListenAddress
+        leaderSelector.resetAsMaster(true, e -> { })
+        leaderSelector.resetAsSlave(true, '', 0, e -> { })
+
+        when:
+        leaderSelector.masterAddressLocalForTest = null
         ConfForGlobal.zookeeperConnectString = 'localhost:2181'
         ConfForGlobal.zookeeperRootPath = '/redis-vlog/cluster-test'
-        ConfForGlobal.netListenAddresses = 'localhost:7379'
+        ConfForGlobal.netListenAddresses = testListenAddress
 
         boolean doThisCase = false
         def tc = new TelnetClient(connectTimeout: 500)

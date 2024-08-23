@@ -95,7 +95,7 @@ public class MultiWorkerServer extends Launcher {
     @Inject
     RefreshLoader refreshLoader;
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger log = LoggerFactory.getLogger(MultiWorkerServer.class);
 
     static File dirFile(Config config) {
         var dir = config.get(ofString(), "dir", "/tmp/redis-vlog");
@@ -314,9 +314,10 @@ public class MultiWorkerServer extends Launcher {
                 .build();
     }
 
+    static final int PORT = 7379;
+
     @Provides
     Config config() {
-        final int PORT = 7379;
         return Config.create()
                 .with("net.listenAddresses", Config.ofValue(ofInetSocketAddress(), new InetSocketAddress(PORT)))
                 .overrideWith(ofClassPathProperties(PROPERTIES_FILE, true))
@@ -413,7 +414,7 @@ public class MultiWorkerServer extends Launcher {
             if (loopCount % 5 == 0) {
                 // need catch exception, or will not delay run task
                 try {
-                    doReplAfterLeaderSelect();
+                    doReplAfterLeaderSelect((byte) 0);
                 } catch (Exception e) {
                     log.error("Repl leader select error", e);
                 }
@@ -441,7 +442,7 @@ public class MultiWorkerServer extends Launcher {
     }
 
     // run in primary eventloop
-    private void doReplAfterLeaderSelect() {
+    static void doReplAfterLeaderSelect(byte slot) {
         var leaderSelector = LeaderSelector.getInstance();
         var masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress();
 
@@ -453,9 +454,9 @@ public class MultiWorkerServer extends Launcher {
             // self become master
             leaderSelector.resetAsMaster(false, (e) -> {
                 if (e != null) {
-                    logger.error("Reset as master failed", e);
+                    log.error("Reset as master failed", e);
                 } else {
-                    logger.debug("Reset as master success");
+                    log.debug("Reset as master success");
                 }
             });
             return;
@@ -470,15 +471,14 @@ public class MultiWorkerServer extends Launcher {
             // connect to master
             leaderSelector.resetAsSlave(false, host, port, (e) -> {
                 if (e != null) {
-                    logger.error("Reset as slave failed", e);
+                    log.error("Reset as slave failed", e);
                 } else {
-                    logger.debug("Reset as slave success");
+                    log.debug("Reset as slave success");
                 }
             });
         } else {
             // connect to master's first slave
-            var firstOneSlot = LocalPersist.getInstance().oneSlots()[0];
-            var firstSlaveListenAddress = leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort(host, port, firstOneSlot.slot());
+            var firstSlaveListenAddress = leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort(host, port, slot);
             if (firstSlaveListenAddress == null) {
                 log.warn("First slave listen address is null, master host: {}, master port: {}", host, port);
             } else {
@@ -488,9 +488,9 @@ public class MultiWorkerServer extends Launcher {
 
                 leaderSelector.resetAsSlave(false, hostSlave, portSlave, (e) -> {
                     if (e != null) {
-                        logger.error("Reset as slave failed", e);
+                        log.error("Reset as slave failed", e);
                     } else {
-                        logger.info("Reset as slave success");
+                        log.info("Reset as slave success");
                     }
                 });
             }
@@ -552,7 +552,7 @@ public class MultiWorkerServer extends Launcher {
             ConfForGlobal.isValueSetUseCompression = isValueSetUseCompression;
             ConfForGlobal.isOnDynTrainDictForCompression = isOnDynTrainDictForCompression;
 
-            ConfForGlobal.netListenAddresses = config.get(ofString(), "net.listenAddresses");
+            ConfForGlobal.netListenAddresses = config.get(ofString(), "net.listenAddresses", "localhost:" + PORT);
             logger.info("Net listen addresses: {}", ConfForGlobal.netListenAddresses);
             ConfForGlobal.eventLoopIdleMillis = config.get(toInt, "eventloop.idleMillis", 10);
 
@@ -638,11 +638,6 @@ public class MultiWorkerServer extends Launcher {
                 throw new IllegalArgumentException("Wal one charge bucket number invalid, wal one charge bucket number should be in " + Wal.VALID_ONE_CHARGE_BUCKET_NUMBER_LIST);
             }
 
-            var walGroupNumber = c.confBucket.bucketsPerSlot / c.confWal.oneChargeBucketNumber;
-            if (walGroupNumber > Wal.MAX_WAL_GROUP_NUMBER) {
-                throw new IllegalArgumentException("Wal group number too large, wal group number should be less than " + Wal.MAX_WAL_GROUP_NUMBER);
-            }
-
             if (config.getChild("wal.valueSizeTrigger").hasValue()) {
                 c.confWal.valueSizeTrigger = config.get(ofInteger(), "wal.valueSizeTrigger");
             }
@@ -685,6 +680,12 @@ public class MultiWorkerServer extends Launcher {
             var cpuNumber = Runtime.getRuntime().availableProcessors();
             if (netWorkers >= cpuNumber) {
                 throw new IllegalArgumentException("Net workers should be less than cpu number");
+            }
+            if (slotNumber < netWorkers) {
+                throw new IllegalArgumentException("Net workers should <= slot number");
+            }
+            if (slotNumber % netWorkers != 0) {
+                throw new IllegalArgumentException("Slot number should be multiple of net workers");
             }
             ConfForGlobal.netWorkers = (byte) netWorkers;
 

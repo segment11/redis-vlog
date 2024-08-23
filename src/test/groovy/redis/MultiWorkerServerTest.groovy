@@ -5,8 +5,10 @@ import io.activej.eventloop.Eventloop
 import io.activej.inject.binding.OptionalDependency
 import io.activej.net.socket.tcp.TcpSocket
 import redis.decode.Request
+import redis.persist.KeyBucket
 import redis.persist.LocalPersist
 import redis.persist.LocalPersistTest
+import redis.repl.LeaderSelector
 import redis.reply.BulkReply
 import redis.reply.ErrorReply
 import redis.reply.NilReply
@@ -39,6 +41,8 @@ class MultiWorkerServerTest extends Specification {
         m.netWorkerEventloopArray = new Eventloop[2]
         m.requestHandlerArray = new RequestHandler[2]
         m.scheduleRunnableArray = new TaskRunnable[2]
+        m.refreshLoader = m.refreshLoader()
+
         def dirFile2 = m.dirFile(config)
         def dirFile3 = m.dirFile(config)
 
@@ -107,7 +111,9 @@ class MultiWorkerServerTest extends Specification {
         Thread.sleep(100)
         m.netWorkerEventloopArray[0] = eventloop0
         m.netWorkerEventloopArray[1] = eventloop1
+        m.socketInspector = new SocketInspector()
         m.onStart()
+        m.primaryScheduleRunnable.run()
         then:
         1 == 1
 
@@ -266,8 +272,10 @@ class MultiWorkerServerTest extends Specification {
         boolean exception = false
         def config2 = Config.create()
                 .with("slotNumber", (LocalPersist.MAX_SLOT_NUMBER + 1).toString())
+
+        def snowFlakes1 = m.snowFlakes(config2)
         try {
-            m1.beforeCreateHandler(c, m.snowFlakes(config2), config2)
+            m1.beforeCreateHandler(c, snowFlakes1, config2)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -280,7 +288,7 @@ class MultiWorkerServerTest extends Specification {
         def config3 = Config.create()
                 .with("slotNumber", "3")
         try {
-            m1.beforeCreateHandler(c, m.snowFlakes(config2), config3)
+            m1.beforeCreateHandler(c, snowFlakes1, config3)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -294,7 +302,7 @@ class MultiWorkerServerTest extends Specification {
                 .with("slotNumber", "1")
                 .with("netWorkers", (MultiWorkerServer.MAX_NET_WORKERS + 1).toString())
         try {
-            m1.beforeCreateHandler(c, m.snowFlakes(config2), config4)
+            m1.beforeCreateHandler(c, snowFlakes1, config4)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -309,7 +317,89 @@ class MultiWorkerServerTest extends Specification {
                 .with("slotNumber", "1")
                 .with("netWorkers", (cpuNumber + 1).toString())
         try {
-            m1.beforeCreateHandler(c, m.snowFlakes(config2), config5)
+            m1.beforeCreateHandler(c, snowFlakes1, config5)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        def config6 = Config.create()
+                .with("slotNumber", "2")
+                .with("netWorkers", '3')
+        try {
+            m1.beforeCreateHandler(c, snowFlakes1, config6)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        def config7 = Config.create()
+                .with("slotNumber", "4")
+                .with("netWorkers", '3')
+        try {
+            m1.beforeCreateHandler(c, snowFlakes1, config7)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        def config8 = Config.create()
+                .with("bucket.bucketsPerSlot", (KeyBucket.MAX_BUCKETS_PER_SLOT + 1).toString())
+        try {
+            m1.confForSlot(config8)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        def config9 = Config.create()
+                .with("bucket.bucketsPerSlot", '1023')
+        try {
+            m1.confForSlot(config9)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        def config10 = Config.create()
+                .with("bucket.bucketsPerSlot", '1024')
+                .with("chunk.fdPerChunk", (ConfForSlot.ConfChunk.MAX_FD_PER_CHUNK + 1).toString())
+        try {
+            m1.confForSlot(config10)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        def config11 = Config.create()
+                .with("chunk.fdPerChunk", '16')
+                .with("wal.oneChargeBucketNumber", '4')
+        try {
+            m1.confForSlot(config11)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -335,5 +425,35 @@ class MultiWorkerServerTest extends Specification {
         cleanup:
         eventloop0.breakEventloop()
         eventloop1.breakEventloop()
+    }
+
+    def 'test do repl'() {
+        given:
+        def leaderSelector = LeaderSelector.instance
+        leaderSelector.masterAddressLocalForTest = 'localhost:7379'
+        ConfForGlobal.netListenAddresses = leaderSelector.masterAddressLocalForTest
+
+        when:
+        MultiWorkerServer.doReplAfterLeaderSelect(slot0)
+        then:
+        1 == 1
+
+        when:
+        leaderSelector.masterAddressLocalForTest = 'localhost:7380'
+        MultiWorkerServer.doReplAfterLeaderSelect(slot0)
+        then:
+        1 == 1
+
+        when:
+        ConfForGlobal.isAsSlaveOfSlave = true
+        MultiWorkerServer.doReplAfterLeaderSelect(slot0)
+        then:
+        1 == 1
+
+        when:
+        leaderSelector.masterAddressLocalForTest = null
+        MultiWorkerServer.doReplAfterLeaderSelect(slot0)
+        then:
+        1 == 1
     }
 }

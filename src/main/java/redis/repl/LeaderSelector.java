@@ -60,7 +60,24 @@ public class LeaderSelector {
 
     private long isLeaderLoopCount = 0;
 
+    @ForTestMethod
+    public String getMasterAddressLocalForTest() {
+        return masterAddressLocalForTest;
+    }
+
+    @ForTestMethod
+    public void setMasterAddressLocalForTest(String masterAddressLocalForTest) {
+        this.masterAddressLocalForTest = masterAddressLocalForTest;
+    }
+
+    @ForTestMethod
+    private String masterAddressLocalForTest;
+
     public String tryConnectAndGetMasterListenAddress() {
+        if (masterAddressLocalForTest != null) {
+            return masterAddressLocalForTest;
+        }
+
         return tryConnectAndGetMasterListenAddress(true);
     }
 
@@ -191,6 +208,12 @@ public class LeaderSelector {
 
     // run in primary eventloop
     public void resetAsMaster(boolean returnExceptionIfAlreadyIsMaster, Consumer<Exception> callback) {
+        if (masterAddressLocalForTest != null) {
+            callback.accept(null);
+            callback.accept(new RuntimeException("just test callback"));
+            return;
+        }
+
         var localPersist = LocalPersist.getInstance();
 
         // when support cluster, need to check all slots, todo
@@ -246,6 +269,12 @@ public class LeaderSelector {
 
     // run in primary eventloop
     public void resetAsSlave(boolean returnExceptionIfAlreadyIsSlave, String host, int port, Consumer<Exception> callback) {
+        if (masterAddressLocalForTest != null) {
+            callback.accept(null);
+            callback.accept(new RuntimeException("just test callback"));
+            return;
+        }
+
         var localPersist = LocalPersist.getInstance();
 
         // when support cluster, need to check all slots, todo
@@ -342,6 +371,10 @@ public class LeaderSelector {
     }
 
     public String getFirstSlaveListenAddressByMasterHostAndPort(String host, int port, byte slot) {
+        if (masterAddressLocalForTest != null) {
+            return masterAddressLocalForTest;
+        }
+
         var jedisPool = JedisPoolHolder.getInstance().create(host, port, null, 5000);
         return (String) JedisPoolHolder.exe(jedisPool, jedis ->
                 // refer to XGroup handle
