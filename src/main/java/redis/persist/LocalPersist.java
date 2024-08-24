@@ -5,10 +5,10 @@ import io.activej.config.Config;
 import io.activej.eventloop.Eventloop;
 import jnr.ffi.LibraryLoader;
 import jnr.posix.LibC;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfVolumeDirsForSlot;
-import redis.ForTestMethod;
 import redis.SnowFlake;
 import redis.SocketInspector;
 
@@ -58,8 +58,8 @@ public class LocalPersist {
         return oneSlots[slot];
     }
 
-    @ForTestMethod
-    public void addOneSlotForTest(byte slot, Eventloop eventloop) {
+    @TestOnly
+    public void addOneSlot(byte slot, Eventloop eventloop) {
         try {
             Thread.sleep(100);
         } catch (InterruptedException e) {

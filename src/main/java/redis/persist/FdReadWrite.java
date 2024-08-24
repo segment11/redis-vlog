@@ -9,11 +9,11 @@ import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
-import redis.ForTestMethod;
 import redis.StaticMemoryPrepareBytesStats;
 import redis.metric.SimpleGauge;
 import redis.repl.SlaveNeedReplay;
@@ -215,8 +215,8 @@ public class FdReadWrite implements InMemoryEstimate {
     // for key bucket, compressed, need compress before set here and decompress after read from here
     private byte[][] allBytesByOneWalGroupIndexForKeyBucketOneSplitIndex;
 
-    @ForTestMethod
-    void resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(int walGroupNumber) {
+    @TestOnly
+    void resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndex(int walGroupNumber) {
         this.allBytesByOneWalGroupIndexForKeyBucketOneSplitIndex = new byte[walGroupNumber][];
     }
 
@@ -702,8 +702,8 @@ public class FdReadWrite implements InMemoryEstimate {
         return readInnerByBuffer(beginBucketIndex, forOneWalGroupBatchBuffer, false);
     }
 
-    @ForTestMethod
-    public void clearOneKeyBucketToMemoryForTest(int bucketIndex) {
+    @TestOnly
+    public void clearOneKeyBucketToMemory(int bucketIndex) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
         var sharedBytes = getSharedBytesDecompressFromMemory(walGroupIndex);
         if (sharedBytes == null) {
@@ -717,14 +717,14 @@ public class FdReadWrite implements InMemoryEstimate {
         setSharedBytesCompressToMemory(sharedBytes, walGroupIndex);
     }
 
-    @ForTestMethod
-    public void clearKeyBucketsToMemoryForTest(int bucketIndex) {
+    @TestOnly
+    public void clearKeyBucketsToMemory(int bucketIndex) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
-        clearAllKeyBucketsInOneWalGroupToMemoryForTest(walGroupIndex);
+        clearAllKeyBucketsInOneWalGroupToMemory(walGroupIndex);
     }
 
-    @ForTestMethod
-    public void clearAllKeyBucketsInOneWalGroupToMemoryForTest(int walGroupIndex) {
+    @TestOnly
+    public void clearAllKeyBucketsInOneWalGroupToMemory(int walGroupIndex) {
         setSharedBytesCompressToMemory(null, walGroupIndex);
     }
 

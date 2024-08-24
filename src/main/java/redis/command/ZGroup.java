@@ -5,9 +5,9 @@ import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
+import org.jetbrains.annotations.TestOnly;
 import redis.BaseCommand;
 import redis.CompressedValue;
-import redis.ForTestMethod;
 import redis.reply.*;
 import redis.type.RedisZSet;
 
@@ -770,8 +770,8 @@ public class ZGroup extends BaseCommand {
         return zdiff(data, isInter, isUnion, null);
     }
 
-    @ForTestMethod
-    void addDstKeyBytesForStoreForTest(byte[] dstKeyBytes) {
+    @TestOnly
+    void addDstKeyBytesForStore(byte[] dstKeyBytes) {
         var data2 = new byte[data.length + 1][];
         data2[0] = data[0];
         data2[1] = dstKeyBytes;

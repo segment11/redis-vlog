@@ -4,7 +4,7 @@ import io.activej.eventloop.Eventloop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
-import redis.ForTestMethod;
+import org.jetbrains.annotations.TestOnly;
 import redis.RequestHandler;
 import redis.repl.content.Hello;
 
@@ -268,8 +268,8 @@ public class ReplPair {
         return isSendBye;
     }
 
-    @ForTestMethod
-    public void setSendByeForTest(boolean isSendBye) {
+    @TestOnly
+    public void setSendBye(boolean isSendBye) {
         this.isSendBye = isSendBye;
     }
 

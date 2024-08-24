@@ -63,22 +63,22 @@ public class LeaderSelector {
     long isLeaderLoopCount = 0;
 
     @TestOnly
-    public String getMasterAddressLocal() {
-        return masterAddressLocalForTest;
+    public String getMasterAddressLocalMocked() {
+        return masterAddressLocalMocked;
     }
 
     @TestOnly
-    public void setMasterAddressLocal(String masterAddressLocalForTest) {
-        this.masterAddressLocalForTest = masterAddressLocalForTest;
+    public void setMasterAddressLocalMocked(String masterAddressLocalMocked) {
+        this.masterAddressLocalMocked = masterAddressLocalMocked;
     }
 
     @TestOnly
-    private String masterAddressLocalForTest;
+    private String masterAddressLocalMocked;
 
     @TestOnly
     String tryConnectAndGetMasterListenAddress() {
-        if (masterAddressLocalForTest != null) {
-            return masterAddressLocalForTest;
+        if (masterAddressLocalMocked != null) {
+            return masterAddressLocalMocked;
         }
 
         return tryConnectAndGetMasterListenAddress(true);
@@ -148,10 +148,10 @@ public class LeaderSelector {
     private LeaderLatch leaderLatch;
 
     @TestOnly
-    boolean startLeaderLatchFailForTest;
+    boolean startLeaderLatchFailMocked;
 
     synchronized boolean startLeaderLatch() {
-        if (startLeaderLatchFailForTest) {
+        if (startLeaderLatchFailMocked) {
             return false;
         }
 
@@ -201,7 +201,7 @@ public class LeaderSelector {
 
     // run in primary eventloop
     public void resetAsMaster(boolean returnExceptionIfAlreadyIsMaster, Consumer<Exception> callback) {
-        if (masterAddressLocalForTest != null) {
+        if (masterAddressLocalMocked != null) {
             callback.accept(null);
             callback.accept(new RuntimeException("just test callback when reset as master"));
             return;
@@ -277,7 +277,7 @@ public class LeaderSelector {
 
     // run in primary eventloop
     public void resetAsSlave(boolean returnExceptionIfAlreadyIsSlave, String host, int port, Consumer<Exception> callback) {
-        if (masterAddressLocalForTest != null) {
+        if (masterAddressLocalMocked != null) {
             callback.accept(null);
             callback.accept(new RuntimeException("just test callback when reset as slave"));
             return;
@@ -379,8 +379,8 @@ public class LeaderSelector {
     }
 
     public String getFirstSlaveListenAddressByMasterHostAndPort(String host, int port, byte slot) {
-        if (masterAddressLocalForTest != null) {
-            return masterAddressLocalForTest;
+        if (masterAddressLocalMocked != null) {
+            return masterAddressLocalMocked;
         }
 
         var jedisPool = JedisPoolHolder.getInstance().create(host, port);

@@ -25,16 +25,16 @@ class LeaderSelectorTest extends Specification {
 
         when:
         def testListenAddress = 'localhost:7379'
-        leaderSelector.masterAddressLocalForTest = testListenAddress
+        leaderSelector.masterAddressLocalMocked = testListenAddress
         then:
-        leaderSelector.masterAddressLocalForTest == testListenAddress
+        leaderSelector.masterAddressLocalMocked == testListenAddress
         leaderSelector.tryConnectAndGetMasterListenAddress() == testListenAddress
         leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort('localhost', 6379, slot) == testListenAddress
         leaderSelector.resetAsMaster(true, e -> { })
         leaderSelector.resetAsSlave(true, '', 0, e -> { })
 
         when:
-        leaderSelector.masterAddressLocalForTest = null
+        leaderSelector.masterAddressLocalMocked = null
         ConfForGlobal.zookeeperConnectString = 'localhost:2181'
         ConfForGlobal.zookeeperRootPath = '/redis-vlog/cluster-test'
         ConfForGlobal.netListenAddresses = testListenAddress
@@ -69,13 +69,13 @@ class LeaderSelectorTest extends Specification {
         masterListenAddress == (doThisCase ? ConfForGlobal.netListenAddresses : null)
 
         when:
-        leaderSelector.startLeaderLatchFailForTest = true
+        leaderSelector.startLeaderLatchFailMocked = true
         masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
         then:
         masterListenAddress == null
 
         when:
-        leaderSelector.startLeaderLatchFailForTest = false
+        leaderSelector.startLeaderLatchFailMocked = false
         if (masterListenAddress == null) {
             masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
         }

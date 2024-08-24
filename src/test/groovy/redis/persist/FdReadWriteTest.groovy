@@ -46,8 +46,8 @@ class FdReadWriteTest extends Specification {
         def fdKeyBucket = new FdReadWrite('test2', libC, oneFile2)
         fdKeyBucket.initByteBuffers(false)
         def walGroupNumber = Wal.calcWalGroupNumber()
-        fdKeyBucket.resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(walGroupNumber)
-        fdKeyBucket.clearAllKeyBucketsInOneWalGroupToMemoryForTest(0)
+        fdKeyBucket.resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndex(walGroupNumber)
+        fdKeyBucket.clearAllKeyBucketsInOneWalGroupToMemory(0)
         println fdKeyBucket
         println 'in memory size estimate: ' + fdKeyBucket.estimate()
 
@@ -344,15 +344,15 @@ class FdReadWriteTest extends Specification {
         fdChunk.readOneInner(200, false).length == 10
 
         when:
-        fdKeyBucket.clearOneKeyBucketToMemoryForTest(oneChargeBucketNumber * 2)
-        fdKeyBucket.clearOneKeyBucketToMemoryForTest(1)
+        fdKeyBucket.clearOneKeyBucketToMemory(oneChargeBucketNumber * 2)
+        fdKeyBucket.clearOneKeyBucketToMemory(1)
         def keyBucket1BytesRead = new byte[segmentLength]
         ByteBuffer.wrap(fdKeyBucket.readOneInner(1, false)).get(segmentLength, keyBucket1BytesRead)
         then:
         keyBucket1BytesRead == new byte[segmentLength]
 
         when:
-        fdKeyBucket.clearKeyBucketsToMemoryForTest(oneChargeBucketNumber)
+        fdKeyBucket.clearKeyBucketsToMemory(oneChargeBucketNumber)
         then:
         fdKeyBucket.readKeyBucketsSharedBytesInOneWalGroup(oneChargeBucketNumber) == null
 

@@ -1,6 +1,6 @@
 package redis.repl.incremental;
 
-import redis.ForTestMethod;
+import org.jetbrains.annotations.TestOnly;
 import redis.persist.Chunk;
 import redis.persist.LocalPersist;
 import redis.repl.BinlogContent;
@@ -14,13 +14,13 @@ public class XOneWalGroupPersist implements BinlogContent {
     private boolean clearWalAfterApply;
     private final int walGroupIndex;
 
-    @ForTestMethod
-    public void setShortValueForTest(boolean isShortValue) {
+    @TestOnly
+    public void setShortValue(boolean isShortValue) {
         this.isShortValue = isShortValue;
     }
 
-    @ForTestMethod
-    public void setClearWalAfterApplyForTest(boolean clearWalAfterApply) {
+    @TestOnly
+    public void setClearWalAfterApply(boolean clearWalAfterApply) {
         this.clearWalAfterApply = clearWalAfterApply;
     }
 

@@ -704,7 +704,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, false)
         then:
         reply == IntegerReply.REPLY_0
@@ -716,7 +716,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply == IntegerReply.REPLY_0
@@ -728,7 +728,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply == IntegerReply.REPLY_0
@@ -746,7 +746,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply == IntegerReply.REPLY_0
@@ -758,7 +758,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply == IntegerReply.REPLY_0
@@ -770,7 +770,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply == IntegerReply.REPLY_0
@@ -788,7 +788,7 @@ zunionstore
         ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == 'member0'.bytes
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, false)
         then:
         reply instanceof IntegerReply
@@ -801,7 +801,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply == IntegerReply.REPLY_0
@@ -814,7 +814,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply instanceof IntegerReply
@@ -834,7 +834,7 @@ zunionstore
         ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == '0.1'.bytes
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, false)
         then:
         reply instanceof IntegerReply
@@ -847,7 +847,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply == IntegerReply.REPLY_0
@@ -860,7 +860,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 2
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply instanceof IntegerReply
@@ -881,7 +881,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, false)
         then:
         reply instanceof IntegerReply
@@ -894,7 +894,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply == IntegerReply.REPLY_0
@@ -907,7 +907,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply instanceof IntegerReply
@@ -923,7 +923,7 @@ zunionstore
         reply == MultiBulkReply.EMPTY
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, false)
         then:
         reply == IntegerReply.REPLY_0
@@ -936,7 +936,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply instanceof IntegerReply
@@ -950,7 +950,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply instanceof IntegerReply
@@ -964,7 +964,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply instanceof IntegerReply
@@ -979,7 +979,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply instanceof IntegerReply
@@ -994,7 +994,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply instanceof IntegerReply
@@ -1015,7 +1015,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply instanceof IntegerReply
@@ -1030,7 +1030,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply instanceof IntegerReply
@@ -1045,7 +1045,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply instanceof IntegerReply
@@ -1072,7 +1072,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 5
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, false)
         then:
         reply instanceof IntegerReply
@@ -1086,7 +1086,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 5
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         then:
         reply instanceof IntegerReply
@@ -1100,7 +1100,7 @@ zunionstore
         ((MultiBulkReply) reply).replies.length == 11
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         then:
         reply instanceof IntegerReply
@@ -1134,7 +1134,7 @@ zunionstore
         Thread.start {
             eventloop.run()
         }
-        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+        LocalPersist.instance.addOneSlot(slot, eventloop)
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
@@ -1152,7 +1152,7 @@ zunionstore
         }.result
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         eventloopCurrent.run()
         then:
@@ -1177,7 +1177,7 @@ zunionstore
         }.result
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(false, true)
         eventloopCurrent.run()
         then:
@@ -1198,7 +1198,7 @@ zunionstore
         }.result
 
         when:
-        zGroup.addDstKeyBytesForStoreForTest(dstKeyBytes)
+        zGroup.addDstKeyBytesForStore(dstKeyBytes)
         reply = zGroup.zdiffstore(true, false)
         eventloopCurrent.run()
         then:
@@ -1429,7 +1429,7 @@ zunionstore
         Thread.start {
             eventloop.run()
         }
-        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+        LocalPersist.instance.addOneSlot(slot, eventloop)
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))

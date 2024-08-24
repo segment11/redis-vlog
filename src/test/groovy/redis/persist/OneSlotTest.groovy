@@ -119,7 +119,7 @@ class OneSlotTest extends Specification {
         oneSlot.doTask(0)
         def replPairAsSlave0 = oneSlot.createReplPairAsSlave('localhost', 6379)
         def replPairAsSlave1 = oneSlot.createReplPairAsSlave('localhost', 6379)
-        replPairAsSlave0.sendByeForTest = true
+        replPairAsSlave0.sendBye = true
         oneSlot.doTask(0)
         then:
         oneSlot.replPairs.size() == 4
@@ -131,13 +131,13 @@ class OneSlotTest extends Specification {
         oneSlot.slaveReplPairListSelfAsMaster.size() == 2
 
         when:
-        replPairAsMaster0.sendByeForTest = true
+        replPairAsMaster0.sendBye = true
         then:
         oneSlot.slaveReplPairListSelfAsMaster.size() == 1
 
         when:
-        replPairAsSlave0.sendByeForTest = true
-        replPairAsSlave1.sendByeForTest = false
+        replPairAsSlave0.sendBye = true
+        replPairAsSlave1.sendBye = false
         oneSlot.removeReplPairAsSlave()
         then:
         oneSlot.delayNeedCloseReplPairs.size() == 1
@@ -158,8 +158,8 @@ class OneSlotTest extends Specification {
         replPairAsSlave0.addToFetchBigStringUuid(1L)
         oneSlot.doTask(0)
         oneSlot.doTask(1)
-        replPairAsSlave0.sendByeForTest = false
-        replPairAsSlave1.sendByeForTest = false
+        replPairAsSlave0.sendBye = false
+        replPairAsSlave1.sendBye = false
         oneSlot.removeReplPairAsSlave()
         then:
         oneSlot.replPairs.size() == 2
@@ -179,12 +179,12 @@ class OneSlotTest extends Specification {
 
         when:
         oneSlot.replPairs.add(replPairAsMaster0)
-        replPairAsMaster0.sendByeForTest = true
+        replPairAsMaster0.sendBye = true
         then:
         oneSlot.getReplPairAsMaster(11L) == null
 
         when:
-        replPairAsMaster0.sendByeForTest = false
+        replPairAsMaster0.sendBye = false
         then:
         oneSlot.getReplPairAsMaster(11L) != null
 
@@ -195,7 +195,7 @@ class OneSlotTest extends Specification {
         oneSlot.getReplPairAsMaster(11L) == null
 
         when:
-        replPairAsSlave0.sendByeForTest = false
+        replPairAsSlave0.sendBye = false
         oneSlot.replPairs.clear()
         oneSlot.replPairs.add(replPairAsSlave0)
         then:
@@ -869,7 +869,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedSegmentSet()
         chunkMergeWorker.addMergedSegment(100, 1)
         chunk.initSegmentIndexWhenFirstStart(0)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -877,7 +877,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedSegmentSet()
         chunkMergeWorker.addMergedSegment(0, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -885,8 +885,8 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        chunkMergeWorker.clearMergedCvListForTest()
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedCvList()
+        chunkMergeWorker.clearMergedSegmentSet()
         chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 1, 1)
         chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, testMergedKey, 0, chunk.halfSegmentNumber + 1))
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
@@ -895,7 +895,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedSegmentSet()
         chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber + 100, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -903,7 +903,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedSegmentSet()
         chunkMergeWorker.addMergedSegment(chunk.halfSegmentNumber - 1, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.halfSegmentNumber)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -911,8 +911,8 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        chunkMergeWorker.clearMergedCvListForTest()
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedCvList()
+        chunkMergeWorker.clearMergedSegmentSet()
         chunkMergeWorker.addMergedSegment(0, 1)
         chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, testMergedKey, 0, 0))
         chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 1)
@@ -921,7 +921,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedSegmentSet()
         chunkMergeWorker.addMergedSegment(100, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 1)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -929,7 +929,7 @@ class OneSlotTest extends Specification {
         1 == 1
 
         when:
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedSegmentSet()
         chunkMergeWorker.addMergedSegment(0, 1)
         chunk.initSegmentIndexWhenFirstStart(chunk.maxSegmentIndex - 100)
         oneSlot.checkFirstMergedButNotPersistedSegmentIndexTooNear()
@@ -982,8 +982,8 @@ class OneSlotTest extends Specification {
         def cvList = Mock.prepareCompressedValueList(100)
         for (cv in cvList) {
             def encoded = cv.encode()
-            oneSlot.putKvInTargetWalGroupIndexLRUForTest(0, 'key:' + cv.seq, encoded)
-            oneSlot.putKvInTargetWalGroupIndexLRUForTest(1, 'key:' + cv.seq, encoded)
+            oneSlot.putKvInTargetWalGroupIndexLRU(0, 'key:' + cv.seq, encoded)
+            oneSlot.putKvInTargetWalGroupIndexLRU(1, 'key:' + cv.seq, encoded)
         }
         println 'lru in memory size: ' + oneSlot.inMemorySizeOfLRU()
         then:
@@ -995,8 +995,8 @@ class OneSlotTest extends Specification {
         oneSlot.initLRU(true)
         for (cv in cvList) {
             def encoded = cv.encode()
-            oneSlot.putKvInTargetWalGroupIndexLRUForTest(0, 'key:' + cv.seq, encoded)
-            oneSlot.putKvInTargetWalGroupIndexLRUForTest(1, 'key:' + cv.seq, encoded)
+            oneSlot.putKvInTargetWalGroupIndexLRU(0, 'key:' + cv.seq, encoded)
+            oneSlot.putKvInTargetWalGroupIndexLRU(1, 'key:' + cv.seq, encoded)
         }
         then:
         oneSlot.kvByWalGroupIndexLRUCountTotal() == 200

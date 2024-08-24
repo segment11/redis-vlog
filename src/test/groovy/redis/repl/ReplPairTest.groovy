@@ -115,7 +115,7 @@ class ReplPairTest extends Specification {
 
         when:
         replPairAsMaster.isSendBye = true
-        replPairAsMaster.sendByeForTest = true
+        replPairAsMaster.sendBye = true
         then:
         !replPairAsMaster.ping()
         !replPairAsMaster.write(ReplType.ping, null)
@@ -183,7 +183,7 @@ class ReplPairTest extends Specification {
         replPairAsSlave.initAsSlave(eventloopCurrent, requestHandler)
         boolean[] isLinkUpArray = [false]
         replPairAsSlave.lastPongGetTimestamp = System.currentTimeMillis()
-        replPairAsSlave.sendByeForTest = false
+        replPairAsSlave.sendBye = false
         println 'before current eventloop run'
         eventloopCurrent.delay(2000, () -> {
             isLinkUpArray[0] = replPairAsSlave.isLinkUp()

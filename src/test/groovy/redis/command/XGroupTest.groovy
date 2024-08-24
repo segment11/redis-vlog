@@ -269,7 +269,7 @@ class XGroupTest extends Specification {
         r.isEmpty()
 
         when:
-        replPairAsMaster.sendByeForTest = false
+        replPairAsMaster.sendBye = false
         // master receive hello from slave, then create repl pair again
         data = mockData(replPairAsSlave, ReplType.hello, hello)
         x = new XGroup(null, data, null)

@@ -58,8 +58,8 @@ class ChunkMergeWorkerTest extends Specification {
         Debug.instance.logMerge = true
         chunkMergeWorker.logMergeCount = 1000
         chunkMergeWorker.removeMergedButNotPersistedAfterPersistWal([1], 1)
-        chunkMergeWorker.clearMergedCvListForTest()
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedCvList()
+        chunkMergeWorker.clearMergedSegmentSet()
         then:
         chunkMergeWorker.mergedCvListSize == 0
         chunkMergeWorker.mergedSegmentSetSize == 0
@@ -113,7 +113,7 @@ class ChunkMergeWorkerTest extends Specification {
         chunkMergeWorker.mergedSegmentSetSize == 1 + 10 - chunkMergeWorker.MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST
 
         when:
-        chunkMergeWorker.clearMergedSegmentSetForTest()
+        chunkMergeWorker.clearMergedSegmentSet()
         for (cv in cvList2) {
             chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, 'key' + cv.seq, bucketIndex, segmentIndex))
             chunkMergeWorker.addMergedCv(new ChunkMergeWorker.CvWithKeyAndBucketIndexAndSegmentIndex(cv, 'key' + cv.seq + 10000, bucketIndex + 32, segmentIndex + 1))

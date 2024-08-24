@@ -442,8 +442,8 @@ class MultiWorkerServerTest extends Specification {
     def 'test do repl'() {
         given:
         def leaderSelector = LeaderSelector.instance
-        leaderSelector.masterAddressLocalForTest = 'localhost:7379'
-        ConfForGlobal.netListenAddresses = leaderSelector.masterAddressLocalForTest
+        leaderSelector.masterAddressLocalMocked = 'localhost:7379'
+        ConfForGlobal.netListenAddresses = leaderSelector.masterAddressLocalMocked
 
         when:
         MultiWorkerServer.doReplAfterLeaderSelect(slot0)
@@ -451,7 +451,7 @@ class MultiWorkerServerTest extends Specification {
         1 == 1
 
         when:
-        leaderSelector.masterAddressLocalForTest = 'localhost:7380'
+        leaderSelector.masterAddressLocalMocked = 'localhost:7380'
         MultiWorkerServer.doReplAfterLeaderSelect(slot0)
         then:
         1 == 1
@@ -463,7 +463,7 @@ class MultiWorkerServerTest extends Specification {
         1 == 1
 
         when:
-        leaderSelector.masterAddressLocalForTest = null
+        leaderSelector.masterAddressLocalMocked = null
         MultiWorkerServer.doReplAfterLeaderSelect(slot0)
         then:
         1 == 1

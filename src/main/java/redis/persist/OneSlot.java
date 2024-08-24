@@ -13,6 +13,7 @@ import jnr.posix.LibC;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.apache.lucene.util.RamUsageEstimator;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
@@ -37,7 +38,7 @@ import static redis.persist.Chunk.*;
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
 public class OneSlot implements InMemoryEstimate {
-    @ForTestMethod
+    @TestOnly
     public OneSlot(byte slot, File slotDir, KeyLoader keyLoader, Wal wal) throws IOException {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
@@ -64,14 +65,13 @@ public class OneSlot implements InMemoryEstimate {
     }
 
     // only for local persist one slot array
-    @ForTestMethod
-    // onl
+    @TestOnly
     OneSlot(byte slot) {
         this(slot, null);
     }
 
     // only for async run/call
-    @ForTestMethod
+    @TestOnly
     OneSlot(byte slot, Eventloop eventloop) {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
@@ -517,8 +517,8 @@ public class OneSlot implements InMemoryEstimate {
         return n;
     }
 
-    @ForTestMethod
-    void putKvInTargetWalGroupIndexLRUForTest(int walGroupIndex, String key, byte[] cvEncoded) {
+    @TestOnly
+    void putKvInTargetWalGroupIndexLRU(int walGroupIndex, String key, byte[] cvEncoded) {
         var lru = kvByWalGroupIndexLRU.get(walGroupIndex);
         if (lru == null) {
             return;

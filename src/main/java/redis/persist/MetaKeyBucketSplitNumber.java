@@ -5,7 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
-import redis.ForTestMethod;
+import org.jetbrains.annotations.TestOnly;
 import redis.repl.SlaveReplay;
 
 import java.io.File;
@@ -99,8 +99,8 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
         return allCapacity;
     }
 
-    @ForTestMethod
-    void setForTest(int bucketIndex, byte splitNumber) {
+    @TestOnly
+    void set(int bucketIndex, byte splitNumber) {
         if (ConfForGlobal.pureMemory) {
             inMemoryCachedByteBuffer.put(bucketIndex, splitNumber);
             return;

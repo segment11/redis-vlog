@@ -88,7 +88,7 @@ class LocalPersistTest extends Specification {
         }
 
         def localPersist = LocalPersist.instance
-        localPersist.addOneSlotForTest(slot, eventloop)
+        localPersist.addOneSlot(slot, eventloop)
         localPersist.addOneSlotForTest2(slot)
 
         expect:

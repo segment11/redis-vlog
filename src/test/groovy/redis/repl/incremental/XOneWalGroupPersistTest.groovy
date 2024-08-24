@@ -77,7 +77,7 @@ class XOneWalGroupPersistTest extends Specification {
         1 == 1
 
         when:
-        x.shortValueForTest = false
+        x.shortValue = false
         x.chunkMergedSegmentIndexEndLastTime = -1
         x.lastSegmentSeq = 0L
         x.apply(slot, replPair)
@@ -85,7 +85,7 @@ class XOneWalGroupPersistTest extends Specification {
         1 == 1
 
         when:
-        x.clearWalAfterApplyForTest = false
+        x.clearWalAfterApply = false
         x.apply(slot, replPair)
         then:
         1 == 1

@@ -174,7 +174,7 @@ class DGroupTest extends Specification {
         Thread.start {
             eventloop.run()
         }
-        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+        LocalPersist.instance.addOneSlot(slot, eventloop)
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))
@@ -216,7 +216,7 @@ class DGroupTest extends Specification {
         Thread.start {
             eventloop.run()
         }
-        LocalPersist.instance.addOneSlotForTest(slot, eventloop)
+        LocalPersist.instance.addOneSlot(slot, eventloop)
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))

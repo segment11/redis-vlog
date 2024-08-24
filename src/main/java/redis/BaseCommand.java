@@ -3,6 +3,7 @@ package redis;
 import com.github.luben.zstd.Zstd;
 import io.activej.net.socket.tcp.ITcpSocket;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.command.AGroup;
@@ -102,18 +103,18 @@ public abstract class BaseCommand {
     protected byte[][] data;
     protected ITcpSocket socket;
 
-    @ForTestMethod
+    @TestOnly
     public void setCmd(String cmd) {
         this.cmd = cmd;
     }
 
-    @ForTestMethod
+    @TestOnly
     public void setData(byte[][] data) {
         this.data = data;
     }
 
-    @ForTestMethod
-    public void setSocketForTest(ITcpSocket socket) {
+    @TestOnly
+    public void setSocket(ITcpSocket socket) {
         this.socket = socket;
     }
 
@@ -128,7 +129,7 @@ public abstract class BaseCommand {
     protected byte workerId;
     protected byte netWorkers;
 
-    @ForTestMethod
+    @TestOnly
     public short getSlotNumber() {
         return slotNumber;
     }
@@ -143,17 +144,17 @@ public abstract class BaseCommand {
     protected TrainSampleJob trainSampleJob;
     protected List<TrainSampleJob.TrainSampleKV> sampleToTrainList;
 
-    @ForTestMethod
+    @TestOnly
     public void setLocalTest(boolean localTest) {
         this.localTest = localTest;
     }
 
-    @ForTestMethod
+    @TestOnly
     public void setLocalTestRandomValueList(ArrayList<byte[]> localTestRandomValueList) {
         this.localTestRandomValueList = localTestRandomValueList;
     }
 
-    @ForTestMethod
+    @TestOnly
     public ArrayList<byte[]> getLocalTestRandomValueList() {
         return localTestRandomValueList;
     }
@@ -164,12 +165,12 @@ public abstract class BaseCommand {
 
     protected ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed;
 
-    @ForTestMethod
+    @TestOnly
     public ArrayList<SlotWithKeyHash> getSlotWithKeyHashListParsed() {
         return slotWithKeyHashListParsed;
     }
 
-    @ForTestMethod
+    @TestOnly
     public void setSlotWithKeyHashListParsed(ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed) {
         this.slotWithKeyHashListParsed = slotWithKeyHashListParsed;
     }

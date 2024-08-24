@@ -157,14 +157,14 @@ class KeyLoaderTest extends Specification {
         !keyLoader.updateMetaKeyBucketSplitNumberBatchIfChanged(0, splitNumberArray)
 
         when:
-        keyLoader.setMetaKeyBucketSplitNumberForTest(0, (byte) 1)
+        keyLoader.setMetaKeyBucketSplitNumber(0, (byte) 1)
         then:
         keyLoader.metaKeyBucketSplitNumber.get(0) == (byte) 1
 
         when:
         exception = false
         try {
-            keyLoader.setMetaKeyBucketSplitNumberForTest(-1, (byte) 1)
+            keyLoader.setMetaKeyBucketSplitNumber(-1, (byte) 1)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -175,7 +175,7 @@ class KeyLoaderTest extends Specification {
         when:
         exception = false
         try {
-            keyLoader.setMetaKeyBucketSplitNumberForTest(keyLoader.bucketsPerSlot, (byte) 1)
+            keyLoader.setMetaKeyBucketSplitNumber(keyLoader.bucketsPerSlot, (byte) 1)
         } catch (IllegalArgumentException e) {
             println e.message
             exception = true
@@ -249,7 +249,7 @@ class KeyLoaderTest extends Specification {
 
         when:
         def encodeAsShortStringA = Mock.prepareShortStringCvEncoded('a', 'a')
-        keyLoader.putValueByKeyForTest(0, 'a'.bytes, 10L, 0L, 1L, encodeAsShortStringA)
+        keyLoader.putValueByKey(0, 'a'.bytes, 10L, 0L, 1L, encodeAsShortStringA)
         def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 10L)
         then:
         valueBytesWithExpireAt.valueBytes() == encodeAsShortStringA
@@ -259,8 +259,8 @@ class KeyLoaderTest extends Specification {
         k0.splitNumber = (byte) 2
         def bytes = k0.encode(true)
         keyLoader.fdReadWriteArray[0].writeOneInner(0, bytes, false)
-        keyLoader.setMetaKeyBucketSplitNumberForTest(0, (byte) 2)
-        keyLoader.putValueByKeyForTest(0, 'b'.bytes, 11L, 0L, 1L, 'b'.bytes)
+        keyLoader.setMetaKeyBucketSplitNumber(0, (byte) 2)
+        keyLoader.putValueByKey(0, 'b'.bytes, 11L, 0L, 1L, 'b'.bytes)
         def keyBuckets = keyLoader.readKeyBuckets(0)
         println keyLoader.readKeyBucketsToStringForDebug(0)
         then:
@@ -273,7 +273,7 @@ class KeyLoaderTest extends Specification {
         } == 1
 
         when:
-        def isRemoved = keyLoader.removeSingleKeyForTest(0, 'a'.bytes, 10L)
+        def isRemoved = keyLoader.removeSingleKey(0, 'a'.bytes, 10L)
         then:
         isRemoved
         keyLoader.getValueByKey(0, 'a'.bytes, 10L) == null
@@ -304,7 +304,7 @@ class KeyLoaderTest extends Specification {
         def keyBuckets = keyLoader.readKeyBuckets(0)
         def valueBytesWithExpireAt0 = keyLoader.getValueByKey(0, 'a'.bytes, 10L)
         def bytesBatch0 = keyLoader.readBatchInOneWalGroup(splitIndex, 0)
-        def isRemoved0 = keyLoader.removeSingleKeyForTest(0, 'a'.bytes, 10L)
+        def isRemoved0 = keyLoader.removeSingleKey(0, 'a'.bytes, 10L)
         then:
         keyBuckets[0] == null
         valueBytesWithExpireAt0 == null
@@ -316,11 +316,11 @@ class KeyLoaderTest extends Specification {
         def keyBucket = new KeyBucket(slot, 0, splitIndex, (byte) 1, null, keyLoader.snowFlake)
         rawFdReadWrite.writeOneInner(0, keyBucket.encode(true), false)
         def encodeAsShortStringA = Mock.prepareShortStringCvEncoded('a', 'a')
-        keyLoader.putValueByKeyForTest(0, 'a'.bytes, 10L, 0L, 1L, encodeAsShortStringA)
+        keyLoader.putValueByKey(0, 'a'.bytes, 10L, 0L, 1L, encodeAsShortStringA)
         def valueBytesWithExpireAt = keyLoader.getValueByKey(0, 'a'.bytes, 10L)
         def bytesBatch = keyLoader.readBatchInOneWalGroup(splitIndex, 0)
-        def isRemoved = keyLoader.removeSingleKeyForTest(0, 'a'.bytes, 10L)
-        def isRemoved2 = keyLoader.removeSingleKeyForTest(0, 'b'.bytes, 11L)
+        def isRemoved = keyLoader.removeSingleKey(0, 'a'.bytes, 10L)
+        def isRemoved2 = keyLoader.removeSingleKey(0, 'b'.bytes, 11L)
         then:
         valueBytesWithExpireAt.valueBytes() == encodeAsShortStringA
         bytesBatch != null
@@ -349,9 +349,9 @@ class KeyLoaderTest extends Specification {
         def splitNumberArray = new byte[oneChargeBucketNumber]
         splitNumberArray[0] = (byte) 3
         keyLoader.metaKeyBucketSplitNumber.setBatch(0, splitNumberArray)
-        keyLoader.fdReadWriteArray[0].resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(walGroupNumber)
-        keyLoader.fdReadWriteArray[1].resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(walGroupNumber)
-        keyLoader.fdReadWriteArray[2].resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndexForTest(walGroupNumber)
+        keyLoader.fdReadWriteArray[0].resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndex(walGroupNumber)
+        keyLoader.fdReadWriteArray[1].resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndex(walGroupNumber)
+        keyLoader.fdReadWriteArray[2].resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndex(walGroupNumber)
         keyLoader.writeSharedBytesList(sharedBytesListBySplitIndex, 0)
         def keyBucketListFromMemory = keyLoader.readKeyBuckets(0)
         then:

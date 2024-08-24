@@ -63,9 +63,9 @@ class MetaKeyBucketSplitNumberTest extends Specification {
 //        println one.inMemoryCachedBytes
 
         when:
-        one.setForTest(10, (byte) 3)
-        one.setForTest(20, (byte) 9)
-        one.setForTest(30, (byte) 27)
+        one.set(10, (byte) 3)
+        one.set(20, (byte) 9)
+        one.set(30, (byte) 27)
         then:
         one.get((byte) 10) == 3
         one.get((byte) 20) == 9
@@ -83,9 +83,9 @@ class MetaKeyBucketSplitNumberTest extends Specification {
         when:
         ConfForGlobal.pureMemory = true
         def one2 = new MetaKeyBucketSplitNumber(slot, slotDir)
-        one2.setForTest(10, (byte) 3)
-        one2.setForTest(20, (byte) 9)
-        one2.setForTest(30, (byte) 27)
+        one2.set(10, (byte) 3)
+        one2.set(20, (byte) 9)
+        one2.set(30, (byte) 27)
         then:
         one2.get((byte) 10) == 3
         one2.get((byte) 20) == 9

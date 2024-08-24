@@ -2,11 +2,11 @@ package redis.persist;
 
 import org.apache.lucene.util.RamUsageEstimator;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.Debug;
-import redis.ForTestMethod;
 import redis.metric.SimpleGauge;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.incremental.XOneWalGroupPersist;
@@ -70,8 +70,8 @@ public class ChunkMergeWorker implements InMemoryEstimate {
         return mergedCvList.size();
     }
 
-    @ForTestMethod
-    void clearMergedCvListForTest() {
+    @TestOnly
+    void clearMergedCvList() {
         mergedCvList.clear();
     }
 
@@ -109,8 +109,8 @@ public class ChunkMergeWorker implements InMemoryEstimate {
         return mergedSegmentSet.first().segmentIndex;
     }
 
-    @ForTestMethod
-    void clearMergedSegmentSetForTest() {
+    @TestOnly
+    void clearMergedSegmentSet() {
         mergedSegmentSet.clear();
     }
 
