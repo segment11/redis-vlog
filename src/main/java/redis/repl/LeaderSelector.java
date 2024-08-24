@@ -7,13 +7,12 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.recipes.leader.LeaderLatch;
 import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.apache.zookeeper.CreateMode;
-import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
-import redis.ForTestMethod;
 import redis.command.XGroup;
 import redis.persist.LocalPersist;
 import redis.repl.support.JedisPoolHolder;
@@ -36,44 +35,48 @@ public class LeaderSelector {
 
     private CuratorFramework client;
 
-    synchronized void connect() {
+    synchronized boolean connect() {
         var connectString = ConfForGlobal.zookeeperConnectString;
         if (connectString == null) {
             log.debug("Repl zookeeper connect string is null, leader select will not work");
-            return;
+            return false;
         }
 
         if (client != null) {
             log.warn("Repl zookeeper client already started, connect string: {}", connectString);
-            return;
+            return true;
         }
 
         client = CuratorFrameworkFactory.newClient(connectString,
                 new ExponentialBackoffRetry(1000, 3));
         client.start();
         log.info("Repl zookeeper client started, connect string: {}", connectString);
+        return true;
     }
 
-    private boolean isConnected() {
+    @VisibleForTesting
+    boolean isConnected() {
         return client != null && client.getZookeeperClient().isConnected();
     }
 
-    private long isLeaderLoopCount = 0;
+    @VisibleForTesting
+    long isLeaderLoopCount = 0;
 
-    @ForTestMethod
-    public String getMasterAddressLocalForTest() {
+    @TestOnly
+    public String getMasterAddressLocal() {
         return masterAddressLocalForTest;
     }
 
-    @ForTestMethod
-    public void setMasterAddressLocalForTest(String masterAddressLocalForTest) {
+    @TestOnly
+    public void setMasterAddressLocal(String masterAddressLocalForTest) {
         this.masterAddressLocalForTest = masterAddressLocalForTest;
     }
 
-    @ForTestMethod
+    @TestOnly
     private String masterAddressLocalForTest;
 
-    public String tryConnectAndGetMasterListenAddress() {
+    @TestOnly
+    String tryConnectAndGetMasterListenAddress() {
         if (masterAddressLocalForTest != null) {
             return masterAddressLocalForTest;
         }
@@ -83,8 +86,10 @@ public class LeaderSelector {
 
     public String tryConnectAndGetMasterListenAddress(boolean doStartLeaderLatch) {
         if (!isConnected()) {
-            connect();
-            return null;
+            boolean isConnectOk = connect();
+            if (!isConnectOk) {
+                return null;
+            }
         }
 
         if (!ConfForGlobal.canBeLeader) {
@@ -97,54 +102,32 @@ public class LeaderSelector {
         }
 
         if (leaderLatch != null && leaderLatch.hasLeadership()) {
-            var path = ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LISTEN_ADDRESS_PATH;
-
-            // set listen address to zookeeper leader listen address path
-            var listenAddress = ConfForGlobal.netListenAddresses;
-            try {
-                var stat = client.checkExists().forPath(path);
-                if (stat == null) {
-                    client.create().withMode(CreateMode.EPHEMERAL).forPath(path, listenAddress.getBytes());
-                } else {
-                    // update
-                    client.setData().forPath(path, listenAddress.getBytes());
-                }
-
-                if (isLeaderLoopCount % 10 == 0) {
-                    log.info("Repl set master listen address to zookeeper: {}", listenAddress);
-                }
-            } catch (Exception e) {
-                // need not stack trace
-                log.error("Repl set master listen address to zookeeper failed: " + e.getMessage());
-                return null;
+            isLeaderLoopCount++;
+            if (isLeaderLoopCount % 100 == 0) {
+                log.info("Repl self is leader");
             }
 
-            isLeaderLoopCount++;
-            return listenAddress;
+            return ConfForGlobal.netListenAddresses;
         } else {
+            isLeaderLoopCount = 0;
             return getMasterListenAddressAsSlave();
         }
     }
 
-    @ForTestMethod
-    void removeTargetPathForTest() throws Exception {
-        var path = ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LISTEN_ADDRESS_PATH;
-        client.delete().forPath(path);
-        log.info("Repl remove master listen address from zookeeper: {}", path);
-    }
-
-    @Nullable
     private String getMasterListenAddressAsSlave() {
-        var path = ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LISTEN_ADDRESS_PATH;
+        if (leaderLatch == null) {
+            return null;
+        }
 
         try {
-            var data = client.getData().forPath(path);
-//            if (data == null) {
-//                log.warn("Repl get master listen address from zookeeper failed, data is null");
-//                return null;
-//            }
+            var latchPath = ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LATCH_PATH;
+            var children = client.getChildren().forPath(latchPath);
+            if (children.isEmpty()) {
+                return null;
+            }
 
-            var listenAddress = new String(data);
+            var dataBytes = client.getData().forPath(latchPath + "/" + children.getFirst());
+            var listenAddress = new String(dataBytes);
             log.debug("Repl get master listen address from zookeeper: {}", listenAddress);
             return listenAddress;
         } catch (Exception e) {
@@ -154,16 +137,24 @@ public class LeaderSelector {
         }
     }
 
-    private synchronized void close() {
+    synchronized void disconnect() {
         if (client != null) {
             client.close();
             log.info("Repl zookeeper client closed");
+            client = null;
         }
     }
 
     private LeaderLatch leaderLatch;
 
+    @TestOnly
+    boolean startLeaderLatchFailForTest;
+
     synchronized boolean startLeaderLatch() {
+        if (startLeaderLatchFailForTest) {
+            return false;
+        }
+
         if (leaderLatch != null) {
             log.debug("Repl leader latch already started");
             return true;
@@ -175,11 +166,13 @@ public class LeaderSelector {
         }
 
         // client must not be null
-        leaderLatch = new LeaderLatch(client, ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LATCH_PATH);
+        // local listen address as id
+        leaderLatch = new LeaderLatch(client, ConfForGlobal.zookeeperRootPath + ConfForGlobal.LEADER_LATCH_PATH,
+                ConfForGlobal.netListenAddresses);
         try {
             leaderLatch.start();
-            log.info("Repl leader latch started");
-            leaderLatch.await(10, TimeUnit.SECONDS);
+            log.info("Repl leader latch started and wait 5s");
+            leaderLatch.await(5, TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
             // need not stack trace
@@ -188,7 +181,7 @@ public class LeaderSelector {
         }
     }
 
-    public synchronized void closeLeaderLatch() {
+    public synchronized void stopLeaderLatch() {
         if (leaderLatch != null) {
             try {
                 leaderLatch.close();
@@ -202,15 +195,15 @@ public class LeaderSelector {
     }
 
     public void closeAll() {
-        closeLeaderLatch();
-        close();
+        stopLeaderLatch();
+        disconnect();
     }
 
     // run in primary eventloop
     public void resetAsMaster(boolean returnExceptionIfAlreadyIsMaster, Consumer<Exception> callback) {
         if (masterAddressLocalForTest != null) {
             callback.accept(null);
-            callback.accept(new RuntimeException("just test callback"));
+            callback.accept(new RuntimeException("just test callback when reset as master"));
             return;
         }
 
@@ -249,17 +242,18 @@ public class LeaderSelector {
             promises[i] = oneSlot.asyncRun(() -> {
                 var replPairAsSlave = oneSlot.getOnlyOneReplPairAsSlave();
 
-                boolean canResetSelfAsMaster = false;
+                boolean canResetSelfAsMasterNow = false;
                 if (replPairAsSlave.isMasterCanNotConnect()) {
-                    canResetSelfAsMaster = true;
+                    canResetSelfAsMasterNow = true;
                 } else {
                     if (replPairAsSlave.isMasterReadonly() && replPairAsSlave.isAllCaughtUp()) {
-                        canResetSelfAsMaster = true;
+                        canResetSelfAsMasterNow = true;
                     }
                 }
 
-                if (!canResetSelfAsMaster) {
-                    log.warn("Repl slave can not reset as master, slot: {}", replPairAsSlave.getSlot());
+                if (!canResetSelfAsMasterNow) {
+                    log.warn("Repl slave can not reset as master now, need wait current master readonly and slave all caught up, slot: {}",
+                            replPairAsSlave.getSlot());
                     XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPairAsSlave, null);
                     throw new IllegalStateException("Repl slave can not reset as master, slot: " + replPairAsSlave.getSlot());
                 }
@@ -285,7 +279,7 @@ public class LeaderSelector {
     public void resetAsSlave(boolean returnExceptionIfAlreadyIsSlave, String host, int port, Consumer<Exception> callback) {
         if (masterAddressLocalForTest != null) {
             callback.accept(null);
-            callback.accept(new RuntimeException("just test callback"));
+            callback.accept(new RuntimeException("just test callback when reset as slave"));
             return;
         }
 

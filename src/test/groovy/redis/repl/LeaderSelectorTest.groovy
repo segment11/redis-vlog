@@ -14,7 +14,7 @@ import spock.lang.Specification
 import java.util.concurrent.CompletableFuture
 
 class LeaderSelectorTest extends Specification {
-    def 'test base'() {
+    def 'test leader latch'() {
         given:
         def leaderSelector = LeaderSelector.instance
         // only for coverage
@@ -57,18 +57,25 @@ class LeaderSelectorTest extends Specification {
         // already connected, skip, for coverage
         leaderSelector.connect()
         then:
-        // just connect this time
+        masterListenAddress == (doThisCase ? ConfForGlobal.netListenAddresses : null)
+
+        when:
+        // already started, skip, for coverage
+        leaderSelector.startLeaderLatch()
+        // trigger log
+        leaderSelector.isLeaderLoopCount = 99
+        masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
+        then:
+        masterListenAddress == (doThisCase ? ConfForGlobal.netListenAddresses : null)
+
+        when:
+        leaderSelector.startLeaderLatchFailForTest = true
+        masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
+        then:
         masterListenAddress == null
 
         when:
-        Thread.sleep(1000)
-        leaderSelector.startLeaderLatch()
-        masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
-        then:
-        masterListenAddress == null || masterListenAddress == ConfForGlobal.netListenAddresses
-
-        when:
-        Thread.sleep(1000)
+        leaderSelector.startLeaderLatchFailForTest = false
         if (masterListenAddress == null) {
             masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress()
         }
@@ -83,27 +90,22 @@ class LeaderSelectorTest extends Specification {
         masterListenAddress == (doThisCase ? ConfForGlobal.netListenAddresses : null)
 
         when:
-        String masterListenAddress2 = null
+        ConfForGlobal.canBeLeader = true
         if (doThisCase) {
-            try {
-                leaderSelector.removeTargetPathForTest()
-                masterListenAddress2 = leaderSelector.tryConnectAndGetMasterListenAddress()
-            } catch (Exception e) {
-                println e.message
-                masterListenAddress2 = null
-            }
+            leaderSelector.stopLeaderLatch()
+            // only for coverage
+            leaderSelector.stopLeaderLatch()
+            masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress(false)
         }
         then:
-        doThisCase ? (masterListenAddress2 == null) : (masterListenAddress2 == masterListenAddress)
+        masterListenAddress == null
 
         when:
-        ConfForGlobal.canBeLeader = true
-        leaderSelector.closeLeaderLatch()
-        leaderSelector.closeLeaderLatch()
-        Thread.sleep(1000)
-        masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress(false)
+        leaderSelector.disconnect()
+        def isStartOk = leaderSelector.startLeaderLatch()
         then:
-        masterListenAddress == null
+        !isStartOk
+        !leaderSelector.isConnected()
 
         cleanup:
         leaderSelector.closeAll()
