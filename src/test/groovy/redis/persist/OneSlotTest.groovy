@@ -86,6 +86,7 @@ class OneSlotTest extends Specification {
         !oneSlot.isAsSlave()
         oneSlot.getReplPairAsSlave(11L) == null
         oneSlot.getOnlyOneReplPairAsSlave() == null
+        oneSlot.firstReplPairAsMaster == null
 
         when:
         def persistConfig2 = Config.create().with('volumeDirsBySlot',
@@ -145,6 +146,13 @@ class OneSlotTest extends Specification {
         when:
         oneSlot.doTask(0)
         then:
+        // will remain in 10s
+        oneSlot.delayNeedCloseReplPairs.size() == 1
+
+        when:
+        Thread.sleep(11 * 1000)
+        oneSlot.doTask(0)
+        then:
         oneSlot.delayNeedCloseReplPairs.size() == 0
 
         when:
@@ -166,9 +174,11 @@ class OneSlotTest extends Specification {
         oneSlot.delayNeedCloseReplPairs.size() == 2
 
         when:
+        Thread.sleep(11 * 1000)
         oneSlot.doTask(0)
+        oneSlot.doTask(1)
         then:
-        oneSlot.delayNeedCloseReplPairs.size() == 1
+        oneSlot.delayNeedCloseReplPairs.size() == 0
 
         when:
         // clear all
@@ -198,6 +208,7 @@ class OneSlotTest extends Specification {
         replPairAsSlave0.sendBye = false
         oneSlot.replPairs.clear()
         oneSlot.replPairs.add(replPairAsSlave0)
+        oneSlot.oneSlotGauge.collect()
         then:
         oneSlot.getReplPairAsMaster(11L) == null
         oneSlot.getReplPairAsSlave(oneSlot.masterUuid) != null
@@ -371,6 +382,12 @@ class OneSlotTest extends Specification {
         then:
         oneSlot.readonly
         !oneSlot.canRead
+
+        when:
+        oneSlot.resetReadonlyFalseAsMaster()
+        oneSlot.resetReadonlyFalseAsMaster()
+        then:
+        1 == 1
 
         when:
         // just for log

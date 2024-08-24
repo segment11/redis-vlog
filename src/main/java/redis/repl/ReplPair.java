@@ -1,10 +1,11 @@
 package redis.repl;
 
 import io.activej.eventloop.Eventloop;
+import io.activej.net.socket.tcp.TcpSocket;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
-import org.jetbrains.annotations.TestOnly;
 import redis.RequestHandler;
 import redis.repl.content.Hello;
 
@@ -137,8 +138,8 @@ public class ReplPair {
         int i = type.ordinal();
         statsCountForReplType[i]++;
 
-        // only log for ping and pong and catch up
-        if (type == ReplType.ping || type == ReplType.pong || type == ReplType.catch_up || type == ReplType.s_catch_up) {
+        // only log for catch up
+        if (type == ReplType.catch_up || type == ReplType.s_catch_up) {
             if (statsCountForReplType[i] % 100 == 0) {
                 log.info("Repl pair stats count for repl type, alive, target host: {}, port: {}, slot: {}, stats: {}",
                         host, port, slot, getStatsCountForReplTypeAsString());
@@ -234,6 +235,24 @@ public class ReplPair {
                     && tcpClient != null && tcpClient.isSocketConnected();
             addLinkUpFlag(isPongReceivedOk);
             return isLinkUpAnyOk();
+        }
+    }
+
+    TcpSocket slaveConnectSocketInMaster;
+
+    public void setSlaveConnectSocketInMaster(TcpSocket slaveConnectSocketInMaster) {
+        this.slaveConnectSocketInMaster = slaveConnectSocketInMaster;
+    }
+
+    public void closeSlaveConnectSocket() {
+        if (slaveConnectSocketInMaster != null) {
+            try {
+                slaveConnectSocketInMaster.close();
+                log.warn("Repl pair master close slave socket, {}:{}", host, port);
+            } catch (Exception e) {
+                log.error("Repl pair master close slave socket error, {}:{}", host, port, e);
+            }
+            slaveConnectSocketInMaster = null;
         }
     }
 

@@ -301,7 +301,7 @@ public class OneSlot implements InMemoryEstimate {
         var replPair = new ReplPair(slot, false, host, port);
         replPair.setSlaveUuid(masterUuid);
         replPair.initAsSlave(netWorkerEventloop, requestHandler);
-        log.warn("Create repl pair as slave, host: {}, port: {}, slot: {}", host, port, slot);
+        log.warn("Repl create repl pair as slave, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
 
         if (!isReadonly()) {
@@ -333,6 +333,7 @@ public class OneSlot implements InMemoryEstimate {
     }
 
     public void resetReadonlyFalseAsMaster() throws IOException {
+        log.warn("Repl reset readonly false as master, slot: {}", slot);
         if (isReadonly()) {
             setReadonly(false);
         }
@@ -342,6 +343,17 @@ public class OneSlot implements InMemoryEstimate {
     }
 
     public ReplPair getReplPairAsMaster(long slaveUuid) {
+        var list = getReplPairAsMasterList();
+        return list.stream().filter(one -> one.getSlaveUuid() == slaveUuid).findFirst().orElse(null);
+    }
+
+    public ReplPair getFirstReplPairAsMaster() {
+        var list = getReplPairAsMasterList();
+        return list.isEmpty() ? null : list.getFirst();
+    }
+
+    public ArrayList<ReplPair> getReplPairAsMasterList() {
+        ArrayList<ReplPair> list = new ArrayList<>();
         for (var replPair : replPairs) {
             if (replPair.isSendBye()) {
                 continue;
@@ -351,17 +363,9 @@ public class OneSlot implements InMemoryEstimate {
                 continue;
             }
 
-            if (slaveUuid != -1L && replPair.getSlaveUuid() != slaveUuid) {
-                continue;
-            }
-
-            return replPair;
+            list.add(replPair);
         }
-        return null;
-    }
-
-    public ReplPair getFirstReplPairAsMaster() {
-        return getReplPairAsMaster(-1L);
+        return list;
     }
 
     public ReplPair getReplPairAsSlave(long slaveUuid) {
@@ -399,7 +403,7 @@ public class OneSlot implements InMemoryEstimate {
             }
         }
 
-        log.warn("Create repl pair as master, host: {}, port: {}, slot: {}", host, port, slot);
+        log.warn("Repl create repl pair as master, host: {}, port: {}, slot: {}", host, port, slot);
         replPairs.add(replPair);
         return replPair;
     }
@@ -1695,7 +1699,7 @@ public class OneSlot implements InMemoryEstimate {
                 map.put("segment_decompress_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(segmentDecompressedCostTAvg, labelValues));
             }
 
-            var replPairAsSlave = getReplPairAsSlave(masterUuid);
+            var replPairAsSlave = getOnlyOneReplPairAsSlave();
             if (replPairAsSlave != null) {
                 map.put("repl_slave_catch_up_last_seq", new SimpleGauge.ValueWithLabelValues(
                         (double) replPairAsSlave.getSlaveCatchUpLastSeq(), labelValues));

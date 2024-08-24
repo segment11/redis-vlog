@@ -84,6 +84,9 @@ public class LeaderSelector {
         return tryConnectAndGetMasterListenAddress(true);
     }
 
+    @VisibleForTesting
+    boolean hasLeadershipLastTry;
+
     public String tryConnectAndGetMasterListenAddress(boolean doStartLeaderLatch) {
         if (!isConnected()) {
             boolean isConnectOk = connect();
@@ -101,17 +104,31 @@ public class LeaderSelector {
             return null;
         }
 
-        if (leaderLatch != null && leaderLatch.hasLeadership()) {
+        if (hasLeadership()) {
             isLeaderLoopCount++;
             if (isLeaderLoopCount % 100 == 0) {
-                log.info("Repl self is leader");
+                log.info("Repl self is leader, loop count: {}", isLeaderLoopCount);
             }
+
+            if (!hasLeadershipLastTry) {
+                log.warn("Repl self become leader, {}", ConfForGlobal.netListenAddresses);
+            }
+            hasLeadershipLastTry = true;
 
             return ConfForGlobal.netListenAddresses;
         } else {
             isLeaderLoopCount = 0;
+            if (hasLeadershipLastTry) {
+                log.warn("Repl self lost leader, {}", ConfForGlobal.netListenAddresses);
+            }
+            hasLeadershipLastTry = false;
+
             return getMasterListenAddressAsSlave();
         }
+    }
+
+    public boolean hasLeadership() {
+        return leaderLatch != null && leaderLatch.hasLeadership();
     }
 
     private String getMasterListenAddressAsSlave() {
@@ -125,6 +142,13 @@ public class LeaderSelector {
             if (children.isEmpty()) {
                 return null;
             }
+
+            // sort by suffix, smaller is master
+            children.sort((o1, o2) -> {
+                var lastIndex1 = o1.lastIndexOf("-");
+                var lastIndex2 = o2.lastIndexOf("-");
+                return o1.substring(lastIndex2).compareTo(o2.substring(lastIndex1));
+            });
 
             var dataBytes = client.getData().forPath(latchPath + "/" + children.getFirst());
             var listenAddress = new String(dataBytes);
@@ -181,12 +205,19 @@ public class LeaderSelector {
         }
     }
 
+    private long lastStopLeaderLatchTimeMillis;
+
+    public long getLastStopLeaderLatchTimeMillis() {
+        return lastStopLeaderLatchTimeMillis;
+    }
+
     public synchronized void stopLeaderLatch() {
         if (leaderLatch != null) {
             try {
                 leaderLatch.close();
                 log.info("Repl leader latch closed");
                 leaderLatch = null;
+                lastStopLeaderLatchTimeMillis = System.currentTimeMillis();
             } catch (Exception e) {
                 // need not stack trace
                 log.error("Repl leader latch close failed: " + e.getMessage());
@@ -229,6 +260,7 @@ public class LeaderSelector {
                 return;
             }
 
+            log.warn("Repl reset self as master, {}", ConfForGlobal.netListenAddresses);
             resetAsMasterNextStep(callback);
         });
     }
@@ -313,12 +345,16 @@ public class LeaderSelector {
             }
 
             if (needCloseOldReplPairAsSlave) {
+                log.warn("Repl slave ready to remove old repl pair as slave, old master: {}", replPair.getHostAndPort());
+
                 Promise<Void>[] promises = new Promise[ConfForGlobal.slotNumber];
                 for (int i = 0; i < ConfForGlobal.slotNumber; i++) {
                     var oneSlot = localPersist.oneSlot((byte) i);
                     // still is a slave, need not reset readonly
                     promises[i] = oneSlot.asyncRun(() -> {
                         oneSlot.removeReplPairAsSlave();
+                        log.warn("Repl slave removed old repl pair as slave, old master: {}", replPair.getHostAndPort());
+
                         oneSlot.getBinlog().moveToNextSegment();
                     });
                 }
@@ -339,6 +375,7 @@ public class LeaderSelector {
 
     // in primary eventloop
     private void makeSelfAsSlave(String host, int port, Consumer<Exception> callback) {
+        log.warn("Repl reset self as slave begin, check new master global config first, {}", ConfForGlobal.netListenAddresses);
         try {
             var jedisPool = JedisPoolHolder.getInstance().create(host, port);
             // may be null
@@ -353,12 +390,16 @@ public class LeaderSelector {
             var jsonStrLocal = objectMapper.writeValueAsString(map);
 
             if (!jsonStrLocal.equals(jsonStr)) {
+                log.warn("Repl reset self as slave begin, check new master global config fail, {}", ConfForGlobal.netListenAddresses);
+                log.info("Repl local: {}", jsonStrLocal);
+                log.info("Repl remote: {}", jsonStr);
                 callback.accept(new IllegalStateException("Repl slave can not match check values"));
             }
         } catch (Exception e) {
             callback.accept(e);
             return;
         }
+        log.warn("Repl reset self as slave begin, check new master global config ok, {}", ConfForGlobal.netListenAddresses);
 
         var localPersist = LocalPersist.getInstance();
 
@@ -367,6 +408,8 @@ public class LeaderSelector {
             var oneSlot = localPersist.oneSlot((byte) i);
             promises[i] = oneSlot.asyncRun(() -> {
                 oneSlot.createReplPairAsSlave(host, port);
+                log.warn("Repl slave created new repl pair as slave, new master: {}:{}", host, port);
+
                 oneSlot.getBinlog().moveToNextSegment();
                 // do not write binlog as slave
                 oneSlot.getDynConfig().setBinlogOn(false);

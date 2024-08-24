@@ -6,6 +6,7 @@ import io.activej.csp.consumer.ChannelConsumers
 import io.activej.csp.supplier.ChannelSuppliers
 import io.activej.eventloop.Eventloop
 import io.activej.net.SimpleServer
+import io.activej.net.socket.tcp.TcpSocket
 import redis.ConfForGlobal
 import redis.MultiWorkerServer
 import redis.RequestHandler
@@ -17,6 +18,7 @@ import redis.persist.LocalPersistTest
 import redis.repl.content.RawBytesContent
 import spock.lang.Specification
 
+import java.nio.channels.SocketChannel
 import java.time.Duration
 
 class ReplPairTest extends Specification {
@@ -55,9 +57,7 @@ class ReplPairTest extends Specification {
 
         // trigger log
         100.times {
-            replPairAsMaster.increaseStatsCountForReplType(ReplType.pong)
             replPairAsMaster.increaseStatsCountForReplType(ReplType.catch_up)
-            replPairAsSlave.increaseStatsCountForReplType(ReplType.ping)
             replPairAsSlave.increaseStatsCountForReplType(ReplType.s_catch_up)
         }
 
@@ -128,6 +128,29 @@ class ReplPairTest extends Specification {
         !replPairAsSlave.linkUp
 
         when:
+        replPairAsMaster.slaveConnectSocketInMaster = null
+        replPairAsMaster.closeSlaveConnectSocket()
+        then:
+        1 == 1
+
+        when:
+        def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
+                new InetSocketAddress('localhost', 46379), null)
+        replPairAsMaster.closeSlaveConnectSocket()
+        replPairAsMaster.slaveConnectSocketInMaster = socket
+        def eventloopCurrent = Eventloop.builder()
+                .withCurrentThread()
+                .withIdleInterval(Duration.ofMillis(100))
+                .build()
+        eventloopCurrent.execute {
+            replPairAsMaster.closeSlaveConnectSocket()
+        }
+        eventloopCurrent.run()
+        Thread.sleep(1000)
+        then:
+        replPairAsMaster.slaveConnectSocketInMaster == null
+
+        when:
         replPairAsMaster.addToFetchBigStringUuid(1L)
         then:
         replPairAsMaster.doingFetchBigStringUuid() == 1L
@@ -151,7 +174,9 @@ class ReplPairTest extends Specification {
         replPairAsSlave.initAsSlave(null, null)
         then:
         !replPairAsSlave.isLinkUp()
+    }
 
+    def 'test connect'() {
         when:
         MultiWorkerServer.STATIC_GLOBAL_V.socketInspector = new SocketInspector()
         LocalPersistTest.prepareLocalPersist()

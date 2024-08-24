@@ -4,6 +4,8 @@ package redis.command;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.activej.net.socket.tcp.ITcpSocket;
+import io.activej.net.socket.tcp.TcpSocket;
+import io.netty.buffer.Unpooled;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.LoggerFactory;
 import redis.*;
@@ -131,11 +133,17 @@ public class XGroup extends BaseCommand {
             this.replPair = replPairAsMaster;
             try {
                 var reply = catch_up(slot, contentBytes);
-                if (reply.isReplType(error)) {
-                    return new ErrorReply(new String(reply.buf().array()));
+                var nettyByteBuf = Unpooled.wrappedBuffer(reply.buf().array());
+                var data4 = Repl.decode(nettyByteBuf);
+                if (data4 == null) {
+                    return NilReply.INSTANCE;
                 }
 
-                return new BulkReply(reply.buf().array());
+                if (reply.isReplType(error)) {
+                    return new ErrorReply(new String(data4[3]));
+                }
+
+                return new BulkReply(data4[3]);
             } catch (Exception e) {
                 log.error("Repl master handle x_repl x_catch_up error, slot: " + slot, e);
                 return new ErrorReply(e.getMessage());
@@ -198,6 +206,11 @@ public class XGroup extends BaseCommand {
         if (replPair != null) {
             replPair.increaseStatsCountForReplType(replType);
             replPair.increaseFetchedBytesLength(contentBytes.length);
+
+            // for proactively close slave connection in master
+            if (replPair.isAsMaster()) {
+                replPair.setSlaveConnectSocketInMaster((TcpSocket) socket);
+            }
         }
 
         return switch (replType) {

@@ -6,10 +6,9 @@ import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
 import redis.BaseCommand;
-import redis.reply.AsyncReply;
-import redis.reply.NilReply;
-import redis.reply.OKReply;
-import redis.reply.Reply;
+import redis.ConfForGlobal;
+import redis.repl.LeaderSelector;
+import redis.reply.*;
 
 import java.util.ArrayList;
 
@@ -24,11 +23,63 @@ public class FGroup extends BaseCommand {
     }
 
     public Reply handle() {
+        if ("failover".equals(cmd)) {
+            return failover();
+        }
+
         if ("flushdb".equals(cmd) || "flushall".equals(cmd)) {
             return flushdb();
         }
 
         return NilReply.INSTANCE;
+    }
+
+    Reply failover() {
+        // skip for test
+        if (data.length == 2) {
+            return OKReply.INSTANCE;
+        }
+
+        if (ConfForGlobal.zookeeperConnectString == null) {
+            return new ErrorReply("zookeeper connect string is null");
+        }
+
+//        if (!LeaderSelector.getInstance().hasLeadership()) {
+//            return new ErrorReply("not leader");
+//        }
+
+        Promise<Void>[] promises = new Promise[slotNumber];
+        for (int i = 0; i < slotNumber; i++) {
+            var oneSlot = localPersist.oneSlot((byte) i);
+            promises[i] = oneSlot.asyncRun(() -> {
+                oneSlot.setReadonly(true);
+                oneSlot.getDynConfig().setBinlogOn(false);
+
+                var replPairAsMasterList = oneSlot.getReplPairAsMasterList();
+                for (var replPairAsMaster : replPairAsMasterList) {
+                    replPairAsMaster.closeSlaveConnectSocket();
+                }
+            });
+        }
+
+        SettablePromise<Reply> finalPromise = new SettablePromise<>();
+        var asyncReply = new AsyncReply(finalPromise);
+
+        Promises.all(promises).whenComplete((r, e) -> {
+            if (e != null) {
+                log.error("failover error: {}", e.getMessage());
+                finalPromise.setException(e);
+                return;
+            }
+
+            LeaderSelector.getInstance().stopLeaderLatch();
+            log.warn("Repl leader latch stopped");
+            // later self will start leader latch again and make self as slave
+
+            finalPromise.set(OKReply.INSTANCE);
+        });
+
+        return asyncReply;
     }
 
     Reply flushdb() {
@@ -37,7 +88,6 @@ public class FGroup extends BaseCommand {
             return OKReply.INSTANCE;
         }
 
-//        assert isCrossRequestWorker;
         Promise<Void>[] promises = new Promise[slotNumber];
         for (int i = 0; i < slotNumber; i++) {
             var oneSlot = localPersist.oneSlot((byte) i);

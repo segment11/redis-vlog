@@ -460,8 +460,13 @@ public class MultiWorkerServer extends Launcher {
     // run in primary eventloop
     static void doReplAfterLeaderSelect(byte slot) {
         var leaderSelector = LeaderSelector.getInstance();
-        var masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress();
+        // if failover, wait 20s and then start leader select
+        if (System.currentTimeMillis() - leaderSelector.getLastStopLeaderLatchTimeMillis()
+                < ConfForGlobal.REPL_FAILOVER_SLAVE_WAIT_SECONDS) {
+            return;
+        }
 
+        var masterListenAddress = leaderSelector.tryConnectAndGetMasterListenAddress(true);
         if (masterListenAddress == null) {
             return;
         }

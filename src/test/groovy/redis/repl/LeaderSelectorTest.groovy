@@ -14,6 +14,18 @@ import spock.lang.Specification
 import java.util.concurrent.CompletableFuture
 
 class LeaderSelectorTest extends Specification {
+    static boolean checkZk() {
+        def tc = new TelnetClient(connectTimeout: 500)
+        try {
+            tc.connect('localhost', 2181)
+            return true
+        } catch (Exception ignored) {
+            return false
+        } finally {
+            tc.disconnect()
+        }
+    }
+
     def 'test leader latch'() {
         given:
         def leaderSelector = LeaderSelector.instance
@@ -27,6 +39,8 @@ class LeaderSelectorTest extends Specification {
         def testListenAddress = 'localhost:7379'
         leaderSelector.masterAddressLocalMocked = testListenAddress
         then:
+        !leaderSelector.isConnected()
+        !leaderSelector.hasLeadership()
         leaderSelector.masterAddressLocalMocked == testListenAddress
         leaderSelector.tryConnectAndGetMasterListenAddress() == testListenAddress
         leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort('localhost', 6379, slot) == testListenAddress
@@ -39,15 +53,7 @@ class LeaderSelectorTest extends Specification {
         ConfForGlobal.zookeeperRootPath = '/redis-vlog/cluster-test'
         ConfForGlobal.netListenAddresses = testListenAddress
 
-        boolean doThisCase = false
-        def tc = new TelnetClient(connectTimeout: 500)
-        try {
-            tc.connect('localhost', 2181)
-            doThisCase = true
-        } catch (Exception ignored) {
-        } finally {
-            tc.disconnect()
-        }
+        boolean doThisCase = checkZk()
         if (!doThisCase) {
             ConfForGlobal.zookeeperConnectString = null
             println 'zookeeper not running, skip'
@@ -99,6 +105,7 @@ class LeaderSelectorTest extends Specification {
         }
         then:
         masterListenAddress == null
+        leaderSelector.lastStopLeaderLatchTimeMillis > (doThisCase ? 0 : -1)
 
         when:
         leaderSelector.disconnect()

@@ -3,10 +3,10 @@ package redis.repl;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
-import org.jetbrains.annotations.TestOnly;
 import redis.persist.DynConfig;
 import redis.persist.InMemoryEstimate;
 
@@ -220,6 +220,7 @@ public class Binlog implements InMemoryEstimate {
                 createAndUseNextFile();
             }
         }
+        log.warn("Repl binlog move to next segment, slot: {}, file index: {}, offset: {}", slot, currentFileIndex, currentFileOffset);
     }
 
     private static final String FILE_NAME_PREFIX = "binlog-";

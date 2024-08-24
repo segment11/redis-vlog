@@ -31,6 +31,7 @@ public class ConfForGlobal {
     // for cascade replication
     public static boolean isAsSlaveOfSlave = false;
 
+    public static final int REPL_FAILOVER_SLAVE_WAIT_SECONDS = 20;
+
     public static final String LEADER_LATCH_PATH = "/leader_latch";
-    public static final String LEADER_LISTEN_ADDRESS_PATH = "/leader_listen_address";
 }
