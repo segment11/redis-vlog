@@ -30,6 +30,18 @@ public class ReplPair {
         return port;
     }
 
+    public record HostAndPort(String host, int port) {
+    }
+
+    public static HostAndPort parseHostAndPort(String hostAndPort) {
+        if (hostAndPort == null) {
+            return null;
+        }
+
+        var parts = hostAndPort.split(":");
+        return new HostAndPort(parts[0], Integer.parseInt(parts[1]));
+    }
+
     private final String host;
     private final int port;
 

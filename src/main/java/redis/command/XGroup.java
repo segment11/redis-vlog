@@ -159,6 +159,10 @@ public class XGroup extends BaseCommand {
     public static final String X_GET_FIRST_SLAVE_LISTEN_ADDRESS_AS_SUB_CMD = "x_get_first_slave_listen_address";
     public static final String X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH = "x_repl";
 
+    // for publish
+    public static final String X_MASTER_SWITCH_PUBLISH_CHANNEL = "+switch-master";
+//    public static final String X_MASTER_RESET_PUBLISH_CHANNEL = "+reset-master";
+
     public void setReplPair(ReplPair replPair) {
         this.replPair = replPair;
     }

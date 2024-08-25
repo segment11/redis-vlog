@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.commons.net.telnet.TelnetClient
 import redis.ConfForGlobal
 import redis.ConfForSlot
+import redis.SocketInspector
 import redis.command.XGroup
 import redis.persist.Consts
 import redis.persist.LocalPersist
@@ -41,6 +42,7 @@ class LeaderSelectorTest extends Specification {
         then:
         !leaderSelector.isConnected()
         !leaderSelector.hasLeadership()
+        leaderSelector.lastGetMasterListenAddressAsSlave == null
         leaderSelector.masterAddressLocalMocked == testListenAddress
         leaderSelector.tryConnectAndGetMasterListenAddress() == testListenAddress
         leaderSelector.getFirstSlaveListenAddressByMasterHostAndPort('localhost', 6379, slot) == testListenAddress
@@ -122,6 +124,9 @@ class LeaderSelectorTest extends Specification {
 
     def 'test reset as master'() {
         given:
+        ConfForGlobal.netListenAddresses = 'localhost:7380'
+        LocalPersist.instance.socketInspector = new SocketInspector()
+
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
@@ -248,6 +253,9 @@ class LeaderSelectorTest extends Specification {
 
     def 'reset as slave'() {
         given:
+        ConfForGlobal.netListenAddresses = 'localhost:7380'
+        LocalPersist.instance.socketInspector = new SocketInspector()
+
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())

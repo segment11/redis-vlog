@@ -50,6 +50,8 @@ class ReplPairTest extends Specification {
         def replPairAsSlave = mockAsSlave()
         println replPairAsMaster
         println replPairAsSlave
+        ReplPair.parseHostAndPort(null)
+        println ReplPair.parseHostAndPort(ConfForGlobal.netListenAddresses)
         for (replType in ReplType.values()) {
             replPairAsMaster.increaseStatsCountForReplType(replType)
             replPairAsSlave.increaseStatsCountForReplType(replType)

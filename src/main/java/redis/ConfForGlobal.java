@@ -26,6 +26,7 @@ public class ConfForGlobal {
 
     // for repl leader select
     public static String zookeeperConnectString;
+    // also as sentinel master name
     public static String zookeeperRootPath;
     public static boolean canBeLeader = true;
     // for cascade replication

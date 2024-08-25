@@ -16,6 +16,7 @@ import redis.ConfForSlot;
 import redis.command.XGroup;
 import redis.persist.LocalPersist;
 import redis.repl.support.JedisPoolHolder;
+import redis.reply.BulkReply;
 
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -131,6 +132,12 @@ public class LeaderSelector {
         return leaderLatch != null && leaderLatch.hasLeadership();
     }
 
+    private String lastGetMasterListenAddressAsSlave;
+
+    public String getLastGetMasterListenAddressAsSlave() {
+        return lastGetMasterListenAddressAsSlave;
+    }
+
     private String getMasterListenAddressAsSlave() {
         if (leaderLatch == null) {
             return null;
@@ -152,9 +159,11 @@ public class LeaderSelector {
 
             var dataBytes = client.getData().forPath(latchPath + "/" + children.getFirst());
             var listenAddress = new String(dataBytes);
+            lastGetMasterListenAddressAsSlave = listenAddress;
             log.debug("Repl get master listen address from zookeeper: {}", listenAddress);
             return listenAddress;
         } catch (Exception e) {
+            lastGetMasterListenAddressAsSlave = null;
             // need not stack trace
             log.error("Repl get master listen address from zookeeper failed: " + e.getMessage());
             return null;
@@ -303,7 +312,20 @@ public class LeaderSelector {
         }
 
         Promises.all(promises).whenComplete((r, e) -> {
-            callback.accept(e);
+            if (e != null) {
+                callback.accept(e);
+                return;
+            }
+
+            // publish switch master to redis clients
+            var oldMasterHostAndPort = ReplPair.parseHostAndPort(LeaderSelector.getInstance().lastGetMasterListenAddressAsSlave);
+            var selfAsMasterHostAndPort = ReplPair.parseHostAndPort(ConfForGlobal.netListenAddresses);
+            if (oldMasterHostAndPort == null) {
+                oldMasterHostAndPort = selfAsMasterHostAndPort;
+            }
+            publishMasterSwitchMessage(oldMasterHostAndPort, selfAsMasterHostAndPort);
+
+            callback.accept(null);
         });
     }
 
@@ -417,8 +439,28 @@ public class LeaderSelector {
         }
 
         Promises.all(promises).whenComplete((r, e) -> {
-            callback.accept(e);
+            if (e != null) {
+                callback.accept(e);
+                return;
+            }
+
+            // publish switch master to redis clients
+            var selfAsOldMasterHostAndPort = ReplPair.parseHostAndPort(ConfForGlobal.netListenAddresses);
+            var newMasterHostAndPort = new ReplPair.HostAndPort(host, port);
+            publishMasterSwitchMessage(selfAsOldMasterHostAndPort, newMasterHostAndPort);
+
+            callback.accept(null);
         });
+    }
+
+    private static void publishMasterSwitchMessage(ReplPair.HostAndPort from, ReplPair.HostAndPort to) {
+        var publishMessage = ConfForGlobal.zookeeperRootPath + " " + from.host() + " " + from.port() + " " +
+                to.host() + " " + to.port();
+        var publishMessageReply = new BulkReply(publishMessage.getBytes());
+        LocalPersist.getInstance().getSocketInspector().publish(XGroup.X_MASTER_SWITCH_PUBLISH_CHANNEL, publishMessageReply, (socket, reply) -> {
+            socket.write(reply.buffer());
+        });
+        log.warn("Repl publish master switch message: {}", publishMessage);
     }
 
     public String getFirstSlaveListenAddressByMasterHostAndPort(String host, int port, byte slot) {
