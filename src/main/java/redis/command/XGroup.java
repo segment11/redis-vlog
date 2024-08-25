@@ -501,6 +501,7 @@ public class XGroup extends BaseCommand {
             }
         } else {
             // skip
+            replPair.increaseStatsCountWhenSlaveSkipFetch(s_exists_wal);
             if (groupIndex % 100 == 0) {
                 log.info("Repl slave skip update wal exists bytes, slot: {}, group index: {}", slot, groupIndex);
             }
@@ -608,6 +609,8 @@ public class XGroup extends BaseCommand {
                 oneSlot.writeChunkSegmentsFromMasterExists(chunkSegmentsBytes,
                         beginSegmentIndex, realSegmentCount);
             }
+        } else {
+            replPair.increaseStatsCountWhenSlaveSkipFetch(s_exists_chunk_segments);
         }
 
         var maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber();
@@ -701,6 +704,8 @@ public class XGroup extends BaseCommand {
             }
             oneSlot.getKeyLoader().writeSharedBytesList(sharedBytesList, beginBucketIndex);
             oneSlot.getKeyLoader().setMetaOneWalGroupSeq(splitIndex, beginBucketIndex, masterOneWalGroupSeq);
+        } else {
+            replPair.increaseStatsCountWhenSlaveSkipFetch(s_exists_key_buckets);
         }
 
         boolean isLastBatchInThisSplit = beginBucketIndex == ConfForSlot.global.confBucket.bucketsPerSlot - oneChargeBucketNumber;
@@ -978,6 +983,7 @@ public class XGroup extends BaseCommand {
         // client received from server
         log.warn("Repl master reply exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
                 replPair.getSlaveUuid(), replPair.getHostAndPort());
+        log.warn("Repl slave stats count for slave skip fetch: {}", replPair.getStatsCountForSlaveSkipFetchAsString());
 
         var oneSlot = localPersist.oneSlot(slot);
         oneSlot.setChunkSegmentIndexFromMeta();

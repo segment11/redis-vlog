@@ -146,6 +146,29 @@ public class ReplPair {
     @ForSlaveField
     private long lastPongGetTimestamp;
 
+    @ForSlaveField
+    private final long[] statsCountWhenSlaveSkipFetch = new long[3];
+
+    public void increaseStatsCountWhenSlaveSkipFetch(ReplType type) {
+        int i;
+        if (type == ReplType.s_exists_wal) {
+            i = 0;
+        } else if (type == ReplType.s_exists_chunk_segments) {
+            i = 1;
+        } else if (type == ReplType.s_exists_key_buckets) {
+            i = 2;
+        } else {
+            return;
+        }
+        statsCountWhenSlaveSkipFetch[i]++;
+    }
+
+    public String getStatsCountForSlaveSkipFetchAsString() {
+        return "exists_wal skip fetch count: " + statsCountWhenSlaveSkipFetch[0] +
+                ", exists_chunk_segments skip fetch count: " + statsCountWhenSlaveSkipFetch[1] +
+                ", exists_key_buckets skip fetch count: " + statsCountWhenSlaveSkipFetch[2];
+    }
+
     private final long[] statsCountForReplType = new long[ReplType.values().length];
 
     public void increaseStatsCountForReplType(ReplType type) {

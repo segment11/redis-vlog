@@ -57,6 +57,12 @@ class ReplPairTest extends Specification {
             replPairAsSlave.increaseStatsCountForReplType(replType)
         }
 
+        replPairAsSlave.increaseStatsCountWhenSlaveSkipFetch(ReplType.error)
+        replPairAsSlave.increaseStatsCountWhenSlaveSkipFetch(ReplType.s_exists_wal)
+        replPairAsSlave.increaseStatsCountWhenSlaveSkipFetch(ReplType.s_exists_chunk_segments)
+        replPairAsSlave.increaseStatsCountWhenSlaveSkipFetch(ReplType.s_exists_key_buckets)
+        println replPairAsSlave.statsCountForSlaveSkipFetchAsString
+
         // trigger log
         100.times {
             replPairAsMaster.increaseStatsCountForReplType(ReplType.catch_up)
@@ -223,7 +229,7 @@ class ReplPairTest extends Specification {
             replPairAsSlave.initAsSlave(eventloopCurrent, requestHandler)
 
             replPairAsSlave.ping()
-            replPairAsSlave.write(ReplType.ok, new RawBytesContent('test'.bytes))
+            replPairAsSlave.write(ReplType.test, new RawBytesContent('test'.bytes))
             replPairAsSlave.bye()
             Thread.sleep(100)
             replPairAsSlave.close()
