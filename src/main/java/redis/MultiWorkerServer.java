@@ -77,6 +77,8 @@ public class MultiWorkerServer extends Launcher {
 
     public static final String PROPERTIES_FILE = "redis-vlog.properties";
 
+    public static long UP_TIME;
+
     static final int MAX_NET_WORKERS = 128;
 
     static ConfigConverter<Integer> toInt = ofInteger();
@@ -466,6 +468,8 @@ public class MultiWorkerServer extends Launcher {
         CollectorRegistry.defaultRegistry.register(new MemoryPoolsExports());
         CollectorRegistry.defaultRegistry.register(new GarbageCollectorExports());
         logger.info("Prometheus jvm hotspot metrics registered");
+
+        UP_TIME = System.currentTimeMillis();
     }
 
     // run in primary eventloop

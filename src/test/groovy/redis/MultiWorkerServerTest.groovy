@@ -43,6 +43,7 @@ class MultiWorkerServerTest extends Specification {
         m.requestHandlerArray = new RequestHandler[2]
         m.scheduleRunnableArray = new TaskRunnable[2]
         m.refreshLoader = m.refreshLoader()
+        println MultiWorkerServer.UP_TIME
 
         def dirFile2 = m.dirFile(config)
         def dirFile3 = m.dirFile(config)
