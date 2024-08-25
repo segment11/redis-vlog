@@ -216,6 +216,10 @@ public class MultiWorkerServer extends Launcher {
                 targetHandler = requestHandlerArray[i];
             }
             var reply = targetHandler.handle(request, socket);
+            if (reply == null) {
+                return Promise.of(null);
+            }
+
             if (reply instanceof AsyncReply) {
                 return transferAsyncReply(request, (AsyncReply) reply);
             } else {
@@ -228,7 +232,7 @@ public class MultiWorkerServer extends Launcher {
 
         var currentThreadId = Thread.currentThread().threadId();
         if (currentThreadId == netWorkerThreadIds[i]) {
-            return getByteBufPromiseByCurrentEventloop(request, socket, targetHandler);
+            return getByteBufPromiseByOtherEventloop(request, socket, targetHandler, null);
         } else {
             var otherNetWorkerEventloop = netWorkerEventloopArray[i];
             return getByteBufPromiseByOtherEventloop(request, socket, targetHandler, otherNetWorkerEventloop);
@@ -244,6 +248,7 @@ public class MultiWorkerServer extends Launcher {
             if (reply == null) {
                 return null;
             }
+
             if (reply instanceof AsyncReply) {
                 return transferAsyncReply(request, (AsyncReply) reply);
             } else {
@@ -262,10 +267,6 @@ public class MultiWorkerServer extends Launcher {
 
             return request.isHttp() ? wrapHttpResponse(r) : r.buffer();
         });
-    }
-
-    private Promise<ByteBuf> getByteBufPromiseByCurrentEventloop(Request request, ITcpSocket socket, RequestHandler targetHandler) {
-        return getByteBufPromiseByOtherEventloop(request, socket, targetHandler, null);
     }
 
     Promise<ByteBuf> handlePipeline(ArrayList<Request> pipeline, ITcpSocket socket, short slotNumber) {
@@ -298,10 +299,20 @@ public class MultiWorkerServer extends Launcher {
                 .map(bufs -> {
                     int totalN = 0;
                     for (var buf : bufs) {
+                        if (buf == null) {
+                            continue;
+                        }
                         totalN += buf.readRemaining();
                     }
+                    if (totalN == 0) {
+                        return null;
+                    }
+
                     var multiBuf = ByteBuf.wrapForWriting(new byte[totalN]);
                     for (var buf : bufs) {
+                        if (buf == null) {
+                            continue;
+                        }
                         multiBuf.put(buf);
                     }
                     return multiBuf;
@@ -594,11 +605,13 @@ public class MultiWorkerServer extends Launcher {
                 ConfForGlobal.zookeeperRootPath = config.get(ofString(), "zookeeperRootPath", "/redis-vlog");
                 ConfForGlobal.canBeLeader = config.get(ofBoolean(), "canBeLeader", true);
                 ConfForGlobal.isAsSlaveOfSlave = config.get(ofBoolean(), "isAsSlaveOfSlave", false);
+                ConfForGlobal.targetAvailableZone = config.get(ofString(), "targetAvailableZone", null);
 
                 log.warn("Global config, zookeeperConnectString: " + ConfForGlobal.zookeeperConnectString);
                 log.warn("Global config, zookeeperRootPath: " + ConfForGlobal.zookeeperRootPath);
                 log.warn("Global config, canBeLeader: " + ConfForGlobal.canBeLeader);
                 log.warn("Global config, isAsSlaveOfSlave: " + ConfForGlobal.isAsSlaveOfSlave);
+                log.warn("Global config, targetAvailableZone: " + ConfForGlobal.targetAvailableZone);
             }
 
             DictMap.TO_COMPRESS_MIN_DATA_LENGTH = config.get(toInt, "toCompressMinDataLength", 64);
