@@ -50,6 +50,12 @@ class LeaderSelectorTest extends Specification {
         leaderSelector.resetAsSlave(true, '', 0, e -> { })
 
         when:
+        leaderSelector.hasLeadershipLocalMocked = false
+        then:
+        !leaderSelector.hasLeadership()
+
+        when:
+        leaderSelector.hasLeadershipLocalMocked = null
         leaderSelector.masterAddressLocalMocked = null
         ConfForGlobal.zookeeperConnectString = 'localhost:2181'
         ConfForGlobal.zookeeperRootPath = '/redis-vlog/cluster-test'

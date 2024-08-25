@@ -5,6 +5,7 @@ import io.activej.eventloop.Eventloop
 import io.activej.inject.binding.OptionalDependency
 import io.activej.net.socket.tcp.TcpSocket
 import redis.decode.Request
+import redis.persist.Consts
 import redis.persist.KeyBucket
 import redis.persist.LocalPersist
 import redis.persist.LocalPersistTest
@@ -445,6 +446,11 @@ class MultiWorkerServerTest extends Specification {
         leaderSelector.masterAddressLocalMocked = 'localhost:7379'
         ConfForGlobal.netListenAddresses = leaderSelector.masterAddressLocalMocked
 
+        and:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot0, Thread.currentThread().threadId())
+
         when:
         MultiWorkerServer.doReplAfterLeaderSelect(slot0)
         then:
@@ -467,5 +473,9 @@ class MultiWorkerServerTest extends Specification {
         MultiWorkerServer.doReplAfterLeaderSelect(slot0)
         then:
         1 == 1
+
+        cleanup:
+        localPersist.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 }

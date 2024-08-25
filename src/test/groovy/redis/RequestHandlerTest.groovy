@@ -8,6 +8,7 @@ import redis.decode.Request
 import redis.persist.Consts
 import redis.persist.LocalPersist
 import redis.persist.LocalPersistTest
+import redis.repl.LeaderSelector
 import redis.repl.Repl
 import redis.repl.ReplType
 import redis.reply.*
@@ -281,6 +282,65 @@ class RequestHandlerTest extends Specification {
         new String(((BulkReply) reply).raw).contains('dict_size')
 
         when:
+        // for haproxy
+        // http metrics
+        var leaderSelector = LeaderSelector.instance
+        leaderSelector.hasLeadershipLocalMocked = true
+        httpData[0] = 'master'.bytes
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply instanceof BulkReply
+        new String(((BulkReply) reply).raw).contains('master')
+
+        when:
+        leaderSelector.hasLeadershipLocalMocked = false
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        httpData[0] = 'master_or_slave'.bytes
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply instanceof BulkReply
+        new String(((BulkReply) reply).raw).contains('master or slave')
+
+        when:
+        leaderSelector.hasLeadershipLocalMocked = true
+        httpData[0] = 'slave'.bytes
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        leaderSelector.hasLeadershipLocalMocked = false
+        httpData[0] = 'slave'.bytes
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply instanceof BulkReply
+        new String(((BulkReply) reply).raw).contains('slave')
+
+        when:
+        httpData[0] = 'slave_with_zone=zone1'.bytes
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        leaderSelector.hasLeadershipLocalMocked = true
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        leaderSelector.hasLeadershipLocalMocked = false
+        ConfForGlobal.targetAvailableZone = 'zone1'
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply instanceof BulkReply
+        new String(((BulkReply) reply).raw).contains('zone1')
+
+        when:
         httpData[0] = null
         reply = requestHandler.handle(httpRequest, socket)
         then:
@@ -303,6 +363,12 @@ class RequestHandlerTest extends Specification {
         httpData2[0] = '123'.bytes
         httpData2[1] = '123'.bytes
         def httpRequest2 = new Request(httpData2, true, false)
+        reply = requestHandler.handle(httpRequest2, socket)
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        httpData2[0] = null
         reply = requestHandler.handle(httpRequest2, socket)
         then:
         reply == ErrorReply.FORMAT

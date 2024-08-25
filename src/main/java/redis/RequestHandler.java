@@ -13,6 +13,7 @@ import redis.command.*;
 import redis.decode.Request;
 import redis.metric.SimpleGauge;
 import redis.persist.ReadonlyException;
+import redis.repl.LeaderSelector;
 import redis.reply.*;
 
 import java.io.IOException;
@@ -192,7 +193,11 @@ public class RequestHandler {
         request.setSlotWithKeyHashList(slotWithKeyHashList);
     }
 
-    private static final byte[] URL_QUERY_METRICS_FIRST_PARAM_BYTES = "metrics".getBytes();
+    private static final byte[] URL_QUERY_METRICS_BYTES = "metrics".getBytes();
+    private static final String URL_QUERY_FOR_HAPROXY_FILTER_MASTER = "master";
+    private static final String URL_QUERY_FOR_HAPROXY_FILTER_MASTER_OR_SLAVE = "master_or_slave";
+    private static final String URL_QUERY_FOR_HAPROXY_FILTER_SLAVE = "slave";
+    private static final String URL_QUERY_FOR_HAPROXY_FILTER_SLAVE_WITH_ZONE = "slave_with_zone";
 
     private static byte[][] transferDataForXGroup(String keyAsData) {
         // eg. get x_repl,sub_cmd,sub_sub_cmd,***
@@ -217,23 +222,73 @@ public class RequestHandler {
             xGroup.init(this, request);
 
             // try catch in handle repl method
-            var replReply = xGroup.handleRepl();
-            if (replReply == null) {
-                log.warn("Repl handle error, repl reply is null");
-                return null;
-            }
-            return replReply;
+            return xGroup.handleRepl();
         }
 
-        // metrics, prometheus format
-        // url should be ?metrics
-        if (request.isHttp() && data[0] != null && Arrays.equals(data[0], URL_QUERY_METRICS_FIRST_PARAM_BYTES)) {
-            var sw = new StringWriter();
-            try {
-                TextFormat.write004(sw, CollectorRegistry.defaultRegistry.metricFamilySamples());
-                return new BulkReply(sw.toString().getBytes());
-            } catch (IOException e) {
-                return new ErrorReply(e.getMessage());
+        // http special handle
+        if (request.isHttp() && data.length == 1) {
+            // metrics, prometheus format
+            // url should be ?metrics, eg: http://localhost:7379/?metrics
+            var firstDataBytes = data[0];
+            if (Arrays.equals(firstDataBytes, URL_QUERY_METRICS_BYTES)) {
+                var sw = new StringWriter();
+                try {
+                    TextFormat.write004(sw, CollectorRegistry.defaultRegistry.metricFamilySamples());
+                    return new BulkReply(sw.toString().getBytes());
+                } catch (IOException e) {
+                    return new ErrorReply(e.getMessage());
+                }
+            }
+
+            // for haproxy
+            if (firstDataBytes == null) {
+                return ErrorReply.FORMAT;
+            }
+
+            var firstDataString = new String(firstDataBytes);
+            if (firstDataString.equals(URL_QUERY_FOR_HAPROXY_FILTER_MASTER)) {
+                var isMaster = LeaderSelector.getInstance().hasLeadership();
+                if (isMaster) {
+                    // will response 200 status code
+                    return new BulkReply("master".getBytes());
+                } else {
+                    // will response 404 status code
+                    return NilReply.INSTANCE;
+                }
+            }
+
+            if (firstDataString.equals(URL_QUERY_FOR_HAPROXY_FILTER_MASTER_OR_SLAVE)) {
+                // will response 200 status code
+                return new BulkReply("master or slave".getBytes());
+            }
+
+            if (firstDataString.equals(URL_QUERY_FOR_HAPROXY_FILTER_SLAVE)) {
+                var isMaster = LeaderSelector.getInstance().hasLeadership();
+                if (!isMaster) {
+                    // will response 200 status code
+                    return new BulkReply("slave".getBytes());
+                } else {
+                    // will response 404 status code
+                    return NilReply.INSTANCE;
+                }
+            }
+
+            if (firstDataString.startsWith(URL_QUERY_FOR_HAPROXY_FILTER_SLAVE_WITH_ZONE)) {
+                // eg. slave_with_zone=zone1
+                var targetZone = firstDataString.substring(URL_QUERY_FOR_HAPROXY_FILTER_SLAVE_WITH_ZONE.length() + 1);
+                var isMaster = LeaderSelector.getInstance().hasLeadership();
+                if (isMaster) {
+                    // will response 404 status code
+                    return NilReply.INSTANCE;
+                }
+
+                if (targetZone.equals(ConfForGlobal.targetAvailableZone)) {
+                    // will response 200 status code
+                    return new BulkReply(("slave with zone " + targetZone).getBytes());
+                } else {
+                    // will response 404 status code
+                    return NilReply.INSTANCE;
+                }
             }
         }
 

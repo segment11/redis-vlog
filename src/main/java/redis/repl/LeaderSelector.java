@@ -78,10 +78,6 @@ public class LeaderSelector {
 
     @TestOnly
     String tryConnectAndGetMasterListenAddress() {
-        if (masterAddressLocalMocked != null) {
-            return masterAddressLocalMocked;
-        }
-
         return tryConnectAndGetMasterListenAddress(true);
     }
 
@@ -89,6 +85,10 @@ public class LeaderSelector {
     boolean hasLeadershipLastTry;
 
     public String tryConnectAndGetMasterListenAddress(boolean doStartLeaderLatch) {
+        if (masterAddressLocalMocked != null) {
+            return masterAddressLocalMocked;
+        }
+
         if (!isConnected()) {
             boolean isConnectOk = connect();
             if (!isConnectOk) {
@@ -128,7 +128,19 @@ public class LeaderSelector {
         }
     }
 
+    @TestOnly
+    private Boolean hasLeadershipLocalMocked;
+
+    @TestOnly
+    public void setHasLeadershipLocalMocked(Boolean hasLeadershipLocalMocked) {
+        this.hasLeadershipLocalMocked = hasLeadershipLocalMocked;
+    }
+
     public boolean hasLeadership() {
+        if (hasLeadershipLocalMocked != null) {
+            return hasLeadershipLocalMocked;
+        }
+
         return leaderLatch != null && leaderLatch.hasLeadership();
     }
 
@@ -281,15 +293,20 @@ public class LeaderSelector {
         for (int i = 0; i < ConfForGlobal.slotNumber; i++) {
             var oneSlot = localPersist.oneSlot((byte) i);
             promises[i] = oneSlot.asyncRun(() -> {
-                var replPairAsSlave = oneSlot.getOnlyOneReplPairAsSlave();
-
                 boolean canResetSelfAsMasterNow = false;
-                if (replPairAsSlave.isMasterCanNotConnect()) {
-                    canResetSelfAsMasterNow = true;
-                } else {
-                    if (replPairAsSlave.isMasterReadonly() && replPairAsSlave.isAllCaughtUp()) {
+
+                var replPairAsSlave = oneSlot.getOnlyOneReplPairAsSlave();
+                if (replPairAsSlave != null) {
+                    if (replPairAsSlave.isMasterCanNotConnect()) {
                         canResetSelfAsMasterNow = true;
+                    } else {
+                        if (replPairAsSlave.isMasterReadonly() && replPairAsSlave.isAllCaughtUp()) {
+                            canResetSelfAsMasterNow = true;
+                        }
                     }
+                } else {
+                    canResetSelfAsMasterNow = true;
+                    log.warn("Repl old repl pair as slave is null, slot: {}", oneSlot.slot());
                 }
 
                 if (!canResetSelfAsMasterNow) {

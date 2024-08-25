@@ -35,4 +35,6 @@ public class ConfForGlobal {
     public static final int REPL_FAILOVER_SLAVE_WAIT_SECONDS = 20;
 
     public static final String LEADER_LATCH_PATH = "/leader_latch";
+
+    public static String targetAvailableZone;
 }
