@@ -1,6 +1,7 @@
 package redis.repl;
 
 import io.netty.buffer.ByteBuf;
+import redis.repl.content.EmptyContent;
 import redis.repl.content.RawBytesContent;
 import redis.reply.Reply;
 
@@ -29,27 +30,23 @@ public class Repl {
         return buf;
     }
 
-    public record ReplReply(io.activej.bytebuf.ByteBuf buf) implements Reply {
+    public record ReplReply(long slaveUuid, byte slot, ReplType type, ReplContent content) implements Reply {
         @Override
         public io.activej.bytebuf.ByteBuf buffer() {
-            return buf;
+            return Repl.buffer(slaveUuid, slot, type, content);
         }
 
         public boolean isReplType(ReplType type) {
-            if (buf.limit() < PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1) {
-                return false;
-            }
-            var b = buf.at(PROTOCOL_KEYWORD_BYTES.length + 8 + 1);
-            return ReplType.fromCode(b) == type;
+            return this.type == type;
         }
 
         public boolean isEmpty() {
-            return buf.limit() == 0;
+            return content == EmptyContent.INSTANCE;
         }
     }
 
     public static ReplReply reply(byte slot, ReplPair replPair, ReplType type, ReplContent content) {
-        return new ReplReply(buffer(replPair.getSlaveUuid(), slot, type, content));
+        return new ReplReply(replPair.getSlaveUuid(), slot, type, content);
     }
 
     public static ReplReply error(byte slot, ReplPair replPair, String errorMessage) {
@@ -57,14 +54,14 @@ public class Repl {
     }
 
     public static ReplReply error(byte slot, long slaveUuid, String errorMessage) {
-        return new ReplReply(buffer(slaveUuid, slot, ReplType.error, new RawBytesContent(errorMessage.getBytes())));
+        return new ReplReply(slaveUuid, slot, ReplType.error, new RawBytesContent(errorMessage.getBytes()));
     }
 
     public static ReplReply ok(byte slot, ReplPair replPair, String message) {
         return reply(slot, replPair, ReplType.ok, new RawBytesContent(message.getBytes()));
     }
 
-    private static final ReplReply EMPTY_REPLY = new ReplReply(io.activej.bytebuf.ByteBuf.empty());
+    private static final ReplReply EMPTY_REPLY = new ReplReply(0L, (byte) 0, ReplType.ok, EmptyContent.INSTANCE);
 
     public static ReplReply emptyReply() {
         return EMPTY_REPLY;

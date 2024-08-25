@@ -48,6 +48,26 @@ public class FGroup extends BaseCommand {
 //            return new ErrorReply("not leader");
 //        }
 
+        var firstOneSlot = localPersist.currentThreadFirstOneSlot();
+        var asMasterList = firstOneSlot.getReplPairAsMasterList();
+        if (asMasterList.isEmpty()) {
+            return new ErrorReply("no slave");
+        }
+
+        // check slave catch up offset, if not catch up, can not do failover
+        var currentFo = firstOneSlot.getBinlog().currentFileIndexAndOffset();
+        for (var replPairAsMaster : asMasterList) {
+            var fo = replPairAsMaster.getSlaveLastCatchUpBinlogFileIndexAndOffset();
+            if (fo == null) {
+                return new ErrorReply("slave not catch up: " + replPairAsMaster.getHostAndPort());
+            }
+
+            // must be equal or slave can less than a little, change here if need
+            if (currentFo.fileIndex() != fo.fileIndex() || currentFo.offset() != fo.offset()) {
+                return new ErrorReply("slave not catch up: " + replPairAsMaster.getHostAndPort() + ", current: " + currentFo + ", slave: " + fo);
+            }
+        }
+
         Promise<Void>[] promises = new Promise[slotNumber];
         for (int i = 0; i < slotNumber; i++) {
             var oneSlot = localPersist.oneSlot((byte) i);
