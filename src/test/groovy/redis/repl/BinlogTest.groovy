@@ -274,7 +274,7 @@ class BinlogTest extends Specification {
         paddingBinlogContent.encodeWithType().length == 10
 
         when:
-        binlog.moveToNextSegment()
+        binlog.moveToNextSegment(true)
         then:
         binlog.currentFileIndex == 6
         binlog.currentFileOffset == oneSegmentLength
@@ -291,6 +291,19 @@ class BinlogTest extends Specification {
         binlog.moveToNextSegment()
         then:
         binlog.currentFileIndex == 7
+        binlog.currentFileOffset == 0
+
+        when:
+        binlog.moveToNextSegment(false)
+        then:
+        binlog.currentFileIndex == 7
+        binlog.currentFileOffset == 0
+
+        when:
+        binlog.resetCurrentFileOffset oneFileMaxLength - oneSegmentLength
+        binlog.moveToNextSegment(true)
+        then:
+        binlog.currentFileIndex == 8
         binlog.currentFileOffset == 0
 
         when:

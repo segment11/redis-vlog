@@ -203,6 +203,10 @@ public class Binlog implements InMemoryEstimate {
     }
 
     public void moveToNextSegment() throws IOException {
+        moveToNextSegment(false);
+    }
+
+    public void moveToNextSegment(boolean forceEvenIfMargin) throws IOException {
         var oneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength;
         var mod = currentFileOffset % oneSegmentLength;
         if (mod != 0) {
@@ -211,6 +215,10 @@ public class Binlog implements InMemoryEstimate {
             var paddingContent = new PaddingBinlogContent(paddingBytes);
             append(paddingContent);
         } else {
+            if (!forceEvenIfMargin) {
+                return;
+            }
+
             currentFileOffset += oneSegmentLength;
             clearByteBuffer();
 
@@ -479,7 +487,7 @@ public class Binlog implements InMemoryEstimate {
             throw new IOException("Repl read binlog segment bytes, file not exist, file index: " + fileIndex);
         }
 
-        // when?, need check
+        // when?, not any binlog will cause this, other cases need to check, todo
         if (prevRaf.length() <= offset) {
             return null;
         }
