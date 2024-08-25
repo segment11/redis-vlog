@@ -723,7 +723,7 @@ class XGroupTest extends Specification {
 
         // ok
         when:
-        data = mockData(Repl.ok(slot, replPairAsMaster, 'ok'))
+        data = mockData(Repl.test(slot, replPairAsMaster, 'test'))
         x = new XGroup(null, data, null)
         r = x.handleRepl()
         then:

@@ -12,7 +12,7 @@ class ReplTest extends Specification {
         final byte slot = 0
         final ReplPair replPair = ReplPairTest.mockAsSlave()
 
-        Repl.ok(slot, replPair, 'ok')
+        Repl.test(slot, replPair, 'test')
         Repl.error(slot, replPair, 'error')
         Repl.error(slot, replPair.slaveUuid, 'error')
 

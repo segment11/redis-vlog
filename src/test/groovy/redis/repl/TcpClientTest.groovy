@@ -43,7 +43,7 @@ class TcpClientTest extends Specification {
         !tcpClient.isSocketConnected()
 
         when:
-        tcpClient.write(ReplType.ok, new RawBytesContent('test'.bytes))
+        tcpClient.write(ReplType.test, new RawBytesContent('test'.bytes))
         then:
         tcpClient.notConnectedErrorCount == 1
 
@@ -81,7 +81,7 @@ class TcpClientTest extends Specification {
                                 for (int i = 0; i < pipeline.size(); i++) {
                                     def request = pipeline[i]
                                     println 'Mock server get request from client, data.length: ' + request.data.length
-                                    var promiseI = Promise.of(Repl.ok(slot, replPair2, 'ok').buffer())
+                                    var promiseI = Promise.of(Repl.test(slot, replPair2, 'ok').buffer())
                                     promiseN[i] = promiseI
                                 }
 
@@ -98,7 +98,7 @@ class TcpClientTest extends Specification {
             tcpClient.connect('localhost', 7379) {
                 tcpClient.write(ReplType.ok, new RawBytesContent('test'.bytes))
                 println 'Send ok to server after client connected'
-                Repl.ok(slot, replPair2, 'ok').buffer()
+                Repl.error(slot, replPair2, 'ok').buffer()
             }
         }
         eventloop.delay(1000, () -> {
