@@ -177,6 +177,7 @@ class XGroupTest extends Specification {
 
         when:
         def replPairAsMaster = oneSlot.firstReplPairAsMaster
+        oneSlot.replPairAsMasterList
         replPairAsMaster.bye()
         reply = xGroup.handle()
         then:
@@ -262,6 +263,7 @@ class XGroupTest extends Specification {
         oneSlot.doTask(0)
         x.replPair = null
         def replPairAsMaster = oneSlot.firstReplPairAsMaster
+        oneSlot.replPairAsMasterList
         replPairAsMaster.bye()
         r = x.handleRepl()
         then:
