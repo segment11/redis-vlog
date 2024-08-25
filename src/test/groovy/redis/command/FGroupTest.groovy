@@ -6,6 +6,7 @@ import redis.BaseCommand
 import redis.ConfForGlobal
 import redis.persist.LocalPersist
 import redis.persist.LocalPersistTest
+import redis.repl.Binlog
 import redis.repl.LeaderSelectorTest
 import redis.reply.*
 import spock.lang.Specification
@@ -76,13 +77,42 @@ class FGroupTest extends Specification {
 
         when:
         ConfForGlobal.zookeeperConnectString = 'localhost:2181'
+        def localPersist = LocalPersist.instance
+        LocalPersistTest.prepareLocalPersist()
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        reply = fGroup.failover()
+        then:
+        // no slave
+        reply instanceof ErrorReply
+
+        when:
+        def firstOneSlot = localPersist.currentThreadFirstOneSlot()
+        def rp1 = firstOneSlot.createIfNotExistReplPairAsMaster(11L, 'localhost', 6380)
+        var rp2 = firstOneSlot.createIfNotExistReplPairAsMaster(12L, 'localhost', 6381)
+        rp1.slaveLastCatchUpBinlogFileIndexAndOffset = new Binlog.FileIndexAndOffset(0, 0L)
+        reply = fGroup.failover()
+        then:
+        reply instanceof ErrorReply
+
+        when:
+        firstOneSlot.binlog.moveToNextSegment()
+        rp2.slaveLastCatchUpBinlogFileIndexAndOffset = new Binlog.FileIndexAndOffset(0, 1L)
+        reply = fGroup.failover()
+        then:
+        reply instanceof ErrorReply
+
+        when:
+        firstOneSlot.binlog.moveToNextSegment()
+        rp2.slaveLastCatchUpBinlogFileIndexAndOffset = new Binlog.FileIndexAndOffset(1, 0L)
+        reply = fGroup.failover()
+        then:
+        reply instanceof ErrorReply
+
+        when:
+        rp2.slaveLastCatchUpBinlogFileIndexAndOffset = new Binlog.FileIndexAndOffset(0, 0L)
         boolean doThisCase = LeaderSelectorTest.checkZk()
         Eventloop eventloop
-        def localPersist = LocalPersist.instance
         if (doThisCase) {
-            LocalPersistTest.prepareLocalPersist()
-            localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
-
             eventloop = Eventloop.builder()
                     .withIdleInterval(Duration.ofMillis(100))
                     .build()

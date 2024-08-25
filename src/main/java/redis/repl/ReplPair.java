@@ -180,6 +180,17 @@ public class ReplPair {
         this.slaveCatchUpLastSeq = slaveCatchUpLastSeq;
     }
 
+    @ForMasterField
+    private Binlog.FileIndexAndOffset slaveLastCatchUpBinlogFileIndexAndOffset;
+
+    public Binlog.FileIndexAndOffset getSlaveLastCatchUpBinlogFileIndexAndOffset() {
+        return slaveLastCatchUpBinlogFileIndexAndOffset;
+    }
+
+    public void setSlaveLastCatchUpBinlogFileIndexAndOffset(Binlog.FileIndexAndOffset slaveLastCatchUpBinlogFileIndexAndOffset) {
+        this.slaveLastCatchUpBinlogFileIndexAndOffset = slaveLastCatchUpBinlogFileIndexAndOffset;
+    }
+
     // as both master and slave field
     private long fetchedBytesLengthTotal;
 

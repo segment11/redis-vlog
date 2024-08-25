@@ -14,6 +14,7 @@ class ReplTest extends Specification {
 
         Repl.ok(slot, replPair, 'ok')
         Repl.error(slot, replPair, 'error')
+        Repl.error(slot, replPair.slaveUuid, 'error')
 
         when:
         def ping = new Ping('localhost:6380')
@@ -29,7 +30,7 @@ class ReplTest extends Specification {
         when:
         def emptyReply = Repl.emptyReply()
         then:
-        emptyReply.buffer().limit() == 0
+        emptyReply.isEmpty()
 
         when:
         def pingBytes = reply.buffer().array()

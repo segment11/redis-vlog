@@ -133,7 +133,7 @@ public class XGroup extends BaseCommand {
             this.replPair = replPairAsMaster;
             try {
                 var reply = catch_up(slot, contentBytes);
-                var nettyByteBuf = Unpooled.wrappedBuffer(reply.buf().array());
+                var nettyByteBuf = Unpooled.wrappedBuffer(reply.buffer().array());
                 var data4 = Repl.decode(nettyByteBuf);
                 if (data4 == null) {
                     return NilReply.INSTANCE;
@@ -1033,6 +1033,7 @@ public class XGroup extends BaseCommand {
             // check if slave already catch up to last binlog segment offset
             var fo = binlog.currentFileIndexAndOffset();
             if (fo.fileIndex() == needFetchFileIndex && fo.offset() == lastUpdatedOffset) {
+                replPair.setSlaveLastCatchUpBinlogFileIndexAndOffset(fo);
                 return Repl.reply(slot, replPair, ReplType.s_catch_up, onlyReadonlyResponseContent);
             }
         }
@@ -1049,6 +1050,7 @@ public class XGroup extends BaseCommand {
 
         // all fetched
         if (readSegmentBytes == null) {
+            replPair.setSlaveLastCatchUpBinlogFileIndexAndOffset(new Binlog.FileIndexAndOffset(needFetchFileIndex, lastUpdatedOffset));
             return Repl.reply(slot, replPair, ReplType.s_catch_up, onlyReadonlyResponseContent);
         }
 
@@ -1067,6 +1069,8 @@ public class XGroup extends BaseCommand {
         responseBuffer.putInt(readSegmentBytes.length);
         responseBuffer.put(readSegmentBytes);
 
+        replPair.setSlaveLastCatchUpBinlogFileIndexAndOffset(new Binlog.FileIndexAndOffset(needFetchFileIndex,
+                needFetchOffset + readSegmentBytes.length));
         return Repl.reply(slot, replPair, ReplType.s_catch_up, new RawBytesContent(responseBytes));
     }
 

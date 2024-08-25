@@ -250,6 +250,12 @@ class XGroupTest extends Specification {
         oneSlot.getReplPairAsMaster(slaveUuid) != null
         oneSlot.dynConfig.binlogOn
 
+        when:
+        x.replPair = null
+        r = x.hello(slot, data[3])
+        then:
+        r.isReplType(ReplType.hi)
+
         // bye
         when:
         data = mockData(replPairAsSlave, ReplType.bye, ping)
@@ -601,7 +607,7 @@ class XGroupTest extends Specification {
         def binlogOneSegmentLength = ConfForSlot.global.confRepl.binlogOneSegmentLength
         def binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength
         (binlogOneFileMaxLength / binlogOneSegmentLength).intValue().times {
-            oneSlot.binlog.moveToNextSegment()
+            oneSlot.binlog.moveToNextSegment(true)
         }
         r = x.handleRepl()
         then:

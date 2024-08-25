@@ -67,6 +67,7 @@ class ReplPairTest extends Specification {
         println replPairAsSlave.statsCountForReplTypeAsString
 
         replPairAsSlave.slaveCatchUpLastSeq = 1000L
+        replPairAsSlave.slaveLastCatchUpBinlogFileIndexAndOffset = null
         replPairAsSlave.increaseFetchedBytesLength(1000)
         replPairAsSlave.masterReadonly = false
         replPairAsSlave.allCaughtUp = false
@@ -81,7 +82,9 @@ class ReplPairTest extends Specification {
         replPairAsMaster.asMaster
         replPairAsMaster.masterUuid == 0L
         replPairAsMaster.lastPingGetTimestamp == 0L
+
         replPairAsSlave.slaveCatchUpLastSeq == 1000L
+        replPairAsSlave.slaveLastCatchUpBinlogFileIndexAndOffset == null
         replPairAsSlave.fetchedBytesLengthTotal == 1000L
         !replPairAsSlave.masterReadonly
         !replPairAsSlave.allCaughtUp
