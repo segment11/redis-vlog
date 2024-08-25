@@ -18,5 +18,27 @@ class RawBytesContentTest extends Specification {
         content.encodeTo(buf)
         then:
         bytes == rawBytes
+
+        when:
+        boolean exception = false
+        try {
+            new RawBytesContent(null)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        exception = false
+        try {
+            new RawBytesContent(new byte[0])
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
     }
 }

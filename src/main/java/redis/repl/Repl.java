@@ -1,7 +1,7 @@
 package redis.repl;
 
 import io.netty.buffer.ByteBuf;
-import redis.repl.content.EmptyContent;
+import org.jetbrains.annotations.TestOnly;
 import redis.repl.content.RawBytesContent;
 import redis.reply.Reply;
 
@@ -33,6 +33,10 @@ public class Repl {
     public record ReplReply(long slaveUuid, byte slot, ReplType type, ReplContent content) implements Reply {
         @Override
         public io.activej.bytebuf.ByteBuf buffer() {
+            if (content == BYTE_0_CONTENT) {
+                return io.activej.bytebuf.ByteBuf.empty();
+            }
+
             return Repl.buffer(slaveUuid, slot, type, content);
         }
 
@@ -41,7 +45,7 @@ public class Repl {
         }
 
         public boolean isEmpty() {
-            return content == EmptyContent.INSTANCE;
+            return content == BYTE_0_CONTENT;
         }
     }
 
@@ -57,11 +61,23 @@ public class Repl {
         return new ReplReply(slaveUuid, slot, ReplType.error, new RawBytesContent(errorMessage.getBytes()));
     }
 
-    public static ReplReply ok(byte slot, ReplPair replPair, String message) {
-        return reply(slot, replPair, ReplType.ok, new RawBytesContent(message.getBytes()));
+    @TestOnly
+    public static ReplReply test(byte slot, ReplPair replPair, String message) {
+        return reply(slot, replPair, ReplType.test, new RawBytesContent(message.getBytes()));
     }
 
-    private static final ReplReply EMPTY_REPLY = new ReplReply(0L, (byte) 0, ReplType.ok, EmptyContent.INSTANCE);
+    private static final ReplContent BYTE_0_CONTENT = new ReplContent() {
+        @Override
+        public void encodeTo(io.activej.bytebuf.ByteBuf toBuf) {
+        }
+
+        @Override
+        public int encodeLength() {
+            return 0;
+        }
+    };
+
+    private static final ReplReply EMPTY_REPLY = new ReplReply(0L, (byte) 0, null, BYTE_0_CONTENT);
 
     public static ReplReply emptyReply() {
         return EMPTY_REPLY;

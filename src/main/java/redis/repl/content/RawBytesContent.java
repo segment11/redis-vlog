@@ -7,6 +7,13 @@ public class RawBytesContent implements ReplContent {
     private final byte[] bytes;
 
     public RawBytesContent(byte[] bytes) {
+        if (bytes == null) {
+            throw new IllegalArgumentException("Repl raw bytes cannot be null");
+        }
+        if (bytes.length == 0) {
+            throw new IllegalArgumentException("Repl raw bytes cannot be empty");
+        }
+
         this.bytes = bytes;
     }
 
