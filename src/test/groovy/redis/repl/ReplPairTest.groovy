@@ -184,6 +184,9 @@ class ReplPairTest extends Specification {
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
 
+        def replPairAsMaster = mockAsMaster()
+        def replPairAsSlave = mockAsSlave()
+
         def eventloopCurrent = Eventloop.builder()
                 .withCurrentThread()
                 .withIdleInterval(Duration.ofMillis(100))

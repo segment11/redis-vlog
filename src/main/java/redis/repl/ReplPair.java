@@ -140,8 +140,10 @@ public class ReplPair {
     private long slaveUuid;
 
     // client side send ping, server side update timestamp
+    @ForMasterField
     private long lastPingGetTimestamp;
     // server side send pong, client side update timestamp
+    @ForSlaveField
     private long lastPongGetTimestamp;
 
     private final long[] statsCountForReplType = new long[ReplType.values().length];
@@ -167,6 +169,7 @@ public class ReplPair {
         return sb.toString();
     }
 
+    @ForMasterField
     private long slaveCatchUpLastSeq;
 
     public long getSlaveCatchUpLastSeq() {
@@ -177,6 +180,7 @@ public class ReplPair {
         this.slaveCatchUpLastSeq = slaveCatchUpLastSeq;
     }
 
+    // as both master and slave field
     private long fetchedBytesLengthTotal;
 
     public long getFetchedBytesLengthTotal() {
@@ -188,6 +192,7 @@ public class ReplPair {
     }
 
     // for slave check if it can fail over as master
+    @ForSlaveField
     private boolean isMasterReadonly;
 
     public boolean isMasterReadonly() {
@@ -198,6 +203,7 @@ public class ReplPair {
         isMasterReadonly = masterReadonly;
     }
 
+    @ForSlaveField
     private boolean isAllCaughtUp;
 
     public boolean isAllCaughtUp() {
@@ -208,6 +214,7 @@ public class ReplPair {
         isAllCaughtUp = allCaughtUp;
     }
 
+    @ForSlaveField
     private boolean isMasterCanNotConnect;
 
     public boolean isMasterCanNotConnect() {
@@ -218,6 +225,55 @@ public class ReplPair {
         isMasterCanNotConnect = masterCanNotConnect;
     }
 
+    // only for slave pull, master never push
+    @ForSlaveField
+    private TcpClient tcpClient;
+
+    public void initAsSlave(Eventloop eventloop, RequestHandler requestHandler) {
+        // for unit test
+        if (eventloop == null) {
+            return;
+        }
+
+        if (System.currentTimeMillis() - lastPongGetTimestamp < 1000 * 3
+                && tcpClient != null && tcpClient.isSocketConnected()) {
+            log.warn("Repl pair init as slave: already connected, target host: {}, port: {}, slot: {}", host, port, slot);
+        } else {
+//            if (tcpClient != null) {
+//                tcpClient.close();
+//                log.warn("Repl pair init as slave: close old connection, target host: {}, port: {}, slot: {}", host, port, slot);
+//            }
+
+            var replContent = new Hello(slaveUuid, ConfForGlobal.netListenAddresses);
+
+            tcpClient = new TcpClient(slot, eventloop, requestHandler, this);
+            tcpClient.connect(host, port, () -> Repl.buffer(slaveUuid, slot, ReplType.hello, replContent));
+        }
+    }
+
+    @ForSlaveField
+    private long disconnectTimeMillis;
+
+    public long getDisconnectTimeMillis() {
+        return disconnectTimeMillis;
+    }
+
+    public void setDisconnectTimeMillis(long disconnectTimeMillis) {
+        this.disconnectTimeMillis = disconnectTimeMillis;
+    }
+
+    @ForSlaveField
+    private long lastGetCatchUpResponseMillis;
+
+    public long getLastGetCatchUpResponseMillis() {
+        return lastGetCatchUpResponseMillis;
+    }
+
+    public void setLastGetCatchUpResponseMillis(long lastGetCatchUpResponseMillis) {
+        this.lastGetCatchUpResponseMillis = lastGetCatchUpResponseMillis;
+    }
+
+    // as both master and slave field
     // change 3 -> 5 or 10
     private final boolean[] linkUpFlagArray = new boolean[3];
 
@@ -250,6 +306,7 @@ public class ReplPair {
         }
     }
 
+    @ForMasterField
     TcpSocket slaveConnectSocketInMaster;
 
     public void setSlaveConnectSocketInMaster(TcpSocket slaveConnectSocketInMaster) {
@@ -268,31 +325,7 @@ public class ReplPair {
         }
     }
 
-    // only for slave pull, master never push
-    private TcpClient tcpClient;
-
-    public void initAsSlave(Eventloop eventloop, RequestHandler requestHandler) {
-        // for unit test
-        if (eventloop == null) {
-            return;
-        }
-
-        if (System.currentTimeMillis() - lastPongGetTimestamp < 1000 * 3
-                && tcpClient != null && tcpClient.isSocketConnected()) {
-            log.warn("Repl pair init as slave: already connected, target host: {}, port: {}, slot: {}", host, port, slot);
-        } else {
-//            if (tcpClient != null) {
-//                tcpClient.close();
-//                log.warn("Repl pair init as slave: close old connection, target host: {}, port: {}, slot: {}", host, port, slot);
-//            }
-
-            var replContent = new Hello(slaveUuid, ConfForGlobal.netListenAddresses);
-
-            tcpClient = new TcpClient(slot, eventloop, requestHandler, this);
-            tcpClient.connect(host, port, () -> Repl.buffer(slaveUuid, slot, ReplType.hello, replContent));
-        }
-    }
-
+    // as both master and slave field
     boolean isSendBye = false;
 
     public boolean isSendBye() {
@@ -312,6 +345,7 @@ public class ReplPair {
         return false;
     }
 
+    // slave do ping, master do pong
     public boolean ping() {
         if (isSendBye) {
             return false;
@@ -341,16 +375,7 @@ public class ReplPair {
         }
     }
 
-    private long disconnectTimeMillis;
-
-    public long getDisconnectTimeMillis() {
-        return disconnectTimeMillis;
-    }
-
-    public void setDisconnectTimeMillis(long disconnectTimeMillis) {
-        this.disconnectTimeMillis = disconnectTimeMillis;
-    }
-
+    // as both master and slave field
     private long putToDelayListToRemoveTimeMillis;
 
     public long getPutToDelayListToRemoveTimeMillis() {
@@ -362,7 +387,9 @@ public class ReplPair {
     }
 
     // as slave delay pull incremental big string file from master when catch up
+    @ForSlaveField
     private final LinkedList<Long> toFetchBigStringUuidList = new LinkedList<>();
+    @ForSlaveField
     private final LinkedList<Long> doFetchingBigStringUuidList = new LinkedList<>();
 
     public LinkedList<Long> getToFetchBigStringUuidList() {
@@ -388,15 +415,5 @@ public class ReplPair {
 
     public void doneFetchBigStringUuid(long uuid) {
         doFetchingBigStringUuidList.removeIf(e -> e == uuid);
-    }
-
-    private long lastGetCatchUpResponseMillis;
-
-    public long getLastGetCatchUpResponseMillis() {
-        return lastGetCatchUpResponseMillis;
-    }
-
-    public void setLastGetCatchUpResponseMillis(long lastGetCatchUpResponseMillis) {
-        this.lastGetCatchUpResponseMillis = lastGetCatchUpResponseMillis;
     }
 }
