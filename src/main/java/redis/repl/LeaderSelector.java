@@ -13,10 +13,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
+import redis.command.PGroup;
 import redis.command.XGroup;
 import redis.persist.LocalPersist;
 import redis.repl.support.JedisPoolHolder;
-import redis.reply.BulkReply;
 
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -453,14 +453,29 @@ public class LeaderSelector {
         });
     }
 
+    private static final byte[] PUBLISH_CMD_BYTES = "publish".getBytes();
+
     private static void publishMasterSwitchMessage(ReplPair.HostAndPort from, ReplPair.HostAndPort to) {
+        // publish master address to redis clients
         var publishMessage = ConfForGlobal.zookeeperRootPath + " " + from.host() + " " + from.port() + " " +
                 to.host() + " " + to.port();
-        var publishMessageReply = new BulkReply(publishMessage.getBytes());
-        LocalPersist.getInstance().getSocketInspector().publish(XGroup.X_MASTER_SWITCH_PUBLISH_CHANNEL, publishMessageReply, (socket, reply) -> {
-            socket.write(reply.buffer());
-        });
+
+        var data = new byte[][]{
+                PUBLISH_CMD_BYTES,
+                XGroup.X_MASTER_SWITCH_PUBLISH_CHANNEL_BYTES,
+                publishMessage.getBytes()};
+        PGroup.publish(data);
         log.warn("Repl publish master switch message: {}", publishMessage);
+
+        // publish slave address to redis clients for readonly slave
+        var publishMessageReadonlySlave = ConfForGlobal.zookeeperRootPath + ReplConsts.REPL_MASTER_NAME_READONLY_SLAVE_SUFFIX + " " +
+                to.host() + " " + to.port() + " " + from.host() + " " + from.port();
+        var dataSlave = new byte[][]{
+                PUBLISH_CMD_BYTES,
+                XGroup.X_MASTER_SWITCH_PUBLISH_CHANNEL_BYTES,
+                publishMessageReadonlySlave.getBytes()};
+        PGroup.publish(dataSlave);
+        log.warn("Repl publish master switch message for readonly slave: {}", publishMessageReadonlySlave);
     }
 
     public String getFirstSlaveListenAddressByMasterHostAndPort(String host, int port, byte slot) {

@@ -3,6 +3,7 @@ package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
 import redis.BaseCommand;
+import redis.persist.LocalPersist;
 import redis.reply.*;
 
 import java.util.ArrayList;
@@ -85,21 +86,22 @@ public class PGroup extends BaseCommand {
         }
 
         if ("publish".equals(cmd)) {
-            return publish();
+            return publish(data);
         }
 
         return NilReply.INSTANCE;
     }
 
-    Reply publish() {
-        if (data.length != 3) {
+    public static Reply publish(byte[][] dataGiven) {
+        if (dataGiven.length != 3) {
             return ErrorReply.FORMAT;
         }
 
+        var localPersist = LocalPersist.getInstance();
         var socketInInspector = localPersist.getSocketInspector();
 
-        var channel = new String(data[1]);
-        var message = new String(data[2]);
+        var channel = new String(dataGiven[1]);
+        var message = new String(dataGiven[2]);
 
         var n = socketInInspector.subscribeSocketCount(channel);
 
@@ -108,7 +110,7 @@ public class PGroup extends BaseCommand {
         replies[1] = new BulkReply(message.getBytes());
         replies[2] = new IntegerReply(n);
 
-        socketInInspector.publish(new String(data[1]), new MultiBulkReply(replies), (s, r) -> {
+        socketInInspector.publish(channel, new MultiBulkReply(replies), (s, r) -> {
             s.write(r.buffer());
         });
         return new IntegerReply(n);

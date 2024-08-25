@@ -160,7 +160,7 @@ public class XGroup extends BaseCommand {
     public static final String X_REPL_AS_GET_CMD_KEY_PREFIX_FOR_DISPATCH = "x_repl";
 
     // for publish
-    public static final String X_MASTER_SWITCH_PUBLISH_CHANNEL = "+switch-master";
+    public static final byte[] X_MASTER_SWITCH_PUBLISH_CHANNEL_BYTES = "+switch-master".getBytes();
 //    public static final String X_MASTER_RESET_PUBLISH_CHANNEL = "+reset-master";
 
     public void setReplPair(ReplPair replPair) {

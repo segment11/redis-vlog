@@ -1,6 +1,5 @@
 package redis.command
 
-import io.activej.net.socket.tcp.TcpSocket
 import redis.BaseCommand
 import redis.SocketInspector
 import redis.mock.InMemoryGetSet
@@ -10,8 +9,6 @@ import redis.reply.IntegerReply
 import redis.reply.NilReply
 import redis.reply.OKReply
 import spock.lang.Specification
-
-import java.nio.channels.SocketChannel
 
 class PGroupTest extends Specification {
     def 'test parse slot'() {
@@ -159,23 +156,18 @@ class PGroupTest extends Specification {
         data3[1] = 'test_channel'.bytes
         data3[2] = 'message'.bytes
 
-        def socket = TcpSocket.wrapChannel(null, SocketChannel.open(),
-                new InetSocketAddress('localhost', 46379), null)
-
-        def pGroup = new PGroup('publish', data3, socket)
-        pGroup.from(BaseCommand.mockAGroup())
+        and:
+        LocalPersist.instance.socketInspector = new SocketInspector()
 
         when:
-        LocalPersist.instance.socketInspector = new SocketInspector()
-        def reply = pGroup.publish()
+        def reply = PGroup.publish(data3)
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 0
 
         when:
         def data1 = new byte[1][]
-        pGroup.data = data1
-        reply = pGroup.publish()
+        reply = PGroup.publish(data1)
         then:
         reply == ErrorReply.FORMAT
     }
