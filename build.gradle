@@ -137,29 +137,20 @@ jacocoTestReport {
 
 test.finalizedBy jacocoTestReport
 
+// for debug
 /*
-~/.jdks/azul-21/bin/java \
--Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=1g \
+java \
+-Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m \
 -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:17379 \
 -jar redis-vlog-1.0.0.jar
- */
-
-/*
-for debug
--agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:17379
  */
 
 jar {
     manifest {
         attributes "Main-Class": 'redis.MultiWorkerServer'
+        attributes "Class-Path": '. lib/' + configurations.runtimeClasspath.collect { it.name }.join(' lib/')
     }
-//    exclude 'redis-vlog.properties'
-    exclude 'redis.command.MasterCommand.class'
-    from {
-        configurations.runtimeClasspath.collect {
-            it.isDirectory() ? it : zipTree(it)
-        }
-    }
+    exclude 'log4j2.xml'
     zip64 true
 }
 
@@ -172,4 +163,14 @@ task copyDynScript(type: Copy) {
     into "$buildDir/libs/dyn/src"
 }
 
-jar.dependsOn copyDynScript
+task copyLog4j2(type: Copy) {
+    from 'src/main/resources/log4j2.xml'
+    into "$buildDir/libs/"
+}
+
+task copyDependencies(type: Copy) {
+    from configurations.runtimeClasspath
+    into 'build/libs/lib'
+}
+
+jar.dependsOn copyDynScript, copyLog4j2, copyDependencies
