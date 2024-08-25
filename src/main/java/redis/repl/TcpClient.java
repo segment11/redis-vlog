@@ -109,7 +109,11 @@ public class TcpClient {
 
                                     try {
                                         var reply = xGroup.handleRepl();
-                                        promiseN[i] = Promise.of(reply.buffer());
+                                        if (reply == null) {
+                                            promiseN[i] = Promise.of(null);
+                                        } else {
+                                            promiseN[i] = Promise.of(reply.buffer());
+                                        }
                                     } catch (Exception e) {
                                         promiseN[i] = Promise.of(Repl.error(slot, replPair, "Repl slave handle error: " + e.getMessage()).buffer());
                                     }
