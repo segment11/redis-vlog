@@ -3,13 +3,13 @@ package redis.repl.content;
 import io.activej.bytebuf.ByteBuf;
 import redis.repl.ReplContent;
 
-public class EmptyContent implements ReplContent {
-    public static final EmptyContent INSTANCE = new EmptyContent();
+public class NextStepContent implements ReplContent {
+    public static final NextStepContent INSTANCE = new NextStepContent();
 
-    private EmptyContent() {
+    private NextStepContent() {
     }
 
-    public static boolean isEmpty(byte[] contentBytes) {
+    public static boolean isNextStep(byte[] contentBytes) {
         return contentBytes.length == 1 && contentBytes[0] == 0;
     }
 

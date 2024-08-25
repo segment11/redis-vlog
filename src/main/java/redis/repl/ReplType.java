@@ -8,7 +8,7 @@ public enum ReplType {
     hi(true, false, (byte) 3),
     bye(true, true, (byte) 4),
     byeBye(true, false, (byte) 5),
-    ok(true, false, (byte) 100),
+    test(true, true, (byte) 100),
 
     exists_wal(false, true, (byte) 19),
     exists_chunk_segments(false, true, (byte) 20),

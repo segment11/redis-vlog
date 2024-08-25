@@ -257,8 +257,8 @@ public class XGroup extends BaseCommand {
             }
             case hello -> hello(slot, contentBytes);
             case hi -> hi(slot, contentBytes);
-            case ok -> {
-                log.info("Repl handle ok: slave uuid={}, message={}", slaveUuid, new String(contentBytes));
+            case test -> {
+                log.info("Repl handle test: slave uuid={}, message={}", slaveUuid, new String(contentBytes));
                 yield Repl.emptyReply();
             }
             case bye -> {
@@ -430,7 +430,7 @@ public class XGroup extends BaseCommand {
         var dictMap = DictMap.getInstance();
         var cacheDictBySeqCopy = dictMap.getCacheDictBySeqCopy();
         if (cacheDictBySeqCopy.isEmpty()) {
-            return Repl.reply(slot, replPair, ReplType.exists_dict, EmptyContent.INSTANCE);
+            return Repl.reply(slot, replPair, ReplType.exists_dict, NextStepContent.INSTANCE);
         } else {
             var rawBytes = new byte[4 * cacheDictBySeqCopy.size()];
             var rawBuffer = ByteBuffer.wrap(rawBytes);
@@ -508,7 +508,7 @@ public class XGroup extends BaseCommand {
 
         var walGroupNumber = Wal.calcWalGroupNumber();
         if (groupIndex == walGroupNumber - 1) {
-            return Repl.reply(slot, replPair, ReplType.exists_all_done, EmptyContent.INSTANCE);
+            return Repl.reply(slot, replPair, ReplType.exists_all_done, NextStepContent.INSTANCE);
         } else {
             var nextGroupIndex = groupIndex + 1;
             if (nextGroupIndex % 100 == 0) {
@@ -777,7 +777,7 @@ public class XGroup extends BaseCommand {
         log.warn("Repl slave fetch meta key bucket split number done, slot: {}", slot);
 
         // next step, fetch exists key buckets
-        return Repl.reply(slot, replPair, ReplType.stat_key_count_in_buckets, EmptyContent.INSTANCE);
+        return Repl.reply(slot, replPair, ReplType.stat_key_count_in_buckets, NextStepContent.INSTANCE);
     }
 
     Repl.ReplReply incremental_big_string(byte slot, byte[] contentBytes) {
@@ -839,7 +839,7 @@ public class XGroup extends BaseCommand {
         var oneSlot = localPersist.oneSlot(slot);
         var uuidListInMaster = oneSlot.getBigStringFiles().getBigStringFileUuidList();
         if (uuidListInMaster.isEmpty()) {
-            return Repl.reply(slot, replPair, ReplType.s_exists_big_string, EmptyContent.INSTANCE);
+            return Repl.reply(slot, replPair, ReplType.s_exists_big_string, NextStepContent.INSTANCE);
         }
 
         var toSlaveExistsBigString = new ToSlaveExistsBigString(oneSlot.getBigStringDir(), uuidListInMaster, sentUuidList);
@@ -850,9 +850,9 @@ public class XGroup extends BaseCommand {
     Repl.ReplReply s_exists_big_string(byte slot, byte[] contentBytes) {
         // client received from server
         // empty content means no big string, next step
-        if (EmptyContent.isEmpty(contentBytes)) {
+        if (NextStepContent.isNextStep(contentBytes)) {
             log.warn("Repl slave fetch all big string done, slot: {}", slot);
-            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, EmptyContent.INSTANCE);
+            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, NextStepContent.INSTANCE);
         }
 
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -862,7 +862,7 @@ public class XGroup extends BaseCommand {
         if (bigStringCount == 0) {
             log.warn("Repl slave fetch all big string done, slot: {}", slot);
             // next step, fetch meta key bucket split number
-            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, EmptyContent.INSTANCE);
+            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, NextStepContent.INSTANCE);
         }
         log.warn("Repl slave fetch exists big string, master sent big string count: {}, slot: {}", bigStringCount, slot);
 
@@ -886,7 +886,7 @@ public class XGroup extends BaseCommand {
         if (isSendAllOnce) {
             log.warn("Repl slave fetch all big string done, slot: {}", slot);
             // next step, fetch meta key bucket split number
-            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, EmptyContent.INSTANCE);
+            return Repl.reply(slot, replPair, ReplType.meta_key_bucket_split_number, NextStepContent.INSTANCE);
         } else {
             return fetchExistsBigString(slot, oneSlot);
         }
@@ -895,7 +895,7 @@ public class XGroup extends BaseCommand {
     Repl.ReplReply fetchExistsBigString(byte slot, OneSlot oneSlot) {
         var uuidListLocal = oneSlot.getBigStringFiles().getBigStringFileUuidList();
         if (uuidListLocal.isEmpty()) {
-            return Repl.reply(slot, replPair, ReplType.exists_big_string, EmptyContent.INSTANCE);
+            return Repl.reply(slot, replPair, ReplType.exists_big_string, NextStepContent.INSTANCE);
         }
 
         var rawBytes = new byte[8 * uuidListLocal.size()];
@@ -971,7 +971,7 @@ public class XGroup extends BaseCommand {
         // server received from client
         log.warn("Repl slave exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
                 replPair.getSlaveUuid(), replPair.getHostAndPort());
-        return Repl.reply(slot, replPair, ReplType.s_exists_all_done, EmptyContent.INSTANCE);
+        return Repl.reply(slot, replPair, ReplType.s_exists_all_done, NextStepContent.INSTANCE);
     }
 
     Repl.ReplReply s_exists_all_done(byte slot, byte[] contentBytes) {
@@ -1265,7 +1265,7 @@ public class XGroup extends BaseCommand {
                         );
                     });
                 } catch (Exception e) {
-                    log.error("Repl slave try catch up again after slave tcp client close error", e);
+                    log.error("Repl slave try catch up again after slave tcp client close error: {}", e.getMessage());
                     replPairAsSlave.setMasterCanNotConnect(true);
                 }
             }

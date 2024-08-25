@@ -3,10 +3,10 @@ package redis.repl.content
 import io.activej.bytebuf.ByteBuf
 import spock.lang.Specification
 
-class EmptyContentTest extends Specification {
+class NextStepContentTest extends Specification {
     def 'test all'() {
         given:
-        def content = EmptyContent.INSTANCE
+        def content = NextStepContent.INSTANCE
 
         expect:
         content.encodeLength() == 1
@@ -17,6 +17,6 @@ class EmptyContentTest extends Specification {
         content.encodeTo(buf)
         then:
         bytes[0] == 0
-        EmptyContent.isEmpty(bytes)
+        NextStepContent.isNextStep(bytes)
     }
 }
