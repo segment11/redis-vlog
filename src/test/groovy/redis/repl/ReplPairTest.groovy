@@ -204,7 +204,7 @@ class ReplPairTest extends Specification {
                                 def request = pipeline[0]
                                 def data = request.getData()
                                 println 'Mock server get request from client, data.length: ' + data.length
-                                Repl.ok(slot, replPairAsSlave, 'ok').buffer()
+                                Repl.test(slot, replPairAsSlave, 'ok').buffer()
                             }.streamTo(ChannelConsumers.ofSocket(socket))
                 })
                 .withListenAddress(new InetSocketAddress('localhost', 6380))
