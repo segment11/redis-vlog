@@ -795,6 +795,9 @@ public class OneSlot implements InMemoryEstimate {
         var key = new String(keyBytes);
         var cvEncodedFromWal = getFromWal(key, bucketIndex);
         if (cvEncodedFromWal != null) {
+            kvLRUHitTotal++;
+            kvLRUCvEncodedLengthTotal += cvEncodedFromWal.length;
+
             // write batch kv is the newest
             if (CompressedValue.isDeleted(cvEncodedFromWal)) {
                 return null;
@@ -833,6 +836,9 @@ public class OneSlot implements InMemoryEstimate {
         var key = new String(keyBytes);
         var cvEncodedFromWal = getFromWal(key, bucketIndex);
         if (cvEncodedFromWal != null) {
+            kvLRUHitTotal++;
+            kvLRUCvEncodedLengthTotal += cvEncodedFromWal.length;
+
             // write batch kv is the newest
             if (CompressedValue.isDeleted(cvEncodedFromWal)) {
                 return null;
@@ -847,6 +853,7 @@ public class OneSlot implements InMemoryEstimate {
         if (cvEncodedBytesFromLRU != null) {
             kvLRUHitTotal++;
             kvLRUCvEncodedLengthTotal += cvEncodedBytesFromLRU.length;
+
             return new BufOrCompressedValue(Unpooled.wrappedBuffer(cvEncodedBytesFromLRU), null);
         }
         kvLRUMissTotal++;
