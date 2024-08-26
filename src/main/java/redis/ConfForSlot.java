@@ -39,6 +39,8 @@ public enum ConfForSlot {
 
     public HashMap<String, Object> slaveCanMatchCheckValues() {
         var map = new HashMap<String, Object>();
+        map.put("datacenterId", datacenterId);
+        map.put("machineId", machineId);
         map.put("estimateKeyNumber", estimateKeyNumber);
         map.put("estimateOneValueLength", estimateOneValueLength);
         map.put("slotNumber", slotNumber);

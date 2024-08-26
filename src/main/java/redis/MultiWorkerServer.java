@@ -6,7 +6,6 @@ import io.activej.async.function.AsyncSupplier;
 import io.activej.bytebuf.ByteBuf;
 import io.activej.config.Config;
 import io.activej.config.ConfigModule;
-import io.activej.config.converter.ConfigConverter;
 import io.activej.csp.binary.BinaryChannelSupplier;
 import io.activej.csp.consumer.ChannelConsumers;
 import io.activej.csp.supplier.ChannelSuppliers;
@@ -81,8 +80,6 @@ public class MultiWorkerServer extends Launcher {
 
     static final int MAX_NET_WORKERS = 128;
 
-    static ConfigConverter<Integer> toInt = ofInteger();
-
     @Inject
     PrimaryServer primaryServer;
 
@@ -151,7 +148,7 @@ public class MultiWorkerServer extends Launcher {
 
     @Provides
     WorkerPool workerPool(WorkerPools workerPools, Config config) {
-        int netWorkers = config.get(toInt, "netWorkers", 1);
+        int netWorkers = config.get(ofInteger(), "netWorkers", 1);
         netWorkerEventloopArray = new Eventloop[netWorkers];
 
         // for unit test coverage
@@ -307,7 +304,7 @@ public class MultiWorkerServer extends Launcher {
                         totalN += buf.readRemaining();
                     }
                     if (totalN == 0) {
-                        return null;
+                        return ByteBuf.empty();
                     }
 
                     var multiBuf = ByteBuf.wrapForWriting(new byte[totalN]);
@@ -324,7 +321,7 @@ public class MultiWorkerServer extends Launcher {
     @Provides
     @Worker
     SimpleServer workerServer(NioReactor reactor, SocketInspector socketInspector, Config config) {
-        int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
+        int slotNumber = config.get(ofInteger(), "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
         return SimpleServer.builder(reactor, socket ->
                         BinaryChannelSupplier.of(ChannelSuppliers.ofSocket(socket))
                                 .decodeStream(new RequestDecoder())
@@ -357,14 +354,12 @@ public class MultiWorkerServer extends Launcher {
     // no share
     // if support transaction, need share to generate lsn for all slots
     @Provides
-    SnowFlake[] snowFlakes(Config config) {
-        int netWorkers = config.get(toInt, "netWorkers", 1);
+    SnowFlake[] snowFlakes(ConfForSlot confForSlot, Config config) {
+        int netWorkers = config.get(ofInteger(), "netWorkers", 1);
         var snowFlakes = new SnowFlake[netWorkers];
 
-        long datacenterId = config.get(ofLong(), "datacenterId", 0L);
-        long machineId = config.get(ofLong(), "machineId", 0L);
         for (int i = 0; i < netWorkers; i++) {
-            snowFlakes[i] = new SnowFlake(datacenterId, (machineId << 8) | i);
+            snowFlakes[i] = new SnowFlake(ConfForGlobal.datacenterId, (ConfForGlobal.machineId << 8) | i);
         }
         return snowFlakes;
     }
@@ -454,7 +449,7 @@ public class MultiWorkerServer extends Launcher {
         primaryEventloop.delay(1000L, primaryScheduleRunnable);
 
         // fix slot thread id
-        int slotNumber = configInject.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
+        int slotNumber = configInject.get(ofInteger(), "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
         for (int slot = 0; slot < slotNumber; slot++) {
             int i = slot % requestHandlerArray.length;
             localPersist.fixSlotThreadId((byte) slot, netWorkerThreadIds[i]);
@@ -579,12 +574,19 @@ public class MultiWorkerServer extends Launcher {
         ConfForSlot confForSlot(Config config) {
             // global conf
             long estimateKeyNumber = config.get(ofLong(), "estimateKeyNumber", 1_000_000L);
-            int estimateOneValueLength = config.get(toInt, "estimateOneValueLength", 200);
+            int estimateOneValueLength = config.get(ofInteger(), "estimateOneValueLength", 200);
             ConfForGlobal.estimateKeyNumber = estimateKeyNumber;
             ConfForGlobal.estimateOneValueLength = estimateOneValueLength;
 
+            long datacenterId = config.get(ofLong(), "datacenterId", 0L);
+            long machineId = config.get(ofLong(), "machineId", 0L);
+            ConfForGlobal.datacenterId = datacenterId;
+            ConfForGlobal.machineId = machineId;
+
             log.warn("Global config, estimateKeyNumber: " + estimateKeyNumber);
             log.warn("Global config, estimateOneValueLength: " + estimateOneValueLength);
+            log.warn("Global config, datacenterId: " + datacenterId);
+            log.warn("Global config, machineId: " + machineId);
 
             boolean isValueSetUseCompression = config.get(ofBoolean(), "isValueSetUseCompression", true);
             boolean isOnDynTrainDictForCompression = config.get(ofBoolean(), "isOnDynTrainDictForCompression", true);
@@ -596,7 +598,7 @@ public class MultiWorkerServer extends Launcher {
 
             ConfForGlobal.netListenAddresses = config.get(ofString(), "net.listenAddresses", "localhost:" + PORT);
             logger.info("Net listen addresses: {}", ConfForGlobal.netListenAddresses);
-            ConfForGlobal.eventLoopIdleMillis = config.get(toInt, "eventloop.idleMillis", 10);
+            ConfForGlobal.eventLoopIdleMillis = config.get(ofInteger(), "eventloop.idleMillis", 10);
             log.warn("Global config, eventLoopIdleMillis: " + ConfForGlobal.eventLoopIdleMillis);
 
             ConfForGlobal.PASSWORD = config.get(ofString(), "password", null);
@@ -618,7 +620,7 @@ public class MultiWorkerServer extends Launcher {
                 log.warn("Global config, targetAvailableZone: " + ConfForGlobal.targetAvailableZone);
             }
 
-            DictMap.TO_COMPRESS_MIN_DATA_LENGTH = config.get(toInt, "toCompressMinDataLength", 64);
+            DictMap.TO_COMPRESS_MIN_DATA_LENGTH = config.get(ofInteger(), "toCompressMinDataLength", 64);
 
             // one slot config
             var c = ConfForSlot.from(estimateKeyNumber);
@@ -660,7 +662,7 @@ public class MultiWorkerServer extends Launcher {
             }
 
             if (config.getChild("bucket.lruPerFd.maxSize").hasValue()) {
-                c.confBucket.lruPerFd.maxSize = config.get(toInt, "bucket.lruPerFd.maxSize");
+                c.confBucket.lruPerFd.maxSize = config.get(ofInteger(), "bucket.lruPerFd.maxSize");
             }
 
             // override chunk conf
@@ -717,7 +719,7 @@ public class MultiWorkerServer extends Launcher {
 
         @Provides
         Integer beforeCreateHandler(ConfForSlot confForSlot, SnowFlake[] snowFlakes, Config config) throws IOException {
-            int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
+            int slotNumber = config.get(ofInteger(), "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
             if (slotNumber > LocalPersist.MAX_SLOT_NUMBER) {
                 throw new IllegalArgumentException("Slot number too large, slot number should be less than " + LocalPersist.MAX_SLOT_NUMBER);
             }
@@ -727,7 +729,7 @@ public class MultiWorkerServer extends Launcher {
             ConfForGlobal.slotNumber = (short) slotNumber;
             log.warn("Global config, slotNumber: " + ConfForGlobal.slotNumber);
 
-            int netWorkers = config.get(toInt, "netWorkers", 1);
+            int netWorkers = config.get(ofInteger(), "netWorkers", 1);
             if (netWorkers > MAX_NET_WORKERS) {
                 throw new IllegalArgumentException("Net workers too large, net workers should be less than " + MAX_NET_WORKERS);
             }
@@ -749,7 +751,7 @@ public class MultiWorkerServer extends Launcher {
             DictMap.getInstance().initDictMap(dirFile);
 
             var configCompress = config.getChild("compress");
-            TrainSampleJob.setDictKeyPrefixEndIndex(configCompress.get(toInt, "dictKeyPrefixEndIndex", 5));
+            TrainSampleJob.setDictKeyPrefixEndIndex(configCompress.get(ofInteger(), "dictKeyPrefixEndIndex", 5));
 
             // init local persist
             // already created when inject
@@ -767,8 +769,8 @@ public class MultiWorkerServer extends Launcher {
 
         @Provides
         RequestHandler[] requestHandlerArray(SnowFlake[] snowFlakes, Integer beforeCreateHandler, Config config) {
-            int slotNumber = config.get(toInt, "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
-            int netWorkers = config.get(toInt, "netWorkers", 1);
+            int slotNumber = config.get(ofInteger(), "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
+            int netWorkers = config.get(ofInteger(), "netWorkers", 1);
 
             var list = new RequestHandler[netWorkers];
             for (int i = 0; i < netWorkers; i++) {
@@ -779,7 +781,7 @@ public class MultiWorkerServer extends Launcher {
 
         @Provides
         TaskRunnable[] scheduleRunnableArray(Integer beforeCreateHandler, Config config) {
-            int netWorkers = config.get(toInt, "netWorkers", 1);
+            int netWorkers = config.get(ofInteger(), "netWorkers", 1);
             var list = new TaskRunnable[netWorkers];
             for (int i = 0; i < netWorkers; i++) {
                 list[i] = new TaskRunnable((byte) i, (byte) netWorkers);
@@ -789,7 +791,7 @@ public class MultiWorkerServer extends Launcher {
 
         @Provides
         SocketInspector socketInspector(Config config) {
-            int maxConnections = config.get(toInt, "maxConnections", 1000);
+            int maxConnections = config.get(ofInteger(), "maxConnections", 1000);
 
             var r = new SocketInspector();
             r.setMaxConnections(maxConnections);

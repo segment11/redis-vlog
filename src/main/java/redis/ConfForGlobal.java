@@ -4,6 +4,8 @@ public class ConfForGlobal {
     private ConfForGlobal() {
     }
 
+    public static long datacenterId;
+    public static long machineId;
     public static long estimateKeyNumber;
     private static final int DEFAULT_ESTIMATE_ONE_VALUE_LENGTH = 200;
     public static int estimateOneValueLength = DEFAULT_ESTIMATE_ONE_VALUE_LENGTH;
