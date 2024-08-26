@@ -1693,6 +1693,13 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
                         (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq), labelValues));
                 map.put("static_memory_prepare_mb_fd_read_write_buffer_all_slots", new SimpleGauge.ValueWithLabelValues(
                         (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer), labelValues));
+
+                if (binlog != null) {
+                    var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
+                    var fo = binlog.currentFileIndexAndOffset();
+                    var offsetFromFileIndex0 = fo.fileIndex() * binlogOneFileMaxLength + fo.offset();
+                    map.put("binlog_current_offset_from_the_beginning", new SimpleGauge.ValueWithLabelValues((double) offsetFromFileIndex0, labelValues));
+                }
             }
 
             var hitMissTotal = kvLRUHitTotal + kvLRUMissTotal;
