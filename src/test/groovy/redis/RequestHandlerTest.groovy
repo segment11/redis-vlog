@@ -262,7 +262,7 @@ class RequestHandlerTest extends Specification {
         replData[1] = new byte[1]
         replData[1][0] = slot
         replData[2] = new byte[1]
-        replData[2][0] = ReplType.ok.code
+        replData[2][0] = ReplType.test.code
         replData[3] = new byte[0]
         oneSlot.createIfNotExistReplPairAsMaster(slaveUuid, 'localhost', 6380)
         def replRequest = new Request(replData, false, true)
@@ -340,6 +340,25 @@ class RequestHandlerTest extends Specification {
         reply instanceof BulkReply
         new String(((BulkReply) reply).raw).contains('zone1')
 
+        // cmd stat count
+        when:
+        httpData[0] = 'cmd_stat_count'.bytes
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply instanceof BulkReply
+
+        when:
+        httpData[0] = 'cmd_stat_count=all'.bytes
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply instanceof BulkReply
+
+        when:
+        httpData[0] = 'cmd_stat_count=get'.bytes
+        reply = requestHandler.handle(httpRequest, socket)
+        then:
+        reply instanceof BulkReply
+
         when:
         httpData[0] = null
         reply = requestHandler.handle(httpRequest, socket)
@@ -377,5 +396,43 @@ class RequestHandlerTest extends Specification {
         Debug.instance.logCmd = false
         localPersist.cleanUp()
         Consts.persistDir.deleteDir()
+    }
+
+    def 'test cmd stat count'() {
+        given:
+        def snowFlake = new SnowFlake(1, 1)
+        def requestHandler = new RequestHandler(workerId, netWorkers, slotNumber, snowFlake, Config.create())
+
+        expect:
+        requestHandler.cmdStatCountTotal() == 0
+
+        when:
+        def random = new Random()
+        ('a'..'z').each { ch ->
+            10.times { i ->
+                def firstByte = ch.bytes[0]
+                def cmd = ch + i
+                requestHandler.getCmdCountStat(cmd)
+
+                requestHandler.increaseCmdStatArray(firstByte, cmd)
+
+                (1 + random.nextInt(100)).times { j ->
+                    requestHandler.increaseCmdStatArray(firstByte, cmd)
+                }
+
+                if (i > 0) {
+                    def lastCmd = ch + (i - 1)
+                    requestHandler.increaseCmdStatArray(firstByte, lastCmd)
+                }
+            }
+        }
+        println 'total cmd count: ' + requestHandler.cmdStatCountTotal()
+        println requestHandler.cmdStatAsPrometheusFormatString()
+        ('a'..'z').each { ch ->
+            def cmd1 = ch + 1
+            println 'cmd ' + cmd1 + ' count: ' + requestHandler.getCmdCountStat(cmd1)
+        }
+        then:
+        1 == 1
     }
 }

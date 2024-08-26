@@ -7,6 +7,8 @@ import io.activej.net.socket.tcp.TcpSocket;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.command.*;
@@ -33,6 +35,8 @@ public class RequestHandler {
     private static final String GET_COMMAND = "get";
     private static final String SET_COMMAND = "set";
     private static final String QUIT_COMMAND = "quit";
+    private static final String ERROR_FOR_STAT_AS_COMMAND = "_error";
+    private static final String READONLY_FOR_STAT_AS_COMMAND = "_readonly";
 
     final byte workerId;
     final String workerIdStr;
@@ -198,6 +202,7 @@ public class RequestHandler {
     private static final String URL_QUERY_FOR_HAPROXY_FILTER_MASTER_OR_SLAVE = "master_or_slave";
     private static final String URL_QUERY_FOR_HAPROXY_FILTER_SLAVE = "slave";
     private static final String URL_QUERY_FOR_HAPROXY_FILTER_SLAVE_WITH_ZONE = "slave_with_zone";
+    private static final String URL_QUERY_FOR_CMD_STAT_COUNT = "cmd_stat_count";
 
     private static byte[][] transferDataForXGroup(String keyAsData) {
         // eg. get x_repl,sub_cmd,sub_sub_cmd,***
@@ -208,6 +213,81 @@ public class RequestHandler {
             dataTransfer[i] = array[i].getBytes();
         }
         return dataTransfer;
+    }
+
+    // redis cmd is less than 1k, each group eg: AGroup is less than 200
+    private String[][] cmdStatArray = new String[26][200];
+    private long[][] cmdStatCountArray = new long[26][200];
+
+    @VisibleForTesting
+    int increaseCmdStatArray(byte firstByte, String cmd) {
+        var index = firstByte - 'a';
+        var stringArray = cmdStatArray[index];
+        var countArray = cmdStatCountArray[index];
+        for (int i = 0; i < stringArray.length; i++) {
+            if (stringArray[i] == null) {
+                stringArray[i] = cmd;
+                countArray[i] = 1;
+                return i;
+            }
+
+            if (stringArray[i].equals(cmd)) {
+                countArray[i]++;
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    @VisibleForTesting
+    String cmdStatAsPrometheusFormatString() {
+        var sb = new StringBuilder();
+        for (int i = 0; i < cmdStatArray.length; i++) {
+            var stringArray = cmdStatArray[i];
+            var countArray = cmdStatCountArray[i];
+            for (int j = 0; j < stringArray.length; j++) {
+                if (stringArray[j] == null) {
+                    break;
+                }
+
+                sb.append("cmd_stat_count{cmd=\"").append(stringArray[j]).append("\",worker_id=\"").append(workerIdStr).append("\"} ").append(countArray[j]).append("\n");
+            }
+        }
+
+        return sb.toString();
+    }
+
+    @TestOnly
+    long cmdStatCountTotal() {
+        long total = 0;
+        for (int i = 0; i < cmdStatCountArray.length; i++) {
+            var countArray = cmdStatCountArray[i];
+            for (long count : countArray) {
+                total += count;
+            }
+        }
+
+        return total;
+    }
+
+    private long getCmdCountStat(String cmd) {
+        var firstByte = cmd.charAt(0);
+        var index = firstByte - 'a';
+        var stringArray = cmdStatArray[index];
+        var countArray = cmdStatCountArray[index];
+
+        for (int i = 0; i < stringArray.length; i++) {
+            if (stringArray[i] == null) {
+                break;
+            }
+
+            if (stringArray[i].equals(cmd)) {
+                return countArray[i];
+            }
+        }
+
+        return 0;
     }
 
     Reply handle(@NotNull Request request, ITcpSocket socket) {
@@ -290,6 +370,17 @@ public class RequestHandler {
                     return NilReply.INSTANCE;
                 }
             }
+
+            // cmd_stat_count or cmd_stat_count=cmd or cmd_stat_count=all
+            if (firstDataString.startsWith(URL_QUERY_FOR_CMD_STAT_COUNT)) {
+                var cmd = firstDataString.length() <= (URL_QUERY_FOR_CMD_STAT_COUNT.length() + 1) ? "all" :
+                        firstDataString.substring(URL_QUERY_FOR_CMD_STAT_COUNT.length() + 1);
+                if ("all".equals(cmd)) {
+                    return new BulkReply(cmdStatAsPrometheusFormatString().getBytes());
+                } else {
+                    return new BulkReply(String.valueOf(getCmdCountStat(cmd)).getBytes());
+                }
+            }
         }
 
         if (data[0] == null) {
@@ -298,6 +389,8 @@ public class RequestHandler {
 
         var cmd = request.cmd();
         if (cmd.equals(PING_COMMAND)) {
+            increaseCmdStatArray((byte) 'p', PING_COMMAND);
+
             return PongReply.INSTANCE;
         }
 
@@ -322,6 +415,8 @@ public class RequestHandler {
 
         InetSocketAddress remoteAddress = ((TcpSocket) socket).getRemoteAddress();
         if (cmd.equals(AUTH_COMMAND)) {
+            increaseCmdStatArray((byte) 'a', AUTH_COMMAND);
+
             if (data.length != 2) {
                 return ErrorReply.FORMAT;
             }
@@ -342,6 +437,8 @@ public class RequestHandler {
         }
 
         if (cmd.equals(GET_COMMAND)) {
+            increaseCmdStatArray((byte) 'g', GET_COMMAND);
+
             if (data.length != 2) {
                 return ErrorReply.FORMAT;
             }
@@ -361,6 +458,7 @@ public class RequestHandler {
                 try {
                     return xGroup.handle();
                 } catch (Exception e) {
+                    increaseCmdStatArray((byte) 'e', ERROR_FOR_STAT_AS_COMMAND);
                     log.error("XGroup handle error", e);
                     return new ErrorReply(e.getMessage());
                 }
@@ -372,10 +470,12 @@ public class RequestHandler {
                 var bytes = gGroup.get(keyBytes, slotWithKeyHashList.get(0), true);
                 return bytes != null ? new BulkReply(bytes) : NilReply.INSTANCE;
             } catch (TypeMismatchException e) {
+                increaseCmdStatArray((byte) 'e', ERROR_FOR_STAT_AS_COMMAND);
                 return new ErrorReply(e.getMessage());
             } catch (DictMissingException e) {
                 return ErrorReply.DICT_MISSING;
             } catch (Exception e) {
+                increaseCmdStatArray((byte) 'e', ERROR_FOR_STAT_AS_COMMAND);
                 log.error("Get error, key: " + new String(keyBytes), e);
                 return new ErrorReply(e.getMessage());
             }
@@ -384,6 +484,8 @@ public class RequestHandler {
         // for short
         // full set command handle in SGroup
         if (cmd.equals(SET_COMMAND) && data.length == 3) {
+            increaseCmdStatArray((byte) 's', SET_COMMAND);
+
             var keyBytes = data[1];
             if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {
                 return ErrorReply.KEY_TOO_LONG;
@@ -399,8 +501,10 @@ public class RequestHandler {
             try {
                 sGroup.set(keyBytes, valueBytes);
             } catch (ReadonlyException e) {
+                increaseCmdStatArray((byte) 'r', READONLY_FOR_STAT_AS_COMMAND);
                 return ErrorReply.READONLY;
             } catch (Exception e) {
+                increaseCmdStatArray((byte) 'e', ERROR_FOR_STAT_AS_COMMAND);
                 log.error("Set error, key: " + new String(keyBytes), e);
                 return new ErrorReply(e.getMessage());
             }
@@ -412,61 +516,89 @@ public class RequestHandler {
         var firstByte = data[0][0];
         try {
             if (firstByte == 'a' || firstByte == 'A') {
+                increaseCmdStatArray((byte) 'a', cmd);
                 return new AGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'b' || firstByte == 'B') {
+                increaseCmdStatArray((byte) 'b', cmd);
                 return new BGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'c' || firstByte == 'C') {
+                increaseCmdStatArray((byte) 'c', cmd);
                 return new CGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'd' || firstByte == 'D') {
+                increaseCmdStatArray((byte) 'd', cmd);
                 return new DGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'e' || firstByte == 'E') {
+                increaseCmdStatArray((byte) 'e', cmd);
                 return new EGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'f' || firstByte == 'F') {
+                increaseCmdStatArray((byte) 'f', cmd);
                 return new FGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'g' || firstByte == 'G') {
+                increaseCmdStatArray((byte) 'g', cmd);
                 return new GGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'h' || firstByte == 'H') {
+                increaseCmdStatArray((byte) 'h', cmd);
                 return new HGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'i' || firstByte == 'I') {
+                increaseCmdStatArray((byte) 'i', cmd);
                 return new IGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'j' || firstByte == 'J') {
+                increaseCmdStatArray((byte) 'j', cmd);
                 return new JGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'k' || firstByte == 'K') {
+                increaseCmdStatArray((byte) 'k', cmd);
                 return new KGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'l' || firstByte == 'L') {
+                increaseCmdStatArray((byte) 'l', cmd);
                 return new LGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'm' || firstByte == 'M') {
+                increaseCmdStatArray((byte) 'm', cmd);
                 return new MGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'n' || firstByte == 'N') {
+                increaseCmdStatArray((byte) 'n', cmd);
                 return new NGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'o' || firstByte == 'O') {
+                increaseCmdStatArray((byte) 'o', cmd);
                 return new OGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'p' || firstByte == 'P') {
+                increaseCmdStatArray((byte) 'p', cmd);
                 return new PGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'q' || firstByte == 'Q') {
+                increaseCmdStatArray((byte) 'q', cmd);
                 return new QGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'r' || firstByte == 'R') {
+                increaseCmdStatArray((byte) 'r', cmd);
                 return new RGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 's' || firstByte == 'S') {
+                increaseCmdStatArray((byte) 's', cmd);
                 return new SGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 't' || firstByte == 'T') {
+                increaseCmdStatArray((byte) 't', cmd);
                 return new TGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'u' || firstByte == 'U') {
+                increaseCmdStatArray((byte) 'u', cmd);
                 return new UGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'v' || firstByte == 'V') {
+                increaseCmdStatArray((byte) 'v', cmd);
                 return new VGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'w' || firstByte == 'W') {
+                increaseCmdStatArray((byte) 'w', cmd);
                 return new WGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'x' || firstByte == 'X') {
+                increaseCmdStatArray((byte) 'x', cmd);
                 return new XGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'y' || firstByte == 'Y') {
+                increaseCmdStatArray((byte) 'y', cmd);
                 return new YGroup(cmd, data, socket).init(this, request).handle();
             } else if (firstByte == 'z' || firstByte == 'Z') {
+                increaseCmdStatArray((byte) 'z', cmd);
                 return new ZGroup(cmd, data, socket).init(this, request).handle();
             }
         } catch (ReadonlyException e) {
+            increaseCmdStatArray((byte) 'r', READONLY_FOR_STAT_AS_COMMAND);
             return ErrorReply.READONLY;
         } catch (Exception e) {
+            increaseCmdStatArray((byte) 'e', ERROR_FOR_STAT_AS_COMMAND);
             log.error("Request handle error", e);
             return new ErrorReply(e.getMessage());
         }

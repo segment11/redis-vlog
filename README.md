@@ -263,7 +263,9 @@ gradle jar
 cd build/libs
 java -Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m -jar redis-vlog-1.0.0.jar
 ```
+
 TIPS: You can use an exist config file:
+
 ```shell
 java -Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m -jar redis-vlog-1.0.0.jar /tmp/redis-vlog7380.properties
 ```
@@ -277,6 +279,12 @@ redis-cli -p 7379
 ### View metrics:
 
 - http://localhost:7379/?metrics
+
+### View cmd count metrics:
+
+- http://localhost:7379/?cmd_stat_count
+
+TIPS: If netWorkers config value is > 1, open more tabs in the browser to view metrics.
 
 ### Test auto failover:
 
@@ -316,6 +324,7 @@ fio --name=randread --ioengine=libaio --iodepth=32 --rw=randread --bs=4k --direc
 - kv.lru.maxSize=1000000
 
 ### run command
+
 ```shell
 java -Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m -jar redis-vlog-1.0.0.jar
 ```
@@ -345,6 +354,7 @@ java -Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m -j
 - kv.lru.maxSize=1000000
 
 ### run command
+
 ```shell
 # need remove old data
 rm -rf /tmp/redis-vlog/persist
@@ -357,6 +367,7 @@ java -Xmx4g -Xms4g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=128m -
 - todo
 
 ### test get
+
 - redis-benchmark -p 7379 -c 4 -r 10000000 -n 10000000 -d 200 -t get
 - todo
 
