@@ -48,7 +48,7 @@ class MultiWorkerServerTest extends Specification {
         def dirFile2 = m.dirFile(config)
         def dirFile3 = m.dirFile(config)
 
-        def snowFlakes = m.snowFlakes(config)
+        def snowFlakes = m.snowFlakes(ConfForSlot.global, config)
 
         expect:
         dirFile2.exists()
@@ -71,6 +71,15 @@ class MultiWorkerServerTest extends Specification {
 
         when:
         MultiWorkerServer.MAIN_ARGS = []
+        m.config()
+        then:
+        1 == 1
+
+        when:
+        def givenConfigFile = new File(Utils.projectPath("/" + MultiWorkerServer.PROPERTIES_FILE))
+        if (!givenConfigFile.exists()) {
+            givenConfigFile.createNewFile()
+        }
         m.config()
         then:
         1 == 1
@@ -287,7 +296,7 @@ class MultiWorkerServerTest extends Specification {
         def config2 = Config.create()
                 .with("slotNumber", (LocalPersist.MAX_SLOT_NUMBER + 1).toString())
 
-        def snowFlakes1 = m.snowFlakes(config2)
+        def snowFlakes1 = m.snowFlakes(ConfForSlot.global, config2)
         try {
             m1.beforeCreateHandler(c, snowFlakes1, config2)
         } catch (IllegalArgumentException e) {
@@ -437,6 +446,7 @@ class MultiWorkerServerTest extends Specification {
         1 == 1
 
         cleanup:
+        givenConfigFile.delete()
         eventloop0.breakEventloop()
         eventloop1.breakEventloop()
     }

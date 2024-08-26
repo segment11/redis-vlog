@@ -341,8 +341,14 @@ public class MultiWorkerServer extends Launcher {
         if (MAIN_ARGS != null && MAIN_ARGS.length > 0) {
             givenConfigFilePath = MAIN_ARGS[0];
         } else {
-            givenConfigFilePath = "/etc/" + PROPERTIES_FILE;
+            var currentDirConfigFile = new File(Utils.projectPath("/" + PROPERTIES_FILE));
+            if (currentDirConfigFile.exists()) {
+                givenConfigFilePath = currentDirConfigFile.getAbsolutePath();
+            } else {
+                givenConfigFilePath = "/etc/" + PROPERTIES_FILE;
+            }
         }
+        log.warn("Config will be loaded from: " + givenConfigFilePath);
 
         return Config.create()
                 .with("net.listenAddresses", Config.ofValue(ofInetSocketAddress(), new InetSocketAddress(PORT)))
@@ -544,10 +550,10 @@ public class MultiWorkerServer extends Launcher {
                 scheduleRunnable.stop();
             }
 
+            primaryScheduleRunnable.stop();
+            
             LeaderSelector.getInstance().closeAll();
             JedisPoolHolder.getInstance().closeAll();
-
-            primaryScheduleRunnable.stop();
 
             if (socketInspector != null) {
                 socketInspector.socketMap.values().forEach(socket -> {
