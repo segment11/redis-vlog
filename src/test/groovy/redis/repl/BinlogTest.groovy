@@ -307,6 +307,24 @@ class BinlogTest extends Specification {
         binlog.currentFileOffset == 0
 
         when:
+        binlog.reopenAtFileIndexAndMarginOffset(9, 0)
+        then:
+        binlog.currentFileIndex == 9
+        binlog.currentFileOffset == 0
+
+        when:
+        binlog.reopenAtFileIndexAndMarginOffset(9, oneSegmentLength)
+        then:
+        binlog.currentFileIndex == 9
+        binlog.currentFileOffset == oneSegmentLength
+
+        when:
+        binlog.reopenAtFileIndexAndMarginOffset(9, 0)
+        then:
+        binlog.currentFileIndex == 9
+        binlog.currentFileOffset == 0
+
+        when:
         exception = false
         oneSegmentBytes = new byte[oneSegmentLength + 1]
         try {

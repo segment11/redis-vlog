@@ -229,7 +229,40 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
                 createAndUseNextFile();
             }
         }
-        log.warn("Repl binlog move to next segment, slot: {}, file index: {}, offset: {}", slot, currentFileIndex, currentFileOffset);
+        log.warn("Repl binlog move to next segment, slot: {}, file index: {}, offset: {}",
+                slot, currentFileIndex, currentFileOffset);
+    }
+
+    public void reopenAtFileIndexAndMarginOffset(int resetFileIndex, long marginOffset) throws IOException {
+        if (currentFileIndex == resetFileIndex) {
+            // truncate to target offset
+            raf.setLength(marginOffset);
+            currentFileOffset = marginOffset;
+            clearByteBuffer();
+
+            log.warn("Repl binlog reopen at file index and margin offset, slot: {}, file index: {}, offset: {}",
+                    slot, currentFileIndex, currentFileOffset);
+            return;
+        }
+
+        IOUtils.closeQuietly(raf);
+        var rafRemoved = prevRafByFileIndex.remove(currentFileIndex);
+        if (rafRemoved != null) {
+            if (rafRemoved != raf) {
+                IOUtils.closeQuietly(rafRemoved);
+            }
+        }
+
+        var prevRaf = prevRaf(resetFileIndex, true);
+        prevRaf.seek(marginOffset);
+
+        currentFileIndex = resetFileIndex;
+        currentFileOffset = marginOffset;
+        clearByteBuffer();
+        raf = prevRaf;
+
+        log.warn("Repl binlog reopen at file index and margin offset, slot: {}, file index: {}, offset: {}",
+                slot, currentFileIndex, currentFileOffset);
     }
 
     private static final String FILE_NAME_PREFIX = "binlog-";
@@ -576,6 +609,8 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
         return n;
     }
 
+    @SlaveNeedReplay
+    @SlaveReplay
     public void truncateAll() {
         try {
             raf.setLength(0);

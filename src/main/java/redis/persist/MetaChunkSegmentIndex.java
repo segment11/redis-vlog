@@ -80,6 +80,11 @@ public class MetaChunkSegmentIndex implements NeedCleanUp {
         setAll(get(), masterUuid, isExistsDataAllFetched, masterBinlogFileIndexNextTimeToFetch, masterBinlogOffsetNextTimeToFetch);
     }
 
+    public void clearMasterBinlogFileIndexAndOffset() {
+        setMasterBinlogFileIndexAndOffset(0L, false, 0, 0L);
+        log.warn("Repl meta chunk segment index clear master binlog file index and offset done, set 0 from the beginning");
+    }
+
     void setAll(int segmentIndex, long masterUuid, boolean isExistsDataAllFetched,
                 int masterBinlogFileIndex, long masterBinlogOffset) {
         if (ConfForGlobal.pureMemory) {

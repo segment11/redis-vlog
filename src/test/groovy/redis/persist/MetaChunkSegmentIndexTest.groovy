@@ -50,6 +50,11 @@ class MetaChunkSegmentIndexTest extends Specification {
         one.masterBinlogFileIndexAndOffset == new Binlog.FileIndexAndOffset(1, 0L)
 
         when:
+        one.clearMasterBinlogFileIndexAndOffset()
+        then:
+        one.masterBinlogFileIndexAndOffset == new Binlog.FileIndexAndOffset(0, 0L)
+
+        when:
         one.setAll(30, 1L, false, 2, 0)
         then:
         one.get() == 30

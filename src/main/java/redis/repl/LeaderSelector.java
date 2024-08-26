@@ -325,7 +325,23 @@ public class LeaderSelector implements NeedCleanUp {
                 oneSlot.checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
                 oneSlot.getMergedSegmentIndexEndLastTime();
 
-                oneSlot.getBinlog().moveToNextSegment();
+                // set binlog same as old master last updated
+                var metaChunkSegmentIndex = oneSlot.getMetaChunkSegmentIndex();
+                var lastUpdatedFileIndexAndOffset = metaChunkSegmentIndex.getMasterBinlogFileIndexAndOffset();
+                var lastUpdatedFileIndex = lastUpdatedFileIndexAndOffset.fileIndex();
+                var lastUpdatedOffset = lastUpdatedFileIndexAndOffset.offset();
+
+                var marginLastUpdatedOffset = Binlog.marginFileOffset(lastUpdatedOffset);
+
+                var binlog = oneSlot.getBinlog();
+                binlog.reopenAtFileIndexAndMarginOffset(lastUpdatedFileIndex, marginLastUpdatedOffset);
+                binlog.moveToNextSegment(true);
+
+                // clear old as slave catch up binlog info
+                // need fetch from the beginning, for data consistency
+                // when next time begin slave again
+                metaChunkSegmentIndex.clearMasterBinlogFileIndexAndOffset();
+
                 oneSlot.resetReadonlyFalseAsMaster();
             });
         }
@@ -448,6 +464,10 @@ public class LeaderSelector implements NeedCleanUp {
         for (int i = 0; i < ConfForGlobal.slotNumber; i++) {
             var oneSlot = localPersist.oneSlot((byte) i);
             promises[i] = oneSlot.asyncRun(() -> {
+                // clear old as slave catch up binlog info
+                // need fetch from the beginning, for data consistency
+                oneSlot.getMetaChunkSegmentIndex().clearMasterBinlogFileIndexAndOffset();
+
                 oneSlot.createReplPairAsSlave(host, port);
                 log.warn("Repl slave created new repl pair as slave, new master: {}:{}", host, port);
 
