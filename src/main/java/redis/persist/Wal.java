@@ -1,6 +1,7 @@
 package redis.persist;
 
 import org.apache.lucene.util.RamUsageEstimator;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
@@ -293,14 +294,21 @@ public class Wal implements InMemoryEstimate {
         }
     }
 
+    @TestOnly
+    void clear() {
+        clear(true);
+    }
+
     @SlaveNeedReplay
     @SlaveReplay
-    void clear() {
+    void clear(boolean writeBytes0ToRaf) {
         delayToKeyBucketValues.clear();
         delayToKeyBucketShortValues.clear();
 
-        resetWal(false);
-        resetWal(true);
+        if (writeBytes0ToRaf) {
+            resetWal(false);
+            resetWal(true);
+        }
 
         if (groupIndex % 100 == 0) {
             log.info("Clear wal, slot: {}, group index: {}", slot, groupIndex);

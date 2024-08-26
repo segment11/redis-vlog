@@ -8,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
+import redis.repl.SlaveNeedReplay;
+import redis.repl.SlaveReplay;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,7 +20,7 @@ import java.util.List;
 public class BigStringFiles implements InMemoryEstimate {
     private final byte slot;
     private final String slotStr;
-    final File bigStringDir;
+    File bigStringDir;
 
     private static final String BIG_STRING_DIR_NAME = "big-string";
 
@@ -161,6 +163,25 @@ public class BigStringFiles implements InMemoryEstimate {
             return file.delete();
         } else {
             return true;
+        }
+    }
+
+    @SlaveNeedReplay
+    @SlaveReplay
+    public void deleteAllBigStringFiles() {
+        if (ConfForGlobal.pureMemory) {
+            allBytesByUuid.clear();
+            return;
+        }
+
+        bigStringBytesByUuidLRU.clear();
+        bigStringFilesCountGauge.labels(slotStr).set(0);
+
+        try {
+            FileUtils.cleanDirectory(bigStringDir);
+            log.warn("Delete all big string files, slot: {}", slot);
+        } catch (IOException e) {
+            log.error("Delete all big string files error, slot: " + slot, e);
         }
     }
 }

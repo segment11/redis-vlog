@@ -196,7 +196,9 @@ class WalTest extends Specification {
 
         cleanup:
         wal.clear()
+        wal.clear(false)
         wal2.clear()
+        wal2.clear(false)
         raf.close()
         rafShortValue.close()
         file.delete()

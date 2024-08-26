@@ -1075,16 +1075,17 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
     public void flush() {
         checkCurrentThreadId();
 
-        // can truncate all batch for better perf, todo
         for (var wal : walArray) {
-            wal.clear();
+            wal.clear(false);
         }
 
-        if (this.keyLoader != null) {
+        if (raf != null) {
+            // truncate all wal raf file
             try {
-                this.keyLoader.flush();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+                raf.setLength(0);
+                rafShortValue.setLength(0);
+            } catch (IOException e) {
+                throw new RuntimeException("Flush wal raf error", e);
             }
         }
 
@@ -1097,6 +1098,22 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
 
         if (this.chunk != null) {
             this.chunk.resetAsFlush();
+        }
+
+        if (this.bigStringFiles != null) {
+            this.bigStringFiles.deleteAllBigStringFiles();
+        }
+
+        if (this.keyLoader != null) {
+            try {
+                this.keyLoader.flush();
+            } catch (Exception e) {
+                throw new RuntimeException("Flush key loader error", e);
+            }
+        }
+
+        if (this.binlog != null) {
+            this.binlog.truncateAll();
         }
 
         appendBinlog(new XFlush());
@@ -1201,6 +1218,8 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
         if (chunk != null) {
             chunk.cleanUp();
         }
+
+        // big string files, need not close, it read write a single file each time
 
         if (keyLoader != null) {
             keyLoader.cleanUp();

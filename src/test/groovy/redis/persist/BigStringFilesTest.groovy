@@ -43,8 +43,11 @@ class BigStringFilesTest extends Specification {
         when:
         bigStringFiles1.deleteBigStringFileIfExist(1L)
         bigStringFiles2.deleteBigStringFileIfExist(1L)
+        bigStringFiles1.deleteAllBigStringFiles()
+        bigStringFiles2.deleteAllBigStringFiles()
         then:
         bigStringFiles1.getBigStringFileUuidList().size() == 0
+        bigStringFiles2.getBigStringFileUuidList().size() == 0
     }
 
     def 'test pure memory mode'() {
@@ -68,6 +71,7 @@ class BigStringFilesTest extends Specification {
         bigStringFiles.getBigStringFileUuidList().size() == 0
 
         cleanup:
+        bigStringFiles.deleteAllBigStringFiles()
         ConfForGlobal.pureMemory = false
     }
 
