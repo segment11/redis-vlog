@@ -150,7 +150,7 @@ jar {
         attributes "Main-Class": 'redis.MultiWorkerServer'
         attributes "Class-Path": '. lib/' + configurations.runtimeClasspath.collect { it.name }.join(' lib/')
     }
-    exclude 'log4j2.xml'
+    exclude 'log4j2.xml', 'redis-vlog.properties'
     zip64 true
 }
 
@@ -168,9 +168,14 @@ task copyLog4j2(type: Copy) {
     into "$buildDir/libs/"
 }
 
+task copyConfigFile(type: Copy) {
+    from 'src/main/resources/redis-vlog.properties'
+    into "$buildDir/libs/"
+}
+
 task copyDependencies(type: Copy) {
     from configurations.runtimeClasspath
     into 'build/libs/lib'
 }
 
-jar.dependsOn copyDynScript, copyLog4j2, copyDependencies
+jar.dependsOn copyDynScript, copyLog4j2, copyConfigFile, copyDependencies
