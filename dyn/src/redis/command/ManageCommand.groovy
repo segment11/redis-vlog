@@ -248,13 +248,9 @@ class ManageCommand extends BaseCommand {
                 return ErrorReply.SYNTAX
             }
 
-            ArrayList<String> keyPrefixGroupList = []
-            for (keyPrefixGroup in keyPrefixGroups.split(',')) {
-                keyPrefixGroupList << keyPrefixGroup
-            }
+            var firstOneSlot = localPersist.currentThreadFirstOneSlot()
+            firstOneSlot.dynConfig.update("dict_key_prefix_groups", keyPrefixGroups);
 
-            trainSampleJob.keyPrefixGroupList = keyPrefixGroupList
-            log.warn 'Manage Set dict key prefix groups: {}', keyPrefixGroups
             return OKReply.INSTANCE
         }
 

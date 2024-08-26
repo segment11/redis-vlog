@@ -5,9 +5,11 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.MultiWorkerServer;
+import redis.TrainSampleJob;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 public class DynConfig {
@@ -37,6 +39,17 @@ public class DynConfig {
             if ("max_connections".equals(key)) {
                 MultiWorkerServer.STATIC_GLOBAL_V.socketInspector.setMaxConnections((int) value);
                 log.warn("Global config set max_connections={}, slot: {}", value, currentSlot);
+            }
+
+            if ("dict_key_prefix_groups".equals(key)) {
+                var keyPrefixGroups = (String) value;
+                ArrayList<String> keyPrefixGroupList = new ArrayList<>();
+                for (var keyPrefixGroup : keyPrefixGroups.split(",")) {
+                    keyPrefixGroupList.add(keyPrefixGroup);
+                }
+
+                TrainSampleJob.setKeyPrefixGroupList(keyPrefixGroupList);
+                log.warn("Global config set dict_key_prefix_groups={}, slot: {}", value, currentSlot);
             }
             // todo
         }

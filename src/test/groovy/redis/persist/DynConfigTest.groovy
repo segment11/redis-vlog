@@ -2,6 +2,7 @@ package redis.persist
 
 import redis.MultiWorkerServer
 import redis.SocketInspector
+import redis.TrainSampleJob
 import spock.lang.Specification
 
 class DynConfigTest extends Specification {
@@ -59,6 +60,7 @@ class DynConfigTest extends Specification {
         MultiWorkerServer.STATIC_GLOBAL_V.socketInspector = new SocketInspector()
         config = new DynConfig(slot, tmpFile)
         config.update('max_connections', 100)
+        config.update('dict_key_prefix_groups', 'key:,xxx:')
         then:
         config.afterUpdateCallback != null
         config.masterUuid == 1234L
@@ -75,6 +77,13 @@ class DynConfigTest extends Specification {
         !config.readonly
         config.canRead
         config.canWrite
+
+        when:
+        // reload from file again
+        new DynConfig(slot, tmpFile)
+        then:
+        MultiWorkerServer.STATIC_GLOBAL_V.socketInspector.maxConnections == 100
+        TrainSampleJob.keyPrefixGroupList == ['key:', 'xxx:']
 
         cleanup:
         tmpFile.delete()

@@ -1,9 +1,6 @@
 package redis.command
 
-import redis.BaseCommand
-import redis.ConfForSlot
-import redis.Dict
-import redis.DictMap
+import redis.*
 import redis.persist.Consts
 import redis.persist.LocalPersist
 import redis.persist.LocalPersistTest
@@ -233,6 +230,12 @@ class ManageCommandTest extends Specification {
         manage.from(mGroup)
 
         and:
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        and:
         def dictMap = DictMap.instance
         dictMap.initDictMap(Consts.testDir)
 
@@ -249,6 +252,7 @@ class ManageCommandTest extends Specification {
         def reply = manage.dict()
         then:
         reply == OKReply.INSTANCE
+        TrainSampleJob.keyPrefixGroupList == ['key:', 'xxx:']
 
         when:
         data4[3] = ''.bytes
@@ -339,6 +343,8 @@ class ManageCommandTest extends Specification {
         reply == ErrorReply.FORMAT
 
         cleanup:
+        oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
         dictMap.clearAll()
         dictMap.cleanUp()
     }
