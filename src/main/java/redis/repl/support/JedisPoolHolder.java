@@ -3,6 +3,7 @@ package redis.repl.support;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
+import redis.NeedCleanUp;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
@@ -11,7 +12,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
-public class JedisPoolHolder {
+public class JedisPoolHolder implements NeedCleanUp {
     // singleton
     private JedisPoolHolder() {
     }
@@ -49,10 +50,11 @@ public class JedisPoolHolder {
         return one;
     }
 
-    public void closeAll() {
+    @Override
+    public void cleanUp() {
         for (var pool : cached.values()) {
             pool.close();
-            log.info("Close jedis pool");
+            System.out.println("Close jedis pool");
         }
         cached.clear();
     }

@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
+import redis.NeedCleanUp;
 import redis.StaticMemoryPrepareBytesStats;
 import redis.metric.SimpleGauge;
 import redis.repl.SlaveNeedReplay;
@@ -31,7 +32,7 @@ import static redis.persist.LocalPersist.PROTECTION;
 
 // need thread safe
 // need refactor to FdChunkSegments + FdKeyBuckets, todo
-public class FdReadWrite implements InMemoryEstimate {
+public class FdReadWrite implements InMemoryEstimate, NeedCleanUp {
 
     protected final Logger log = LoggerFactory.getLogger(this.getClass());
 
@@ -402,6 +403,7 @@ public class FdReadWrite implements InMemoryEstimate {
         }
     }
 
+    @Override
     public void cleanUp() {
         var npagesOneInner = oneInnerLength / PAGE_SIZE;
 

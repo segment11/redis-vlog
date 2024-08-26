@@ -3,10 +3,7 @@ package redis.persist;
 import jnr.posix.LibC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.ConfForGlobal;
-import redis.ConfForSlot;
-import redis.Debug;
-import redis.SnowFlake;
+import redis.*;
 import redis.metric.SimpleGauge;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
@@ -20,7 +17,7 @@ import java.util.*;
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 import static redis.persist.FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD;
 
-public class Chunk implements InMemoryEstimate {
+public class Chunk implements InMemoryEstimate, NeedCleanUp {
     private final int segmentNumberPerFd;
     private final byte fdPerChunk;
     final int maxSegmentIndex;
@@ -115,7 +112,8 @@ public class Chunk implements InMemoryEstimate {
         }
     }
 
-    void cleanUp() {
+    @Override
+    public void cleanUp() {
         if (fdReadWriteArray != null) {
             for (var fdReadWrite : fdReadWriteArray) {
                 fdReadWrite.cleanUp();

@@ -37,7 +37,7 @@ import static io.activej.config.converter.ConfigConverters.ofBoolean;
 import static redis.persist.Chunk.*;
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
-public class OneSlot implements InMemoryEstimate {
+public class OneSlot implements InMemoryEstimate, NeedCleanUp {
     @TestOnly
     public OneSlot(byte slot, File slotDir, KeyLoader keyLoader, Wal wal) throws IOException {
         this.slot = slot;
@@ -1173,6 +1173,7 @@ public class OneSlot implements InMemoryEstimate {
         log.warn("Repl write chunk segments from master exists, s={}, i={}, c={}", slot, beginSegmentIndex, segmentCount);
     }
 
+    @Override
     public void cleanUp() {
         checkCurrentThreadId();
 
@@ -1201,12 +1202,15 @@ public class OneSlot implements InMemoryEstimate {
             chunk.cleanUp();
         }
 
+        if (keyLoader != null) {
+            keyLoader.cleanUp();
+        }
+
         for (var replPair : replPairs) {
             replPair.bye();
             replPair.close();
         }
     }
-
 
     record BeforePersistWalExtFromMerge(ArrayList<Integer> segmentIndexList,
                                         ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList) {

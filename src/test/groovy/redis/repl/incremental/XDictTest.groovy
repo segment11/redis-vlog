@@ -81,6 +81,6 @@ class XDictTest extends Specification {
 
         cleanup:
         dictMap.clearAll()
-        dictMap.close()
+        dictMap.cleanUp()
     }
 }

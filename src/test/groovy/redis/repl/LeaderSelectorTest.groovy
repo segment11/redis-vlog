@@ -31,7 +31,7 @@ class LeaderSelectorTest extends Specification {
         given:
         def leaderSelector = LeaderSelector.instance
         // only for coverage
-        leaderSelector.closeAll()
+        leaderSelector.cleanUp()
 
         expect:
         leaderSelector.tryConnectAndGetMasterListenAddress() == null
@@ -123,7 +123,7 @@ class LeaderSelectorTest extends Specification {
         !leaderSelector.isConnected()
 
         cleanup:
-        leaderSelector.closeAll()
+        leaderSelector.cleanUp()
     }
 
     final byte slot = 0
@@ -392,7 +392,7 @@ class LeaderSelectorTest extends Specification {
         firstSlaveListenAddress == 'localhost:6380'
 
         cleanup:
-        JedisPoolHolder.instance.closeAll()
+        JedisPoolHolder.instance.cleanUp()
         oneSlot.cleanUp()
         Consts.persistDir.deleteDir()
     }

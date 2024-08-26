@@ -340,7 +340,7 @@ class ManageCommandTest extends Specification {
 
         cleanup:
         dictMap.clearAll()
-        dictMap.close()
+        dictMap.cleanUp()
     }
 
     def 'manage in on slot'() {

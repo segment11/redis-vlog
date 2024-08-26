@@ -16,7 +16,7 @@ import java.util.*;
 
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
-public class KeyLoader implements InMemoryEstimate {
+public class KeyLoader implements InMemoryEstimate, NeedCleanUp {
     private static final int PAGE_NUMBER_PER_BUCKET = 1;
     public static final int KEY_BUCKET_ONE_COST_SIZE = PAGE_NUMBER_PER_BUCKET * PAGE_SIZE;
 
@@ -246,6 +246,7 @@ public class KeyLoader implements InMemoryEstimate {
         log.info("Persist key bucket files fd opened, split number: {}, slot: {}", splitNumber, slot);
     }
 
+    @Override
     public void cleanUp() {
         if (fdReadWriteArray != null) {
             for (var fdReadWrite : fdReadWriteArray) {
@@ -257,17 +258,14 @@ public class KeyLoader implements InMemoryEstimate {
 
         if (metaKeyBucketSplitNumber != null) {
             metaKeyBucketSplitNumber.cleanUp();
-            System.out.println("Cleaned up bucket split number");
         }
 
         if (metaOneWalGroupSeq != null) {
             metaOneWalGroupSeq.cleanUp();
-            System.out.println("Cleaned up one wal group seq");
         }
 
         if (statKeyCountInBuckets != null) {
             statKeyCountInBuckets.cleanUp();
-            System.out.println("Cleaned up key count in buckets");
         }
     }
 

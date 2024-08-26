@@ -29,6 +29,6 @@ class JedisPoolHolderTest extends Specification {
         r == 'test'
 
         cleanup:
-        holder.closeAll()
+        holder.cleanUp()
     }
 }

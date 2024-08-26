@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
+import redis.NeedCleanUp;
 import redis.repl.SlaveReplay;
 
 import java.io.File;
@@ -13,7 +14,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-public class StatKeyCountInBuckets implements InMemoryEstimate {
+public class StatKeyCountInBuckets implements InMemoryEstimate, NeedCleanUp {
     private static final String STAT_KEY_BUCKET_LAST_UPDATE_COUNT_FILE = "stat_key_count_in_buckets.dat";
     // short is enough for one key bucket index total value count
     public static final int ONE_LENGTH = 2;
@@ -191,7 +192,8 @@ public class StatKeyCountInBuckets implements InMemoryEstimate {
         }
     }
 
-    void cleanUp() {
+    @Override
+    public void cleanUp() {
         if (ConfForGlobal.pureMemory) {
             return;
         }
@@ -199,8 +201,8 @@ public class StatKeyCountInBuckets implements InMemoryEstimate {
         // sync all
         try {
 //            raf.getFD().sync();
-//            System.out.println("Stat key count in buckets sync all done");
             raf.close();
+            System.out.println("Stat key count in buckets file closed");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

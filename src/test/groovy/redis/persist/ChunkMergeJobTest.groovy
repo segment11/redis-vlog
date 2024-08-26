@@ -195,7 +195,7 @@ class ChunkMergeJobTest extends Specification {
 
         cleanup:
         oneSlot.cleanUp()
-        dictMap.close()
+        dictMap.cleanUp()
         Consts.persistDir.deleteDir()
     }
 }

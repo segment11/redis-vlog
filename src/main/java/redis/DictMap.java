@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class DictMap {
+public class DictMap implements NeedCleanUp {
     public static int TO_COMPRESS_MIN_DATA_LENGTH = 64;
     // singleton
     private static final DictMap instance = new DictMap();
@@ -101,11 +101,16 @@ public class DictMap {
 
     private FileOutputStream fos;
 
-    public void close() throws IOException {
+    @Override
+    public void cleanUp() {
         if (fos != null) {
             synchronized (fos) {
-                fos.close();
-                System.out.println("Close dict fos");
+                try {
+                    fos.close();
+                    System.out.println("Close dict fos");
+                } catch (IOException e) {
+                    System.err.println("Close dict fos error, message: " + e.getMessage());
+                }
             }
         }
     }

@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.MultiWorkerServer;
+import redis.NeedCleanUp;
 import redis.RequestHandler;
 import redis.command.XGroup;
 import redis.decode.RequestDecoder;
@@ -19,7 +20,7 @@ import redis.repl.content.Ping;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Callable;
 
-public class TcpClient {
+public class TcpClient implements NeedCleanUp {
     private final byte slot;
     private final Eventloop netWorkerEventloop;
     private final RequestHandler requestHandler;
@@ -137,11 +138,14 @@ public class TcpClient {
     public void close() {
         if (sock != null && !sock.isClosed()) {
             sock.close();
-            log.warn("Repl closed socket, to server: {}, slot: {}", replPair.getHostAndPort(), slot);
             System.out.println("Repl closed socket, to server: " + replPair.getHostAndPort() + ", slot: " + slot);
         } else {
-            log.warn("Repl socket is already closed, to server: {}, slot: {}", replPair.getHostAndPort(), slot);
             System.out.println("Repl socket is already closed, to server: " + replPair.getHostAndPort() + ", slot: " + slot);
         }
+    }
+
+    @Override
+    public void cleanUp() {
+        close();
     }
 }

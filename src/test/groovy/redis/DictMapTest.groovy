@@ -19,7 +19,7 @@ class DictMapTest extends Specification {
 
         and:
         def dictMap = DictMap.instance
-        dictMap.close()
+        dictMap.cleanUp()
         dictMap.initDictMap(Consts.testDir)
 
         and:
@@ -69,7 +69,7 @@ class DictMapTest extends Specification {
 
         when:
         dictMap.clearAll()
-        dictMap.close()
+        dictMap.cleanUp()
         boolean exception = false
         try {
             dictMap.putDict('test', dict)

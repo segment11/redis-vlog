@@ -115,6 +115,7 @@ class TcpClientTest extends Specification {
         eventloop.breakEventloop()
         // only for coverage
         tcpClient.close()
+        tcpClient.cleanUp()
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         localPersist.cleanUp()
         Consts.persistDir.deleteDir()

@@ -1,11 +1,12 @@
 package redis.persist;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
-import org.jetbrains.annotations.TestOnly;
+import redis.NeedCleanUp;
 import redis.repl.SlaveReplay;
 
 import java.io.File;
@@ -14,7 +15,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
+public class MetaKeyBucketSplitNumber implements InMemoryEstimate, NeedCleanUp {
     private static final String META_KEY_BUCKET_SPLIT_NUMBER_FILE = "meta_key_bucket_split_number.dat";
 
     final int allCapacity;
@@ -170,6 +171,7 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
         }
     }
 
+    @Override
     public void cleanUp() {
         if (ConfForGlobal.pureMemory) {
             return;
@@ -178,8 +180,8 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate {
         // sync all
         try {
 //            raf.getFD().sync();
-//            System.out.println("Meta key bucket split number sync all done");
             raf.close();
+            System.out.println("Meta key bucket split number file closed");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

@@ -650,7 +650,7 @@ class BaseCommandTest extends Specification {
         exception
 
         cleanup:
-        dictMap.close()
+        dictMap.cleanUp()
         Consts.testDir.deleteDir()
     }
 }

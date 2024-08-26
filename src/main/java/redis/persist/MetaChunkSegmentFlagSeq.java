@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
+import redis.NeedCleanUp;
 import redis.StaticMemoryPrepareBytesStats;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
@@ -19,7 +20,7 @@ import java.util.List;
 import static redis.persist.Chunk.Flag;
 import static redis.persist.Chunk.NO_NEED_MERGE_SEGMENT_INDEX;
 
-public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
+public class MetaChunkSegmentFlagSeq implements InMemoryEstimate, NeedCleanUp {
     private static final String META_CHUNK_SEGMENT_SEQ_FLAG_FILE = "meta_chunk_segment_flag_seq.dat";
     // flag byte + seq long + wal group index int
     public static final int ONE_LENGTH = 1 + 8 + 4;
@@ -323,7 +324,8 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
         }
     }
 
-    void cleanUp() {
+    @Override
+    public void cleanUp() {
         if (ConfForGlobal.pureMemory) {
             return;
         }
@@ -331,8 +333,8 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate {
         // sync all
         try {
 //            raf.getFD().sync();
-//            System.out.println("Meta chunk segment flag seq sync all done");
             raf.close();
+            System.out.println("Meta chunk segment flag seq file closed.");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

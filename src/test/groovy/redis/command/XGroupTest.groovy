@@ -1249,7 +1249,7 @@ class XGroupTest extends Specification {
 
         cleanup:
         localPersist.cleanUp()
-        dictMap.close()
+        dictMap.cleanUp()
         Consts.persistDir.deleteDir()
     }
 

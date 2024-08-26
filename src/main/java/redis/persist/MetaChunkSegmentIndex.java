@@ -4,6 +4,7 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
+import redis.NeedCleanUp;
 import redis.repl.Binlog;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
@@ -13,7 +14,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 
-public class MetaChunkSegmentIndex {
+public class MetaChunkSegmentIndex implements NeedCleanUp {
     private static final String META_CHUNK_SEGMENT_INDEX_FILE = "meta_chunk_segment_index.dat";
     private RandomAccessFile raf;
 
@@ -129,7 +130,8 @@ public class MetaChunkSegmentIndex {
         System.out.println("Meta chunk segment index clear done, set 0 from the beginning. Clear master binlog file index and offset.");
     }
 
-    void cleanUp() {
+    @Override
+    public void cleanUp() {
         if (ConfForGlobal.pureMemory) {
             return;
         }
@@ -137,8 +139,8 @@ public class MetaChunkSegmentIndex {
         // sync all
         try {
 //            raf.getFD().sync();
-//            System.out.println("Meta chunk segment index sync all done");
             raf.close();
+            System.out.println("Meta chunk segment index file closed");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

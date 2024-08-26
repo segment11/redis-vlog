@@ -9,13 +9,14 @@ import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfVolumeDirsForSlot;
+import redis.NeedCleanUp;
 import redis.SnowFlake;
 import redis.SocketInspector;
 
 import java.io.File;
 import java.io.IOException;
 
-public class LocalPersist {
+public class LocalPersist implements NeedCleanUp {
     public static final int PAGE_SIZE = (int) PageManager.getInstance().pageSize();
     public static final int PROTECTION = PageManager.PROT_READ | PageManager.PROT_WRITE | PageManager.PROT_EXEC;
     public static final short DEFAULT_SLOT_NUMBER = 4;
@@ -120,6 +121,7 @@ public class LocalPersist {
         this.socketInspector = socketInspector;
     }
 
+    @Override
     public void cleanUp() {
         for (var oneSlot : oneSlots) {
             oneSlot.asyncRun(oneSlot::cleanUp);

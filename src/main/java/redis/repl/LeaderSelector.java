@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
+import redis.NeedCleanUp;
 import redis.command.PGroup;
 import redis.command.XGroup;
 import redis.persist.LocalPersist;
@@ -21,7 +22,7 @@ import redis.repl.support.JedisPoolHolder;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-public class LeaderSelector {
+public class LeaderSelector implements NeedCleanUp {
     // singleton
     private LeaderSelector() {
     }
@@ -185,7 +186,7 @@ public class LeaderSelector {
     synchronized void disconnect() {
         if (client != null) {
             client.close();
-            log.info("Repl zookeeper client closed");
+            System.out.println("Repl zookeeper client closed");
             client = null;
         }
     }
@@ -236,17 +237,18 @@ public class LeaderSelector {
         if (leaderLatch != null) {
             try {
                 leaderLatch.close();
-                log.info("Repl leader latch closed");
+                System.out.println("Repl leader latch closed");
                 leaderLatch = null;
                 lastStopLeaderLatchTimeMillis = System.currentTimeMillis();
             } catch (Exception e) {
                 // need not stack trace
-                log.error("Repl leader latch close failed: " + e.getMessage());
+                System.err.println("Repl leader latch close failed: " + e.getMessage());
             }
         }
     }
 
-    public void closeAll() {
+    @Override
+    public void cleanUp() {
         stopLeaderLatch();
         disconnect();
     }

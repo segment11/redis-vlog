@@ -4,6 +4,7 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
+import redis.NeedCleanUp;
 import redis.repl.SlaveNeedReplay;
 
 import java.io.File;
@@ -13,7 +14,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 // for slave check if key buckets need fetch from master, compare with seq
-public class MetaOneWalGroupSeq implements InMemoryEstimate {
+public class MetaOneWalGroupSeq implements InMemoryEstimate, NeedCleanUp {
     private static final String META_ONE_WAL_GROUP_SEQ_FILE = "meta_one_wal_group_seq.dat";
 
     final int walGroupNumber;
@@ -108,6 +109,7 @@ public class MetaOneWalGroupSeq implements InMemoryEstimate {
         }
     }
 
+    @Override
     public void cleanUp() {
         if (ConfForGlobal.pureMemory) {
             return;
@@ -116,8 +118,8 @@ public class MetaOneWalGroupSeq implements InMemoryEstimate {
         // sync all
         try {
 //            raf.getFD().sync();
-//            System.out.println("Meta one wal group seq sync all done");
             raf.close();
+            System.out.println("Meta one wal group seq file closed");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

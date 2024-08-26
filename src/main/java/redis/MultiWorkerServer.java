@@ -560,23 +560,23 @@ public class MultiWorkerServer extends Launcher {
 
             primaryScheduleRunnable.stop();
 
-            LeaderSelector.getInstance().closeAll();
-            JedisPoolHolder.getInstance().closeAll();
+            LeaderSelector.getInstance().cleanUp();
+            JedisPoolHolder.getInstance().cleanUp();
 
             if (socketInspector != null) {
                 socketInspector.socketMap.values().forEach(socket -> {
-                    socket.getReactor().execute(() -> {
+                    socket.getReactor().submit(() -> {
                         socket.close();
-                        logger.info("Close connected socket: {}", socket.getRemoteAddress());
+                        System.out.println("Close connected socket: " + socket.getRemoteAddress());
                     });
                 });
             }
 
             // close local persist
             LocalPersist.getInstance().cleanUp();
-            DictMap.getInstance().close();
+            DictMap.getInstance().cleanUp();
         } catch (Exception e) {
-            logger.error("Stop error", e);
+            System.err.println("Stop error: " + e.getMessage());
             throw e;
         }
     }
