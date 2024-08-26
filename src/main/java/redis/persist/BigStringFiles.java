@@ -20,7 +20,7 @@ import java.util.List;
 public class BigStringFiles implements InMemoryEstimate {
     private final byte slot;
     private final String slotStr;
-    File bigStringDir;
+    final File bigStringDir;
 
     private static final String BIG_STRING_DIR_NAME = "big-string";
 
