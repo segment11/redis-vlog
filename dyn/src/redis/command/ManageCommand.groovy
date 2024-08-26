@@ -226,6 +226,18 @@ class ManageCommand extends BaseCommand {
             }
 
             return OKReply.INSTANCE
+        } else if (subSubCmd == 'set-readonly') {
+            oneSlot.readonly = true
+            return new BulkReply(('slot ' + slot + ' set readonly').bytes)
+        } else if (subSubCmd == 'set-not-readonly') {
+            oneSlot.readonly = false
+            return new BulkReply(('slot ' + slot + ' set not readonly').bytes)
+        } else if (subSubCmd == 'set-can-read') {
+            oneSlot.canRead = true
+            return new BulkReply(('slot ' + slot + ' set can read').bytes)
+        } else if (subSubCmd == 'set-not-can-read') {
+            oneSlot.canRead = false
+            return new BulkReply(('slot ' + slot + ' set not can read').bytes)
         }
 
         return ErrorReply.SYNTAX

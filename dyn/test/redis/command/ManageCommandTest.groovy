@@ -461,6 +461,30 @@ class ManageCommandTest extends Specification {
         reply instanceof IntegerReply
 
         when:
+        data4[3] = 'set-readonly'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply instanceof BulkReply
+
+        when:
+        data4[3] = 'set-not-readonly'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply instanceof BulkReply
+
+        when:
+        data4[3] = 'set-can-read'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply instanceof BulkReply
+
+        when:
+        data4[3] = 'set-not-can-read'.bytes
+        reply = manage.manageInOneSlot()
+        then:
+        reply instanceof BulkReply
+
+        when:
         data4[3] = 'xxx'.bytes
         reply = manage.manageInOneSlot()
         then:
