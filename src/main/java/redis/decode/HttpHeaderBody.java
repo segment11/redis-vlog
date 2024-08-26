@@ -17,6 +17,7 @@ public class HttpHeaderBody {
 
     public static final byte[] HEADER_PREFIX_200 = "HTTP/1.1 200 OK\r\nContent-Length: ".getBytes();
     public static final byte[] HEADER_PREFIX_404 = "HTTP/1.1 404 Not Found\r\nContent-Length: ".getBytes();
+    public static final byte[] BODY_404 = "404: ".getBytes();
     public static final byte[] HEADER_PREFIX_500 = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: ".getBytes();
     public static final byte[] HEADER_SUFFIX = "\r\n\r\n".getBytes();
 

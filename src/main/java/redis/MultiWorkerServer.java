@@ -168,11 +168,19 @@ public class MultiWorkerServer extends Launcher {
     }
 
     ByteBuf wrapHttpResponse(Reply reply) {
-        var buf = reply.bufferAsHttp();
-        byte[] array = buf.array();
+        byte[] array;
+
+        boolean isError = reply instanceof ErrorReply;
+        boolean isNil = reply instanceof NilReply;
+        if (isNil) {
+            array = BODY_404;
+        } else {
+            array = reply.bufferAsHttp().array();
+        }
+
         byte[] contentLengthBytes = String.valueOf(array.length).getBytes();
 
-        var headerPrefix = reply instanceof ErrorReply ? HEADER_PREFIX_500 : (reply instanceof NilReply ? HEADER_PREFIX_404 : HEADER_PREFIX_200);
+        var headerPrefix = isError ? HEADER_PREFIX_500 : (isNil ? HEADER_PREFIX_404 : HEADER_PREFIX_200);
         var withHeaderLength = headerPrefix.length + contentLengthBytes.length + HEADER_SUFFIX.length + array.length;
         var withHeaderBytes = new byte[withHeaderLength];
 
@@ -551,7 +559,7 @@ public class MultiWorkerServer extends Launcher {
             }
 
             primaryScheduleRunnable.stop();
-            
+
             LeaderSelector.getInstance().closeAll();
             JedisPoolHolder.getInstance().closeAll();
 
