@@ -7,6 +7,7 @@ import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
+import redis.NeedCleanUp;
 import redis.persist.DynConfig;
 import redis.persist.InMemoryEstimate;
 
@@ -18,7 +19,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 // before slave start receive data from master, master need start this binlog for slave catch up
-public class Binlog implements InMemoryEstimate {
+public class Binlog implements InMemoryEstimate, NeedCleanUp {
 
     private final byte slot;
     private final File binlogDir;
@@ -575,8 +576,7 @@ public class Binlog implements InMemoryEstimate {
         return n;
     }
 
-    public void clear() {
-        // truncate
+    public void truncateAll() {
         try {
             raf.setLength(0);
         } catch (IOException e) {
@@ -605,7 +605,8 @@ public class Binlog implements InMemoryEstimate {
         }
     }
 
-    public void close() {
+    @Override
+    public void cleanUp() {
         try {
             raf.close();
             System.out.println("Repl close binlog current raf success, slot: " + slot);

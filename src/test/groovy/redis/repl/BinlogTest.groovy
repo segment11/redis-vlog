@@ -167,7 +167,7 @@ class BinlogTest extends Specification {
         when:
         // current file index == 1
         def oldCurrentFileIndex = binlog.currentFileIndex
-        binlog.close()
+        binlog.cleanUp()
         // load again
         binlog = new Binlog(slot, Consts.slotDir, dynConfig)
         then:
@@ -326,8 +326,8 @@ class BinlogTest extends Specification {
 
         cleanup:
         println 'in memory size estimate: ' + binlog.estimate()
-        binlog.clear()
-        binlog.close()
+        binlog.truncateAll()
+        binlog.cleanUp()
         Consts.slotDir.deleteDir()
         slotDir2.deleteDir()
     }

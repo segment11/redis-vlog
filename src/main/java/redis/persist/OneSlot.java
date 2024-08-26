@@ -1206,6 +1206,10 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
             keyLoader.cleanUp();
         }
 
+        if (binlog != null) {
+            binlog.cleanUp();
+        }
+
         for (var replPair : replPairs) {
             replPair.bye();
             replPair.close();

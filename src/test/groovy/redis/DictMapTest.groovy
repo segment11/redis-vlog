@@ -92,8 +92,8 @@ class DictMapTest extends Specification {
         exception
 
         cleanup:
-        binlog.clear()
-        binlog.close()
+        binlog.truncateAll()
+        binlog.cleanUp()
         Consts.slotDir.deleteDir()
         Consts.testDir.deleteDir()
     }
