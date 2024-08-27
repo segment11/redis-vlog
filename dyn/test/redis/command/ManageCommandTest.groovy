@@ -304,8 +304,8 @@ class ManageCommandTest extends Specification {
         manage.data = data15
         reply = manage.dict()
         then:
-        reply instanceof IntegerReply
-        ((IntegerReply) reply).integer == 1
+        reply instanceof BulkReply
+        Double.parseDouble(new String(((BulkReply) reply).raw)) < 1
 
         when:
         def data14 = new byte[14][]

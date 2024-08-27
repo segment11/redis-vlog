@@ -1,5 +1,6 @@
 package redis.command
 
+import com.github.luben.zstd.Zstd
 import groovy.transform.CompileStatic
 import io.activej.promise.Promise
 import io.activej.promise.Promises
@@ -301,20 +302,31 @@ class ManageCommand extends BaseCommand {
             trainSampleJob.resetSampleToTrainList(sampleToTrainList)
             def trainSampleResult = trainSampleJob.train()
 
+            // only one key prefix given, only one dict after train
             def trainSampleCacheDict = trainSampleResult.cacheDict()
+            def onlyOneDict = trainSampleCacheDict.get(keyPrefixGiven)
             log.warn 'Train new dict result, sample value count: {}, dict count: {}', data.length - 4, trainSampleCacheDict.size()
-            trainSampleCacheDict.each { keyPrefix, dict ->
-                // will overwrite same key prefix dict exists
-                dictMap.putDict(keyPrefix, dict)
-//                def oldDict = dictMap.putDict(keyPrefix, dict)
-//                if (oldDict != null) {
-//                    // keep old dict in persist, because may be used by other worker
-//                    // when start server, early dict will be overwritten by new dict with same key prefix, need not persist again?
-//                    dictMap.putDict(keyPrefix + '_' + new Random().nextInt(10000), oldDict)
-//                }
+            // will overwrite same key prefix dict exists
+            dictMap.putDict(keyPrefixGiven, onlyOneDict)
+
+//            def oldDict = dictMap.putDict(keyPrefixGiven, onlyOneDict)
+//            if (oldDict != null) {
+//                // keep old dict in persist, because may be used by other worker
+//                // when start server, early dict will be overwritten by new dict with same key prefix, need not persist again?
+//                dictMap.putDict(keyPrefixGiven + '_' + new Random().nextInt(10000), oldDict)
+//            }
+
+            // show compress ratio use dict just trained
+            long totalBytes = 0
+            long totalCompressedBytes = 0
+            for (sample in sampleToTrainList) {
+                totalBytes += sample.valueBytes().length
+                def compressedBytes = Zstd.compressUsingDict(sample.valueBytes(), onlyOneDict.dictBytes, Zstd.defaultCompressionLevel())
+                totalCompressedBytes += compressedBytes.length
             }
 
-            return new IntegerReply(trainSampleCacheDict.size())
+            def ratio = totalCompressedBytes / totalBytes
+            return new BulkReply(ratio.toString().bytes)
         }
 
         if (subSubCmd == 'output-dict-bytes') {
