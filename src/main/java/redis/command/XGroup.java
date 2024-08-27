@@ -425,6 +425,13 @@ public class XGroup extends BaseCommand {
                 slot, currentFileIndex, currentOffset);
         log.warn("Repl slave begin fetch all exists data from master, slot: {}", slot);
 
+        // dict is global, only first slot do fetch
+        var firstSlot = localPersist.oneSlots()[0].slot();
+        if (firstSlot != slot) {
+            log.warn("Repl slave skip fetch exists dict, slot: {}", slot);
+            return fetchExistsBigString(slot, oneSlot);
+        }
+
         // begin to fetch exist data from master
         // first fetch dict
         var dictMap = DictMap.getInstance();
@@ -983,7 +990,7 @@ public class XGroup extends BaseCommand {
         // client received from server
         log.warn("Repl master reply exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
                 replPair.getSlaveUuid(), replPair.getHostAndPort());
-        log.warn("Repl slave stats count for slave skip fetch: {}", replPair.getStatsCountForSlaveSkipFetchAsString());
+        log.warn("Repl slave stats count for slave skip fetch: {}, slot: {}", replPair.getStatsCountForSlaveSkipFetchAsString(), slot);
 
         var oneSlot = localPersist.oneSlot(slot);
         oneSlot.setChunkSegmentIndexFromMeta();
@@ -1228,13 +1235,13 @@ public class XGroup extends BaseCommand {
 
             var isExistsDataAllFetched = metaChunkSegmentIndex.isExistsDataAllFetched();
             if (!isExistsDataAllFetched) {
-                log.warn("Repl slave try catch up again after slave tcp client close, but exists data not all fetched, slot: {}", targetSlot);
+                System.out.println("Repl slave try catch up again after slave tcp client close, but exists data not all fetched, slot: " + targetSlot);
                 return;
             }
 
             var lastUpdatedMasterUuid = metaChunkSegmentIndex.getMasterUuid();
             if (lastUpdatedMasterUuid != replPairAsSlave.getMasterUuid()) {
-                log.warn("Repl slave try catch up again after slave tcp client close, but master uuid not match, slot: {}", targetSlot);
+                System.out.println("Repl slave try catch up again after slave tcp client close, but master uuid not match, slot: " + targetSlot);
                 return;
             }
 
@@ -1253,7 +1260,7 @@ public class XGroup extends BaseCommand {
                 try {
                     resultBytes = JedisPoolHolder.exe(jedisPool, jedis -> {
                         var pong = jedis.ping();
-                        log.info("Repl slave try ping after slave tcp client close, to {}, pong: {}", replPairAsSlave.getHostAndPort(), pong);
+                        System.out.println("Repl slave try ping after slave tcp client close, to " + replPairAsSlave.getHostAndPort() + ", pong: " + pong + ", slot: " + targetSlot);
                         // get data from master
                         // refer RequestHandler.transferDataForXGroup
                         return jedis.get(
@@ -1271,13 +1278,13 @@ public class XGroup extends BaseCommand {
                         );
                     });
                 } catch (Exception e) {
-                    log.error("Repl slave try catch up again after slave tcp client close error: {}", e.getMessage());
+                    System.out.println("Repl slave try catch up again after slave tcp client close error: " + e.getMessage() + ", slot: " + targetSlot);
                     replPairAsSlave.setMasterCanNotConnect(true);
                 }
             }
 
             if (resultBytes == null) {
-                log.warn("Repl slave try catch up again after slave tcp client close, but get data from master is null, slot: {}", targetSlot);
+                System.out.println("Repl slave try catch up again after slave tcp client close, but get data from master is null, slot: " + targetSlot);
                 return;
             }
 
@@ -1287,9 +1294,9 @@ public class XGroup extends BaseCommand {
                 xGroup.s_catch_up(targetSlot, resultBytes);
 
                 if (replPairAsSlave.isAllCaughtUp()) {
-                    log.warn("Repl slave try catch up again, is all caught up!!!, slot: {}", targetSlot);
+                    System.out.println("Repl slave try catch up again, is all caught up!!!, slot: " + targetSlot);
                 } else {
-                    log.warn("Repl slave try catch up again, is not!!! all caught up!!!, slot: {}", targetSlot);
+                    System.out.println("Repl slave try catch up again, is not!!! all caught up!!!, slot: " + targetSlot);
                     // todo, try to loop if not all caught up
                 }
             } catch (Exception e) {

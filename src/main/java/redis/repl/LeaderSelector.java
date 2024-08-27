@@ -469,7 +469,7 @@ public class LeaderSelector implements NeedCleanUp {
                 oneSlot.getMetaChunkSegmentIndex().clearMasterBinlogFileIndexAndOffset();
 
                 oneSlot.createReplPairAsSlave(host, port);
-                log.warn("Repl slave created new repl pair as slave, new master: {}:{}", host, port);
+                log.warn("Repl slave created new repl pair as slave, new master: {}:{}, slot: {}", host, port, oneSlot.slot());
 
                 oneSlot.getBinlog().moveToNextSegment();
                 // do not write binlog as slave

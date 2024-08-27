@@ -86,11 +86,11 @@ public class SocketInspector implements TcpSocket.Inspector {
     @Override
     public void onConnect(TcpSocket socket) {
         var userData = socket.getUserData();
-        if (userData instanceof ReplPair) {
+        if (userData instanceof ReplPair replPair) {
             // this socket is a slave connection master
             // need not check max connections
             var remoteAddress = socket.getRemoteAddress();
-            log.info("Inspector on repl connect, remote address: {}", remoteAddress);
+            log.info("Inspector on repl connect, remote address: {}, slot: {}", remoteAddress, replPair.getSlot());
             return;
         }
 
@@ -148,7 +148,7 @@ public class SocketInspector implements TcpSocket.Inspector {
 
         var userData = socket.getUserData();
         if (userData instanceof ReplPair replPair) {
-            log.info("Inspector on repl disconnect, remote address: {}", remoteAddress);
+            log.info("Inspector on repl disconnect, remote address: {}, slot: {}", remoteAddress, replPair.getSlot());
             replPair.setDisconnectTimeMillis(System.currentTimeMillis());
             XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair, null);
             return;
