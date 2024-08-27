@@ -35,6 +35,7 @@ import io.prometheus.client.hotspot.BufferPoolsExports;
 import io.prometheus.client.hotspot.GarbageCollectorExports;
 import io.prometheus.client.hotspot.MemoryPoolsExports;
 import org.apache.commons.net.telnet.TelnetClient;
+import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.decode.Request;
@@ -591,6 +592,9 @@ public class MultiWorkerServer extends Launcher {
     static class InnerModule extends AbstractModule {
         private final Logger logger = getLogger(getClass());
 
+        @TestOnly
+        boolean skipZookeeperConnectCheck = false;
+
         @Provides
         ConfForSlot confForSlot(Config config) {
             // global conf
@@ -640,7 +644,7 @@ public class MultiWorkerServer extends Launcher {
                 log.warn("Global config, isAsSlaveOfSlave: " + ConfForGlobal.isAsSlaveOfSlave);
                 log.warn("Global config, targetAvailableZone: " + ConfForGlobal.targetAvailableZone);
 
-                if (ConfForGlobal.zookeeperConnectString != null) {
+                if (!skipZookeeperConnectCheck) {
                     // check can connect
                     var array = ConfForGlobal.zookeeperConnectString.split(",");
                     var hostAndPort = ReplPair.parseHostAndPort(array[array.length - 1]);

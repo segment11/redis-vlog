@@ -292,6 +292,7 @@ class MultiWorkerServerTest extends Specification {
                 .with("repl.binlogForReadCacheSegmentMaxCount", cc.confRepl.binlogForReadCacheSegmentMaxCount.toString())
                 .with("big.string.lru.maxSize", cc.lruBigString.maxSize.toString())
                 .with("kv.lru.maxSize", cc.lruKeyAndCompressedValueEncoded.maxSize.toString())
+        m1.skipZookeeperConnectCheck = true
         m1.confForSlot(configX)
         m1.beforeCreateHandler(c, snowFlakes, configX)
         then:
@@ -299,6 +300,19 @@ class MultiWorkerServerTest extends Specification {
 
         when:
         boolean exception = false
+        m1.skipZookeeperConnectCheck = false
+        try {
+            m1.confForSlot(configX)
+        } catch (IllegalArgumentException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        when:
+        m1.skipZookeeperConnectCheck = true
+        exception = false
         def config2 = Config.create()
                 .with("slotNumber", (LocalPersist.MAX_SLOT_NUMBER + 1).toString())
 
