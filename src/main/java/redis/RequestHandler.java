@@ -35,8 +35,8 @@ public class RequestHandler {
     private static final String GET_COMMAND = "get";
     private static final String SET_COMMAND = "set";
     private static final String QUIT_COMMAND = "quit";
-    private static final String ERROR_FOR_STAT_AS_COMMAND = "_error";
-    private static final String READONLY_FOR_STAT_AS_COMMAND = "_readonly";
+    private static final String ERROR_FOR_STAT_AS_COMMAND = "x_error";
+    private static final String READONLY_FOR_STAT_AS_COMMAND = "x_readonly";
 
     final byte workerId;
     final String workerIdStr;
