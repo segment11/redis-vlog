@@ -164,30 +164,36 @@ class RequestHandlerTest extends Specification {
         reply == ErrorReply.FORMAT
 
         when:
+        requestHandler.password = 'xxx'
+        def socket2 = TcpSocket.wrapChannel(eventloopCurrent, SocketChannel.open(),
+                new InetSocketAddress('localhost', 46380), null)
         def authRequestAsHttp = new Request(authData, true, false)
         def base64Encoded = new String(Base64.getEncoder().encode('123456'.bytes))
-        authRequestAsHttp.httpHeaders = ['authenticate': 'Basic ' + base64Encoded]
-        reply = requestHandler.handle(authRequestAsHttp, socket)
-        then:
-        reply == ErrorReply.NO_PASSWORD
-
-        when:
-        requestHandler.password = 'xxx'
-        reply = requestHandler.handle(authRequestAsHttp, socket)
+        authRequestAsHttp.httpHeaders = ['Authorization': 'Basic ' + base64Encoded]
+        reply = requestHandler.handle(authRequestAsHttp, socket2)
         then:
         reply == ErrorReply.AUTH_FAILED
 
         when:
         requestHandler.password = '123456'
-        reply = requestHandler.handle(authRequestAsHttp, socket)
+        reply = requestHandler.handle(authRequestAsHttp, socket2)
         then:
-        reply == OKReply.INSTANCE
+        reply == NilReply.INSTANCE
 
         when:
-        authRequestAsHttp.httpHeaders.remove('authenticate')
-        reply = requestHandler.handle(authRequestAsHttp, socket)
+        // new client
+        def socket3 = TcpSocket.wrapChannel(eventloopCurrent, SocketChannel.open(),
+                new InetSocketAddress('localhost', 46381), null)
+        authRequestAsHttp.httpHeaders.remove('Authorization')
+        reply = requestHandler.handle(authRequestAsHttp, socket3)
         then:
-        reply == ErrorReply.AUTH_FAILED
+        reply == ErrorReply.NO_AUTH
+
+        when:
+        requestHandler.password = null
+        reply = requestHandler.handle(authRequestAsHttp, socket3)
+        then:
+        reply == NilReply.INSTANCE
 
         when:
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())

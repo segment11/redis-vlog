@@ -178,9 +178,9 @@ public class MultiWorkerServer extends Launcher {
             array = reply.bufferAsHttp().array();
         }
 
-        if (isError && reply == ErrorReply.NO_AUTH) {
+        if (isError && (reply == ErrorReply.NO_AUTH || reply == ErrorReply.AUTH_FAILED)) {
             // response 401
-            return ByteBuf.wrapForWriting(HEADER_401);
+            return ByteBuf.wrapForReading(HEADER_401);
         }
 
         byte[] contentLengthBytes = String.valueOf(array.length).getBytes();

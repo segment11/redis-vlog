@@ -15,11 +15,11 @@ public class HttpHeaderBody {
     private static final int HEADER_BUFFER_LENGTH = 4096;
     private static final String HEADER_CONTENT_LENGTH = "Content-Length";
 
-    public static final byte[] HEADER_PREFIX_200 = "HTTP/1.1 200 OK\r\nContent-Length: ".getBytes();
+    public static final byte[] HEADER_PREFIX_200 = "HTTP/1.1 200 OK\r\nCache-Control: no-cache, no-store\r\nContent-Length: ".getBytes();
     public static final byte[] HEADER_PREFIX_404 = "HTTP/1.1 404 Not Found\r\nContent-Length: ".getBytes();
     public static final byte[] BODY_404 = "404: ".getBytes();
-    public static final byte[] HEADER_PREFIX_500 = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: ".getBytes();
-    public static final byte[] HEADER_401 = "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"Access to the staging site\"\r\nContent-Length: 3\r\n\r\n401".getBytes();
+    public static final byte[] HEADER_PREFIX_500 = "HTTP/1.1 500 Internal Server Error\r\nCache-Control: no-cache, no-store\r\nContent-Length: ".getBytes();
+    public static final byte[] HEADER_401 = "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"Access to the staging site\"\r\nContent-Length: 0\r\n\r\n".getBytes();
     public static final byte[] HEADER_SUFFIX = "\r\n\r\n".getBytes();
 
     private static final byte r = '\r';
@@ -140,7 +140,7 @@ public class HttpHeaderBody {
                         return;
                     } else {
                         if (lastHeaderName != null) {
-                            headers.put(lastHeaderName, new String(bf, startIndex, headerLength - startIndex - 2));
+                            headers.put(lastHeaderName.trim(), new String(bf, startIndex, headerLength - startIndex - 2).trim());
                             startIndex = headerLength;
                             lastHeaderName = null;
                         }

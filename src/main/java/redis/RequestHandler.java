@@ -205,7 +205,7 @@ public class RequestHandler {
     private static final String URL_QUERY_FOR_HAPROXY_FILTER_SLAVE = "slave";
     private static final String URL_QUERY_FOR_HAPROXY_FILTER_SLAVE_WITH_ZONE = "slave_with_zone";
     private static final String URL_QUERY_FOR_CMD_STAT_COUNT = "cmd_stat_count";
-    private static final String HEADER_NAME_FOR_BASIC_AUTH = "authenticate";
+    private static final String HEADER_NAME_FOR_BASIC_AUTH = "Authorization";
 
     private static byte[][] transferDataForXGroup(String keyAsData) {
         // eg. get x_repl,sub_cmd,sub_sub_cmd,***
@@ -417,42 +417,44 @@ public class RequestHandler {
         }
 
         InetSocketAddress remoteAddress = ((TcpSocket) socket).getRemoteAddress();
-        if (cmd.equals(AUTH_COMMAND)) {
-            increaseCmdStatArray((byte) 'a', AUTH_COMMAND);
 
-            // http basic auth
-            if (request.isHttp()) {
+        // http basic auth
+        if (request.isHttp()) {
+            if (!AfterAuthFlagHolder.contains(remoteAddress) && password != null) {
                 var headerValue = request.getHttpHeader(HEADER_NAME_FOR_BASIC_AUTH);
-                if (headerValue != null) {
-                    if (password == null) {
-                        return ErrorReply.NO_PASSWORD;
-                    }
-
-                    // base64 decode
-                    // trim "Basic " prefix
-                    var auth = new String(Base64.getDecoder().decode(headerValue.substring(6)));
-                    if (!password.equals(auth)) {
-                        return ErrorReply.AUTH_FAILED;
-                    }
-
-                    AfterAuthFlagHolder.add(remoteAddress);
-                    return OKReply.INSTANCE;
+                if (headerValue == null) {
+                    return ErrorReply.NO_AUTH;
                 }
-            }
 
-            if (data.length != 2) {
-                return ErrorReply.FORMAT;
-            }
+                // base64 decode
+                // trim "Basic " prefix
+                var auth = new String(Base64.getDecoder().decode(headerValue.substring(6)));
+                // skip username
+                if (!password.equals(auth.substring(auth.indexOf(':') + 1))) {
+                    return ErrorReply.AUTH_FAILED;
+                }
 
-            if (password == null) {
-                return ErrorReply.NO_PASSWORD;
+                AfterAuthFlagHolder.add(remoteAddress);
+                // continue to handle request
             }
+        } else {
+            if (cmd.equals(AUTH_COMMAND)) {
+                increaseCmdStatArray((byte) 'a', AUTH_COMMAND);
 
-            if (!password.equals(new String(data[1]))) {
-                return ErrorReply.AUTH_FAILED;
+                if (data.length != 2) {
+                    return ErrorReply.FORMAT;
+                }
+
+                if (password == null) {
+                    return ErrorReply.NO_PASSWORD;
+                }
+
+                if (!password.equals(new String(data[1]))) {
+                    return ErrorReply.AUTH_FAILED;
+                }
+                AfterAuthFlagHolder.add(remoteAddress);
+                return OKReply.INSTANCE;
             }
-            AfterAuthFlagHolder.add(remoteAddress);
-            return OKReply.INSTANCE;
         }
 
         if (password != null && !AfterAuthFlagHolder.contains(remoteAddress)) {
