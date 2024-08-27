@@ -9,6 +9,7 @@ import redis.repl.Repl;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Map;
 
 import static redis.repl.Repl.PROTOCOL_KEYWORD_BYTES;
 
@@ -37,6 +38,7 @@ public class RequestDecoder implements ByteBufsDecoder<ArrayList<Request>> {
         byte[][] data;
         boolean isHttp = false;
         boolean isRepl = false;
+        Map<String, String> httpHeaders = null;
         if (capacity < 6) {
             data = resp.decode(compositeByteBuf);
             if (data == null) {
@@ -62,6 +64,7 @@ public class RequestDecoder implements ByteBufsDecoder<ArrayList<Request>> {
                 if (!h.isOk) {
                     return null;
                 }
+                httpHeaders = h.getHeaders();
 
                 if (isGet || isDelete) {
                     // query parameters
@@ -104,7 +107,9 @@ public class RequestDecoder implements ByteBufsDecoder<ArrayList<Request>> {
         int consumedN = compositeByteBuf.readerIndex();
         bufs.takeExactSize(consumedN);
 
-        return new Request(data, isHttp, isRepl);
+        var r = new Request(data, isHttp, isRepl);
+        r.setHttpHeaders(httpHeaders);
+        return r;
     }
 
     @Override

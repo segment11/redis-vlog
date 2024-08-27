@@ -164,6 +164,32 @@ class RequestHandlerTest extends Specification {
         reply == ErrorReply.FORMAT
 
         when:
+        def authRequestAsHttp = new Request(authData, true, false)
+        def base64Encoded = new String(Base64.getEncoder().encode('123456'.bytes))
+        authRequestAsHttp.httpHeaders = ['authenticate': 'Basic ' + base64Encoded]
+        reply = requestHandler.handle(authRequestAsHttp, socket)
+        then:
+        reply == ErrorReply.NO_PASSWORD
+
+        when:
+        requestHandler.password = 'xxx'
+        reply = requestHandler.handle(authRequestAsHttp, socket)
+        then:
+        reply == ErrorReply.AUTH_FAILED
+
+        when:
+        requestHandler.password = '123456'
+        reply = requestHandler.handle(authRequestAsHttp, socket)
+        then:
+        reply == OKReply.INSTANCE
+
+        when:
+        authRequestAsHttp.httpHeaders.remove('authenticate')
+        reply = requestHandler.handle(authRequestAsHttp, socket)
+        then:
+        reply == ErrorReply.AUTH_FAILED
+
+        when:
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
         def key = 'key'
         def sKey = BaseCommand.slot(key.bytes, slotNumber)

@@ -97,6 +97,12 @@ class MultiWorkerServerTest extends Specification {
         httpResponseBody.contains('500')
 
         when:
+        httpReply = m.wrapHttpResponse(ErrorReply.NO_AUTH)
+        httpResponseBody = new String(httpReply.array())
+        then:
+        httpResponseBody.contains('401')
+
+        when:
         httpReply = m.wrapHttpResponse(NilReply.INSTANCE)
         httpResponseBody = new String(httpReply.array())
         then:

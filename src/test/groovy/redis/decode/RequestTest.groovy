@@ -85,5 +85,21 @@ class RequestTest extends Specification {
         request4.checkCmdIfCrossRequestWorker()
         then:
         request4.isCrossRequestWorker()
+
+        when:
+        def httpRequest = new Request(data1, true, false)
+        then:
+        httpRequest.isHttp()
+        httpRequest.getHttpHeader('key') == null
+
+        when:
+        httpRequest.httpHeaders = [:]
+        then:
+        httpRequest.getHttpHeader('key') == null
+
+        when:
+        httpRequest.httpHeaders = ['key': 'value']
+        then:
+        httpRequest.getHttpHeader('key') == 'value'
     }
 }

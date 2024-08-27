@@ -178,6 +178,11 @@ public class MultiWorkerServer extends Launcher {
             array = reply.bufferAsHttp().array();
         }
 
+        if (isError && reply == ErrorReply.NO_AUTH) {
+            // response 401
+            return ByteBuf.wrapForWriting(HEADER_401);
+        }
+
         byte[] contentLengthBytes = String.valueOf(array.length).getBytes();
 
         var headerPrefix = isError ? HEADER_PREFIX_500 : (isNil ? HEADER_PREFIX_404 : HEADER_PREFIX_200);

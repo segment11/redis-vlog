@@ -19,6 +19,7 @@ public class HttpHeaderBody {
     public static final byte[] HEADER_PREFIX_404 = "HTTP/1.1 404 Not Found\r\nContent-Length: ".getBytes();
     public static final byte[] BODY_404 = "404: ".getBytes();
     public static final byte[] HEADER_PREFIX_500 = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: ".getBytes();
+    public static final byte[] HEADER_401 = "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"Access to the staging site\"\r\nContent-Length: 3\r\n\r\n401".getBytes();
     public static final byte[] HEADER_SUFFIX = "\r\n\r\n".getBytes();
 
     private static final byte r = '\r';
@@ -57,7 +58,12 @@ public class HttpHeaderBody {
     boolean isOk = false;
 
     private String lastHeaderName;
-    Map<String, String> headers = new HashMap<>();
+
+    private Map<String, String> headers = new HashMap<>();
+
+    public Map<String, String> getHeaders() {
+        return headers;
+    }
 
     public String header(String name) {
         return headers.get(name);

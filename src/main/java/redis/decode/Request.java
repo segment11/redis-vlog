@@ -3,6 +3,7 @@ package redis.decode;
 import redis.BaseCommand;
 
 import java.util.ArrayList;
+import java.util.Map;
 
 public class Request {
     private final byte[][] data;
@@ -48,6 +49,16 @@ public class Request {
 
     public void setCrossRequestWorker(boolean crossRequestWorker) {
         isCrossRequestWorker = crossRequestWorker;
+    }
+
+    private Map<String, String> httpHeaders;
+
+    public String getHttpHeader(String header) {
+        return httpHeaders == null ? null : httpHeaders.get(header);
+    }
+
+    public void setHttpHeaders(Map<String, String> httpHeaders) {
+        this.httpHeaders = httpHeaders;
     }
 
     public static final ArrayList<String> crossRequestWorkerCmdList = new ArrayList<>();
