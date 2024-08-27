@@ -34,6 +34,7 @@ import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.hotspot.BufferPoolsExports;
 import io.prometheus.client.hotspot.GarbageCollectorExports;
 import io.prometheus.client.hotspot.MemoryPoolsExports;
+import org.apache.commons.net.telnet.TelnetClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.decode.Request;
@@ -44,6 +45,7 @@ import redis.persist.KeyBucket;
 import redis.persist.LocalPersist;
 import redis.persist.Wal;
 import redis.repl.LeaderSelector;
+import redis.repl.ReplPair;
 import redis.repl.support.JedisPoolHolder;
 import redis.reply.AsyncReply;
 import redis.reply.ErrorReply;
@@ -637,6 +639,19 @@ public class MultiWorkerServer extends Launcher {
                 log.warn("Global config, canBeLeader: " + ConfForGlobal.canBeLeader);
                 log.warn("Global config, isAsSlaveOfSlave: " + ConfForGlobal.isAsSlaveOfSlave);
                 log.warn("Global config, targetAvailableZone: " + ConfForGlobal.targetAvailableZone);
+
+                if (ConfForGlobal.zookeeperConnectString != null) {
+                    // check can connect
+                    var array = ConfForGlobal.zookeeperConnectString.split(",");
+                    var hostAndPort = ReplPair.parseHostAndPort(array[array.length - 1]);
+                    var tc = new TelnetClient();
+                    try {
+                        tc.connect(hostAndPort.host(), hostAndPort.port());
+                        tc.disconnect();
+                    } catch (IOException e) {
+                        throw new IllegalArgumentException("Zookeeper connect string invalid, can not connect to " + hostAndPort.host() + ":" + hostAndPort.port());
+                    }
+                }
             }
 
             DictMap.TO_COMPRESS_MIN_DATA_LENGTH = config.get(ofInteger(), "toCompressMinDataLength", 64);
