@@ -102,4 +102,30 @@ class LocalPersistTest extends Specification {
         cleanup:
         eventloop.breakEventloop()
     }
+
+    def 'test init slots'() {
+        given:
+        byte netWorkers = 1
+        short slotNumber = 1
+        def localPersist = LocalPersist.instance
+
+        def snowFlakes = new SnowFlake[netWorkers]
+        for (int i = 0; i < netWorkers; i++) {
+            snowFlakes[i] = new SnowFlake(i + 1, 1)
+        }
+        localPersist.initSlots(netWorkers, slotNumber, snowFlakes, Consts.persistDir,
+                Config.create().with('isHashSaveMemberTogether', 'true'))
+
+        expect:
+        localPersist.isHashSaveMemberTogether
+
+        when:
+        localPersist.hashSaveMemberTogether = false
+        then:
+        !localPersist.isHashSaveMemberTogether
+
+        cleanup:
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        localPersist.cleanUp()
+    }
 }

@@ -3,6 +3,7 @@ package redis.command
 import redis.BaseCommand
 import redis.CompressedValue
 import redis.mock.InMemoryGetSet
+import redis.persist.LocalPersist
 import redis.persist.Mock
 import redis.reply.*
 import redis.type.RedisHashKeys
@@ -192,6 +193,14 @@ class HGroupTest extends Specification {
         reply == IntegerReply.REPLY_0
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hdel()
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvKeys = Mock.prepareCompressedValueList(1)[0]
         cvKeys.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
         def rhk = new RedisHashKeys()
@@ -204,18 +213,43 @@ class HGroupTest extends Specification {
         ((IntegerReply) reply).integer == 1
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.put(slot, 'a', 0, cvKeys)
+        reply = hGroup.hdel()
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         reply = hGroup.hdel()
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 0
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hdel()
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 0
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         rhk.remove('field')
         100.times {
             rhk.add('field' + it)
         }
         cvKeys.compressedData = rhk.encode()
         inMemoryGetSet.put(slot, RedisHashKeys.keysKey('a'), 0, cvKeys)
+        reply = hGroup.hdel()
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 0
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.put(slot, 'a', 0, cvKeys)
         reply = hGroup.hdel()
         then:
         reply instanceof IntegerReply

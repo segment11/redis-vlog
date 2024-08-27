@@ -17,13 +17,16 @@ class RedisHHTest extends Specification {
         rh.get('name') == 'zhangsan'.bytes
         rh.get('age') == '20'.bytes
         rh.size() == 2
+        rh.remove('name')
+        !rh.remove('name')
+        rh.size() == 1
 
         when:
         rh.putAll(['name2': 'lisi'.bytes, 'age2': '30'.bytes])
         then:
         rh.get('name2') == 'lisi'.bytes
         rh.get('age2') == '30'.bytes
-        rh.size() == 4
+        rh.size() == 3
     }
 
     def 'encode'() {

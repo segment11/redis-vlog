@@ -2,10 +2,7 @@ package redis;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.persist.Chunk;
-import redis.persist.FdReadWrite;
-import redis.persist.KeyBucket;
-import redis.persist.Wal;
+import redis.persist.*;
 
 import java.util.HashMap;
 
@@ -51,6 +48,8 @@ public enum ConfForSlot {
         map.put("wal.oneChargeBucketNumber", confWal.oneChargeBucketNumber);
         map.put("repl.binlogOneSegmentLength", confRepl.binlogOneSegmentLength);
         map.put("repl.binlogOneFileMaxLength", confRepl.binlogOneFileMaxLength);
+        // hash save mode need be same as master
+        map.put("persist.isHashSaveMemberTogether", LocalPersist.getInstance().getIsHashSaveMemberTogether());
         return map;
     }
 

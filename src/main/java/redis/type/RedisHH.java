@@ -33,6 +33,10 @@ public class RedisHH {
         map.put(key, value);
     }
 
+    public boolean remove(String key) {
+        return map.remove(key) != null;
+    }
+
     public void putAll(HashMap<String, byte[]> map) {
         this.map.putAll(map);
     }

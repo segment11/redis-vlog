@@ -16,6 +16,8 @@ import redis.SocketInspector;
 import java.io.File;
 import java.io.IOException;
 
+import static io.activej.config.converter.ConfigConverters.ofBoolean;
+
 public class LocalPersist implements NeedCleanUp {
     public static final int PAGE_SIZE = (int) PageManager.getInstance().pageSize();
     public static final int PROTECTION = PageManager.PROT_READ | PageManager.PROT_WRITE | PageManager.PROT_EXEC;
@@ -81,6 +83,8 @@ public class LocalPersist implements NeedCleanUp {
     public void initSlots(byte netWorkers, short slotNumber, SnowFlake[] snowFlakes, File persistDir, Config persistConfig) throws IOException {
         ConfVolumeDirsForSlot.initFromConfig(persistConfig, slotNumber);
 
+        isHashSaveMemberTogether = persistConfig.get(ofBoolean(), "isHashSaveMemberTogether", false);
+
         this.oneSlots = new OneSlot[slotNumber];
         for (short slot = 0; slot < slotNumber; slot++) {
             var i = slot % netWorkers;
@@ -89,6 +93,17 @@ public class LocalPersist implements NeedCleanUp {
 
             oneSlots[slot] = oneSlot;
         }
+    }
+
+    private boolean isHashSaveMemberTogether;
+
+    public boolean getIsHashSaveMemberTogether() {
+        return isHashSaveMemberTogether;
+    }
+
+    @TestOnly
+    public void setHashSaveMemberTogether(boolean hashSaveMemberTogether) {
+        isHashSaveMemberTogether = hashSaveMemberTogether;
     }
 
     public void debugMode() {
