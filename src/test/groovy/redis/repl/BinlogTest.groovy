@@ -300,6 +300,12 @@ class BinlogTest extends Specification {
         binlog.currentFileOffset == 0
 
         when:
+        binlog.moveToNextSegment(true)
+        then:
+        binlog.currentFileIndex == 7
+        binlog.currentFileOffset == oneSegmentLength
+
+        when:
         binlog.resetCurrentFileOffset oneFileMaxLength - oneSegmentLength
         binlog.moveToNextSegment(true)
         then:

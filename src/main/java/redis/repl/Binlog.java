@@ -221,6 +221,8 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
             }
 
             currentFileOffset += oneSegmentLength;
+            // padding
+            raf.setLength(currentFileOffset);
             clearByteBuffer();
 
             var oneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
