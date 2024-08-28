@@ -1711,72 +1711,80 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
             });
         }
 
-        oneSlotGauge.addRawGetter(() -> {
-            var labelValues = List.of(slotStr);
-
-            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            map.put("slot_last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
-
-            if (chunk != null) {
-                map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.segmentIndex, labelValues));
-                map.put("chunk_merged_segment_index_end_last_time", new SimpleGauge.ValueWithLabelValues((double) chunk.mergedSegmentIndexEndLastTime, labelValues));
-                map.put("chunk_max_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.maxSegmentIndex, labelValues));
+        oneSlotGauge.addRawGetter(new SimpleGauge.RawGetter() {
+            @Override
+            public short slot() {
+                return slot;
             }
 
-            long walKeyCount = getWalKeyCount();
-            map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) walKeyCount, labelValues));
+            @Override
+            public Map<String, SimpleGauge.ValueWithLabelValues> get2() {
+                var labelValues = List.of(slotStr);
 
-            if (keyLoader != null) {
-                long keyLoaderKeyCount = keyLoader.getKeyCount();
-                map.put("key_loader_key_count", new SimpleGauge.ValueWithLabelValues((double) keyLoaderKeyCount, labelValues));
+                var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+                map.put("slot_last_seq", new SimpleGauge.ValueWithLabelValues((double) snowFlake.getLastNextId(), labelValues));
+
+                if (chunk != null) {
+                    map.put("chunk_current_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.segmentIndex, labelValues));
+                    map.put("chunk_merged_segment_index_end_last_time", new SimpleGauge.ValueWithLabelValues((double) chunk.mergedSegmentIndexEndLastTime, labelValues));
+                    map.put("chunk_max_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.maxSegmentIndex, labelValues));
+                }
+
+                long walKeyCount = getWalKeyCount();
+                map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) walKeyCount, labelValues));
+
+                if (keyLoader != null) {
+                    long keyLoaderKeyCount = keyLoader.getKeyCount();
+                    map.put("key_loader_key_count", new SimpleGauge.ValueWithLabelValues((double) keyLoaderKeyCount, labelValues));
+                }
+
+                // only show first wal group
+                var firstWalGroup = walArray[0];
+                map.put("wal_group_first_delay_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketValues.size(), labelValues));
+                map.put("wal_group_first_delay_short_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketShortValues.size(), labelValues));
+                map.put("wal_group_first_need_persist_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistCountTotal, labelValues));
+                map.put("wal_group_first_need_persist_kv_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistKvCountTotal, labelValues));
+                map.put("wal_group_first_need_persist_offset_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistOffsetTotal, labelValues));
+
+                if (binlog != null) {
+                    var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
+                    var fo = binlog.currentFileIndexAndOffset();
+                    var offsetFromFileIndex0 = (long) fo.fileIndex() * binlogOneFileMaxLength + fo.offset();
+                    map.put("binlog_current_offset_from_the_beginning", new SimpleGauge.ValueWithLabelValues((double) offsetFromFileIndex0, labelValues));
+                }
+
+                var hitMissTotal = kvLRUHitTotal + kvLRUMissTotal;
+                if (hitMissTotal > 0) {
+                    map.put("slot_kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
+                    map.put("slot_kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
+                    map.put("slot_kv_lru_hit_ratio", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal / hitMissTotal, labelValues));
+                    map.put("slot_kv_lru_current_count_total", new SimpleGauge.ValueWithLabelValues((double) kvByWalGroupIndexLRUCountTotal(), labelValues));
+                }
+
+                if (kvLRUHitTotal > 0) {
+                    var kvLRUCvEncodedLengthAvg = (double) kvLRUCvEncodedLengthTotal / kvLRUHitTotal;
+                    map.put("slot_kv_lru_cv_encoded_length_avg", new SimpleGauge.ValueWithLabelValues(kvLRUCvEncodedLengthAvg, labelValues));
+                }
+
+                if (segmentDecompressCountTotal > 0) {
+                    map.put("segment_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressTimeTotalUs, labelValues));
+                    map.put("segment_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressCountTotal, labelValues));
+                    double segmentDecompressedCostTAvg = (double) segmentDecompressTimeTotalUs / segmentDecompressCountTotal;
+                    map.put("segment_decompress_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(segmentDecompressedCostTAvg, labelValues));
+                }
+
+                var replPairAsSlave = getOnlyOneReplPairAsSlave();
+                if (replPairAsSlave != null) {
+                    map.put("repl_slave_catch_up_last_seq", new SimpleGauge.ValueWithLabelValues(
+                            (double) replPairAsSlave.getSlaveCatchUpLastSeq(), labelValues));
+                    map.put("repl_slave_fetched_bytes_total", new SimpleGauge.ValueWithLabelValues(
+                            (double) replPairAsSlave.getFetchedBytesLengthTotal(), labelValues));
+                }
+
+                var replPairSize = replPairs.stream().filter(one -> !one.isSendBye()).count();
+                map.put("repl_pair_size", new SimpleGauge.ValueWithLabelValues((double) replPairSize, labelValues));
+                return map;
             }
-
-            // only show first wal group
-            var firstWalGroup = walArray[0];
-            map.put("wal_group_first_delay_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketValues.size(), labelValues));
-            map.put("wal_group_first_delay_short_values_size", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.delayToKeyBucketShortValues.size(), labelValues));
-            map.put("wal_group_first_need_persist_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistCountTotal, labelValues));
-            map.put("wal_group_first_need_persist_kv_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistKvCountTotal, labelValues));
-            map.put("wal_group_first_need_persist_offset_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistOffsetTotal, labelValues));
-
-            if (binlog != null) {
-                var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
-                var fo = binlog.currentFileIndexAndOffset();
-                var offsetFromFileIndex0 = (long) fo.fileIndex() * binlogOneFileMaxLength + fo.offset();
-                map.put("binlog_current_offset_from_the_beginning", new SimpleGauge.ValueWithLabelValues((double) offsetFromFileIndex0, labelValues));
-            }
-
-            var hitMissTotal = kvLRUHitTotal + kvLRUMissTotal;
-            if (hitMissTotal > 0) {
-                map.put("slot_kv_lru_hit_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal, labelValues));
-                map.put("slot_kv_lru_miss_total", new SimpleGauge.ValueWithLabelValues((double) kvLRUMissTotal, labelValues));
-                map.put("slot_kv_lru_hit_ratio", new SimpleGauge.ValueWithLabelValues((double) kvLRUHitTotal / hitMissTotal, labelValues));
-                map.put("slot_kv_lru_current_count_total", new SimpleGauge.ValueWithLabelValues((double) kvByWalGroupIndexLRUCountTotal(), labelValues));
-            }
-
-            if (kvLRUHitTotal > 0) {
-                var kvLRUCvEncodedLengthAvg = (double) kvLRUCvEncodedLengthTotal / kvLRUHitTotal;
-                map.put("slot_kv_lru_cv_encoded_length_avg", new SimpleGauge.ValueWithLabelValues(kvLRUCvEncodedLengthAvg, labelValues));
-            }
-
-            if (segmentDecompressCountTotal > 0) {
-                map.put("segment_decompress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressTimeTotalUs, labelValues));
-                map.put("segment_decompress_count_total", new SimpleGauge.ValueWithLabelValues((double) segmentDecompressCountTotal, labelValues));
-                double segmentDecompressedCostTAvg = (double) segmentDecompressTimeTotalUs / segmentDecompressCountTotal;
-                map.put("segment_decompress_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(segmentDecompressedCostTAvg, labelValues));
-            }
-
-            var replPairAsSlave = getOnlyOneReplPairAsSlave();
-            if (replPairAsSlave != null) {
-                map.put("repl_slave_catch_up_last_seq", new SimpleGauge.ValueWithLabelValues(
-                        (double) replPairAsSlave.getSlaveCatchUpLastSeq(), labelValues));
-                map.put("repl_slave_fetched_bytes_total", new SimpleGauge.ValueWithLabelValues(
-                        (double) replPairAsSlave.getFetchedBytesLengthTotal(), labelValues));
-            }
-
-            var replPairSize = replPairs.stream().filter(one -> !one.isSendBye()).count();
-            map.put("repl_pair_size", new SimpleGauge.ValueWithLabelValues((double) replPairSize, labelValues));
-            return map;
         });
     }
 }

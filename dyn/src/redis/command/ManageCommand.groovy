@@ -106,6 +106,10 @@ class ManageCommand extends BaseCommand {
             return ErrorReply.INVALID_INTEGER
         }
 
+        if (slot >= slotNumber) {
+            return ErrorReply.INVALID_INTEGER
+        }
+
         int bucketIndex = -1
 
         int subSubCmdIndex = 3
