@@ -414,10 +414,10 @@ class ManageCommandTest extends Specification {
         when:
         data5[1] = 'slot'.bytes
         data5[2] = '0'.bytes
-        data5[3] = 'view-bucket-key-count'.bytes
+        data5[3] = 'view-metrics'.bytes
         def reply = manage.manageInOneSlot()
         then:
-        reply instanceof IntegerReply
+        reply instanceof BulkReply
 
         when:
         data5[3] = 'view-bucket-keys'.bytes

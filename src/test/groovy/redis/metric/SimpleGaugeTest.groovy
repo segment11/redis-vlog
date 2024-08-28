@@ -23,6 +23,7 @@ class SimpleGaugeTest extends Specification {
         def mfsList = g.collect()
 
         then:
+        g.rawGetterList.size() == 1
         mfsList.size() == 1
         mfsList[0].name == 'test'
         mfsList[0].samples.size() == 3

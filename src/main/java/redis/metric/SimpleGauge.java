@@ -12,10 +12,18 @@ public class SimpleGauge extends Collector {
     }
 
     public interface RawGetter {
+        default short slot() {
+            return (short) -1;
+        }
+
         Map<String, ValueWithLabelValues> get();
     }
 
     private final ArrayList<RawGetter> rawGetterList = new ArrayList<>();
+
+    public ArrayList<RawGetter> getRawGetterList() {
+        return rawGetterList;
+    }
 
     public void addRawGetter(RawGetter rawGetter) {
         rawGetterList.add(rawGetter);

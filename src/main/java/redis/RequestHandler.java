@@ -312,6 +312,7 @@ public class RequestHandler {
         if (request.isHttp() && data.length == 1) {
             // metrics, prometheus format
             // url should be ?metrics, eg: http://localhost:7379/?metrics
+            // for one target slot beside 0 metrics: http://localhost:7379/?manage&slot&0&view-metrics
             var firstDataBytes = data[0];
             if (Arrays.equals(firstDataBytes, URL_QUERY_METRICS_BYTES)) {
                 var sw = new StringWriter();

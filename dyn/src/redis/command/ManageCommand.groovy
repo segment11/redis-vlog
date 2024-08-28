@@ -12,6 +12,7 @@ import redis.ConfForSlot
 import redis.Debug
 import redis.TrainSampleJob
 import redis.persist.Chunk
+import redis.persist.OneSlot
 import redis.repl.support.JedisPoolHolder
 import redis.reply.*
 import redis.type.RedisHH
@@ -128,7 +129,19 @@ class ManageCommand extends BaseCommand {
         def oneSlot = localPersist.oneSlot(slot)
 
         def subSubCmd = new String(data[subSubCmdIndex])
-        if (subSubCmd == 'view-bucket-key-count') {
+        if (subSubCmd == 'view-metrics') {
+            // http url: ?manage&slot&0&view-metrics
+            def metricsCollectedMap = OneSlot.oneSlotGauge.rawGetterList.find {
+                it.slot() == slot
+            }.get()
+
+            // prometheus format
+            def sb = new StringBuilder()
+            metricsCollectedMap.each { k, v ->
+                sb << k << '{slot="' << slot << '",} ' << v.value() << '\n'
+            }
+            return new BulkReply(sb.toString().bytes)
+        } else if (subSubCmd == 'view-bucket-key-count') {
             // manage slot 0 view-bucket-key-count
             // manage slot 0 bucket 0 view-bucket-key-count
             def keyCount = bucketIndex == -1 ? oneSlot.getAllKeyCount() : oneSlot.keyLoader.getKeyCountInBucketIndex(bucketIndex)
