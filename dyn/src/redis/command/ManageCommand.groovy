@@ -133,7 +133,7 @@ class ManageCommand extends BaseCommand {
             // http url: ?manage&slot&0&view-metrics
             def metricsCollectedMap = OneSlot.oneSlotGauge.rawGetterList.find {
                 it.slot() == slot
-            }.get()
+            }.get2()
 
             // prometheus format
             def sb = new StringBuilder()

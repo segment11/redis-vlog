@@ -16,7 +16,13 @@ public class SimpleGauge extends Collector {
             return (short) -1;
         }
 
+        // for global metrics collect
         Map<String, ValueWithLabelValues> get();
+
+        // for target one slot metrics collect
+        default Map<String, ValueWithLabelValues> get2() {
+            return null;
+        }
     }
 
     private final ArrayList<RawGetter> rawGetterList = new ArrayList<>();

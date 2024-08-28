@@ -20,12 +20,30 @@ class SimpleGaugeTest extends Specification {
             map
         }
 
+        g.addRawGetter(new SimpleGauge.RawGetter() {
+            @Override
+            Map<String, SimpleGauge.ValueWithLabelValues> get() {
+                Map<String, SimpleGauge.ValueWithLabelValues> map = [:]
+                map.put('c', new SimpleGauge.ValueWithLabelValues(3.0, labelValues2))
+                map
+            }
+
+            @Override
+            Map<String, SimpleGauge.ValueWithLabelValues> get2() {
+                Map<String, SimpleGauge.ValueWithLabelValues> map = [:]
+                map.put('d', new SimpleGauge.ValueWithLabelValues(4.0, labelValues))
+                map
+            }
+        })
+
         def mfsList = g.collect()
+        def map2 = g.rawGetterList[-1].get2()
 
         then:
-        g.rawGetterList.size() == 1
+        g.rawGetterList.size() == 2
         mfsList.size() == 1
         mfsList[0].name == 'test'
-        mfsList[0].samples.size() == 3
+        mfsList[0].samples.size() == 4
+        map2.size() == 1
     }
 }
