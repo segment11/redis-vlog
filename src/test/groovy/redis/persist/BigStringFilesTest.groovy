@@ -28,6 +28,7 @@ class BigStringFilesTest extends Specification {
         def bigStringFiles11 = new BigStringFiles(slot, tmpSlotDir1)
         def bigStringFiles2 = new BigStringFiles(slot, tmpSlotDir2)
         println bigStringFiles1.estimate()
+        bigStringFiles1.bigStringFilesCountGauge.rawGetterList[0].get2()
 
         when:
         def isWriteOk = bigStringFiles1.writeBigStringBytes(1L, 'a', bigString.bytes)

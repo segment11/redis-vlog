@@ -17,12 +17,12 @@ public class SimpleGauge extends Collector {
         }
 
         // for global metrics collect
-        Map<String, ValueWithLabelValues> get();
-
-        // for target one slot metrics collect
-        default Map<String, ValueWithLabelValues> get2() {
+        default Map<String, ValueWithLabelValues> get() {
             return null;
         }
+
+        // for target one slot metrics collect
+        Map<String, ValueWithLabelValues> get2();
     }
 
     private final ArrayList<RawGetter> rawGetterList = new ArrayList<>();
@@ -71,7 +71,7 @@ public class SimpleGauge extends Collector {
             if (raw == null) {
                 continue;
             }
-            
+
             for (var entry : raw.entrySet()) {
                 var entryValue = entry.getValue();
                 samples.add(new MetricFamilySamples.Sample(entry.getKey(), labels, entryValue.labelValues, entryValue.value));

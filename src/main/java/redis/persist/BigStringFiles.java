@@ -1,6 +1,5 @@
 package redis.persist;
 
-import io.prometheus.client.Gauge;
 import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.io.FileUtils;
 import org.apache.lucene.util.RamUsageEstimator;
@@ -8,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
+import redis.metric.SimpleGauge;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
 
@@ -28,11 +28,23 @@ public class BigStringFiles implements InMemoryEstimate {
 
     private final HashMap<Long, byte[]> allBytesByUuid = new HashMap<>();
 
-    private static final Gauge bigStringFilesCountGauge = Gauge.build()
-            .name("big_string_files_count")
-            .help("big string files count")
-            .labelNames("slot")
-            .register();
+    final static SimpleGauge bigStringFilesCountGauge = new SimpleGauge("big_string_files_count", "big string files count",
+            "slot");
+
+    static {
+        bigStringFilesCountGauge.register();
+    }
+
+    private int bigStringFilesCount = 0;
+
+    private void initMetricsCollect() {
+        bigStringFilesCountGauge.addRawGetter(() -> {
+            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            map.put("big_string_files_count", new SimpleGauge.ValueWithLabelValues((double) bigStringFilesCount,
+                    List.of(slotStr)));
+            return map;
+        });
+    }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -66,7 +78,10 @@ public class BigStringFiles implements InMemoryEstimate {
         LRUPrepareBytesStats.add(LRUPrepareBytesStats.Type.big_string, slotStr, lruMemoryRequireMB, false);
 
         this.bigStringBytesByUuidLRU = new LRUMap<>(maxSize);
-        bigStringFilesCountGauge.labels(slotStr).set(0);
+
+        var files = bigStringDir.listFiles();
+        bigStringFilesCount = files.length;
+        initMetricsCollect();
     }
 
     @Override
@@ -113,7 +128,6 @@ public class BigStringFiles implements InMemoryEstimate {
         var bytes = readBigStringBytes(uuid);
         if (bytes != null && doLRUCache) {
             bigStringBytesByUuidLRU.put(uuid, bytes);
-            bigStringFilesCountGauge.labels(slotStr).set(bigStringBytesByUuidLRU.size());
         }
         return bytes;
     }
@@ -142,6 +156,7 @@ public class BigStringFiles implements InMemoryEstimate {
         var file = new File(bigStringDir, String.valueOf(uuid));
         try {
             FileUtils.writeByteArrayToFile(file, bytes);
+            bigStringFilesCount++;
             return true;
         } catch (IOException e) {
             log.error("Write big string file error, uuid: " + uuid + ", key: " + key + ", slot: " + slot, e);
@@ -156,7 +171,7 @@ public class BigStringFiles implements InMemoryEstimate {
         }
 
         bigStringBytesByUuidLRU.remove(uuid);
-        bigStringFilesCountGauge.labels(slotStr).set(bigStringBytesByUuidLRU.size());
+        bigStringFilesCount--;
 
         var file = new File(bigStringDir, String.valueOf(uuid));
         if (file.exists()) {
@@ -175,7 +190,7 @@ public class BigStringFiles implements InMemoryEstimate {
         }
 
         bigStringBytesByUuidLRU.clear();
-        bigStringFilesCountGauge.labels(slotStr).set(0);
+        bigStringFilesCount = 0;
 
         try {
             FileUtils.cleanDirectory(bigStringDir);
