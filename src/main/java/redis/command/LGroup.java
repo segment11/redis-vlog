@@ -135,13 +135,12 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
-        if (encodedBytes == null) {
+        var rl = getRedisList(keyBytes, slotWithKeyHash);
+        if (rl == null) {
             // -1 or nil ? todo
             return NilReply.INSTANCE;
         }
 
-        var rl = RedisList.decode(encodedBytes);
         if (index >= rl.size()) {
             return NilReply.INSTANCE;
         }
@@ -159,16 +158,13 @@ public class LGroup extends BaseCommand {
     private Reply addToList(byte[] keyBytes, byte[][] valueBytesArr, boolean addFirst,
                             boolean considerBeforeOrAfter, boolean isBefore, byte[] pivotBytes, boolean needKeyExist) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        var rl = getRedisList(keyBytes, slotWithKeyHash);
         // lpushx / rpushx
-        if (encodedBytes == null && needKeyExist) {
+        if (rl == null && needKeyExist) {
             return IntegerReply.REPLY_0;
         }
 
-        RedisList rl;
-        if (encodedBytes != null) {
-            rl = RedisList.decode(encodedBytes);
-
+        if (rl != null) {
             if (rl.size() >= RedisList.LIST_MAX_SIZE) {
                 return ErrorReply.LIST_SIZE_TO_LONG;
             }
@@ -206,6 +202,16 @@ public class LGroup extends BaseCommand {
         saveRedisList(rl, keyBytes, slotWithKeyHash);
         return new IntegerReply(rl.size());
     }
+
+    private RedisList getRedisList(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        if (encodedBytes == null) {
+            return null;
+        }
+
+        return RedisList.decode(encodedBytes);
+    }
+
 
     private void saveRedisList(RedisList rl, byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
         var encodedBytesToSave = rl.encode();
@@ -334,12 +340,11 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
-        if (encodedBytes == null) {
+        var rl = getRedisList(keyBytes, slotWithKeyHash);
+        if (rl == null) {
             return NilReply.INSTANCE;
         }
 
-        var rl = RedisList.decode(encodedBytes);
         ArrayList<Reply> replies = new ArrayList<>();
 
         boolean isUpdated = false;
@@ -433,12 +438,11 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
-        if (encodedBytes == null) {
+        var rl = getRedisList(keyBytes, slotWithKeyHash);
+        if (rl == null) {
             return NilReply.INSTANCE;
         }
 
-        var rl = RedisList.decode(encodedBytes);
         var list = rl.getList();
 
         Iterator<byte[]> it;
@@ -546,12 +550,11 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
-        if (encodedBytes == null) {
+        var rl = getRedisList(keyBytes, slotWithKeyHash);
+        if (rl == null) {
             return MultiBulkReply.EMPTY;
         }
 
-        var rl = RedisList.decode(encodedBytes);
         int size = rl.size();
         if (start < 0) {
             start = size + start;
@@ -606,12 +609,11 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
-        if (encodedBytes == null) {
+        var rl = getRedisList(keyBytes, slotWithKeyHash);
+        if (rl == null) {
             return IntegerReply.REPLY_0;
         }
 
-        var rl = RedisList.decode(encodedBytes);
         var list = rl.getList();
         var it = count < 0 ? list.descendingIterator() : list.iterator();
 
@@ -665,12 +667,11 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
-        if (encodedBytes == null) {
+        var rl = getRedisList(keyBytes, slotWithKeyHash);
+        if (rl == null) {
             return ErrorReply.NO_SUCH_KEY;
         }
 
-        var rl = RedisList.decode(encodedBytes);
         int size = rl.size();
         if (index < 0) {
             index = size + index;
@@ -713,13 +714,12 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
-        if (encodedBytes == null) {
+        var rl = getRedisList(keyBytes, slotWithKeyHash);
+        if (rl == null) {
             // or ErrorReply.NO_SUCH_KEY
             return OKReply.INSTANCE;
         }
 
-        var rl = RedisList.decode(encodedBytes);
         int size = rl.size();
 
         if (start < 0) {

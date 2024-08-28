@@ -238,7 +238,7 @@ public class RedisZSet {
         return buffer.array();
     }
 
-    public static short zsetSize(byte[] data) {
+    public static int getSizeWithoutDecode(byte[] data) {
         var buffer = ByteBuffer.wrap(data);
         return buffer.getShort();
     }

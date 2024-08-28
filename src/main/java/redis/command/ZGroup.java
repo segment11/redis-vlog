@@ -346,24 +346,18 @@ public class ZGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    private RedisZSet getByKeyBytes(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
-        var zsetCv = getCv(keyBytes, slotWithKeyHash);
-        if (zsetCv == null) {
+    private RedisZSet getRedisZSet(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_ZSET, CompressedValue.SP_TYPE_ZSET_COMPRESSED);
+        if (encodedBytes == null) {
             return null;
         }
-        if (!zsetCv.isZSet()) {
-            var key = new String(keyBytes);
-            log.warn("Key {} is not sorted set type", key);
-            throw new IllegalStateException("Key is not sorted set type: " + key);
-        }
 
-        var zsetValueBytes = getValueBytesByCv(zsetCv);
-        return RedisZSet.decode(zsetValueBytes);
+        return RedisZSet.decode(encodedBytes);
     }
 
-    private void setByKeyBytes(RedisZSet rz, byte[] dstKeyBytes, SlotWithKeyHash dstSlotWithKeyHash) {
+    private void saveRedisZSet(RedisZSet rz, byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
         if (rz.isEmpty()) {
-            removeDelay(dstSlotWithKeyHash.slot(), dstSlotWithKeyHash.bucketIndex(), new String(dstKeyBytes), dstSlotWithKeyHash.keyHash());
+            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
             return;
         }
 
@@ -371,7 +365,7 @@ public class ZGroup extends BaseCommand {
         var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
         var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
 
-        set(dstKeyBytes, encodedBytes, dstSlotWithKeyHash, spType);
+        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
     }
 
     private record Member(double score, String e) {
@@ -455,7 +449,7 @@ public class ZGroup extends BaseCommand {
 
         // use RedisZSet to store zset
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null) {
             rz = new RedisZSet();
         }
@@ -519,7 +513,7 @@ public class ZGroup extends BaseCommand {
 
         var handled = added + changed;
         if (handled > 0) {
-            setByKeyBytes(rz, keyBytes, slotWithKeyHash);
+            saveRedisZSet(rz, keyBytes, slotWithKeyHash);
         }
         return new IntegerReply(isIncludeCh ? changed + added : added);
     }
@@ -535,17 +529,12 @@ public class ZGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var zsetCv = getCv(keyBytes, slotWithKeyHash);
-        if (zsetCv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_ZSET, CompressedValue.SP_TYPE_ZSET_COMPRESSED);
+        if (encodedBytes == null) {
             return IntegerReply.REPLY_0;
         }
 
-        if (!zsetCv.isZSet()) {
-            return ErrorReply.WRONG_TYPE;
-        }
-
-        var setValueBytes = getValueBytesByCv(zsetCv);
-        var size = RedisZSet.zsetSize(setValueBytes);
+        var size = RedisZSet.getSizeWithoutDecode(encodedBytes);
         return new IntegerReply(size);
     }
 
@@ -639,7 +628,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null || rz.isEmpty()) {
             return IntegerReply.REPLY_0;
         }
@@ -908,7 +897,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var first = list.getFirst();
-        var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
+        var rz = getRedisZSet(first.keyBytes(), first.slotWithKeyHash());
         if (rz == null || rz.isEmpty()) {
             if (isInter) {
                 return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
@@ -925,7 +914,7 @@ public class ZGroup extends BaseCommand {
             ArrayList<RedisZSet> otherRzList = new ArrayList<>(list.size() - 1);
             for (int i = 1; i < list.size(); i++) {
                 var other = list.get(i);
-                var otherRz = getByKeyBytes(other.keyBytes(), other.slotWithKeyHash());
+                var otherRz = getRedisZSet(other.keyBytes(), other.slotWithKeyHash());
                 otherRzList.add(otherRz);
             }
             operateZset(rz, otherRzList, isInter, isUnion,
@@ -937,7 +926,7 @@ public class ZGroup extends BaseCommand {
             }
 
             if (doStore) {
-                setByKeyBytes(rz, dstKeyBytes, dstSlotWithKeyHash);
+                saveRedisZSet(rz, dstKeyBytes, dstSlotWithKeyHash);
                 return new IntegerReply(rz.size());
             } else {
                 var replies = new Reply[rz.size() * (withScores ? 2 : 1)];
@@ -959,7 +948,7 @@ public class ZGroup extends BaseCommand {
             var otherKeyBytes = other.keyBytes();
 
             var oneSlot = localPersist.oneSlot(otherSlotWithKeyHash.slot());
-            var p = oneSlot.asyncCall(() -> getByKeyBytes(otherKeyBytes, otherSlotWithKeyHash));
+            var p = oneSlot.asyncCall(() -> getRedisZSet(otherKeyBytes, otherSlotWithKeyHash));
             promises.add(p);
         }
 
@@ -995,7 +984,7 @@ public class ZGroup extends BaseCommand {
 
             if (doStore) {
                 var dstOneSlot = localPersist.oneSlot(dstSlotWithKeyHash.slot());
-                dstOneSlot.asyncRun(() -> setByKeyBytes(finalRz, dstKeyBytes, dstSlotWithKeyHash));
+                dstOneSlot.asyncRun(() -> saveRedisZSet(finalRz, dstKeyBytes, dstSlotWithKeyHash));
                 finalPromise.set(new IntegerReply(finalRz.size()));
             } else {
                 var replies = new Reply[finalRz.size() * (finalWithScores ? 2 : 1)];
@@ -1037,7 +1026,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null) {
             rz = new RedisZSet();
         }
@@ -1054,7 +1043,7 @@ public class ZGroup extends BaseCommand {
 
         rz.add(score, member);
 
-        setByKeyBytes(rz, keyBytes, slotWithKeyHash);
+        saveRedisZSet(rz, keyBytes, slotWithKeyHash);
         return new BulkReply(String.valueOf(score).getBytes());
     }
 
@@ -1113,7 +1102,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var first = list.getFirst();
-        var rz = getByKeyBytes(first.keyBytes(), first.slotWithKeyHash());
+        var rz = getRedisZSet(first.keyBytes(), first.slotWithKeyHash());
         if (rz == null || rz.isEmpty()) {
             return IntegerReply.REPLY_0;
         }
@@ -1124,7 +1113,7 @@ public class ZGroup extends BaseCommand {
             outer:
             for (int i = 1; i < list.size(); i++) {
                 var other = list.get(i);
-                var otherRz = getByKeyBytes(other.keyBytes(), other.slotWithKeyHash());
+                var otherRz = getRedisZSet(other.keyBytes(), other.slotWithKeyHash());
                 if (otherRz == null || otherRz.size() == 0) {
                     return IntegerReply.REPLY_0;
                 }
@@ -1159,7 +1148,7 @@ public class ZGroup extends BaseCommand {
             var otherKeyBytes = other.keyBytes();
 
             var oneSlot = localPersist.oneSlot(otherSlotWithKeyHash.slot());
-            var p = oneSlot.asyncCall(() -> getByKeyBytes(otherKeyBytes, otherSlotWithKeyHash));
+            var p = oneSlot.asyncCall(() -> getRedisZSet(otherKeyBytes, otherSlotWithKeyHash));
             promises.add(p);
         }
 
@@ -1237,7 +1226,7 @@ public class ZGroup extends BaseCommand {
 
         var replies = new Reply[memberBytesArr.length];
 
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHashListParsed.getFirst());
+        var rz = getRedisZSet(keyBytes, slotWithKeyHashListParsed.getFirst());
         if (rz == null || rz.isEmpty()) {
             for (int i = 0; i < replies.length; i++) {
                 replies[i] = NilReply.INSTANCE;
@@ -1283,7 +1272,7 @@ public class ZGroup extends BaseCommand {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var slot = slotWithKeyHash.slot();
 
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null || rz.isEmpty()) {
             return MultiBulkReply.EMPTY;
         }
@@ -1295,7 +1284,7 @@ public class ZGroup extends BaseCommand {
             replies[j + 1] = new BulkReply(String.valueOf(sv.score()).getBytes());
         }
 
-        setByKeyBytes(rz, keyBytes, slotWithKeyHash);
+        saveRedisZSet(rz, keyBytes, slotWithKeyHash);
         return new MultiBulkReply(replies);
     }
 
@@ -1337,7 +1326,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null || rz.isEmpty()) {
             return hasCount ? MultiBulkReply.EMPTY : NilReply.INSTANCE;
         }
@@ -1590,7 +1579,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null || rz.isEmpty()) {
             return doStore ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
         }
@@ -1663,10 +1652,10 @@ public class ZGroup extends BaseCommand {
             if (doStore) {
                 var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
                 if (!isCrossRequestWorker) {
-                    setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash);
+                    saveRedisZSet(dstRz, dstKeyBytes, dstSlotWithKeyHash);
                 } else {
                     var dstOneSlot = localPersist.oneSlot(dstSlotWithKeyHash.slot());
-                    dstOneSlot.asyncRun(() -> setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash));
+                    dstOneSlot.asyncRun(() -> saveRedisZSet(dstRz, dstKeyBytes, dstSlotWithKeyHash));
                 }
 
                 return dstRz.size() == 0 ? IntegerReply.REPLY_0 : new IntegerReply(dstRz.size());
@@ -1712,10 +1701,10 @@ public class ZGroup extends BaseCommand {
 
                 var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
                 if (!isCrossRequestWorker) {
-                    setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash);
+                    saveRedisZSet(dstRz, dstKeyBytes, dstSlotWithKeyHash);
                 } else {
                     var dstOneSlot = localPersist.oneSlot(dstSlotWithKeyHash.slot());
-                    dstOneSlot.asyncRun(() -> setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash));
+                    dstOneSlot.asyncRun(() -> saveRedisZSet(dstRz, dstKeyBytes, dstSlotWithKeyHash));
                 }
 
                 return dstRz.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(dstRz.size());
@@ -1774,10 +1763,10 @@ public class ZGroup extends BaseCommand {
 
                 var dstSlotWithKeyHash = slotWithKeyHashListParsed.getLast();
                 if (!isCrossRequestWorker) {
-                    setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash);
+                    saveRedisZSet(dstRz, dstKeyBytes, dstSlotWithKeyHash);
                 } else {
                     var dstOneSlot = localPersist.oneSlot(dstSlotWithKeyHash.slot());
-                    dstOneSlot.asyncRun(() -> setByKeyBytes(dstRz, dstKeyBytes, dstSlotWithKeyHash));
+                    dstOneSlot.asyncRun(() -> saveRedisZSet(dstRz, dstKeyBytes, dstSlotWithKeyHash));
                 }
 
                 return dstRz.isEmpty() ? IntegerReply.REPLY_0 : new IntegerReply(dstRz.size());
@@ -1824,7 +1813,7 @@ public class ZGroup extends BaseCommand {
         boolean withScore = "withscore".equalsIgnoreCase(new String(data[data.length - 1]));
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null || rz.isEmpty()) {
             return withScore ? MultiBulkReply.EMPTY : NilReply.INSTANCE;
         }
@@ -1869,7 +1858,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null || rz.isEmpty()) {
             return IntegerReply.REPLY_0;
         }
@@ -1883,7 +1872,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if (removedCount > 0) {
-            setByKeyBytes(rz, keyBytes, slotWithKeyHash);
+            saveRedisZSet(rz, keyBytes, slotWithKeyHash);
         }
         return removedCount == 0 ? IntegerReply.REPLY_0 : new IntegerReply(removedCount);
     }
@@ -1997,7 +1986,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null || rz.isEmpty()) {
             return IntegerReply.REPLY_0;
         }
@@ -2061,7 +2050,7 @@ public class ZGroup extends BaseCommand {
         }
 
         if (removed > 0) {
-            setByKeyBytes(rz, keyBytes, slotWithKeyHash);
+            saveRedisZSet(rz, keyBytes, slotWithKeyHash);
         }
 
         return removed == 0 ? IntegerReply.REPLY_0 : new IntegerReply(removed);
@@ -2083,7 +2072,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var rz = getByKeyBytes(keyBytes, slotWithKeyHash);
+        var rz = getRedisZSet(keyBytes, slotWithKeyHash);
         if (rz == null || rz.isEmpty()) {
             return NilReply.INSTANCE;
         }

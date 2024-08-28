@@ -498,14 +498,6 @@ zunionstore
 
         when:
         def cv = Mock.prepareCompressedValueList(1)[0]
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = zGroup.zcard()
-        then:
-        reply == ErrorReply.WRONG_TYPE
-
-        when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
         def rz = new RedisZSet()
         rz.add(0.1, 'member0')
@@ -546,20 +538,7 @@ zunionstore
         reply == IntegerReply.REPLY_0
 
         when:
-        boolean wrongTypeException = false
         def cv = Mock.prepareCompressedValueList(1)[0]
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        try {
-            zGroup.zcount(false)
-        } catch (IllegalStateException e) {
-            println e.message
-            wrongTypeException = true
-        }
-        then:
-        wrongTypeException
-
-        when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_ZSET
         def rz = new RedisZSet()
         cv.compressedData = rz.encode()

@@ -78,7 +78,7 @@ class RedisZSetTest extends Specification {
         then:
         rz2.size() == 3
         rz3.size() == 3
-        RedisZSet.zsetSize(encoded) == 3
+        RedisZSet.getSizeWithoutDecode(encoded) == 3
         rz2.contains('a')
         rz2.contains('b')
         rz2.contains('c')
