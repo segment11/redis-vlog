@@ -1,6 +1,5 @@
 package redis.command
 
-import com.github.luben.zstd.Zstd
 import redis.BaseCommand
 import redis.CompressedValue
 import redis.mock.InMemoryGetSet
@@ -345,22 +344,6 @@ class LGroupTest extends Specification {
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 1
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST_COMPRESSED
-        rl.removeLast()
-        100.times {
-            rl.addFirst(('aaaaabbbbcccc' * 5).bytes)
-        }
-        def encoded = rl.encode()
-        def compressedBytes = Zstd.compress(encoded)
-        cv.uncompressedLength = encoded.length
-        cv.compressedData = compressedBytes
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.llen()
-        then:
-        reply instanceof IntegerReply
-        ((IntegerReply) reply).integer == 100
 
         when:
         data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -792,24 +775,6 @@ class LGroupTest extends Specification {
         reply == ErrorReply.LIST_SIZE_TO_LONG
 
         when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST_COMPRESSED
-        while (rl.size() != 0) {
-            rl.removeFirst()
-        }
-        100.times {
-            rl.addFirst(('aaaaabbbbcccc' * 5).bytes)
-        }
-        def encoded = rl.encode()
-        def compressedBytes = Zstd.compress(encoded)
-        cv.uncompressedLength = encoded.length
-        cv.compressedData = compressedBytes
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.lpush(false, false)
-        then:
-        reply instanceof IntegerReply
-        ((IntegerReply) reply).integer == 101
-
-        when:
         data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = lGroup.lpush(true, false)
         then:
@@ -985,26 +950,6 @@ class LGroupTest extends Specification {
         ((IntegerReply) reply).integer == 2
 
         when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST_COMPRESSED
-        while (rl.size() != 0) {
-            rl.removeFirst()
-        }
-        100.times {
-            rl.addFirst(('aaaaabbbbcccc' * 5).bytes)
-        }
-        def encoded = rl.encode()
-        def compressedBytes = Zstd.compress(encoded)
-        cv.uncompressedLength = encoded.length
-        cv.compressedData = compressedBytes
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        data4[2] = '1'.bytes
-        data4[3] = ('aaaaabbbbcccc' * 5).bytes
-        reply = lGroup.lrem()
-        then:
-        reply instanceof IntegerReply
-        ((IntegerReply) reply).integer == 1
-
-        when:
         data4[2] = 'a'.bytes
         reply = lGroup.lrem()
         then:
@@ -1088,25 +1033,6 @@ class LGroupTest extends Specification {
         reply = lGroup.lset()
         then:
         reply == ErrorReply.LIST_SIZE_TO_LONG
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST_COMPRESSED
-        while (rl.size() != 0) {
-            rl.removeFirst()
-        }
-        100.times {
-            rl.addFirst(('aaaaabbbbcccc' * 5).bytes)
-        }
-        def encoded = rl.encode()
-        def compressedBytes = Zstd.compress(encoded)
-        cv.uncompressedLength = encoded.length
-        cv.compressedData = compressedBytes
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        data4[2] = '1'.bytes
-        data4[3] = 'a'.bytes
-        reply = lGroup.lset()
-        then:
-        reply == OKReply.INSTANCE
 
         when:
         data4[2] = 'a'.bytes
@@ -1209,25 +1135,6 @@ class LGroupTest extends Specification {
         inMemoryGetSet.put(slot, 'a', 0, cv)
         data4[2] = '1'.bytes
         data4[3] = '0'.bytes
-        reply = lGroup.ltrim()
-        then:
-        reply == OKReply.INSTANCE
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST_COMPRESSED
-        while (rl.size() != 0) {
-            rl.removeFirst()
-        }
-        100.times {
-            rl.addFirst(('aaaaabbbbcccc' * 5).bytes)
-        }
-        def encoded = rl.encode()
-        def compressedBytes = Zstd.compress(encoded)
-        cv.uncompressedLength = encoded.length
-        cv.compressedData = compressedBytes
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        data4[2] = '0'.bytes
-        data4[3] = '9'.bytes
         reply = lGroup.ltrim()
         then:
         reply == OKReply.INSTANCE

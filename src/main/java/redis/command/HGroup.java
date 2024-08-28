@@ -17,8 +17,6 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Random;
 
-import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
-
 public class HGroup extends BaseCommand {
     public HGroup(String cmd, byte[][] data, ITcpSocket socket) {
         super(cmd, data, socket);
@@ -109,7 +107,7 @@ public class HGroup extends BaseCommand {
         var keysKey = RedisHashKeys.keysKey(key);
         var keysKeyBytes = keysKey.getBytes();
 
-        var keysValueBytes = get(keysKeyBytes, null, false, CompressedValue.SP_TYPE_HASH, CompressedValue.SP_TYPE_HASH_COMPRESSED);
+        var keysValueBytes = get(keysKeyBytes, null, false, CompressedValue.SP_TYPE_HASH);
         if (keysValueBytes == null) {
             return null;
         }
@@ -118,19 +116,20 @@ public class HGroup extends BaseCommand {
     }
 
     private void saveRedisHashKeys(RedisHashKeys rhk, String key) {
-        var encodedBytes = rhk.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_HASH_COMPRESSED : CompressedValue.SP_TYPE_HASH;
-
         var keysKey = RedisHashKeys.keysKey(key);
         var keysKeyBytes = keysKey.getBytes();
         var slotWithKeyHashForKeys = slot(keysKeyBytes);
 
-        set(keysKeyBytes, encodedBytes, slotWithKeyHashForKeys, spType);
+        if (rhk.size() == 0) {
+            removeDelay(slotWithKeyHashForKeys.slot(), slotWithKeyHashForKeys.bucketIndex(), keysKey, slotWithKeyHashForKeys.keyHash());
+            return;
+        }
+
+        set(keysKeyBytes, rhk.encode(), slotWithKeyHashForKeys, CompressedValue.SP_TYPE_HASH);
     }
 
     private RedisHH getRedisHH(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH);
         if (encodedBytes == null) {
             return null;
         }
@@ -139,11 +138,12 @@ public class HGroup extends BaseCommand {
     }
 
     private void saveRedisHH(RedisHH rhh, byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
-        var encodedBytes = rhh.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_HH_COMPRESSED : CompressedValue.SP_TYPE_HH;
+        if (rhh.size() == 0) {
+            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
+            return;
+        }
 
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        set(keyBytes, rhh.encode(), slotWithKeyHash, CompressedValue.SP_TYPE_HH);
     }
 
     @VisibleForTesting
@@ -260,7 +260,7 @@ public class HGroup extends BaseCommand {
 
     Reply hexists2(byte[] keyBytes, byte[] fieldBytes) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH);
         if (encodedBytes == null) {
             return IntegerReply.REPLY_0;
         }
@@ -312,7 +312,7 @@ public class HGroup extends BaseCommand {
 
     Reply hget2(byte[] keyBytes, byte[] fieldBytes, boolean onlyReturnLength) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH);
         if (encodedBytes == null) {
             return onlyReturnLength ? IntegerReply.REPLY_0 : NilReply.INSTANCE;
         }
@@ -547,7 +547,7 @@ public class HGroup extends BaseCommand {
 
     Reply hkeys2(byte[] keyBytes, boolean onlyReturnSize) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH);
         if (encodedBytes == null) {
             return onlyReturnSize ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
         }

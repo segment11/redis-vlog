@@ -515,7 +515,7 @@ public class SGroup extends BaseCommand {
     }
 
     private RedisHashKeys getRedisSet(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_SET, CompressedValue.SP_TYPE_SET_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_SET);
         if (encodedBytes == null) {
             return null;
         }
@@ -529,11 +529,7 @@ public class SGroup extends BaseCommand {
             return;
         }
 
-        var encodedBytes = rhk.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_SET_COMPRESSED : CompressedValue.SP_TYPE_SET;
-
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        set(keyBytes, rhk.encode(), slotWithKeyHash, CompressedValue.SP_TYPE_SET);
     }
 
 
@@ -589,7 +585,7 @@ public class SGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_SET, CompressedValue.SP_TYPE_SET_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_SET);
         if (encodedBytes == null) {
             return IntegerReply.REPLY_0;
         }

@@ -266,7 +266,7 @@ class BaseCommandTest extends Specification {
         when:
         exception = false
         try {
-            c.get(keyForTypeList.bytes, sKeyForTypeList, true, CompressedValue.SP_TYPE_HASH, CompressedValue.SP_TYPE_HH_COMPRESSED)
+            c.get(keyForTypeList.bytes, sKeyForTypeList, true, CompressedValue.SP_TYPE_HASH, CompressedValue.SP_TYPE_SET)
         } catch (TypeMismatchException e) {
             println e.message
             exception = true
@@ -633,18 +633,6 @@ class BaseCommandTest extends Specification {
         }
         then:
         exception
-
-        when:
-        var rl = new RedisList()
-        100.times {
-            rl.addFirst(longValueBytes)
-        }
-        def encoded = rl.encode()
-        c.set(firstKey.bytes, encoded, sFirstKey, CompressedValue.SP_TYPE_LIST_COMPRESSED, CompressedValue.NO_EXPIRE)
-        cvGet = inMemoryGetSet.getBuf(slot, firstKey.bytes, sFirstKey.bucketIndex(), sFirstKey.keyHash()).cv()
-        then:
-        cvGet.dictSeqOrSpType == CompressedValue.SP_TYPE_LIST_COMPRESSED
-        RedisList.decode(c.getValueBytesByCv(cvGet)).size() == 100
 
         when:
         Dict.GLOBAL_ZSTD_DICT.dictBytes = trainedDict.dictBytes

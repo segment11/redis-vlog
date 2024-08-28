@@ -11,8 +11,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 
-import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
-
 public class LGroup extends BaseCommand {
     public LGroup(String cmd, byte[][] data, ITcpSocket socket) {
         super(cmd, data, socket);
@@ -204,7 +202,7 @@ public class LGroup extends BaseCommand {
     }
 
     private RedisList getRedisList(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST);
         if (encodedBytes == null) {
             return null;
         }
@@ -214,11 +212,12 @@ public class LGroup extends BaseCommand {
 
 
     private void saveRedisList(RedisList rl, byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
-        var encodedBytesToSave = rl.encode();
-        var needCompress = encodedBytesToSave.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
+        if (rl.size() == 0) {
+            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
+            return;
+        }
 
-        set(keyBytes, encodedBytesToSave, slotWithKeyHash, spType);
+        set(keyBytes, rl.encode(), slotWithKeyHash, CompressedValue.SP_TYPE_LIST);
     }
 
     Reply linsert() {
@@ -265,7 +264,7 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST);
         if (encodedBytes == null) {
             return IntegerReply.REPLY_0;
         }

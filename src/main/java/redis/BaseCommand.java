@@ -619,7 +619,7 @@ public abstract class BaseCommand {
 
         if (ConfForGlobal.isValueSetUseCompression &&
                 valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH &&
-                (CompressedValue.preferCompress(spType) || dict != null)) {
+                dict != null) {
             var beginT = System.nanoTime();
             // dict may be null
             var cv = CompressedValue.compress(valueBytes, dict, compressLevel);

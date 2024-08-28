@@ -15,8 +15,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
 
-import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
-
 public class ZGroup extends BaseCommand {
     public ZGroup(String cmd, byte[][] data, ITcpSocket socket) {
         super(cmd, data, socket);
@@ -347,7 +345,7 @@ public class ZGroup extends BaseCommand {
     }
 
     private RedisZSet getRedisZSet(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_ZSET, CompressedValue.SP_TYPE_ZSET_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_ZSET);
         if (encodedBytes == null) {
             return null;
         }
@@ -361,11 +359,7 @@ public class ZGroup extends BaseCommand {
             return;
         }
 
-        var encodedBytes = rz.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
-
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        set(keyBytes, rz.encode(), slotWithKeyHash, CompressedValue.SP_TYPE_ZSET);
     }
 
     private record Member(double score, String e) {
@@ -529,7 +523,7 @@ public class ZGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_ZSET, CompressedValue.SP_TYPE_ZSET_COMPRESSED);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_ZSET);
         if (encodedBytes == null) {
             return IntegerReply.REPLY_0;
         }

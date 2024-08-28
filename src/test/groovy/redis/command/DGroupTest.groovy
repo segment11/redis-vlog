@@ -3,6 +3,7 @@ package redis.command
 import io.activej.eventloop.Eventloop
 import redis.BaseCommand
 import redis.CompressedValue
+import redis.Dict
 import redis.mock.InMemoryGetSet
 import redis.persist.LocalPersist
 import redis.persist.Mock
@@ -276,7 +277,7 @@ class DGroupTest extends Specification {
         ((IntegerReply) reply).integer == -1
 
         when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH_COMPRESSED
+        cv.dictSeqOrSpType = Dict.SELF_ZSTD_DICT_SEQ
         inMemoryGetSet.put(slot, 'a', 0, cv)
         reply = dGroup.decrBy(1, 0)
         then:

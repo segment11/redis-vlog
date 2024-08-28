@@ -262,15 +262,13 @@ class HGroupTest extends Specification {
         LocalPersist.instance.hashSaveMemberTogether = false
         reply = hGroup.hdel()
         then:
-        reply instanceof IntegerReply
-        ((IntegerReply) reply).integer == 0
+        reply == IntegerReply.REPLY_0
 
         when:
         LocalPersist.instance.hashSaveMemberTogether = true
         reply = hGroup.hdel()
         then:
-        reply instanceof IntegerReply
-        ((IntegerReply) reply).integer == 0
+        reply == IntegerReply.REPLY_0
 
         when:
         LocalPersist.instance.hashSaveMemberTogether = false

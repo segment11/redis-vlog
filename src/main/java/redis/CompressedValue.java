@@ -29,15 +29,10 @@ public class CompressedValue {
     public static final byte SP_FLAG_DELETE_TMP = -128;
 
     public static final int SP_TYPE_HH = -512;
-    public static final int SP_TYPE_HH_COMPRESSED = -513;
     public static final int SP_TYPE_HASH = -1024;
-    public static final int SP_TYPE_HASH_COMPRESSED = -1025;
     public static final int SP_TYPE_LIST = -2048;
-    public static final int SP_TYPE_LIST_COMPRESSED = -2049;
     public static final int SP_TYPE_SET = -4096;
-    public static final int SP_TYPE_SET_COMPRESSED = -4097;
     public static final int SP_TYPE_ZSET = -8192;
-    public static final int SP_TYPE_ZSET_COMPRESSED = -8193;
     public static final int SP_TYPE_STREAM = -16384;
 
     // change here to limit key size
@@ -186,20 +181,20 @@ public class CompressedValue {
     }
 
     public boolean isHash() {
-        return dictSeqOrSpType == SP_TYPE_HH || dictSeqOrSpType == SP_TYPE_HH_COMPRESSED ||
-                dictSeqOrSpType == SP_TYPE_HASH || dictSeqOrSpType == SP_TYPE_HASH_COMPRESSED;
+        return dictSeqOrSpType == SP_TYPE_HH ||
+                dictSeqOrSpType == SP_TYPE_HASH;
     }
 
     public boolean isList() {
-        return dictSeqOrSpType == SP_TYPE_LIST || dictSeqOrSpType == SP_TYPE_LIST_COMPRESSED;
+        return dictSeqOrSpType == SP_TYPE_LIST;
     }
 
     public boolean isSet() {
-        return dictSeqOrSpType == SP_TYPE_SET || dictSeqOrSpType == SP_TYPE_SET_COMPRESSED;
+        return dictSeqOrSpType == SP_TYPE_SET;
     }
 
     public boolean isZSet() {
-        return dictSeqOrSpType == SP_TYPE_ZSET || dictSeqOrSpType == SP_TYPE_ZSET_COMPRESSED;
+        return dictSeqOrSpType == SP_TYPE_ZSET;
     }
 
     public boolean isStream() {
@@ -237,20 +232,7 @@ public class CompressedValue {
     }
 
     public boolean isCompressed() {
-        return dictSeqOrSpType > NULL_DICT_SEQ ||
-                dictSeqOrSpType == SP_TYPE_HH_COMPRESSED ||
-                dictSeqOrSpType == SP_TYPE_HASH_COMPRESSED ||
-                dictSeqOrSpType == SP_TYPE_LIST_COMPRESSED ||
-                dictSeqOrSpType == SP_TYPE_SET_COMPRESSED ||
-                dictSeqOrSpType == SP_TYPE_ZSET_COMPRESSED;
-    }
-
-    public static boolean preferCompress(int spType) {
-        return spType == SP_TYPE_HH_COMPRESSED ||
-                spType == SP_TYPE_HASH_COMPRESSED ||
-                spType == SP_TYPE_LIST_COMPRESSED ||
-                spType == SP_TYPE_SET_COMPRESSED ||
-                spType == SP_TYPE_ZSET_COMPRESSED;
+        return dictSeqOrSpType > NULL_DICT_SEQ;
     }
 
     public static boolean isTypeString(int spType) {

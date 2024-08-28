@@ -15,7 +15,6 @@ import java.util.function.Consumer;
 
 import static redis.CompressedValue.NO_EXPIRE;
 import static redis.CompressedValue.NULL_DICT_SEQ;
-import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 public class RGroup extends BaseCommand {
     public RGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -246,37 +245,25 @@ public class RGroup extends BaseCommand {
 
                 @Override
                 public void onList(byte[] valueBytes) {
-                    var needCompress = valueBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-                    var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
-
-                    set(keyBytes, valueBytes, slotWithKeyHash, spType, finalExpireAt);
+                    set(keyBytes, valueBytes, slotWithKeyHash, CompressedValue.SP_TYPE_LIST, finalExpireAt);
                 }
 
                 @Override
                 public void onSet(byte[] encodedBytes) {
-                    var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-                    var spType = needCompress ? CompressedValue.SP_TYPE_SET_COMPRESSED : CompressedValue.SP_TYPE_SET;
-
-                    set(keyBytes, encodedBytes, slotWithKeyHash, spType, finalExpireAt);
+                    set(keyBytes, encodedBytes, slotWithKeyHash, CompressedValue.SP_TYPE_SET, finalExpireAt);
                 }
 
                 @Override
                 public void onZSet(byte[] encodedBytes) {
-                    var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-                    var spType = needCompress ? CompressedValue.SP_TYPE_ZSET_COMPRESSED : CompressedValue.SP_TYPE_ZSET;
-
-                    set(keyBytes, encodedBytes, slotWithKeyHash, spType, finalExpireAt);
+                    set(keyBytes, encodedBytes, slotWithKeyHash, CompressedValue.SP_TYPE_ZSET, finalExpireAt);
                 }
 
                 @Override
                 public void onHashKeys(byte[] encodedBytes) {
-                    var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-                    var spType = needCompress ? CompressedValue.SP_TYPE_HASH_COMPRESSED : CompressedValue.SP_TYPE_HASH;
-
                     var keysKey = RedisHashKeys.keysKey(key);
                     var keysKeyBytes = keysKey.getBytes();
 
-                    set(keysKeyBytes, encodedBytes, null, spType, finalExpireAt);
+                    set(keysKeyBytes, encodedBytes, null, CompressedValue.SP_TYPE_HASH, finalExpireAt);
                 }
 
                 @Override
@@ -315,12 +302,7 @@ public class RGroup extends BaseCommand {
             rlDst.addLast(memberValueBytes);
         }
 
-        var encodedBytesDst = rlDst.encode();
-        var needCompressDst = encodedBytesDst.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spTypeDst = needCompressDst ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
-
-        set(dstKeyBytes, encodedBytesDst, dstSlotWithKeyHash, spTypeDst);
-
+        set(dstKeyBytes, rlDst.encode(), dstSlotWithKeyHash, CompressedValue.SP_TYPE_LIST);
         consumer.accept(new BulkReply(memberValueBytes));
     }
 
@@ -343,12 +325,8 @@ public class RGroup extends BaseCommand {
         }
 
         var memberValueBytes = srcLeft ? rlSrc.removeFirst() : rlSrc.removeLast();
-
-        var encodedBytes = rlSrc.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
-
-        set(srcKeyBytes, encodedBytes, srcSlotWithKeyHash, spType);
+        // save after remove
+        set(srcKeyBytes, rlSrc.encode(), srcSlotWithKeyHash, CompressedValue.SP_TYPE_LIST);
 
         if (!isCrossRequestWorker) {
             final Reply[] finalReplyArray = {null};

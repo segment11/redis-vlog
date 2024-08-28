@@ -1,6 +1,5 @@
 package redis.command
 
-import com.github.luben.zstd.Zstd
 import io.activej.eventloop.Eventloop
 import io.activej.net.socket.tcp.TcpSocket
 import redis.*
@@ -580,24 +579,6 @@ sunionstore
         reply = sGroup.sadd()
         then:
         reply == ErrorReply.SET_SIZE_TO_LONG
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SET_COMPRESSED
-        def rhk2 = new RedisHashKeys()
-        100.times {
-            rhk2.add('aaaaabbbbcccc' * 5 + it.toString())
-        }
-        def encoded = rhk2.encode()
-        def compressedBytes = Zstd.compress(encoded)
-        cv.uncompressedLength = encoded.length
-        cv.compressedData = compressedBytes
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        data4[2] = '1'.bytes
-        data4[3] = '2'.bytes
-        reply = sGroup.sadd()
-        then:
-        reply instanceof IntegerReply
-        ((IntegerReply) reply).integer == 2
 
         when:
         data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
