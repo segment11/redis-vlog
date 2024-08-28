@@ -277,7 +277,7 @@ public class SGroup extends BaseCommand {
             return ErrorReply.NOT_INTEGER;
         }
         if (port < 0 || port > 65535) {
-            return new ErrorReply("invalid port");
+            return ErrorReply.INVALID_INTEGER;
         }
 
         SettablePromise<Reply> finalPromise = new SettablePromise<>();
@@ -566,34 +566,22 @@ public class SGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var setCv = getCv(keyBytes, slotWithKeyHash);
-        if (setCv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_SET, CompressedValue.SP_TYPE_SET_COMPRESSED);
+        if (encodedBytes == null) {
             return IntegerReply.REPLY_0;
         }
 
-        if (!setCv.isSet()) {
-            return ErrorReply.WRONG_TYPE;
-        }
-
-        var setValueBytes = getValueBytesByCv(setCv);
-        var size = RedisHashKeys.getSizeWithoutDecode(setValueBytes);
+        var size = RedisHashKeys.getSizeWithoutDecode(encodedBytes);
         return new IntegerReply(size);
     }
 
     private RedisHashKeys getByKeyBytes(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
-        var setCv = getCv(keyBytes, slotWithKeyHash);
-        if (setCv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_SET, CompressedValue.SP_TYPE_SET_COMPRESSED);
+        if (encodedBytes == null) {
             return null;
         }
-        if (!setCv.isSet()) {
-            // throw exception ?
-            var key = new String(keyBytes);
-            log.warn("Key {} is not set type", key);
-            throw new IllegalStateException("Key is not set type: " + key);
-        }
 
-        var setValueBytes = getValueBytesByCv(setCv);
-        return RedisHashKeys.decode(setValueBytes);
+        return RedisHashKeys.decode(encodedBytes);
     }
 
     private void setByKeyBytes(RedisHashKeys rhk, byte[] dstKeyBytes, SlotWithKeyHash dstSlotWithKeyHash) {
