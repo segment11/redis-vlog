@@ -68,6 +68,10 @@ public class SimpleGauge extends Collector {
 
         for (var rawGetter : rawGetterList) {
             var raw = rawGetter.get();
+            if (raw == null) {
+                continue;
+            }
+            
             for (var entry : raw.entrySet()) {
                 var entryValue = entry.getValue();
                 samples.add(new MetricFamilySamples.Sample(entry.getKey(), labels, entryValue.labelValues, entryValue.value));

@@ -361,8 +361,8 @@ class OneSlotTest extends Specification {
         oneSlot.kvLRUHitTotal = 1
         oneSlot.segmentDecompressCountTotal = 1
         oneSlot.segmentDecompressTimeTotalUs = 10
-        oneSlot.oneSlotGauge.collect()
-        oneSlot2.oneSlotGauge.collect()
+        oneSlot.oneSlotGauge.rawGetterList.each { it.get2() }
+        oneSlot2.oneSlotGauge.rawGetterList.each { it.get2() }
 
         expect:
         oneSlot.bigStringFiles != null

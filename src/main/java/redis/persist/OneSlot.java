@@ -1653,14 +1653,64 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
     long segmentDecompressCountTotal = 0;
 
     private void initMetricsCollect() {
+        // only first slot show global metrics
+        if (slot == 0) {
+            oneSlotGauge.addRawGetter(() -> {
+                // global use slot -1
+                var labelValues = List.of("-1");
+
+                var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+
+                // only show global
+                map.put("global_up_time", new SimpleGauge.ValueWithLabelValues((double) MultiWorkerServer.UP_TIME, labelValues));
+                map.put("global_dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
+                // global config for one slot
+                map.put("global_estimate_key_number", new SimpleGauge.ValueWithLabelValues((double) ConfForGlobal.estimateKeyNumber, labelValues));
+                map.put("global_estimate_one_value_length", new SimpleGauge.ValueWithLabelValues((double) ConfForGlobal.estimateOneValueLength, labelValues));
+                map.put("global_slot_number", new SimpleGauge.ValueWithLabelValues((double) slotNumber, labelValues));
+                map.put("global_key_buckets_per_slot", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confBucket.bucketsPerSlot, labelValues));
+                map.put("global_chunk_segment_number_per_fd", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confChunk.segmentNumberPerFd, labelValues));
+                map.put("global_chunk_fd_per_chunk", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confChunk.fdPerChunk, labelValues));
+                map.put("global_chunk_segment_length", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confChunk.segmentLength, labelValues));
+                map.put("global_wal_one_charge_bucket_number", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confWal.oneChargeBucketNumber, labelValues));
+
+                map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket), labelValues));
+                map.put("lru_prepare_mb_fd_chunk_data_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_chunk_data), labelValues));
+                map.put("lru_prepare_mb_kv_read_group_by_wal_group_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_read_group_by_wal_group), labelValues));
+                map.put("lru_prepare_mb_kv_write_in_wal_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_write_in_wal), labelValues));
+                map.put("lru_prepare_mb_kv_big_string_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.big_string), labelValues));
+                map.put("lru_prepare_mb_chunk_segment_merged_cv_buffer_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer), labelValues));
+
+                map.put("lru_prepare_mb_all", new SimpleGauge.ValueWithLabelValues(
+                        (double) LRUPrepareBytesStats.sum(), labelValues));
+
+                map.put("static_memory_prepare_mb_wal_cache_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.wal_cache), labelValues));
+                map.put("static_memory_prepare_mb_wal_cache_init_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.wal_cache_init), labelValues));
+                map.put("static_memory_prepare_mb_meta_chunk_segment_flag_seq_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq), labelValues));
+                map.put("static_memory_prepare_mb_fd_read_write_buffer_all_slots", new SimpleGauge.ValueWithLabelValues(
+                        (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer), labelValues));
+
+                return map;
+            });
+        }
+
         oneSlotGauge.addRawGetter(new SimpleGauge.RawGetter() {
             @Override
-            public short slot() {
-                return slot;
+            public Map<String, SimpleGauge.ValueWithLabelValues> get() {
+                return null;
             }
 
             @Override
-            public Map<String, SimpleGauge.ValueWithLabelValues> get() {
+            public Map<String, SimpleGauge.ValueWithLabelValues> get2() {
                 var labelValues = List.of(slotStr);
 
                 var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
@@ -1672,7 +1722,13 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
                     map.put("chunk_max_segment_index", new SimpleGauge.ValueWithLabelValues((double) chunk.maxSegmentIndex, labelValues));
                 }
 
-                map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) getWalKeyCount(), labelValues));
+                long walKeyCount = getWalKeyCount();
+                map.put("wal_key_count", new SimpleGauge.ValueWithLabelValues((double) walKeyCount, labelValues));
+
+                if (keyLoader != null) {
+                    long keyLoaderKeyCount = keyLoader.getKeyCount();
+                    map.put("key_loader_key_count", new SimpleGauge.ValueWithLabelValues((double) keyLoaderKeyCount, labelValues));
+                }
 
                 // only show first wal group
                 var firstWalGroup = walArray[0];
@@ -1682,50 +1738,11 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
                 map.put("wal_group_first_need_persist_kv_count_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistKvCountTotal, labelValues));
                 map.put("wal_group_first_need_persist_offset_total", new SimpleGauge.ValueWithLabelValues((double) firstWalGroup.needPersistOffsetTotal, labelValues));
 
-                if (slot == 0) {
-                    map.put("global_up_time", new SimpleGauge.ValueWithLabelValues((double) MultiWorkerServer.UP_TIME, labelValues));
-                    map.put("global_dict_size", new SimpleGauge.ValueWithLabelValues((double) DictMap.getInstance().dictSize(), labelValues));
-                    // global config for one slot
-                    map.put("global_estimate_key_number", new SimpleGauge.ValueWithLabelValues((double) ConfForGlobal.estimateKeyNumber, labelValues));
-                    map.put("global_estimate_one_value_length", new SimpleGauge.ValueWithLabelValues((double) ConfForGlobal.estimateOneValueLength, labelValues));
-                    map.put("global_slot_number", new SimpleGauge.ValueWithLabelValues((double) slotNumber, labelValues));
-                    map.put("global_key_buckets_per_slot", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confBucket.bucketsPerSlot, labelValues));
-                    map.put("global_chunk_segment_number_per_fd", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confChunk.segmentNumberPerFd, labelValues));
-                    map.put("global_chunk_fd_per_chunk", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confChunk.fdPerChunk, labelValues));
-                    map.put("global_chunk_segment_length", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confChunk.segmentLength, labelValues));
-                    map.put("global_wal_one_charge_bucket_number", new SimpleGauge.ValueWithLabelValues((double) ConfForSlot.global.confWal.oneChargeBucketNumber, labelValues));
-
-                    map.put("lru_prepare_mb_fd_key_bucket_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_key_bucket), labelValues));
-                    map.put("lru_prepare_mb_fd_chunk_data_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.fd_chunk_data), labelValues));
-                    map.put("lru_prepare_mb_kv_read_group_by_wal_group_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_read_group_by_wal_group), labelValues));
-                    map.put("lru_prepare_mb_kv_write_in_wal_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.kv_write_in_wal), labelValues));
-                    map.put("lru_prepare_mb_kv_big_string_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.big_string), labelValues));
-                    map.put("lru_prepare_mb_chunk_segment_merged_cv_buffer_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) LRUPrepareBytesStats.sum(LRUPrepareBytesStats.Type.chunk_segment_merged_cv_buffer), labelValues));
-
-                    map.put("lru_prepare_mb_all", new SimpleGauge.ValueWithLabelValues(
-                            (double) LRUPrepareBytesStats.sum(), labelValues));
-
-                    map.put("static_memory_prepare_mb_wal_cache_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.wal_cache), labelValues));
-                    map.put("static_memory_prepare_mb_wal_cache_init_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.wal_cache_init), labelValues));
-                    map.put("static_memory_prepare_mb_meta_chunk_segment_flag_seq_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.meta_chunk_segment_flag_seq), labelValues));
-                    map.put("static_memory_prepare_mb_fd_read_write_buffer_all_slots", new SimpleGauge.ValueWithLabelValues(
-                            (double) StaticMemoryPrepareBytesStats.sum(StaticMemoryPrepareBytesStats.Type.fd_read_write_buffer), labelValues));
-
-                    if (binlog != null) {
-                        var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
-                        var fo = binlog.currentFileIndexAndOffset();
-                        var offsetFromFileIndex0 = fo.fileIndex() * binlogOneFileMaxLength + fo.offset();
-                        map.put("binlog_current_offset_from_the_beginning", new SimpleGauge.ValueWithLabelValues((double) offsetFromFileIndex0, labelValues));
-                    }
+                if (binlog != null) {
+                    var binlogOneFileMaxLength = ConfForSlot.global.confRepl.binlogOneFileMaxLength;
+                    var fo = binlog.currentFileIndexAndOffset();
+                    var offsetFromFileIndex0 = (long) fo.fileIndex() * binlogOneFileMaxLength + fo.offset();
+                    map.put("binlog_current_offset_from_the_beginning", new SimpleGauge.ValueWithLabelValues((double) offsetFromFileIndex0, labelValues));
                 }
 
                 var hitMissTotal = kvLRUHitTotal + kvLRUMissTotal;

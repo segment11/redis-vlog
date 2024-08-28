@@ -20,6 +20,10 @@ class SimpleGaugeTest extends Specification {
             map
         }
 
+        g.addRawGetter {
+            null
+        }
+
         g.addRawGetter(new SimpleGauge.RawGetter() {
             @Override
             Map<String, SimpleGauge.ValueWithLabelValues> get() {
@@ -34,13 +38,23 @@ class SimpleGaugeTest extends Specification {
                 map.put('d', new SimpleGauge.ValueWithLabelValues(4.0, labelValues))
                 map
             }
+
+            @Override
+            short slot() {
+                (short) 0
+            }
         })
 
         def mfsList = g.collect()
         def map2 = g.rawGetterList[-1].get2()
 
+        g.rawGetterList.each {
+            it.slot()
+            it.get2()
+        }
+
         then:
-        g.rawGetterList.size() == 2
+        g.rawGetterList.size() == 3
         mfsList.size() == 1
         mfsList[0].name == 'test'
         mfsList[0].samples.size() == 4
