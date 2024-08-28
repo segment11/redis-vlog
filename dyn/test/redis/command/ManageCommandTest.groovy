@@ -252,7 +252,7 @@ class ManageCommandTest extends Specification {
         def reply = manage.dict()
         then:
         reply == OKReply.INSTANCE
-        TrainSampleJob.keyPrefixGroupList == ['key:', 'xxx:']
+        TrainSampleJob.keyPrefixOrSuffixGroupList == ['key:', 'xxx:']
 
         when:
         data4[3] = ''.bytes

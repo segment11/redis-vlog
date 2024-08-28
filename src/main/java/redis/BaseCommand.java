@@ -608,8 +608,8 @@ public abstract class BaseCommand {
             if (Dict.GLOBAL_ZSTD_DICT.hasDictBytes()) {
                 dict = Dict.GLOBAL_ZSTD_DICT;
             } else {
-                var keyPrefix = TrainSampleJob.keyPrefix(key);
-                dict = dictMap.getDict(keyPrefix);
+                var keyPrefixOrSuffix = TrainSampleJob.keyPrefixOrSuffixGroup(key);
+                dict = dictMap.getDict(keyPrefixOrSuffix);
 
                 if (dict == null) {
                     dict = Dict.SELF_ZSTD_DICT;

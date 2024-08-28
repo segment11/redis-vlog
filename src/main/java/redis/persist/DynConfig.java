@@ -48,7 +48,7 @@ public class DynConfig {
                     keyPrefixGroupList.add(keyPrefixGroup);
                 }
 
-                TrainSampleJob.setKeyPrefixGroupList(keyPrefixGroupList);
+                TrainSampleJob.setKeyPrefixOrSuffixGroupList(keyPrefixGroupList);
                 log.warn("Global config set dict_key_prefix_groups={}, slot: {}", value, currentSlot);
             }
             // todo

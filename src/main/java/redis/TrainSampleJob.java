@@ -50,21 +50,25 @@ public class TrainSampleJob {
         TrainSampleJob.dictKeyPrefixEndIndex = dictKeyPrefixEndIndex;
     }
 
-    private static ArrayList<String> keyPrefixGroupList = new ArrayList<>();
+    private static ArrayList<String> keyPrefixOrSuffixGroupList = new ArrayList<>();
 
-    public synchronized static void setKeyPrefixGroupList(ArrayList<String> keyPrefixGroupList) {
+    public static ArrayList<String> getKeyPrefixOrSuffixGroupList() {
+        return keyPrefixOrSuffixGroupList;
+    }
+
+    public synchronized static void setKeyPrefixOrSuffixGroupList(ArrayList<String> keyPrefixOrSuffixGroupList) {
         // longer first
-        keyPrefixGroupList.sort((a, b) -> b.length() - a.length());
-        TrainSampleJob.keyPrefixGroupList = keyPrefixGroupList;
+        keyPrefixOrSuffixGroupList.sort((a, b) -> b.length() - a.length());
+        TrainSampleJob.keyPrefixOrSuffixGroupList = keyPrefixOrSuffixGroupList;
     }
 
     public synchronized static void addKeyPrefixGroupIfNotExist(String keyPrefixGroup) {
-        if (keyPrefixGroupList.contains(keyPrefixGroup)) {
+        if (keyPrefixOrSuffixGroupList.contains(keyPrefixGroup)) {
             return;
         }
-        keyPrefixGroupList.add(keyPrefixGroup);
+        keyPrefixOrSuffixGroupList.add(keyPrefixGroup);
         // longer first
-        keyPrefixGroupList.sort((a, b) -> b.length() - a.length());
+        keyPrefixOrSuffixGroupList.sort((a, b) -> b.length() - a.length());
     }
 
     private Dict trainNewDict(List<TrainSampleKV> list) {
@@ -111,11 +115,11 @@ public class TrainSampleJob {
         return new Dict(dictBytes);
     }
 
-    public static String keyPrefix(String key) {
-        if (!keyPrefixGroupList.isEmpty()) {
-            for (var keyPrefix : keyPrefixGroupList) {
-                if (key.startsWith(keyPrefix)) {
-                    return keyPrefix;
+    public static String keyPrefixOrSuffixGroup(String key) {
+        if (!keyPrefixOrSuffixGroupList.isEmpty()) {
+            for (var keyPrefixOrSuffix : keyPrefixOrSuffixGroupList) {
+                if (key.startsWith(keyPrefixOrSuffix) || key.endsWith(keyPrefixOrSuffix)) {
+                    return keyPrefixOrSuffix;
                 }
             }
         }
@@ -147,19 +151,19 @@ public class TrainSampleJob {
             return null;
         }
 
-        var groupByKeyPrefixMap = sampleToTrainListCopy.stream().collect(Collectors.groupingBy(one -> {
+        var groupByKeyPrefixOrSuffixMap = sampleToTrainListCopy.stream().collect(Collectors.groupingBy(one -> {
             if (one.keyPrefixGiven != null) {
                 return one.keyPrefixGiven;
             }
 
             var key = one.key();
-            return keyPrefix(key);
+            return keyPrefixOrSuffixGroup(key);
         }));
 
-        for (var entry : groupByKeyPrefixMap.entrySet()) {
-            var keyPrefix = entry.getKey();
+        for (var entry : groupByKeyPrefixOrSuffixMap.entrySet()) {
+            var keyPrefixOrSuffix = entry.getKey();
             var list = entry.getValue();
-            var dict = cacheDict.get(keyPrefix);
+            var dict = cacheDict.get(keyPrefixOrSuffix);
             if (dict != null) {
                 for (var one : list) {
                     removedSampleKVSeqList.add(one.seq());
@@ -175,14 +179,14 @@ public class TrainSampleJob {
             dict = trainNewDict(list);
             if (dict != null) {
                 // in one thread, no need lock
-                cacheDict.put(keyPrefix, dict);
+                cacheDict.put(keyPrefixOrSuffix, dict);
 
                 // remove trained sample
                 for (var one : list) {
                     removedSampleKVSeqList.add(one.seq());
                 }
                 log.info("Train sample, worker {} train dict ok, key prefix: {}, dict size: {}, removed sample size: {}",
-                        workerId, keyPrefix, dict.dictBytes.length, list.size());
+                        workerId, keyPrefixOrSuffix, dict.dictBytes.length, list.size());
 
                 // need persist immediately, todo
             }

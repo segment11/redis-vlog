@@ -208,7 +208,7 @@ class RedisHHTest extends Specification {
 
         def snowFlake = new SnowFlake(0, 0)
 
-        TrainSampleJob.keyPrefixGroupList = ['key:']
+        TrainSampleJob.keyPrefixOrSuffixGroupList = ['key:']
         List<TrainSampleJob.TrainSampleKV> sampleToTrainList = []
         11.times {
             sampleToTrainList << new TrainSampleJob.TrainSampleKV("key:$it", null, snowFlake.nextId(), longStringBytes)

@@ -374,7 +374,7 @@ class CompressedValueTest extends Specification {
         def job = new TrainSampleJob((byte) 0)
         job.dictSize = 512
         job.trainSampleMinBodyLength = 1024
-        TrainSampleJob.keyPrefixGroupList = ['key:']
+        TrainSampleJob.keyPrefixOrSuffixGroupList = ['key:']
         List<TrainSampleJob.TrainSampleKV> sampleToTrainList = []
         11.times {
             sampleToTrainList << new TrainSampleJob.TrainSampleKV("key:$it", null, snowFlake.nextId(), rawBytes)

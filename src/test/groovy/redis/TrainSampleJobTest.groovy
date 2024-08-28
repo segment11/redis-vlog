@@ -5,27 +5,39 @@ import spock.lang.Specification
 
 class TrainSampleJobTest extends Specification {
 
-    def 'test key prefix'() {
+    def 'test key prefix or suffix'() {
         given:
         TrainSampleJob.dictKeyPrefixEndIndex = 6
 
         TrainSampleJob.addKeyPrefixGroupIfNotExist 'key:'
         TrainSampleJob.addKeyPrefixGroupIfNotExist 'key2:'
-        TrainSampleJob.keyPrefix('test.xxx.yyy') == 'test.xxx'
-        TrainSampleJob.keyPrefixGroupList = ['key:', 'key2:']
+        TrainSampleJob.keyPrefixOrSuffixGroup('test.xxx.yyy') == 'test.xxx'
+        TrainSampleJob.keyPrefixOrSuffixGroupList = ['key:', 'key2:']
         TrainSampleJob.addKeyPrefixGroupIfNotExist 'key:'
 
         expect:
-        TrainSampleJob.keyPrefix('key:1234567890') == 'key:'
-        TrainSampleJob.keyPrefix('test.xxx.yyy') == 'test.xxx'
-        TrainSampleJob.keyPrefix('test:xxx') == 'test:'
-        TrainSampleJob.keyPrefix('xxxyyyzzz') == 'xxxyyy'
+        TrainSampleJob.keyPrefixOrSuffixGroup('key:1234567890') == 'key:'
+        TrainSampleJob.keyPrefixOrSuffixGroup('test.xxx.yyy') == 'test.xxx'
+        TrainSampleJob.keyPrefixOrSuffixGroup('test:xxx') == 'test:'
+        TrainSampleJob.keyPrefixOrSuffixGroup('xxxyyyzzz') == 'xxxyyy'
+
+        when:
+        TrainSampleJob.keyPrefixOrSuffixGroupList = ['_zzz']
+        then:
+        TrainSampleJob.keyPrefixOrSuffixGroup('xxxyyy_zzz') == '_zzz'
+
+        when:
+        TrainSampleJob.keyPrefixOrSuffixGroupList = []
+        then:
+        TrainSampleJob.keyPrefixOrSuffixGroup('xxxyyyzzz') == 'xxxyyy'
     }
 
     def 'test train'() {
         given:
-        TrainSampleJob.keyPrefixGroupList = []
+        TrainSampleJob.keyPrefixOrSuffixGroupList = []
         TrainSampleJob.setDictKeyPrefixEndIndex(5)
+
+        TrainSampleJob.keyPrefixOrSuffixGroupList
 
         and:
         def job = new TrainSampleJob((byte) 0)
@@ -41,7 +53,7 @@ class TrainSampleJobTest extends Specification {
 
         def snowFlake = new SnowFlake(0, 0)
 
-        TrainSampleJob.keyPrefixGroupList = ['key:']
+        TrainSampleJob.keyPrefixOrSuffixGroupList = ['key:']
         List<TrainSampleJob.TrainSampleKV> sampleToTrainList = []
         11.times {
             sampleToTrainList << new TrainSampleJob.TrainSampleKV("key:$it", null, snowFlake.nextId(), sampleValueBytes)
@@ -85,7 +97,7 @@ class TrainSampleJobTest extends Specification {
         result == null
 
         when:
-        TrainSampleJob.keyPrefixGroupList = ['prefix:']
+        TrainSampleJob.keyPrefixOrSuffixGroupList = ['prefix:']
         sampleToTrainList.clear()
         10.times {
             sampleToTrainList << new TrainSampleJob.TrainSampleKV("key:$it", null, snowFlake.nextId(), sampleValueBytes)

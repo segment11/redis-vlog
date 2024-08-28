@@ -83,7 +83,7 @@ class DynConfigTest extends Specification {
         new DynConfig(slot, tmpFile)
         then:
         MultiWorkerServer.STATIC_GLOBAL_V.socketInspector.maxConnections == 100
-        TrainSampleJob.keyPrefixGroupList == ['key:', 'xxx:']
+        TrainSampleJob.keyPrefixOrSuffixGroupList == ['key:', 'xxx:']
 
         cleanup:
         tmpFile.delete()

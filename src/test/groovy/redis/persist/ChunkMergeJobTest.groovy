@@ -168,7 +168,7 @@ class ChunkMergeJobTest extends Specification {
 
         def dictMap = DictMap.instance
         dictMap.initDictMap(Consts.persistDir)
-        TrainSampleJob.keyPrefixGroupList = ['xh!']
+        TrainSampleJob.keyPrefixOrSuffixGroupList = ['xh!']
         dictMap.putDict('xh!', Dict.SELF_ZSTD_DICT)
 
         int[] nextNSegmentIndex = [0, 1, 2, 3, 4, 5, 6]

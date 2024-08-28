@@ -401,7 +401,7 @@ public class ChunkMergeJob {
 
                         // if there is a new dict, compress use new dict and replace if compressed length is smaller
                         if (cv.isUseDict() && cv.getDictSeqOrSpType() == Dict.SELF_ZSTD_DICT_SEQ) {
-                            var dict = dictMap.getDict(TrainSampleJob.keyPrefix(key));
+                            var dict = dictMap.getDict(TrainSampleJob.keyPrefixOrSuffixGroup(key));
                             if (dict != null) {
                                 var rawBytes = cv.decompress(Dict.SELF_ZSTD_DICT);
                                 var newCompressedCv = CompressedValue.compress(rawBytes, dict, Zstd.defaultCompressionLevel());
