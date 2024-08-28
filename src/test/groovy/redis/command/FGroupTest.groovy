@@ -4,10 +4,10 @@ import io.activej.eventloop.Eventloop
 import io.activej.promise.SettablePromise
 import redis.BaseCommand
 import redis.ConfForGlobal
+import redis.persist.Consts
 import redis.persist.LocalPersist
 import redis.persist.LocalPersistTest
 import redis.repl.Binlog
-import redis.repl.LeaderSelectorTest
 import redis.reply.*
 import spock.lang.Specification
 
@@ -110,7 +110,7 @@ class FGroupTest extends Specification {
 
         when:
         rp2.slaveLastCatchUpBinlogFileIndexAndOffset = new Binlog.FileIndexAndOffset(0, 0L)
-        boolean doThisCase = LeaderSelectorTest.checkZk()
+        boolean doThisCase = Consts.checkConnectAvailable()
         Eventloop eventloop
         if (doThisCase) {
             eventloop = Eventloop.builder()

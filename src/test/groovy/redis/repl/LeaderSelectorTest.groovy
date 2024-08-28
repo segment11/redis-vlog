@@ -1,7 +1,6 @@
 package redis.repl
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.apache.commons.net.telnet.TelnetClient
 import redis.ConfForGlobal
 import redis.ConfForSlot
 import redis.SocketInspector
@@ -15,18 +14,6 @@ import spock.lang.Specification
 import java.util.concurrent.CompletableFuture
 
 class LeaderSelectorTest extends Specification {
-    static boolean checkZk() {
-        def tc = new TelnetClient(connectTimeout: 500)
-        try {
-            tc.connect('localhost', 2181)
-            return true
-        } catch (Exception ignored) {
-            return false
-        } finally {
-            tc.disconnect()
-        }
-    }
-
     def 'test leader latch'() {
         given:
         def leaderSelector = LeaderSelector.instance
@@ -61,7 +48,7 @@ class LeaderSelectorTest extends Specification {
         ConfForGlobal.zookeeperRootPath = '/redis-vlog/cluster-test'
         ConfForGlobal.netListenAddresses = testListenAddress
 
-        boolean doThisCase = checkZk()
+        boolean doThisCase = Consts.checkConnectAvailable()
         if (!doThisCase) {
             ConfForGlobal.zookeeperConnectString = null
             println 'zookeeper not running, skip'
