@@ -172,10 +172,41 @@ class HGroupTest extends Specification {
         reply == NilReply.INSTANCE
     }
 
+    final byte slot = 0
+
+    def 'test prefer use hh'() {
+        given:
+        def data3 = new byte[3][]
+        data3[1] = 'a'.bytes
+        data3[2] = 'field'.bytes
+
+        def hGroup = new HGroup('hdel', data3, null)
+        hGroup.from(BaseCommand.mockAGroup())
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
+        def keyBytes = 'a'.bytes
+        then:
+        !hGroup.isUseHH(keyBytes)
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        then:
+        hGroup.isUseHH(keyBytes)
+
+        when:
+        keyBytes = (new String(RedisHH.PREFER_MEMBER_NOT_TOGETHER_KEY_PREFIX) + 'xxx').bytes
+        then:
+        !hGroup.isUseHH(keyBytes)
+
+        when:
+        keyBytes = '11111111111111'.bytes
+        then:
+        hGroup.isUseHH(keyBytes)
+    }
+
     def 'test hdel'() {
         given:
-        final byte slot = 0
-
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = 'field'.bytes
@@ -283,8 +314,6 @@ class HGroupTest extends Specification {
 
     def 'test hexists'() {
         given:
-        final byte slot = 0
-
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = 'field'.bytes
@@ -352,8 +381,6 @@ class HGroupTest extends Specification {
 
     def 'test hget'() {
         given:
-        final byte slot = 0
-
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
         data3[2] = 'field'.bytes
@@ -454,8 +481,6 @@ class HGroupTest extends Specification {
 
     def 'test hgetall'() {
         given:
-        final byte slot = 0
-
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
 
@@ -554,8 +579,6 @@ class HGroupTest extends Specification {
 
     def 'test hincrby'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = 'field'.bytes
@@ -669,8 +692,6 @@ class HGroupTest extends Specification {
 
     def 'test hkeys'() {
         given:
-        final byte slot = 0
-
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
 
@@ -784,8 +805,6 @@ class HGroupTest extends Specification {
 
     def 'test hmget'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = 'field'.bytes
@@ -869,8 +888,6 @@ class HGroupTest extends Specification {
 
     def 'test hmset'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = 'field'.bytes
@@ -1027,8 +1044,6 @@ class HGroupTest extends Specification {
 
     def 'test hrandfield'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = '1'.bytes
@@ -1231,8 +1246,6 @@ class HGroupTest extends Specification {
 
     def 'test hsetnx'() {
         given:
-        final byte slot = 0
-
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
         data4[2] = 'field'.bytes
@@ -1295,8 +1308,6 @@ class HGroupTest extends Specification {
 
     def 'test hvals'() {
         given:
-        final byte slot = 0
-
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
 

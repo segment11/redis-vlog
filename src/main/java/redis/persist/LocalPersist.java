@@ -83,7 +83,7 @@ public class LocalPersist implements NeedCleanUp {
     public void initSlots(byte netWorkers, short slotNumber, SnowFlake[] snowFlakes, File persistDir, Config persistConfig) throws IOException {
         ConfVolumeDirsForSlot.initFromConfig(persistConfig, slotNumber);
 
-        isHashSaveMemberTogether = persistConfig.get(ofBoolean(), "isHashSaveMemberTogether", false);
+        isHashSaveMemberTogether = persistConfig.get(ofBoolean(), "isHashSaveMemberTogether", true);
 
         this.oneSlots = new OneSlot[slotNumber];
         for (short slot = 0; slot < slotNumber; slot++) {

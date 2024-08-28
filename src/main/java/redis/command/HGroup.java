@@ -3,6 +3,7 @@ package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
@@ -12,6 +13,7 @@ import redis.type.RedisHashKeys;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Random;
 
@@ -144,6 +146,19 @@ public class HGroup extends BaseCommand {
         set(keyBytes, encodedBytes, slotWithKeyHash, spType);
     }
 
+    @VisibleForTesting
+    boolean isUseHH(byte[] keyBytes) {
+        int checkPrefixLength = RedisHH.PREFER_MEMBER_NOT_TOGETHER_KEY_PREFIX.length;
+        if (keyBytes.length > checkPrefixLength) {
+            // check prefix match
+            if (Arrays.equals(keyBytes, 0, checkPrefixLength,
+                    RedisHH.PREFER_MEMBER_NOT_TOGETHER_KEY_PREFIX, 0, checkPrefixLength)) {
+                return false;
+            }
+        }
+        return localPersist.getIsHashSaveMemberTogether();
+    }
+
     Reply hdel() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
@@ -164,7 +179,7 @@ public class HGroup extends BaseCommand {
             fields.add(new String(fieldBytes));
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hdel2(keyBytes, fields);
         }
 
@@ -225,7 +240,7 @@ public class HGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hexists2(keyBytes, fieldBytes);
         }
 
@@ -278,7 +293,7 @@ public class HGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hget2(keyBytes, fieldBytes, onlyReturnLength);
         }
 
@@ -329,7 +344,7 @@ public class HGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hgetall2(keyBytes);
         }
 
@@ -408,7 +423,7 @@ public class HGroup extends BaseCommand {
             }
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hincrby2(keyBytes, fieldBytes, by, byFloat, isFloat);
         }
 
@@ -498,7 +513,7 @@ public class HGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hkeys2(keyBytes, onlyReturnSize);
         }
 
@@ -575,7 +590,7 @@ public class HGroup extends BaseCommand {
             fields.add(new String(fieldBytes));
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hmget2(keyBytes, fields);
         }
 
@@ -629,7 +644,7 @@ public class HGroup extends BaseCommand {
             fieldValues.put(new String(fieldBytes), fieldValueBytes);
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hmset2(keyBytes, fieldValues);
         }
 
@@ -700,7 +715,7 @@ public class HGroup extends BaseCommand {
             }
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hrandfield2(keyBytes, count, withValues);
         }
 
@@ -818,7 +833,7 @@ public class HGroup extends BaseCommand {
             return ErrorReply.VALUE_TOO_LONG;
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hsetnx2(keyBytes, fieldBytes, fieldValueBytes);
         }
 
@@ -877,7 +892,7 @@ public class HGroup extends BaseCommand {
             return ErrorReply.KEY_TOO_LONG;
         }
 
-        if (localPersist.getIsHashSaveMemberTogether()) {
+        if (isUseHH(keyBytes)) {
             return hvals2(keyBytes);
         }
 
