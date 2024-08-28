@@ -96,7 +96,7 @@ class RedisZSetTest extends Specification {
         rz.add(2, 'b')
         rz.add(3, 'c')
         def encoded = rz.encode()
-        encoded[2] = Byte.MAX_VALUE
+        encoded[RedisZSet.HEADER_LENGTH - 4] = Byte.MAX_VALUE
         boolean exception = false
         try {
             RedisZSet.decode(encoded, true)
@@ -131,5 +131,34 @@ class RedisZSetTest extends Specification {
         def rz2 = RedisZSet.decode(encoded, false)
         then:
         rz2.size() == 0
+    }
+
+    def 'test compress'() {
+        given:
+        def rz = new RedisZSet()
+        def longString = 'aaaaabbbbbccccc' * 10
+
+        when:
+        RedisHH.PREFER_COMPRESS_RATIO = 0.9
+        10.times {
+            rz.add(it, longString + it)
+        }
+        def encoded = rz.encode()
+        def rz2 = RedisZSet.decode(encoded)
+        then:
+        rz2.size() == 10
+        rz.set == rz2.set
+
+        when:
+        // compress ratio too big, ignore
+        RedisHH.PREFER_COMPRESS_RATIO = 0.1
+        def rz4 = new RedisZSet()
+        5.times {
+            rz4.add(it, UUID.randomUUID().toString())
+        }
+        def encoded4 = rz4.encode()
+        then:
+        // uuid length is 36
+        encoded4.length == RedisZSet.HEADER_LENGTH + 5 * (2 + 8 + 36)
     }
 }

@@ -79,7 +79,7 @@ class RedisListTest extends Specification {
         rl.addFirst('b'.bytes)
         rl.addFirst('c'.bytes)
         def encoded = rl.encode()
-        encoded[3] = 0
+        encoded[RedisList.HEADER_LENGTH - 4] = 0
         boolean exception = false
         try {
             RedisList.decode(encoded)
@@ -107,5 +107,34 @@ class RedisListTest extends Specification {
         def rl3 = RedisList.decode(encoded2, false)
         then:
         rl3.size() == 1
+    }
+
+    def 'test compress'() {
+        given:
+        def rl = new RedisList()
+        def longStringBytes = ('aaaaabbbbbccccc' * 10).bytes
+
+        when:
+        RedisHH.PREFER_COMPRESS_RATIO = 0.9
+        10.times {
+            rl.addFirst(longStringBytes)
+        }
+        def encoded = rl.encode()
+        def rl2 = RedisList.decode(encoded)
+        then:
+        rl2.size() == 10
+        rl.list == rl2.list
+
+        when:
+        // compress ratio too big, ignore
+        RedisHH.PREFER_COMPRESS_RATIO = 0.1
+        def rl4 = new RedisList()
+        5.times {
+            rl4.addFirst(UUID.randomUUID().toString().bytes)
+        }
+        def encoded4 = rl4.encode()
+        then:
+        // uuid length is 36
+        encoded4.length == RedisList.HEADER_LENGTH + 5 * (2 + 36)
     }
 }

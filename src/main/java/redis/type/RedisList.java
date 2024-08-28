@@ -1,10 +1,14 @@
 package redis.type;
 
+import org.jetbrains.annotations.VisibleForTesting;
+import redis.Dict;
 import redis.KeyHash;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.LinkedList;
+
+import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 public class RedisList {
     // change here to limit list size
@@ -12,8 +16,9 @@ public class RedisList {
     // suppose value length is 32, then 16KB / 32 = 512
     public static final short LIST_MAX_SIZE = 1024;
 
-    // list size short + crc int
-    private static final int HEADER_LENGTH = 2 + 4;
+    @VisibleForTesting
+    // size short + dict seq int + body bytes length int + crc int
+    static final int HEADER_LENGTH = 2 + 4 + 4 + 4;
 
     private final LinkedList<byte[]> list = new LinkedList<>();
 
@@ -65,14 +70,23 @@ public class RedisList {
     }
 
     public byte[] encode() {
-        int len = 0;
+        return encode(null);
+    }
+
+    public byte[] encode(Dict dict) {
+        int bodyBytesLength = 0;
         for (var e : list) {
             // list value length use 2 bytes
-            len += 2 + e.length;
+            bodyBytesLength += 2 + e.length;
         }
 
-        var buffer = ByteBuffer.allocate(len + HEADER_LENGTH);
-        buffer.putShort((short) list.size());
+        short size = (short) list.size();
+
+        var buffer = ByteBuffer.allocate(bodyBytesLength + HEADER_LENGTH);
+        buffer.putShort(size);
+        // tmp no dict seq
+        buffer.putInt(0);
+        buffer.putInt(bodyBytesLength);
         // tmp crc
         buffer.putInt(0);
         for (var e : list) {
@@ -81,13 +95,21 @@ public class RedisList {
         }
 
         // crc
-        if (len > 0) {
+        int crc = 0;
+        if (bodyBytesLength > 0) {
             var hb = buffer.array();
-            int crc = KeyHash.hash32Offset(hb, HEADER_LENGTH, hb.length - HEADER_LENGTH);
-            buffer.putInt(2, crc);
+            crc = KeyHash.hash32Offset(hb, HEADER_LENGTH, hb.length - HEADER_LENGTH);
+            buffer.putInt(HEADER_LENGTH - 4, crc);
         }
 
-        return buffer.array();
+        var rawBytesWithHeader = buffer.array();
+        if (bodyBytesLength > TO_COMPRESS_MIN_DATA_LENGTH) {
+            var compressedBytes = RedisHH.compressIfBytesLengthIsLong(dict, bodyBytesLength, rawBytesWithHeader, size, crc);
+            if (compressedBytes != null) {
+                return compressedBytes;
+            }
+        }
+        return rawBytesWithHeader;
     }
 
     public static int getSizeWithoutDecode(byte[] data) {
@@ -101,12 +123,19 @@ public class RedisList {
 
     public static RedisList decode(byte[] data, boolean doCheckCrc32) {
         var buffer = ByteBuffer.wrap(data);
-        int size = buffer.getShort();
-        int crc = buffer.getInt();
+        var size = buffer.getShort();
+        var dictSeq = buffer.getInt();
+        var bodyBytesLength = buffer.getInt();
+        var crc = buffer.getInt();
+
+        if (dictSeq > 0) {
+            // decompress first
+            buffer = RedisHH.decompressIfUseDict(dictSeq, bodyBytesLength, data);
+        }
 
         // check crc
         if (size > 0 && doCheckCrc32) {
-            int crcCompare = KeyHash.hash32Offset(data, HEADER_LENGTH, data.length - HEADER_LENGTH);
+            int crcCompare = KeyHash.hash32Offset(buffer.array(), buffer.position(), buffer.remaining());
             if (crc != crcCompare) {
                 throw new IllegalStateException("Crc check failed");
             }

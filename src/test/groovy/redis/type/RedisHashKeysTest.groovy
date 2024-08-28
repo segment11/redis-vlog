@@ -68,7 +68,7 @@ class RedisHashKeysTest extends Specification {
         rhk.add('field1')
         rhk.add('field2')
         def encoded = rhk.encode()
-        encoded[3] = 0
+        encoded[RedisHashKeys.HEADER_LENGTH - 4] = 0
         boolean exception = false
         try {
             RedisHashKeys.decode(encoded)
@@ -107,7 +107,7 @@ class RedisHashKeysTest extends Specification {
         rhk.add('field2')
         def encoded = rhk.encode()
         def buffer = ByteBuffer.wrap(encoded)
-        buffer.putShort(6, (short) 0)
+        buffer.putShort(RedisHashKeys.HEADER_LENGTH, (short) 0)
         boolean exception = false
         try {
             RedisHashKeys.decode(encoded, false)
@@ -117,5 +117,34 @@ class RedisHashKeysTest extends Specification {
         }
         then:
         exception
+    }
+
+    def 'test compress'() {
+        given:
+        def rhk = new RedisHashKeys()
+        def longString = 'aaaaabbbbbccccc' * 10
+
+        when:
+        RedisHH.PREFER_COMPRESS_RATIO = 0.9
+        10.times {
+            rhk.add(longString + it)
+        }
+        def encoded = rhk.encode()
+        def rhk2 = RedisHashKeys.decode(encoded)
+        then:
+        rhk2.size() == 10
+        rhk.set == rhk2.set
+
+        when:
+        // compress ratio too big, ignore
+        RedisHH.PREFER_COMPRESS_RATIO = 0.1
+        def rhk4 = new RedisHashKeys()
+        5.times {
+            rhk4.add(UUID.randomUUID().toString())
+        }
+        def encoded4 = rhk4.encode()
+        then:
+        // uuid length is 36
+        encoded4.length == RedisHashKeys.HEADER_LENGTH + 5 * (2 + 36)
     }
 }

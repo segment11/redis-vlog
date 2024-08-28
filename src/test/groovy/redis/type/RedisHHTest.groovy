@@ -189,6 +189,7 @@ class RedisHHTest extends Specification {
         def longStringBytes = ('aaaaabbbbbccccc' * 10).bytes
 
         when:
+        RedisHH.PREFER_COMPRESS_RATIO = 0.9
         10.times {
             rh.put('field' + it, longStringBytes)
         }
@@ -240,6 +241,18 @@ class RedisHHTest extends Specification {
         }
         then:
         exception
+
+        when:
+        // compress ratio too big, ignore
+        RedisHH.PREFER_COMPRESS_RATIO = 0.1
+        def rh4 = new RedisHH()
+        5.times {
+            rh4.put('field' + it, UUID.randomUUID().toString().bytes)
+        }
+        def encoded4 = rh4.encode()
+        then:
+        // uuid length is 36
+        encoded4.length == RedisHH.HEADER_LENGTH + 5 * (2 + 6 + 2 + 36)
 
         cleanup:
         dictMap.cleanUp()
