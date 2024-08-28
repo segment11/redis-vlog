@@ -257,7 +257,7 @@ public class LeaderSelector implements NeedCleanUp {
     public void resetAsMaster(boolean returnExceptionIfAlreadyIsMaster, Consumer<Exception> callback) {
         if (masterAddressLocalMocked != null) {
             callback.accept(null);
-            callback.accept(new RuntimeException("just test callback when reset as master"));
+//            callback.accept(new RuntimeException("just test callback when reset as master"));
             return;
         }
 
@@ -368,7 +368,7 @@ public class LeaderSelector implements NeedCleanUp {
     public void resetAsSlave(boolean returnExceptionIfAlreadyIsSlave, String host, int port, Consumer<Exception> callback) {
         if (masterAddressLocalMocked != null) {
             callback.accept(null);
-            callback.accept(new RuntimeException("just test callback when reset as slave"));
+//            callback.accept(new RuntimeException("just test callback when reset as slave"));
             return;
         }
 

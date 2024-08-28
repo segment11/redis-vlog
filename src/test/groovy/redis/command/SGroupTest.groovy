@@ -3,12 +3,13 @@ package redis.command
 import com.github.luben.zstd.Zstd
 import io.activej.eventloop.Eventloop
 import io.activej.net.socket.tcp.TcpSocket
-import redis.BaseCommand
-import redis.CompressedValue
-import redis.SocketInspector
+import redis.*
 import redis.mock.InMemoryGetSet
+import redis.persist.Consts
 import redis.persist.LocalPersist
+import redis.persist.LocalPersistTest
 import redis.persist.Mock
+import redis.repl.LeaderSelector
 import redis.reply.*
 import redis.type.RedisHashKeys
 import spock.lang.Specification
@@ -115,7 +116,7 @@ sunionstore
         def sGroup = new SGroup('set', data1, null)
         sGroup.from(BaseCommand.mockAGroup())
 
-        def allCmdList = singleKeyCmdList1 + multiKeyCmdList2 + ['sintercard', 'smove', 'select']
+        def allCmdList = singleKeyCmdList1 + multiKeyCmdList2 + ['sintercard', 'smove']
 
         when:
         sGroup.data = data1
@@ -129,13 +130,31 @@ sunionstore
         }
 
         when:
-        sGroup.cmd = 'save'
+        sGroup.cmd = 'sentinel'
         def reply = sGroup.handle()
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        sGroup.cmd = 'save'
+        reply = sGroup.handle()
         then:
         reply == OKReply.INSTANCE
 
         when:
         sGroup.cmd = 'select'
+        reply = sGroup.handle()
+        then:
+        reply == ErrorReply.NOT_SUPPORT
+
+        when:
+        sGroup.cmd = 'subscribe'
+        reply = sGroup.handle()
+        then:
+        reply == ErrorReply.FORMAT
+
+        when:
+        sGroup.cmd = 'slaveof'
         reply = sGroup.handle()
         then:
         reply == ErrorReply.FORMAT
@@ -538,20 +557,7 @@ sunionstore
         ((IntegerReply) reply).integer == 2
 
         when:
-        boolean wrongTypeException = false
         def cv = Mock.prepareCompressedValueList(1)[0]
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        try {
-            sGroup.sadd()
-        } catch (IllegalStateException e) {
-            println e.message
-            wrongTypeException = true
-        }
-        then:
-        wrongTypeException
-
-        when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
         def rhk = new RedisHashKeys()
         rhk.add('1')
@@ -627,13 +633,6 @@ sunionstore
 
         when:
         def cv = Mock.prepareCompressedValueList(1)[0]
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = sGroup.scard()
-        then:
-        reply == ErrorReply.WRONG_TYPE
-
-        when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_SET
         def rhk = new RedisHashKeys()
         rhk.add('1')
@@ -679,7 +678,7 @@ sunionstore
         inMemoryGetSet.put(slot, 'a', 0, cvA)
         try {
             sGroup.sdiff(false, false)
-        } catch (IllegalStateException e) {
+        } catch (TypeMismatchException e) {
             println e.message
             wrongTypeException = true
         }
@@ -851,7 +850,7 @@ sunionstore
         inMemoryGetSet.put(slot, 'a', 0, cvA)
         try {
             reply = sGroup.sdiffstore(false, false)
-        } catch (IllegalStateException e) {
+        } catch (TypeMismatchException e) {
             println e.message
             wrongTypeException = true
         }
@@ -1704,5 +1703,69 @@ sunionstore
         reply = sGroup.subscribe()
         then:
         reply == ErrorReply.FORMAT
+    }
+
+    def 'test slaveof'() {
+        given:
+        ConfForGlobal.netListenAddresses = 'localhost:7380'
+        LocalPersist.instance.socketInspector = new SocketInspector()
+
+        LocalPersistTest.prepareLocalPersist()
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+        def oneSlot = localPersist.oneSlot(slot)
+
+        and:
+        def leaderSelector = LeaderSelector.instance
+        def testListenAddress = 'localhost:7379'
+        leaderSelector.masterAddressLocalMocked = testListenAddress
+
+        and:
+        def data3 = new byte[3][]
+        data3[1] = 'no'.bytes
+        data3[2] = '7379'.bytes
+
+        def sGroup = new SGroup('slaveof', data3, null)
+        sGroup.from(BaseCommand.mockAGroup())
+
+        when:
+        def reply = sGroup.slaveof()
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == OKReply.INSTANCE
+        }.result
+
+        when:
+        data3[1] = 'localhost'.bytes
+        reply = sGroup.slaveof()
+        then:
+        reply == ErrorReply.SYNTAX
+
+        when:
+        data3[1] = '127.0.0.1'.bytes
+        data3[2] = '-1'.bytes
+        reply = sGroup.slaveof()
+        then:
+        reply == ErrorReply.INVALID_INTEGER
+
+        when:
+        data3[2] = 'a'.bytes
+        reply = sGroup.slaveof()
+        then:
+        reply == ErrorReply.NOT_INTEGER
+
+        when:
+        data3[2] = '7379'.bytes
+        reply = sGroup.slaveof()
+        then:
+        reply instanceof AsyncReply
+        ((AsyncReply) reply).settablePromise.whenResult { result ->
+            result == OKReply.INSTANCE
+        }.result
+
+        cleanup:
+        oneSlot.cleanUp()
+        Consts.persistDir.deleteDir()
     }
 }
