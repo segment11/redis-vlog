@@ -25,6 +25,7 @@ import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.reactor.nio.NioReactor;
 import io.activej.service.ServiceGraphModule;
+import io.activej.service.adapter.ServiceAdapters;
 import io.activej.worker.WorkerPool;
 import io.activej.worker.WorkerPoolModule;
 import io.activej.worker.WorkerPools;
@@ -34,6 +35,8 @@ import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.hotspot.BufferPoolsExports;
 import io.prometheus.client.hotspot.GarbageCollectorExports;
 import io.prometheus.client.hotspot.MemoryPoolsExports;
+import net.openhft.affinity.AffinityStrategies;
+import net.openhft.affinity.AffinityThreadFactory;
 import org.apache.commons.net.telnet.TelnetClient;
 import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
@@ -396,8 +399,12 @@ public class MultiWorkerServer extends Launcher {
 
     @Override
     protected final Module getModule() {
+        var affinityThreadFactory = new AffinityThreadFactory("net-worker",
+                AffinityStrategies.SAME_SOCKET, AffinityStrategies.DIFFERENT_CORE);
         return combine(
-                ServiceGraphModule.create(),
+                ServiceGraphModule.builder()
+                        .with(Eventloop.class, ServiceAdapters.forEventloop(affinityThreadFactory))
+                        .build(),
                 WorkerPoolModule.create(),
                 ConfigModule.builder()
                         .withEffectiveConfigLogger()
