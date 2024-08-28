@@ -44,7 +44,7 @@ public class DictMap implements NeedCleanUp {
 
     @SlaveNeedReplay
     @SlaveReplay
-    public synchronized Dict putDict(String keyPrefix, Dict dict) {
+    public synchronized Dict putDict(String keyPrefixOrSuffix, Dict dict) {
         // check dict seq is already in cache
         var existDict = cacheDictBySeq.get(dict.seq);
         if (existDict != null) {
@@ -59,7 +59,7 @@ public class DictMap implements NeedCleanUp {
 
         synchronized (fos) {
             try {
-                fos.write(dict.encode(keyPrefix));
+                fos.write(dict.encode(keyPrefixOrSuffix));
             } catch (IOException e) {
                 throw new RuntimeException("Write dict to file error", e);
             }
@@ -67,16 +67,16 @@ public class DictMap implements NeedCleanUp {
 
         if (binlog != null) {
             try {
-                binlog.append(new XDict(keyPrefix, dict));
+                binlog.append(new XDict(keyPrefixOrSuffix, dict));
             } catch (IOException e) {
-                throw new RuntimeException("Append binlog error, dict key prefix: " + keyPrefix, e);
+                throw new RuntimeException("Append binlog error, dict key prefix: " + keyPrefixOrSuffix, e);
             }
         }
 
-        TrainSampleJob.addKeyPrefixGroupIfNotExist(keyPrefix);
+        TrainSampleJob.addKeyPrefixGroupIfNotExist(keyPrefixOrSuffix);
 
         cacheDictBySeq.put(dict.seq, dict);
-        return cacheDict.put(keyPrefix, dict);
+        return cacheDict.put(keyPrefixOrSuffix, dict);
     }
 
     public HashMap<String, Dict> getCacheDictCopy() {
@@ -153,7 +153,7 @@ public class DictMap implements NeedCleanUp {
                 }
 
                 var dict = dictWithKey.dict();
-                cacheDict.put(dictWithKey.keyPrefix(), dict);
+                cacheDict.put(dictWithKey.keyPrefixOrSuffix(), dict);
                 cacheDictBySeq.put(dict.seq, dict);
 
                 loadedSeqList.add(dict.seq);

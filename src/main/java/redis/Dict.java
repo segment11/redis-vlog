@@ -159,17 +159,17 @@ public class Dict implements Serializable {
         return bytes;
     }
 
-    public record DictWithKeyPrefix(String keyPrefix, Dict dict) {
+    public record DictWithKeyPrefixOrSuffix(String keyPrefixOrSuffix, Dict dict) {
         @Override
         public String toString() {
-            return "DictWithKey{" +
-                    "keyPrefix='" + keyPrefix + '\'' +
+            return "DictWithKeyPrefixOrSuffix{" +
+                    "keyPrefixOrSuffix='" + keyPrefixOrSuffix + '\'' +
                     ", dict=" + dict +
                     '}';
         }
     }
 
-    public static DictWithKeyPrefix decode(DataInputStream is) throws IOException {
+    public static DictWithKeyPrefixOrSuffix decode(DataInputStream is) throws IOException {
         if (is.available() < 4) {
             return null;
         }
@@ -181,18 +181,18 @@ public class Dict implements Serializable {
 
         var seq = is.readInt();
         var createdTime = is.readLong();
-        var keyPrefixLength = is.readShort();
-        if (keyPrefixLength > CompressedValue.KEY_MAX_LENGTH || keyPrefixLength <= 0) {
-            throw new IllegalStateException("Key prefix length error, key length: " + keyPrefixLength);
+        var keyPrefixOrSuffixLength = is.readShort();
+        if (keyPrefixOrSuffixLength > CompressedValue.KEY_MAX_LENGTH || keyPrefixOrSuffixLength <= 0) {
+            throw new IllegalStateException("Key prefix or suffix length error, key prefix or suffix length: " + keyPrefixOrSuffixLength);
         }
 
-        var keyPrefixBytes = new byte[keyPrefixLength];
-        is.readFully(keyPrefixBytes);
+        var keyPrefixOrSuffixBytes = new byte[keyPrefixOrSuffixLength];
+        is.readFully(keyPrefixOrSuffixBytes);
         var dictBytesLength = is.readShort();
         var dictBytes = new byte[dictBytesLength];
         is.readFully(dictBytes);
 
-        if (vLength != ENCODED_HEADER_LENGTH + keyPrefixLength + dictBytesLength) {
+        if (vLength != ENCODED_HEADER_LENGTH + keyPrefixOrSuffixLength + dictBytesLength) {
             throw new IllegalStateException("Invalid length: " + vLength);
         }
 
@@ -201,7 +201,7 @@ public class Dict implements Serializable {
         dict.createdTime = createdTime;
         dict.dictBytes = dictBytes;
 
-        return new DictWithKeyPrefix(new String(keyPrefixBytes), dict);
+        return new DictWithKeyPrefixOrSuffix(new String(keyPrefixOrSuffixBytes), dict);
     }
 
     public Dict() {

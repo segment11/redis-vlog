@@ -11,20 +11,20 @@ import redis.repl.ReplPair;
 import java.nio.ByteBuffer;
 
 public class XDict implements BinlogContent {
-    private final String keyPrefix;
+    private final String keyPrefixOrSuffix;
 
     private final Dict dict;
 
-    public String getKeyPrefix() {
-        return keyPrefix;
+    public String getKeyPrefixOrSuffix() {
+        return keyPrefixOrSuffix;
     }
 
     public Dict getDict() {
         return dict;
     }
 
-    public XDict(String keyPrefix, Dict dict) {
-        this.keyPrefix = keyPrefix;
+    public XDict(String keyPrefixOrSuffix, Dict dict) {
+        this.keyPrefixOrSuffix = keyPrefixOrSuffix;
         this.dict = dict;
     }
 
@@ -40,7 +40,7 @@ public class XDict implements BinlogContent {
         // 1 byte for type, 4 bytes for encoded length for check
         // 4 bytes for seq, 8 bytes for created time
         // 2 bytes for key prefix length, key prefix, 2 bytes for dict bytes length, dict bytes
-        return 1 + 4 + 4 + 8 + 2 + keyPrefix.length() + 2 + dict.getDictBytes().length;
+        return 1 + 4 + 4 + 8 + 2 + keyPrefixOrSuffix.length() + 2 + dict.getDictBytes().length;
     }
 
     @Override
@@ -52,8 +52,8 @@ public class XDict implements BinlogContent {
         buffer.putInt(bytes.length);
         buffer.putInt(dict.getSeq());
         buffer.putLong(dict.getCreatedTime());
-        buffer.putShort((short) keyPrefix.length());
-        buffer.put(keyPrefix.getBytes());
+        buffer.putShort((short) keyPrefixOrSuffix.length());
+        buffer.put(keyPrefixOrSuffix.getBytes());
         buffer.putShort((short) dict.getDictBytes().length);
         buffer.put(dict.getDictBytes());
 
@@ -94,11 +94,11 @@ public class XDict implements BinlogContent {
 
     @Override
     public void apply(byte slot, ReplPair replPair) {
-        log.warn("Repl slave get dict, key prefix: {}, seq: {}", keyPrefix, dict.getSeq());
+        log.warn("Repl slave get dict, key prefix or suffix: {}, seq: {}", keyPrefixOrSuffix, dict.getSeq());
         // ignore slot, need sync
         var dictMap = DictMap.getInstance();
         synchronized (dictMap) {
-            dictMap.putDict(keyPrefix, dict);
+            dictMap.putDict(keyPrefixOrSuffix, dict);
         }
     }
 }

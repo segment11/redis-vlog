@@ -755,11 +755,11 @@ public abstract class BaseCommand {
                 var keyPrefix = entry.getKey();
                 var dict = entry.getValue();
                 dictMap.putDict(keyPrefix, dict);
-//                var oldDict = dictMap.putDict(keyPrefix, dict);
+//                var oldDict = dictMap.putDict(keyPrefixOrSuffix, dict);
 //                if (oldDict != null) {
 //                    // keep old dict in persist, because may be used by other worker
 //                    // when start server, early dict will be overwritten by new dict with same key prefix, need not persist again?
-//                    dictMap.putDict(keyPrefix + "_" + new Random().nextInt(10000), oldDict);
+//                    dictMap.putDict(keyPrefixOrSuffix + "_" + new Random().nextInt(10000), oldDict);
 //                }
             }
         }

@@ -959,16 +959,20 @@ public class XGroup extends BaseCommand {
                 buffer.get(encodeBytes);
 
                 var is = new DataInputStream(new ByteArrayInputStream(encodeBytes));
-                var dictWithKeyPrefix = Dict.decode(is);
+                var dictWithKeyPrefixOrSuffix = Dict.decode(is);
 
-                var dict = dictWithKeyPrefix.dict();
-                var keyPrefix = dictWithKeyPrefix.keyPrefix();
-                if (keyPrefix.equals(Dict.GLOBAL_ZSTD_DICT_KEY)) {
+                if (dictWithKeyPrefixOrSuffix == null) {
+                    throw new IllegalArgumentException("Repl slave decode dict error, slot: " + slot);
+                }
+
+                var dict = dictWithKeyPrefixOrSuffix.dict();
+                var keyPrefixOrSuffix = dictWithKeyPrefixOrSuffix.keyPrefixOrSuffix();
+                if (keyPrefixOrSuffix.equals(Dict.GLOBAL_ZSTD_DICT_KEY)) {
                     dictMap.updateGlobalDictBytes(dict.getDictBytes());
                 } else {
-                    dictMap.putDict(keyPrefix, dict);
+                    dictMap.putDict(keyPrefixOrSuffix, dict);
                 }
-                log.warn("Repl slave save master exists dict: dict with key={}", dictWithKeyPrefix);
+                log.warn("Repl slave save master exists dict: dict with key={}", dictWithKeyPrefixOrSuffix);
             }
         } catch (IOException e) {
             throw new RuntimeException(e);

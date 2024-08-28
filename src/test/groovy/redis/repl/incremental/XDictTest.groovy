@@ -30,7 +30,7 @@ class XDictTest extends Specification {
         def xDict2 = XDict.decodeFrom(buffer)
         then:
         xDict2.encodedLength() == encoded.length
-        xDict2.keyPrefix == xDict.keyPrefix
+        xDict2.keyPrefixOrSuffix == xDict.keyPrefixOrSuffix
         xDict2.dict.dictBytes == dict.dictBytes
 
         when:

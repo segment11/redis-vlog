@@ -1,6 +1,5 @@
 package redis
 
-import redis.persist.Consts
 import spock.lang.Specification
 
 import java.nio.ByteBuffer
@@ -122,13 +121,13 @@ class DictTest extends Specification {
 
         def encoded = dict.encode(keyPrefix)
 
-        def dictWithKeyPrefix = Dict.decode(new DataInputStream(new ByteArrayInputStream(encoded)))
-        println dictWithKeyPrefix.toString()
-        def dict2 = dictWithKeyPrefix.dict()
+        def dictWithKeyPrefixOrSuffix = Dict.decode(new DataInputStream(new ByteArrayInputStream(encoded)))
+        println dictWithKeyPrefixOrSuffix.toString()
+        def dict2 = dictWithKeyPrefixOrSuffix.dict()
 
         expect:
         dict.encodeLength(keyPrefix) == encoded.length
-        dictWithKeyPrefix.keyPrefix() == keyPrefix
+        dictWithKeyPrefixOrSuffix.keyPrefixOrSuffix() == keyPrefix
         dict == dict2
         dict2.dictBytes == dict.dictBytes
 
