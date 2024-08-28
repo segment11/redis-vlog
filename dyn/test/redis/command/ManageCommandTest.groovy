@@ -317,6 +317,53 @@ class ManageCommandTest extends Specification {
         reply instanceof ErrorReply
 
         when:
+        def data16 = new byte[16][]
+        data16[1] = 'dict'.bytes
+        data16[2] = 'train-new-dict-by-keys-in-redis'.bytes
+        manage.data = data16
+        reply = manage.dict()
+        then:
+        reply instanceof ErrorReply
+
+        when:
+        boolean doThisCase = Consts.checkConnectAvailable('localhost', 6379)
+        def data17 = new byte[17][]
+        data17[1] = 'dict'.bytes
+        data17[2] = 'train-new-dict-by-keys-in-redis'.bytes
+        data17[3] = 'xxx:'.bytes
+        data17[4] = '127.0.0.1'.bytes
+        data17[5] = '6379'.bytes
+        data17[6] = 'a'.bytes
+        data17[7] = 'b'.bytes
+        data17[8] = 'c'.bytes
+        data17[9] = 'd'.bytes
+        data17[10] = 'e'.bytes
+        data17[11] = 'a'.bytes
+        data17[12] = 'a'.bytes
+        data17[13] = 'a'.bytes
+        data17[14] = 'a'.bytes
+        data17[15] = 'a'.bytes
+        data17[16] = 'a'.bytes
+        manage.data = data17
+        reply = doThisCase ? manage.dict() : new BulkReply('skip'.bytes)
+        then:
+        reply instanceof BulkReply
+
+        when:
+        data17[5] = 'a'.bytes
+        reply = manage.dict()
+        then:
+        reply == ErrorReply.INVALID_INTEGER
+
+        when:
+        data17[5] = '6379'.bytes
+        data17[16] = 'xxx'.bytes
+        reply = doThisCase ? manage.dict() : ErrorReply.SYNTAX
+        then:
+        // xxx not exists
+        reply instanceof ErrorReply
+
+        when:
         data3[2] = 'output-dict-bytes'.bytes
         manage.data = data3
         reply = manage.dict()

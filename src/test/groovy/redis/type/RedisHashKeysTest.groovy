@@ -52,6 +52,7 @@ class RedisHashKeysTest extends Specification {
         rhk.add('field1')
         rhk.add('field2')
         def encoded = rhk.encode()
+        encoded = rhk.encodeButDoNotCompress()
         def rhk2 = RedisHashKeys.decode(encoded)
         then:
         rhk2.contains('field1')

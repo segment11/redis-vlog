@@ -38,6 +38,7 @@ class RedisHHTest extends Specification {
         rh.put('name', 'zhangsan'.bytes)
         rh.put('age', '20'.bytes)
         def encoded = rh.encode()
+        encoded = rh.encodeButDoNotCompress()
         def rh2 = RedisHH.decode(encoded)
         then:
         rh2.get('name') == 'zhangsan'.bytes

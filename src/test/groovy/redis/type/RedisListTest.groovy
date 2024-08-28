@@ -61,6 +61,7 @@ class RedisListTest extends Specification {
         rl.addFirst('b'.bytes)
         rl.addFirst('c'.bytes)
         def encoded = rl.encode()
+        encoded = rl.encodeButDoNotCompress()
         def rl2 = RedisList.decode(encoded)
         then:
         rl2.size() == 3

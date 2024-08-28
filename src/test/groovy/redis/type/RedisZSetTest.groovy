@@ -73,6 +73,7 @@ class RedisZSetTest extends Specification {
         rz.add(2, 'b')
         rz.add(3, 'c')
         def encoded = rz.encode()
+        encoded = rz.encodeButDoNotCompress()
         def rz2 = RedisZSet.decode(encoded, false)
         def rz3 = RedisZSet.decode(encoded)
         then:

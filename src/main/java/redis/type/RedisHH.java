@@ -50,8 +50,12 @@ public class RedisHH {
         return map.get(key);
     }
 
-    public byte[] encode() {
+    public byte[] encodeButDoNotCompress() {
         return encode(null);
+    }
+
+    public byte[] encode() {
+        return encode(Dict.SELF_ZSTD_DICT);
     }
 
     public byte[] encode(Dict dict) {
@@ -90,7 +94,7 @@ public class RedisHH {
         }
 
         var rawBytesWithHeader = buffer.array();
-        if (bodyBytesLength > TO_COMPRESS_MIN_DATA_LENGTH) {
+        if (bodyBytesLength > TO_COMPRESS_MIN_DATA_LENGTH && dict != null) {
             var compressedBytes = compressIfBytesLengthIsLong(dict, bodyBytesLength, rawBytesWithHeader, size, crc);
             if (compressedBytes != null) {
                 return compressedBytes;
@@ -103,11 +107,11 @@ public class RedisHH {
     static double PREFER_COMPRESS_RATIO = 0.9;
 
     static byte[] compressIfBytesLengthIsLong(Dict dict, int bodyBytesLength, byte[] rawBytesWithHeader, short size, int crc) {
-        var dictSeq = dict == null ? Dict.SELF_ZSTD_DICT_SEQ : dict.getSeq();
+        var dictSeq = dict.getSeq();
 
         var dst = new byte[((int) Zstd.compressBound(bodyBytesLength))];
         int compressedSize;
-        if (dict == null) {
+        if (dict == Dict.SELF_ZSTD_DICT) {
             compressedSize = (int) Zstd.compressByteArray(dst, 0, dst.length, rawBytesWithHeader, HEADER_LENGTH, bodyBytesLength, Zstd.defaultCompressionLevel());
         } else {
             compressedSize = (int) Zstd.compressUsingDict(dst, 0, rawBytesWithHeader, HEADER_LENGTH, bodyBytesLength, dict.getDictBytes(), Zstd.defaultCompressionLevel());

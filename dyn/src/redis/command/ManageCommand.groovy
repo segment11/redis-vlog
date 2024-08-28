@@ -6,12 +6,18 @@ import io.activej.promise.Promise
 import io.activej.promise.Promises
 import io.activej.promise.SettablePromise
 import org.apache.commons.io.FileUtils
+import org.slf4j.LoggerFactory
 import redis.BaseCommand
 import redis.ConfForSlot
 import redis.Debug
 import redis.TrainSampleJob
 import redis.persist.Chunk
+import redis.repl.support.JedisPoolHolder
 import redis.reply.*
+import redis.type.RedisHH
+import redis.type.RedisHashKeys
+import redis.type.RedisList
+import redis.type.RedisZSet
 
 import static redis.TrainSampleJob.MIN_TRAIN_SAMPLE_SIZE
 
@@ -244,6 +250,38 @@ class ManageCommand extends BaseCommand {
         return ErrorReply.SYNTAX
     }
 
+    private Reply trainSampleListAndReturnRatio(String keyPrefixOrSuffixGiven, List<TrainSampleJob.TrainSampleKV> sampleToTrainList) {
+        def trainSampleJob = new TrainSampleJob(workerId)
+        trainSampleJob.resetSampleToTrainList(sampleToTrainList)
+        def trainSampleResult = trainSampleJob.train()
+
+        // only one key prefix given, only one dict after train
+        def trainSampleCacheDict = trainSampleResult.cacheDict()
+        def onlyOneDict = trainSampleCacheDict.get(keyPrefixOrSuffixGiven)
+        log.warn 'Train new dict result, sample value count: {}, dict count: {}', data.length - 4, trainSampleCacheDict.size()
+        // will overwrite same key prefix dict exists
+        dictMap.putDict(keyPrefixOrSuffixGiven, onlyOneDict)
+
+//            def oldDict = dictMap.putDict(keyPrefixOrSuffixGiven, onlyOneDict)
+//            if (oldDict != null) {
+//                // keep old dict in persist, because may be used by other worker
+//                // when start server, early dict will be overwritten by new dict with same key prefix, need not persist again?
+//                dictMap.putDict(keyPrefixOrSuffixGiven + '_' + new Random().nextInt(10000), oldDict)
+//            }
+
+        // show compress ratio use dict just trained
+        long totalBytes = 0
+        long totalCompressedBytes = 0
+        for (sample in sampleToTrainList) {
+            totalBytes += sample.valueBytes().length
+            def compressedBytes = Zstd.compressUsingDict(sample.valueBytes(), onlyOneDict.dictBytes, Zstd.defaultCompressionLevel())
+            totalCompressedBytes += compressedBytes.length
+        }
+
+        def ratio = totalCompressedBytes / totalBytes
+        return new BulkReply(ratio.toString().bytes)
+    }
+
     Reply dict() {
         if (data.length < 3) {
             return ErrorReply.FORMAT
@@ -286,7 +324,7 @@ class ManageCommand extends BaseCommand {
         }
 
         if (subSubCmd == 'train-new-dict') {
-            // manage dict train-new-dict keyPrefix sampleValue1 sampleValue2 ...
+            // manage dict train-new-dict keyPrefixOrSuffix sampleValue1 sampleValue2 ...
             if (data.length <= 4 + MIN_TRAIN_SAMPLE_SIZE) {
                 return new ErrorReply('Train sample value count too small')
             }
@@ -298,35 +336,101 @@ class ManageCommand extends BaseCommand {
                 sampleToTrainList << new TrainSampleJob.TrainSampleKV(null, keyPrefixOrSuffixGiven, 0L, data[i])
             }
 
-            def trainSampleJob = new TrainSampleJob(workerId)
-            trainSampleJob.resetSampleToTrainList(sampleToTrainList)
-            def trainSampleResult = trainSampleJob.train()
+            return trainSampleListAndReturnRatio(keyPrefixOrSuffixGiven, sampleToTrainList)
+        }
 
-            // only one key prefix given, only one dict after train
-            def trainSampleCacheDict = trainSampleResult.cacheDict()
-            def onlyOneDict = trainSampleCacheDict.get(keyPrefixOrSuffixGiven)
-            log.warn 'Train new dict result, sample value count: {}, dict count: {}', data.length - 4, trainSampleCacheDict.size()
-            // will overwrite same key prefix dict exists
-            dictMap.putDict(keyPrefixOrSuffixGiven, onlyOneDict)
-
-//            def oldDict = dictMap.putDict(keyPrefixOrSuffixGiven, onlyOneDict)
-//            if (oldDict != null) {
-//                // keep old dict in persist, because may be used by other worker
-//                // when start server, early dict will be overwritten by new dict with same key prefix, need not persist again?
-//                dictMap.putDict(keyPrefixOrSuffixGiven + '_' + new Random().nextInt(10000), oldDict)
-//            }
-
-            // show compress ratio use dict just trained
-            long totalBytes = 0
-            long totalCompressedBytes = 0
-            for (sample in sampleToTrainList) {
-                totalBytes += sample.valueBytes().length
-                def compressedBytes = Zstd.compressUsingDict(sample.valueBytes(), onlyOneDict.dictBytes, Zstd.defaultCompressionLevel())
-                totalCompressedBytes += compressedBytes.length
+        if (subSubCmd == 'train-new-dict-by-keys-in-redis') {
+            // manage dict train-new-dict-by-keys-in-redis keyPrefixOrSuffix host port sampleKey1 sampleKey2
+            if (data.length <= 6 + MIN_TRAIN_SAMPLE_SIZE) {
+                return new ErrorReply('Train sample value count too small')
             }
 
-            def ratio = totalCompressedBytes / totalBytes
-            return new BulkReply(ratio.toString().bytes)
+            def keyPrefixOrSuffixGiven = new String(data[3])
+            def host = new String(data[4])
+            def portBytes = data[5]
+
+            int port
+            try {
+                port = Integer.parseInt(new String(portBytes))
+            } catch (NumberFormatException e) {
+                return ErrorReply.INVALID_INTEGER
+            }
+
+            def log = LoggerFactory.getLogger(ManageCommand.class)
+            byte[][] valueBytesArray = new byte[data.length - 6][]
+            try {
+                def jedisPool = JedisPoolHolder.instance.create(host, port)
+                // may be null
+                JedisPoolHolder.exe(jedisPool, jedis -> {
+                    def pong = jedis.ping()
+                    log.info("Manage train dict, remove redis server: {}:{} pong: {}", host, port, pong);
+                })
+
+                /*
+                set a aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
+                hset b f1 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
+                hset b f2 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
+                hset b f3 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
+                lpush c aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
+                lpush c aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
+                lpush c aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
+                sadd d aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd0 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd1 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd2
+                zadd e 1 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd0 2 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd1 3 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd2
+                 */
+                JedisPoolHolder.exe(jedisPool, jedis -> {
+                    for (i in 6..<data.length) {
+                        def key = new String(data[i])
+                        def isExists = jedis.exists(key)
+                        if (isExists) {
+                            def type = jedis.type(key)
+                            if (type == 'string') {
+                                valueBytesArray[i - 6] = jedis.get(key)?.bytes
+                            } else if (type == 'list') {
+                                def list = jedis.lrange(key, 0, -1)
+                                def rl = new RedisList()
+                                for (one in list) {
+                                    rl.addLast(one.bytes)
+                                }
+                                valueBytesArray[i - 6] = rl.encodeButDoNotCompress()
+                            } else if (type == 'hash') {
+                                def hash = jedis.hgetAll(key)
+                                def rhh = new RedisHH()
+                                hash.each { k, v ->
+                                    rhh.put(k, v.bytes)
+                                }
+                                valueBytesArray[i - 6] = rhh.encodeButDoNotCompress()
+                            } else if (type == 'set') {
+                                def set = jedis.smembers(key)
+                                def rhk = new RedisHashKeys()
+                                for (one in set) {
+                                    rhk.add(one)
+                                }
+                                valueBytesArray[i - 6] = rhk.encodeButDoNotCompress()
+                            } else if (type == 'zset') {
+                                def zset = jedis.zrandmemberWithScores(key, 1000)
+                                def rz = new RedisZSet()
+                                for (one in zset) {
+                                    rz.add(one.score, new String(one.element))
+                                }
+                                valueBytesArray[i - 6] = rz.encodeButDoNotCompress()
+                            }
+                        }
+                    }
+                    null
+                })
+            } catch (Exception e) {
+                return new ErrorReply(e.message)
+            }
+
+            List<TrainSampleJob.TrainSampleKV> sampleToTrainList = []
+            for (i in 0..<valueBytesArray.length) {
+                if (valueBytesArray[i] == null) {
+                    return new ErrorReply('Key not exists or type not support: ' + new String(data[i + 6]))
+                }
+                sampleToTrainList << new TrainSampleJob.TrainSampleKV(null, keyPrefixOrSuffixGiven, 0L, valueBytesArray[i])
+            }
+
+            return trainSampleListAndReturnRatio(keyPrefixOrSuffixGiven, sampleToTrainList)
         }
 
         if (subSubCmd == 'output-dict-bytes') {

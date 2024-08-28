@@ -216,8 +216,12 @@ public class RedisZSet {
         }
     }
 
-    public byte[] encode() {
+    public byte[] encodeButDoNotCompress() {
         return encode(null);
+    }
+
+    public byte[] encode() {
+        return encode(Dict.SELF_ZSTD_DICT);
     }
 
     public byte[] encode(Dict dict) {
@@ -251,7 +255,7 @@ public class RedisZSet {
         }
 
         var rawBytesWithHeader = buffer.array();
-        if (bodyBytesLength > TO_COMPRESS_MIN_DATA_LENGTH) {
+        if (bodyBytesLength > TO_COMPRESS_MIN_DATA_LENGTH && dict != null) {
             var compressedBytes = RedisHH.compressIfBytesLengthIsLong(dict, bodyBytesLength, rawBytesWithHeader, size, crc);
             if (compressedBytes != null) {
                 return compressedBytes;
