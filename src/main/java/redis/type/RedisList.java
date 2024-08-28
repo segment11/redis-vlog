@@ -90,6 +90,11 @@ public class RedisList {
         return buffer.array();
     }
 
+    public static int getSizeWithoutDecode(byte[] data) {
+        var buffer = ByteBuffer.wrap(data);
+        return buffer.getShort();
+    }
+
     public static RedisList decode(byte[] data) {
         return decode(data, true);
     }

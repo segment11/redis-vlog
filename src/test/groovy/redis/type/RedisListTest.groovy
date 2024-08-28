@@ -64,6 +64,7 @@ class RedisListTest extends Specification {
         def rl2 = RedisList.decode(encoded)
         then:
         rl2.size() == 3
+        RedisList.getSizeWithoutDecode(encoded) == 3
         rl2.get(0) == 'c'.bytes
         rl2.get(1) == 'b'.bytes
         rl2.get(2) == 'a'.bytes

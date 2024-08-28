@@ -214,13 +214,6 @@ class LGroupTest extends Specification {
         reply == NilReply.INSTANCE
 
         when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.lindex()
-        then:
-        reply == ErrorReply.WRONG_TYPE
-
-        when:
         data3[2] = RedisList.LIST_MAX_SIZE.toString().bytes
         reply = lGroup.lindex()
         then:
@@ -293,13 +286,6 @@ class LGroupTest extends Specification {
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 0
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.linsert()
-        then:
-        reply == ErrorReply.WRONG_TYPE
 
         when:
         data5[2] = 'xxx'.bytes
@@ -375,13 +361,6 @@ class LGroupTest extends Specification {
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 100
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.llen()
-        then:
-        reply == ErrorReply.WRONG_TYPE
 
         when:
         data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -464,22 +443,6 @@ class LGroupTest extends Specification {
         ((BulkReply) reply).raw == 'a'.bytes
 
         when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.lmove()
-        then:
-        reply == ErrorReply.WRONG_TYPE
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_LIST
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        cv1.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'b', 0, cv1)
-        reply = lGroup.lmove()
-        then:
-        reply == ErrorReply.WRONG_TYPE
-
-        when:
         data5[3] = 'xxx'.bytes
         reply = lGroup.lmove()
         then:
@@ -560,13 +523,6 @@ class LGroupTest extends Specification {
         ((MultiBulkReply) reply).replies.length == 2
         ((MultiBulkReply) reply).replies[0] instanceof BulkReply
         ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == ('aaaaabbbbbccccc' * 5).bytes
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.lpop(true)
-        then:
-        reply == ErrorReply.WRONG_TYPE
 
         when:
         data3[2] = '0'.bytes
@@ -714,13 +670,6 @@ class LGroupTest extends Specification {
         then:
         reply instanceof MultiBulkReply
         ((MultiBulkReply) reply).replies.length == 2
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.lpos()
-        then:
-        reply == ErrorReply.WRONG_TYPE
 
         when:
         def data4 = new byte[4][]
@@ -955,13 +904,6 @@ class LGroupTest extends Specification {
         reply == MultiBulkReply.EMPTY
 
         when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.lrange()
-        then:
-        reply == ErrorReply.WRONG_TYPE
-
-        when:
         data4[2] = 'a'.bytes
         reply = lGroup.lrange()
         then:
@@ -1061,13 +1003,6 @@ class LGroupTest extends Specification {
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 1
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.lrem()
-        then:
-        reply == ErrorReply.WRONG_TYPE
 
         when:
         data4[2] = 'a'.bytes
@@ -1172,13 +1107,6 @@ class LGroupTest extends Specification {
         reply = lGroup.lset()
         then:
         reply == OKReply.INSTANCE
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.lset()
-        then:
-        reply == ErrorReply.WRONG_TYPE
 
         when:
         data4[2] = 'a'.bytes
@@ -1303,13 +1231,6 @@ class LGroupTest extends Specification {
         reply = lGroup.ltrim()
         then:
         reply == OKReply.INSTANCE
-
-        when:
-        cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
-        inMemoryGetSet.put(slot, 'a', 0, cv)
-        reply = lGroup.ltrim()
-        then:
-        reply == ErrorReply.WRONG_TYPE
 
         when:
         data4[2] = 'a'.bytes

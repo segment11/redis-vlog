@@ -7,7 +7,6 @@ import redis.CompressedValue;
 import redis.reply.*;
 import redis.type.RedisList;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -136,16 +135,12 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
-        if (cv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        if (encodedBytes == null) {
             // -1 or nil ? todo
             return NilReply.INSTANCE;
         }
-        if (!cv.isList()) {
-            return ErrorReply.WRONG_TYPE;
-        }
 
-        var encodedBytes = getValueBytesByCv(cv);
         var rl = RedisList.decode(encodedBytes);
         if (index >= rl.size()) {
             return NilReply.INSTANCE;
@@ -164,20 +159,15 @@ public class LGroup extends BaseCommand {
     private Reply addToList(byte[] keyBytes, byte[][] valueBytesArr, boolean addFirst,
                             boolean considerBeforeOrAfter, boolean isBefore, byte[] pivotBytes, boolean needKeyExist) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
 
         // lpushx / rpushx
-        if (cv == null && needKeyExist) {
+        if (encodedBytes == null && needKeyExist) {
             return IntegerReply.REPLY_0;
         }
 
         RedisList rl;
-        if (cv != null) {
-            if (!cv.isList()) {
-                return ErrorReply.WRONG_TYPE;
-            }
-
-            var encodedBytes = getValueBytesByCv(cv);
+        if (encodedBytes != null) {
             rl = RedisList.decode(encodedBytes);
 
             if (rl.size() >= RedisList.LIST_MAX_SIZE) {
@@ -214,12 +204,16 @@ public class LGroup extends BaseCommand {
             }
         }
 
-        var encodedBytes = rl.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
+        saveRedisList(rl, keyBytes, slotWithKeyHash);
+        return new IntegerReply(rl.size());
+    }
+
+    private void saveRedisList(RedisList rl, byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
+        var encodedBytesToSave = rl.encode();
+        var needCompress = encodedBytesToSave.length >= TO_COMPRESS_MIN_DATA_LENGTH;
         var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
 
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
-        return new IntegerReply(rl.size());
+        set(keyBytes, encodedBytesToSave, slotWithKeyHash, spType);
     }
 
     Reply linsert() {
@@ -266,24 +260,12 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
-        if (cv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        if (encodedBytes == null) {
             return IntegerReply.REPLY_0;
         }
-        if (!cv.isList()) {
-            return ErrorReply.WRONG_TYPE;
-        }
 
-        byte[] encodedBytes;
-        if (!cv.isCompressed()) {
-            encodedBytes = cv.getCompressedData();
-        } else {
-            encodedBytes = getValueBytesByCv(cv);
-        }
-
-        // netty default is big endian
-        // first 2 bytes is list size, refer to RedisList.encode()
-        int size = ByteBuffer.wrap(encodedBytes).getShort();
+        var size = RedisList.getSizeWithoutDecode(encodedBytes);
         return new IntegerReply(size);
     }
 
@@ -353,18 +335,12 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
-        if (cv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        if (encodedBytes == null) {
             return NilReply.INSTANCE;
         }
 
-        if (!cv.isList()) {
-            return ErrorReply.WRONG_TYPE;
-        }
-
-        var encodedBytesExist = getValueBytesByCv(cv);
-        var rl = RedisList.decode(encodedBytesExist);
-
+        var rl = RedisList.decode(encodedBytes);
         ArrayList<Reply> replies = new ArrayList<>();
 
         boolean isUpdated = false;
@@ -385,11 +361,7 @@ public class LGroup extends BaseCommand {
         }
 
         if (isUpdated) {
-            var encodedBytes = rl.encode();
-            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-            var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
-
-            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+            saveRedisList(rl, keyBytes, slotWithKeyHash);
         }
 
         if (count == 1) {
@@ -462,18 +434,12 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
-        if (cv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        if (encodedBytes == null) {
             return NilReply.INSTANCE;
         }
 
-        if (!cv.isList()) {
-            return ErrorReply.WRONG_TYPE;
-        }
-
-        var encodedBytes = getValueBytesByCv(cv);
         var rl = RedisList.decode(encodedBytes);
-
         var list = rl.getList();
 
         Iterator<byte[]> it;
@@ -581,15 +547,11 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
-        if (cv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        if (encodedBytes == null) {
             return MultiBulkReply.EMPTY;
         }
-        if (!cv.isList()) {
-            return ErrorReply.WRONG_TYPE;
-        }
 
-        var encodedBytes = getValueBytesByCv(cv);
         var rl = RedisList.decode(encodedBytes);
 
         int size = rl.size();
@@ -646,18 +608,12 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
-        if (cv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        if (encodedBytes == null) {
             return IntegerReply.REPLY_0;
         }
 
-        if (!cv.isList()) {
-            return ErrorReply.WRONG_TYPE;
-        }
-
-        var encodedBytesExist = getValueBytesByCv(cv);
-        var rl = RedisList.decode(encodedBytesExist);
-
+        var rl = RedisList.decode(encodedBytes);
         var list = rl.getList();
         var it = count < 0 ? list.descendingIterator() : list.iterator();
 
@@ -678,11 +634,7 @@ public class LGroup extends BaseCommand {
         }
 
         if (removed > 0) {
-            var encodedBytes = rl.encode();
-            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-            var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
-
-            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+            saveRedisList(rl, keyBytes, slotWithKeyHash);
         }
         return new IntegerReply(removed);
     }
@@ -715,18 +667,12 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
-        if (cv == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        if (encodedBytes == null) {
             return ErrorReply.NO_SUCH_KEY;
         }
 
-        if (!cv.isList()) {
-            return ErrorReply.WRONG_TYPE;
-        }
-
-        var encodedBytesExist = getValueBytesByCv(cv);
-        var rl = RedisList.decode(encodedBytesExist);
-
+        var rl = RedisList.decode(encodedBytes);
         int size = rl.size();
         if (index < 0) {
             index = size + index;
@@ -740,11 +686,7 @@ public class LGroup extends BaseCommand {
         rl.setAt(index, valueBytes);
 
         if (!Arrays.equals(valueBytesOld, valueBytes)) {
-            var encodedBytes = rl.encode();
-            var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-            var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
-
-            set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+            saveRedisList(rl, keyBytes, slotWithKeyHash);
         }
         return OKReply.INSTANCE;
     }
@@ -773,19 +715,13 @@ public class LGroup extends BaseCommand {
         }
 
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
-        if (cv == null) {
-            // ErrorReply.NO_SUCH_KEY
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
+        if (encodedBytes == null) {
+            // or ErrorReply.NO_SUCH_KEY
             return OKReply.INSTANCE;
         }
 
-        if (!cv.isList()) {
-            return ErrorReply.WRONG_TYPE;
-        }
-
-        var encodedBytesExist = getValueBytesByCv(cv);
-        var rl = RedisList.decode(encodedBytesExist);
-
+        var rl = RedisList.decode(encodedBytes);
         int size = rl.size();
 
         if (start < 0) {
@@ -822,11 +758,7 @@ public class LGroup extends BaseCommand {
             i++;
         }
 
-        var encodedBytes = rl.encode();
-        var needCompress = encodedBytes.length >= TO_COMPRESS_MIN_DATA_LENGTH;
-        var spType = needCompress ? CompressedValue.SP_TYPE_LIST_COMPRESSED : CompressedValue.SP_TYPE_LIST;
-
-        set(keyBytes, encodedBytes, slotWithKeyHash, spType);
+        saveRedisList(rl, keyBytes, slotWithKeyHash);
         return OKReply.INSTANCE;
     }
 
