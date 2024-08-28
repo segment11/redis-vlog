@@ -113,7 +113,7 @@ class LeaderSelectorTest extends Specification {
         leaderSelector.cleanUp()
     }
 
-    final byte slot = 0
+    final short slot = 0
 
     def 'test reset as master'() {
         given:

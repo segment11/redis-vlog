@@ -60,7 +60,7 @@ class FGroupTest extends Specification {
         reply == NilReply.INSTANCE
     }
 
-    final byte slot = 0
+    final short slot = 0
 
     def 'test failover'() {
         given:

@@ -278,7 +278,7 @@ public abstract class BaseCommand {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
-    public record SlotWithKeyHash(byte slot, int bucketIndex, long keyHash) {
+    public record SlotWithKeyHash(short slot, int bucketIndex, long keyHash) {
         @Override
         public String toString() {
             return "SlotWithKeyHash{" +
@@ -714,7 +714,7 @@ public abstract class BaseCommand {
         }
     }
 
-    public boolean remove(byte slot, int bucketIndex, String key, long keyHash) {
+    public boolean remove(short slot, int bucketIndex, String key, long keyHash) {
         if (byPassGetSet != null) {
             return byPassGetSet.remove(slot, key);
         }
@@ -723,7 +723,7 @@ public abstract class BaseCommand {
         return oneSlot.remove(key, bucketIndex, keyHash);
     }
 
-    public void removeDelay(byte slot, int bucketIndex, String key, long keyHash) {
+    public void removeDelay(short slot, int bucketIndex, String key, long keyHash) {
         if (byPassGetSet != null) {
             byPassGetSet.remove(slot, key);
             return;
@@ -733,7 +733,7 @@ public abstract class BaseCommand {
         oneSlot.removeDelay(key, bucketIndex, keyHash);
     }
 
-    public boolean exists(byte slot, int bucketIndex, String key, long keyHash) {
+    public boolean exists(short slot, int bucketIndex, String key, long keyHash) {
         if (byPassGetSet != null) {
             var bufOrCompressedValue = byPassGetSet.getBuf(slot, key.getBytes(), bucketIndex, keyHash);
             return bufOrCompressedValue != null;

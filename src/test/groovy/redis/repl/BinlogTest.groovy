@@ -8,7 +8,7 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class BinlogTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'test append'() {
         given:
@@ -204,7 +204,7 @@ class BinlogTest extends Specification {
             }
 
             @Override
-            void apply(byte slot, ReplPair replPair) {
+            void apply(short slot, ReplPair replPair) {
 
             }
         }

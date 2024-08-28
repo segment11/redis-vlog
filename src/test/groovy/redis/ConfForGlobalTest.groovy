@@ -26,7 +26,6 @@ class ConfForGlobalTest extends Specification {
         println ConfForGlobal.isAsSlaveOfSlave
 
         println ConfForGlobal.LEADER_LATCH_PATH
-        println ConfForGlobal.LEADER_LISTEN_ADDRESS_PATH
 
         expect:
         1 == 1

@@ -6,8 +6,8 @@ import redis.repl.incremental.XOneWalGroupPersist
 import spock.lang.Specification
 
 class ChunkMergeJobTest extends Specification {
-    final byte slot = 0
-    final byte slotNumber = 1
+    final short slot = 0
+    final short slotNumber = 1
 
     def 'merge segments'() {
         given:

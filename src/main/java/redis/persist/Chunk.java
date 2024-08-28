@@ -28,7 +28,7 @@ public class Chunk implements InMemoryEstimate, NeedCleanUp {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private final byte slot;
+    private final short slot;
     private final String slotStr;
     private final File slotDir;
 
@@ -59,7 +59,7 @@ public class Chunk implements InMemoryEstimate, NeedCleanUp {
     int[] fdLengths;
     FdReadWrite[] fdReadWriteArray;
 
-    public Chunk(byte slot, File slotDir, OneSlot oneSlot,
+    public Chunk(short slot, File slotDir, OneSlot oneSlot,
                  SnowFlake snowFlake, KeyLoader keyLoader) {
         var confChunk = ConfForSlot.global.confChunk;
         this.segmentNumberPerFd = confChunk.segmentNumberPerFd;

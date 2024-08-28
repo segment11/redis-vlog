@@ -8,7 +8,7 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class SegmentBatchTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'tight segments write and read'() {
         given:

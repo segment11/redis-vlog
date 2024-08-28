@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class KeyBucketsInOneWalGroup {
-    public KeyBucketsInOneWalGroup(byte slot, int groupIndex, KeyLoader keyLoader) {
+    public KeyBucketsInOneWalGroup(short slot, int groupIndex, KeyLoader keyLoader) {
         this.slot = slot;
         this.keyLoader = keyLoader;
 
@@ -25,7 +25,7 @@ public class KeyBucketsInOneWalGroup {
         this.readBeforePutBatch();
     }
 
-    private final byte slot;
+    private final short slot;
     private final int oneChargeBucketNumber;
     // index is bucket index - begin bucket index
     byte[] splitNumberTmp;

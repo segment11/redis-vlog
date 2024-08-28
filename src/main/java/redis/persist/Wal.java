@@ -119,7 +119,7 @@ public class Wal implements InMemoryEstimate {
 
     long initMemoryN = 0;
 
-    public Wal(byte slot, int groupIndex, RandomAccessFile walSharedFile, RandomAccessFile walSharedFileShortValue,
+    public Wal(short slot, int groupIndex, RandomAccessFile walSharedFile, RandomAccessFile walSharedFileShortValue,
                SnowFlake snowFlake) throws IOException {
         this.slot = slot;
         this.groupIndex = groupIndex;
@@ -189,7 +189,7 @@ public class Wal implements InMemoryEstimate {
     int writePosition;
     int writePositionShortValue;
 
-    private final byte slot;
+    private final short slot;
     final int groupIndex;
 
     static int calWalGroupIndex(int bucketIndex) {

@@ -162,7 +162,7 @@ class LGroupTest extends Specification {
 
     def 'test lindex'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
@@ -233,7 +233,7 @@ class LGroupTest extends Specification {
 
     def 'test linsert'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data5 = new byte[5][]
         data5[1] = 'a'.bytes
@@ -315,7 +315,7 @@ class LGroupTest extends Specification {
 
     def 'test llen'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
@@ -354,7 +354,7 @@ class LGroupTest extends Specification {
 
     def 'test lmove'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data5 = new byte[5][]
         data5[1] = 'a'.bytes
@@ -454,7 +454,7 @@ class LGroupTest extends Specification {
 
     def 'test lpop'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
@@ -528,7 +528,7 @@ class LGroupTest extends Specification {
 
     def 'test lpos'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
@@ -730,7 +730,7 @@ class LGroupTest extends Specification {
 
     def 'test lpush'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
@@ -790,7 +790,7 @@ class LGroupTest extends Specification {
 
     def 'test lrange'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -883,7 +883,7 @@ class LGroupTest extends Specification {
 
     def 'test lrem'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -971,7 +971,7 @@ class LGroupTest extends Specification {
 
     def 'test lset'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -1056,7 +1056,7 @@ class LGroupTest extends Specification {
 
     def 'test ltrim'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes

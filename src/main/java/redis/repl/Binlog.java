@@ -21,7 +21,7 @@ import java.util.*;
 // before slave start receive data from master, master need start this binlog for slave catch up
 public class Binlog implements InMemoryEstimate, NeedCleanUp {
 
-    private final byte slot;
+    private final short slot;
     private final File binlogDir;
     private final DynConfig dynConfig;
     private RandomAccessFile raf;
@@ -92,7 +92,7 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
         return list;
     }
 
-    public Binlog(byte slot, File slotDir, DynConfig dynConfig) throws IOException {
+    public Binlog(short slot, File slotDir, DynConfig dynConfig) throws IOException {
         this.slot = slot;
         this.binlogDir = new File(slotDir, BINLOG_DIR_NAME);
         if (!binlogDir.exists()) {
@@ -198,7 +198,7 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
         }
 
         @Override
-        public void apply(byte slot, ReplPair replPair) {
+        public void apply(short slot, ReplPair replPair) {
             // do nothing
         }
     }
@@ -588,7 +588,7 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
         }
     }
 
-    public static int decodeAndApply(byte slot, byte[] oneSegmentBytes, int skipBytesN, ReplPair replPair) {
+    public static int decodeAndApply(short slot, byte[] oneSegmentBytes, int skipBytesN, ReplPair replPair) {
         var byteBuffer = ByteBuffer.wrap(oneSegmentBytes);
         byteBuffer.position(skipBytesN);
 

@@ -22,7 +22,10 @@ public class LocalPersist implements NeedCleanUp {
     public static final int PAGE_SIZE = (int) PageManager.getInstance().pageSize();
     public static final int PROTECTION = PageManager.PROT_READ | PageManager.PROT_WRITE | PageManager.PROT_EXEC;
     public static final short DEFAULT_SLOT_NUMBER = 4;
-    public static final short MAX_SLOT_NUMBER = 128;
+    // 16384, todo
+    // 1024 slots, one slot max 100 million keys, 100 million * 1024 = 102.4 billion keys
+    // one slot cost 50-100GB, all cost will be 50-100TB
+    public static final short MAX_SLOT_NUMBER = 1024;
 
     // singleton
     private static final LocalPersist instance = new LocalPersist();
@@ -57,12 +60,12 @@ public class LocalPersist implements NeedCleanUp {
         return oneSlots;
     }
 
-    public OneSlot oneSlot(byte slot) {
+    public OneSlot oneSlot(short slot) {
         return oneSlots[slot];
     }
 
     @TestOnly
-    public void addOneSlot(byte slot, Eventloop eventloop) {
+    public void addOneSlot(short slot, Eventloop eventloop) {
         try {
             Thread.sleep(100);
         } catch (InterruptedException e) {
@@ -74,7 +77,7 @@ public class LocalPersist implements NeedCleanUp {
         this.oneSlots[slot] = oneSlot;
     }
 
-    public void addOneSlotForTest2(byte slot) {
+    public void addOneSlotForTest2(short slot) {
         var oneSlot = new OneSlot(slot);
         this.oneSlots = new OneSlot[slot + 1];
         this.oneSlots[slot] = oneSlot;
@@ -112,7 +115,7 @@ public class LocalPersist implements NeedCleanUp {
         }
     }
 
-    public void fixSlotThreadId(byte slot, long threadId) {
+    public void fixSlotThreadId(short slot, long threadId) {
         oneSlots[slot].threadIdProtectedForSafe = threadId;
         log.warn("Fix slot thread id, s={}, tid={}", slot, threadId);
     }

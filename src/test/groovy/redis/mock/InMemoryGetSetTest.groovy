@@ -7,7 +7,7 @@ import spock.lang.Specification
 class InMemoryGetSetTest extends Specification {
     def 'test set and get'() {
         given:
-        final byte slot = 0
+        final short slot = 0
         def inMemoryGetSet = new InMemoryGetSet()
 
         when:

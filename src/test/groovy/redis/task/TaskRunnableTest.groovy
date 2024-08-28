@@ -10,7 +10,7 @@ import java.time.Duration
 class TaskRunnableTest extends Specification {
     def 'test delay run task'() {
         given:
-        final byte slot = 0
+        final short slot = 0
         def oneSlot = new OneSlot(slot, Consts.slotDir, null, null)
         oneSlot.taskChain.add(new TaskChainTest.Task1())
 
@@ -47,7 +47,7 @@ class TaskRunnableTest extends Specification {
 
     def 'test some branches'() {
         given:
-        final byte slot = 0
+        final short slot = 0
         def oneSlot = new OneSlot(slot, Consts.slotDir, null, null)
         oneSlot.taskChain.add(new TaskChainTest.Task1())
         def oneSlot2 = new OneSlot((byte) 1, Consts.slotDir, null, null)

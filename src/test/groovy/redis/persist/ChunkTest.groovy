@@ -11,7 +11,7 @@ import spock.lang.Specification
 import static redis.persist.FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD
 
 class ChunkTest extends Specification {
-    static Chunk prepareOne(byte slot, boolean withKeyLoader = false) {
+    static Chunk prepareOne(short slot, boolean withKeyLoader = false) {
         def confChunk = ConfForSlot.global.confChunk
         confChunk.fdPerChunk = 2
         confChunk.segmentNumberPerFd = 4096
@@ -26,7 +26,7 @@ class ChunkTest extends Specification {
         chunk
     }
 
-    final byte slot = 0
+    final short slot = 0
 
     def 'test base'() {
         given:

@@ -93,7 +93,8 @@ class DGroupTest extends Specification {
         dGroup.slotWithKeyHashListParsed = DGroup.parseSlots('decr', data2, dGroup.slotNumber)
         reply = dGroup.handle()
         then:
-        reply == ErrorReply.NOT_INTEGER
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == -1
 
         when:
         def data3 = new byte[3][]
@@ -125,7 +126,7 @@ class DGroupTest extends Specification {
 
     def 'test del'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -202,7 +203,7 @@ class DGroupTest extends Specification {
 
     def 'test dbsize'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data1 = new byte[1][]
 
@@ -236,7 +237,7 @@ class DGroupTest extends Specification {
 
     def 'test decr by'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes

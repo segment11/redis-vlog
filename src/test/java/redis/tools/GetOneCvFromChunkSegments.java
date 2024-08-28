@@ -15,7 +15,7 @@ public class GetOneCvFromChunkSegments {
     public static void main(String[] args) throws IOException {
         ConfForSlot.global = ConfForSlot.c1m;
 
-        byte slot = 0;
+        short slot = 0;
 
         final int segmentIndex = 9333;
         final int segmentOffset = 716;

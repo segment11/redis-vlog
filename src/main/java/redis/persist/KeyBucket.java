@@ -63,7 +63,7 @@ public class KeyBucket {
     static final long NO_KEY = 0;
     static final long PRE_KEY = -1;
 
-    private final byte slot;
+    private final short slot;
     private final int bucketIndex;
     final byte splitIndex;
     byte splitNumber;
@@ -107,11 +107,11 @@ public class KeyBucket {
         this.lastUpdateSplitNumber = 0;
     }
 
-    public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] bytes, SnowFlake snowFlake) {
+    public KeyBucket(short slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] bytes, SnowFlake snowFlake) {
         this(slot, bucketIndex, splitIndex, splitNumber, bytes, 0, snowFlake);
     }
 
-    public KeyBucket(byte slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] sharedBytes, int position, SnowFlake snowFlake) {
+    public KeyBucket(short slot, int bucketIndex, byte splitIndex, byte splitNumber, @Nullable byte[] sharedBytes, int position, SnowFlake snowFlake) {
         this.slot = slot;
         this.bucketIndex = bucketIndex;
         this.splitIndex = splitIndex;

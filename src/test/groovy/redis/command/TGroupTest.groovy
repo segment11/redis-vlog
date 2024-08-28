@@ -65,7 +65,7 @@ class TGroupTest extends Specification {
 
     def 'test type'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
@@ -143,7 +143,7 @@ class TGroupTest extends Specification {
 
     def 'test ttl'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes

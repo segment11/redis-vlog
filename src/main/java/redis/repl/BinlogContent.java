@@ -49,5 +49,5 @@ public interface BinlogContent {
     byte[] encodeWithType();
 
     @SlaveReplay
-    void apply(byte slot, ReplPair replPair);
+    void apply(short slot, ReplPair replPair);
 }

@@ -105,7 +105,7 @@ public class XWalV implements BinlogContent {
     private final LocalPersist localPersist = LocalPersist.getInstance();
 
     @Override
-    public void apply(byte slot, ReplPair replPair) {
+    public void apply(short slot, ReplPair replPair) {
         var oneSlot = localPersist.oneSlot(slot);
         var targetWal = oneSlot.getWalByBucketIndex(v.bucketIndex());
         targetWal.putFromX(v, isValueShort, offset);

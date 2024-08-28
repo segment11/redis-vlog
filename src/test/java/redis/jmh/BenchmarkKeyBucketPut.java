@@ -49,7 +49,7 @@ BenchmarkKeyBucketPut.putAndGet  100000  avgt       24.516          ms/op
 
     @Benchmark
     public void put() {
-        final byte slot = 0;
+        final short slot = 0;
         final int capacity = KeyBucket.INIT_CAPACITY;
         final byte[] valueBytes = "value-test".getBytes();
 
@@ -67,7 +67,7 @@ BenchmarkKeyBucketPut.putAndGet  100000  avgt       24.516          ms/op
 
     @Benchmark
     public void putAndGet() {
-        final byte slot = 0;
+        final short slot = 0;
         final int capacity = KeyBucket.INIT_CAPACITY;
         final byte[] valueBytes = "value-test".getBytes();
 

@@ -12,10 +12,10 @@ public class Repl {
     }
 
     public static final byte[] PROTOCOL_KEYWORD_BYTES = "X-REPL".getBytes();
-    // 8 bytes for slaveUuid, 1 byte for slot, 1 byte for type, 4 bytes for length
-    public static final int HEADER_LENGTH = PROTOCOL_KEYWORD_BYTES.length + 8 + 1 + 1 + 4;
+    // 8 bytes for slaveUuid, 2 byte for slot, 2 byte for type, 4 bytes for length
+    public static final int HEADER_LENGTH = PROTOCOL_KEYWORD_BYTES.length + 8 + 2 + 2 + 4;
 
-    public static io.activej.bytebuf.ByteBuf buffer(long slaveUuid, byte slot, ReplType type, ReplContent content) {
+    public static io.activej.bytebuf.ByteBuf buffer(long slaveUuid, short slot, ReplType type, ReplContent content) {
         var encodeLength = content.encodeLength();
 
         var bytes = new byte[HEADER_LENGTH + encodeLength];
@@ -23,14 +23,14 @@ public class Repl {
 
         buf.write(PROTOCOL_KEYWORD_BYTES);
         buf.writeLong(slaveUuid);
-        buf.writeByte(slot);
-        buf.writeByte(type.code);
+        buf.writeShort(slot);
+        buf.writeShort(type.code);
         buf.writeInt(encodeLength);
         content.encodeTo(buf);
         return buf;
     }
 
-    public record ReplReply(long slaveUuid, byte slot, ReplType type, ReplContent content) implements Reply {
+    public record ReplReply(long slaveUuid, short slot, ReplType type, ReplContent content) implements Reply {
         @Override
         public io.activej.bytebuf.ByteBuf buffer() {
             if (content == BYTE_0_CONTENT) {
@@ -49,20 +49,20 @@ public class Repl {
         }
     }
 
-    public static ReplReply reply(byte slot, ReplPair replPair, ReplType type, ReplContent content) {
+    public static ReplReply reply(short slot, ReplPair replPair, ReplType type, ReplContent content) {
         return new ReplReply(replPair.getSlaveUuid(), slot, type, content);
     }
 
-    public static ReplReply error(byte slot, ReplPair replPair, String errorMessage) {
+    public static ReplReply error(short slot, ReplPair replPair, String errorMessage) {
         return reply(slot, replPair, ReplType.error, new RawBytesContent(errorMessage.getBytes()));
     }
 
-    public static ReplReply error(byte slot, long slaveUuid, String errorMessage) {
+    public static ReplReply error(short slot, long slaveUuid, String errorMessage) {
         return new ReplReply(slaveUuid, slot, ReplType.error, new RawBytesContent(errorMessage.getBytes()));
     }
 
     @TestOnly
-    public static ReplReply test(byte slot, ReplPair replPair, String message) {
+    public static ReplReply test(short slot, ReplPair replPair, String message) {
         return reply(slot, replPair, ReplType.test, new RawBytesContent(message.getBytes()));
     }
 
@@ -91,13 +91,13 @@ public class Repl {
         buf.skipBytes(PROTOCOL_KEYWORD_BYTES.length);
 
         var slaveUuid = buf.readLong();
-        var slot = buf.readByte();
+        var slot = buf.readShort();
 
         if (slot < 0) {
             throw new IllegalArgumentException("Repl slot should be positive");
         }
 
-        var replType = ReplType.fromCode(buf.readByte());
+        var replType = ReplType.fromCode((byte) buf.readShort());
         if (replType == null) {
             return null;
         }
@@ -112,8 +112,8 @@ public class Repl {
         data[0] = new byte[8];
         ByteBuffer.wrap(data[0]).putLong(slaveUuid);
 
-        data[1] = new byte[1];
-        data[1][0] = slot;
+        data[1] = new byte[2];
+        ByteBuffer.wrap(data[1]).putShort(slot);
 
         data[2] = new byte[1];
         data[2][0] = replType.code;

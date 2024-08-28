@@ -5,10 +5,10 @@ import io.activej.bytebuf.ByteBuf;
 import static redis.CompressedValue.NO_EXPIRE;
 
 public class PersistValueMeta {
-    // slot byte + segment sub block index byte
+    // slot short + segment sub block index byte
     // + length int + segment index int + segment offset int
     // may add type or other metadata in the future
-    static final int ENCODED_LENGTH = 1 + 1 + 4 + 4 + 4;
+    static final int ENCODED_LENGTH = 2 + 2 + 4 + 4 + 4;
 
     // CompressedValue encoded length is much more than PersistValueMeta encoded length
     public static boolean isPvm(byte[] bytes) {
@@ -17,7 +17,7 @@ public class PersistValueMeta {
         return bytes[0] >= 0 && (bytes.length == ENCODED_LENGTH);
     }
 
-    byte slot;
+    short slot;
     byte subBlockIndex;
     public int length;
     int segmentIndex;
@@ -66,8 +66,8 @@ public class PersistValueMeta {
     public byte[] encode() {
         var bytes = new byte[ENCODED_LENGTH];
         var buf = ByteBuf.wrapForWriting(bytes);
-        buf.writeByte(slot);
-        buf.writeByte(subBlockIndex);
+        buf.writeShort(slot);
+        buf.writeShort(subBlockIndex);
         buf.writeInt(length);
         buf.writeInt(segmentIndex);
         buf.writeInt(segmentOffset);
@@ -77,8 +77,8 @@ public class PersistValueMeta {
     public static PersistValueMeta decode(byte[] bytes) {
         var buf = ByteBuf.wrapForReading(bytes);
         var pvm = new PersistValueMeta();
-        pvm.slot = buf.readByte();
-        pvm.subBlockIndex = buf.readByte();
+        pvm.slot = buf.readShort();
+        pvm.subBlockIndex = (byte) buf.readShort();
         pvm.length = buf.readInt();
         pvm.segmentIndex = buf.readInt();
         pvm.segmentOffset = buf.readInt();

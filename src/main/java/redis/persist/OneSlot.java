@@ -39,7 +39,7 @@ import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
 public class OneSlot implements InMemoryEstimate, NeedCleanUp {
     @TestOnly
-    public OneSlot(byte slot, File slotDir, KeyLoader keyLoader, Wal wal) throws IOException {
+    public OneSlot(short slot, File slotDir, KeyLoader keyLoader, Wal wal) throws IOException {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
         this.slotDir = slotDir;
@@ -66,13 +66,13 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
 
     // only for local persist one slot array
     @TestOnly
-    OneSlot(byte slot) {
+    OneSlot(short slot) {
         this(slot, null);
     }
 
     // only for async run/call
     @TestOnly
-    OneSlot(byte slot, Eventloop eventloop) {
+    OneSlot(short slot, Eventloop eventloop) {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
         this.slotDir = null;
@@ -99,7 +99,7 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
         this.netWorkerEventloop = eventloop;
     }
 
-    public OneSlot(byte slot, short slotNumber, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
+    public OneSlot(short slot, short slotNumber, SnowFlake snowFlake, File persistDir, Config persistConfig) throws IOException {
         this.chunkSegmentLength = ConfForSlot.global.confChunk.segmentLength;
 
         this.slot = slot;
@@ -456,11 +456,11 @@ public class OneSlot implements InMemoryEstimate, NeedCleanUp {
         netWorkerEventloop.delay(millis, runnable);
     }
 
-    private final byte slot;
+    private final short slot;
     private final String slotStr;
     private final short slotNumber;
 
-    public byte slot() {
+    public short slot() {
         return slot;
     }
 

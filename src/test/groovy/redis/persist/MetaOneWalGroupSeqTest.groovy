@@ -7,7 +7,7 @@ import spock.lang.Specification
 import static redis.persist.Consts.getSlotDir
 
 class MetaOneWalGroupSeqTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'test set and get'() {
         given:

@@ -18,7 +18,7 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class XGroupTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
     final short slotNumber = 1
 
     private byte[][] mockData(ReplPair replPair, ReplType replType, ReplContent content) {
@@ -1266,6 +1266,7 @@ class XGroupTest extends Specification {
         when:
         var metaChunkSegmentIndex = oneSlot.metaChunkSegmentIndex
         metaChunkSegmentIndex.setMasterBinlogFileIndexAndOffset(replPair.masterUuid, false, 0, 0L)
+        XGroup.skipTryCatchUpAgainAfterSlaveTcpClientClosed = false
         XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair)
         then:
         1 == 1
@@ -1305,6 +1306,12 @@ class XGroupTest extends Specification {
         XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair, contentBytes)
         then:
         1 == 1
+
+        when:
+        XGroup.skipTryCatchUpAgainAfterSlaveTcpClientClosed = true
+        XGroup.tryCatchUpAgainAfterSlaveTcpClientClosed(replPair, contentBytes)
+        then:
+        XGroup.skipTryCatchUpAgainAfterSlaveTcpClientClosed
 
         cleanup:
         oneSlot.cleanUp()

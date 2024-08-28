@@ -21,12 +21,12 @@ import java.net.InetSocketAddress;
 import java.util.concurrent.Callable;
 
 public class TcpClient implements NeedCleanUp {
-    private final byte slot;
+    private final short slot;
     private final Eventloop netWorkerEventloop;
     private final RequestHandler requestHandler;
     private final ReplPair replPair;
 
-    public TcpClient(byte slot, Eventloop netWorkerEventloop, RequestHandler requestHandler, ReplPair replPair) {
+    public TcpClient(short slot, Eventloop netWorkerEventloop, RequestHandler requestHandler, ReplPair replPair) {
         this.slot = slot;
         this.netWorkerEventloop = netWorkerEventloop;
         this.requestHandler = requestHandler;

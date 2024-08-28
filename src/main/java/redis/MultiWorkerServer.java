@@ -460,7 +460,7 @@ public class MultiWorkerServer extends Launcher {
             if (loopCount % 5 == 0) {
                 // need catch exception, or will not delay run task
                 try {
-                    doReplAfterLeaderSelect((byte) 0);
+                    doReplAfterLeaderSelect((short) 0);
                 } catch (Exception e) {
                     log.error("Repl leader select error", e);
                 }
@@ -490,7 +490,7 @@ public class MultiWorkerServer extends Launcher {
     }
 
     // run in primary eventloop
-    static void doReplAfterLeaderSelect(byte slot) {
+    static void doReplAfterLeaderSelect(short slot) {
         var leaderSelector = LeaderSelector.getInstance();
         // if failover, wait 20s and then start leader select
         if (System.currentTimeMillis() - leaderSelector.getLastStopLeaderLatchTimeMillis()

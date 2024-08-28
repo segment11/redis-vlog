@@ -12,7 +12,7 @@ import java.nio.ByteBuffer
 import java.time.Duration
 
 class OneSlotTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
     final short slotNumber = 1
 
     def 'test mock'() {

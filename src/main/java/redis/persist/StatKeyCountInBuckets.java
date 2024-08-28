@@ -61,7 +61,7 @@ public class StatKeyCountInBuckets implements InMemoryEstimate, NeedCleanUp {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public StatKeyCountInBuckets(byte slot, File slotDir) throws IOException {
+    public StatKeyCountInBuckets(short slot, File slotDir) throws IOException {
         this.bucketsPerSlot = ConfForSlot.global.confBucket.bucketsPerSlot;
         this.allCapacity = bucketsPerSlot * ONE_LENGTH;
 

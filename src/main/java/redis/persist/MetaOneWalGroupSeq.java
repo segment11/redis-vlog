@@ -27,7 +27,7 @@ public class MetaOneWalGroupSeq implements InMemoryEstimate, NeedCleanUp {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public MetaOneWalGroupSeq(byte slot, File slotDir) throws IOException {
+    public MetaOneWalGroupSeq(short slot, File slotDir) throws IOException {
         this.walGroupNumber = Wal.calcWalGroupNumber();
         // 8 bytes long seq for each one wal group, each split index
         this.allCapacity = 8 * walGroupNumber * KeyLoader.MAX_SPLIT_NUMBER;

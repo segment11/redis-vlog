@@ -44,9 +44,9 @@ class ManageCommand extends BaseCommand {
             }
 
             def slotBytes = data[2]
-            byte slot
+            short slot
             try {
-                slot = Byte.parseByte(new String(slotBytes))
+                slot = Short.parseShort(new String(slotBytes))
             } catch (NumberFormatException ignored) {
                 return r
             }
@@ -97,10 +97,10 @@ class ManageCommand extends BaseCommand {
         }
 
         def slotBytes = data[2]
-        byte slot
+        short slot
 
         try {
-            slot = Byte.parseByte(new String(slotBytes))
+            slot = Short.parseShort(new String(slotBytes))
         } catch (NumberFormatException ignored) {
             return ErrorReply.INVALID_INTEGER
         }

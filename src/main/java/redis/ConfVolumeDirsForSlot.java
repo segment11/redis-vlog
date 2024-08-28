@@ -14,7 +14,7 @@ public class ConfVolumeDirsForSlot {
 
     private static String[] volumeDirsBySlot;
 
-    public static String getVolumeDirBySlot(byte slot) {
+    public static String getVolumeDirBySlot(short slot) {
         return volumeDirsBySlot[slot];
     }
 

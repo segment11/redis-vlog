@@ -24,7 +24,7 @@ import java.time.Duration
 class TcpClientTest extends Specification {
     def 'test connect and close'() {
         given:
-        byte slot = 0
+        short slot = 0
         ConfForGlobal.netListenAddresses = 'localhost:6380'
 
         def eventloop = Eventloop.builder()

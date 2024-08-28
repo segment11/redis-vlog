@@ -4,7 +4,7 @@ import redis.Debug
 import spock.lang.Specification
 
 class ChunkMergeWorkerTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'test base'() {
         given:

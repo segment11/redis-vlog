@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_FOR_MERGE;
 
 public class ChunkMergeJob {
-    private final byte slot;
+    private final short slot;
     private final ArrayList<Integer> needMergeSegmentIndexList;
     private final ChunkMergeWorker chunkMergeWorker;
     private final OneSlot oneSlot;
@@ -26,7 +26,7 @@ public class ChunkMergeJob {
 
     private static final Logger log = LoggerFactory.getLogger(ChunkMergeJob.class);
 
-    public ChunkMergeJob(byte slot, ArrayList<Integer> needMergeSegmentIndexList, ChunkMergeWorker chunkMergeWorker, SnowFlake snowFlake) {
+    public ChunkMergeJob(short slot, ArrayList<Integer> needMergeSegmentIndexList, ChunkMergeWorker chunkMergeWorker, SnowFlake snowFlake) {
         this.slot = slot;
         this.needMergeSegmentIndexList = needMergeSegmentIndexList;
         this.chunkMergeWorker = chunkMergeWorker;

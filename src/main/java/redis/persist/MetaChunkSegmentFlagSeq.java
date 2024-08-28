@@ -27,7 +27,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate, NeedCleanUp {
 
     private static final int INIT_WAL_GROUP_INDEX = -1;
 
-    private final byte slot;
+    private final short slot;
     private final int maxSegmentNumber;
     final int allCapacity;
     private RandomAccessFile raf;
@@ -81,7 +81,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate, NeedCleanUp {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public MetaChunkSegmentFlagSeq(byte slot, File slotDir) throws IOException {
+    public MetaChunkSegmentFlagSeq(short slot, File slotDir) throws IOException {
         this.slot = slot;
         this.maxSegmentNumber = ConfForSlot.global.confChunk.maxSegmentNumber();
         this.allCapacity = maxSegmentNumber * ONE_LENGTH;

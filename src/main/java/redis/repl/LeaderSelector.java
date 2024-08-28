@@ -517,7 +517,7 @@ public class LeaderSelector implements NeedCleanUp {
         log.warn("Repl publish master switch message for readonly slave: {}", publishMessageReadonlySlave);
     }
 
-    public String getFirstSlaveListenAddressByMasterHostAndPort(String host, int port, byte slot) {
+    public String getFirstSlaveListenAddressByMasterHostAndPort(String host, int port, short slot) {
         if (masterAddressLocalMocked != null) {
             return masterAddressLocalMocked;
         }

@@ -6,8 +6,8 @@ import java.io.File;
 import java.io.IOException;
 
 public interface TestDataGenerator {
-    default byte slot() {
-        return (byte) 0;
+    default short slot() {
+        return (short) 0;
     }
 
     default short slotNumber() {

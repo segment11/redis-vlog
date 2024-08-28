@@ -5,6 +5,7 @@ import io.activej.net.socket.tcp.TcpSocket
 import redis.BaseCommand
 import redis.mock.InMemoryGetSet
 import redis.persist.LocalPersist
+import redis.persist.LocalPersistTest
 import redis.persist.Mock
 import redis.reply.*
 import spock.lang.Specification
@@ -13,7 +14,7 @@ import java.nio.channels.SocketChannel
 import java.time.Duration
 
 class CGroupTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'test parse slot'() {
         given:
@@ -26,6 +27,9 @@ class CGroupTest extends Specification {
 
         when:
         LocalPersist.instance.addOneSlotForTest2(slot)
+        def localPersist = LocalPersist.instance
+        localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())
+
         def sCopyList = CGroup.parseSlots('copy', data3, slotNumber)
         def sConfigList = CGroup.parseSlots('config', data3, slotNumber)
         then:
@@ -102,7 +106,7 @@ class CGroupTest extends Specification {
 
     def 'test copy'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes

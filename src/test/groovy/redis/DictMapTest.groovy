@@ -23,7 +23,7 @@ class DictMapTest extends Specification {
         dictMap.initDictMap(Consts.testDir)
 
         and:
-        final byte slot = 0
+        final short slot = 0
         def dynConfig = new DynConfig(slot, DynConfigTest.tmpFile)
         def binlog = new Binlog(slot, Consts.slotDir, dynConfig)
         dictMap.binlog = binlog

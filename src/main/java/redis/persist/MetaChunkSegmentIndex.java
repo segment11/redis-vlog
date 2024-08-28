@@ -23,7 +23,7 @@ public class MetaChunkSegmentIndex implements NeedCleanUp {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public MetaChunkSegmentIndex(byte slot, File slotDir) throws IOException {
+    public MetaChunkSegmentIndex(short slot, File slotDir) throws IOException {
         // 4 bytes for chunk segment index int
         // when slave connect master, master start binlog
         // 8 bytes for master uuid long

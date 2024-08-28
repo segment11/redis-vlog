@@ -19,7 +19,7 @@ public class IterateKeyBuckets {
     private static String persistDir = "/tmp/redis-vlog/persist";
 
     public static void main(String[] args) throws IOException {
-        byte slot = 0;
+        short slot = 0;
         byte splitIndex = 0;
         byte splitNumber = 1;
         var bucketsPerSlot = ConfForSlot.ConfBucket.c100m.bucketsPerSlot;
@@ -74,7 +74,7 @@ public class IterateKeyBuckets {
 
     private static Map<Integer, HashMap<String, byte[]>> keyWithValueBytesByBucketIndex = new HashMap<>();
 
-    public static void iterateOneSplitIndex(byte slot, byte splitIndex, byte splitNumber, int[] sumArray) throws IOException {
+    public static void iterateOneSplitIndex(short slot, byte splitIndex, byte splitNumber, int[] sumArray) throws IOException {
         var bucketsPerSlot = sumArray.length;
 
         var slotDir = new File(persistDir + "/slot-" + slot);

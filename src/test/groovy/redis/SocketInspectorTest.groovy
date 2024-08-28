@@ -4,6 +4,7 @@ import io.activej.async.callback.AsyncComputation
 import io.activej.common.function.SupplierEx
 import io.activej.eventloop.Eventloop
 import io.activej.net.socket.tcp.TcpSocket
+import redis.command.XGroup
 import redis.repl.ReplPairTest
 import redis.reply.BulkReply
 import spock.lang.Specification
@@ -34,6 +35,7 @@ class SocketInspectorTest extends Specification {
         inspector.lookup(SocketInspector.class) == null
 
         when:
+        XGroup.skipTryCatchUpAgainAfterSlaveTcpClientClosed = true
         socket.userData = ReplPairTest.mockAsSlave()
         inspector.onConnect(socket)
         inspector.onDisconnect(socket)

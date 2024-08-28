@@ -8,7 +8,7 @@ import static redis.persist.Chunk.NO_NEED_MERGE_SEGMENT_INDEX
 import static redis.persist.Consts.getSlotDir
 
 class MetaChunkSegmentFlagSeqTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'test for repl'() {
         given:

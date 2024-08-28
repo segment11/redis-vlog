@@ -53,7 +53,7 @@ class RESPReplyTest extends Specification {
                 new BulkReply('bulk2'.bytes)
         ]
         new MultiBulkReply(replies).buffer().asArray() == "*2\r\n\$5\r\nbulk1\r\n\$5\r\nbulk2\r\n".bytes
-        new MultiBulkReply(replies).bufferAsHttp() == null
+        new MultiBulkReply(replies).bufferAsHttp() != null
     }
 
     def 'test async reply'() {

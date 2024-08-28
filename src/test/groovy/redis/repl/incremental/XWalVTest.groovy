@@ -82,7 +82,7 @@ class XWalVTest extends Specification {
         exception
 
         when:
-        final byte slot = 0
+        final short slot = 0
         LocalPersistTest.prepareLocalPersist()
         def localPersist = LocalPersist.instance
         localPersist.fixSlotThreadId(slot, Thread.currentThread().threadId())

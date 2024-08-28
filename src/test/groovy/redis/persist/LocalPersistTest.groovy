@@ -19,7 +19,7 @@ class LocalPersistTest extends Specification {
         localPersist.debugMode()
     }
 
-    final byte slot = 0
+    final short slot = 0
 
     def 'test all'() {
         given:
@@ -29,7 +29,7 @@ class LocalPersistTest extends Specification {
         LocalPersist.PAGE_SIZE == 4096
         LocalPersist.PROTECTION == 7
         LocalPersist.DEFAULT_SLOT_NUMBER == 4
-        LocalPersist.MAX_SLOT_NUMBER == 128
+        LocalPersist.MAX_SLOT_NUMBER == 1024
         LocalPersist.O_DIRECT == 040000
         localPersist.oneSlots() == null
 

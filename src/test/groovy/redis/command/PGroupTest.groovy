@@ -74,7 +74,7 @@ class PGroupTest extends Specification {
 
     def 'test handle'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes

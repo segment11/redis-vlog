@@ -48,7 +48,7 @@ public class XFlush implements BinlogContent {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     @Override
-    public void apply(byte slot, ReplPair replPair) {
+    public void apply(short slot, ReplPair replPair) {
         log.warn("Repl slave apply one slot flush, !!!, slot: {}", slot);
         var oneSlot = localPersist.oneSlot(slot);
         oneSlot.flush();

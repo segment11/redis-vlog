@@ -25,11 +25,11 @@ public class KeyLoader implements InMemoryEstimate, NeedCleanUp {
     static final int MAX_KEY_BUCKET_COUNT_PER_FD = 2 * 1024 * 1024 / 4;
 
     @TestOnly
-    KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake) {
+    KeyLoader(short slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake) {
         this(slot, bucketsPerSlot, slotDir, snowFlake, null);
     }
 
-    public KeyLoader(byte slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake, OneSlot oneSlot) {
+    public KeyLoader(short slot, int bucketsPerSlot, File slotDir, SnowFlake snowFlake, OneSlot oneSlot) {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
         this.bucketsPerSlot = bucketsPerSlot;
@@ -78,7 +78,7 @@ public class KeyLoader implements InMemoryEstimate, NeedCleanUp {
         return size;
     }
 
-    private final byte slot;
+    private final short slot;
     private final String slotStr;
     final int bucketsPerSlot;
     private final File slotDir;

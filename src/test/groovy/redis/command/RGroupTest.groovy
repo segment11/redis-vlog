@@ -101,7 +101,7 @@ class RGroupTest extends Specification {
 
     def 'test rename'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
@@ -171,7 +171,7 @@ class RGroupTest extends Specification {
 
     def 'test rpop'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
@@ -193,7 +193,7 @@ class RGroupTest extends Specification {
 
     def 'test rpoplpush'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
@@ -277,7 +277,7 @@ class RGroupTest extends Specification {
 
     def 'test rpush and rpushx'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes

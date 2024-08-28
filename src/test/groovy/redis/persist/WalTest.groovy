@@ -11,7 +11,7 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class WalTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'put and get'() {
         given:

@@ -18,7 +18,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 public class ChunkMergeWorker implements InMemoryEstimate {
-    private final byte slot;
+    private final short slot;
     private final String slotStr;
     final OneSlot oneSlot;
 
@@ -262,7 +262,7 @@ public class ChunkMergeWorker implements InMemoryEstimate {
 
     long logMergeCount = 0;
 
-    public ChunkMergeWorker(byte slot, OneSlot oneSlot) {
+    public ChunkMergeWorker(short slot, OneSlot oneSlot) {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
         this.oneSlot = oneSlot;

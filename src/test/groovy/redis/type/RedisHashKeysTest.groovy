@@ -6,7 +6,7 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class RedisHashKeysTest extends Specification {
-    private static byte slot(String key) {
+    private static short slot(String key) {
         BaseCommand.slot(key.bytes, 128).slot()
     }
 

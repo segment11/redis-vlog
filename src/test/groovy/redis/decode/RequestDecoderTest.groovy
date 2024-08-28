@@ -2,7 +2,6 @@ package redis.decode
 
 import io.activej.bytebuf.ByteBuf
 import io.activej.bytebuf.ByteBufs
-import io.activej.common.exception.MalformedDataException
 import redis.repl.Repl
 import redis.repl.ReplType
 import redis.repl.content.Ping
@@ -162,7 +161,7 @@ class RequestDecoderTest extends Specification {
         requestList3 == null
     }
 
-    def "test decode repl"() {
+    def 'test decode repl'() {
         given:
         def decoder = new RequestDecoder()
 
@@ -199,18 +198,12 @@ class RequestDecoderTest extends Specification {
         def buffer = ByteBuffer.wrap(bb)
         buffer.put('X-REPL'.bytes)
         buffer.putLong(0L)
-        buffer.put((byte) -1)
+        buffer.putShort((short) -1)
         buf2 = ByteBuf.wrapForReading(bb)
         bufs2 = new ByteBufs(1)
         bufs2.add(buf2)
-        boolean exception = false
-        try {
-            decoder.tryDecode(bufs2)
-        } catch (MalformedDataException e) {
-            println e.message
-            exception = true
-        }
+        requestList = decoder.tryDecode(bufs2)
         then:
-        exception
+        requestList == null
     }
 }

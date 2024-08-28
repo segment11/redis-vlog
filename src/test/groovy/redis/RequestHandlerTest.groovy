@@ -19,7 +19,7 @@ import java.nio.channels.SocketChannel
 import java.time.Duration
 
 class RequestHandlerTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
     final byte workerId = 0
     final byte netWorkers = 1
     final short slotNumber = 1

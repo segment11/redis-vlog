@@ -269,7 +269,7 @@ public class XOneWalGroupPersist implements BinlogContent {
     private final LocalPersist localPersist = LocalPersist.getInstance();
 
     @Override
-    public void apply(byte slot, ReplPair replPair) {
+    public void apply(short slot, ReplPair replPair) {
         var oneSlot = localPersist.oneSlot(slot);
 
         var keyLoader = oneSlot.getKeyLoader();

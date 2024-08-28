@@ -14,7 +14,7 @@ import java.util.HashMap;
 
 public class DynConfig {
     private final Logger log = LoggerFactory.getLogger(DynConfig.class);
-    private final byte slot;
+    private final short slot;
     private final File dynConfigFile;
 
     private final HashMap<String, Object> data;
@@ -28,9 +28,9 @@ public class DynConfig {
     }
 
     private class AfterUpdateCallbackInner implements AfterUpdateCallback {
-        private final byte currentSlot;
+        private final short currentSlot;
 
-        public AfterUpdateCallbackInner(byte currentSlot) {
+        public AfterUpdateCallbackInner(short currentSlot) {
             this.currentSlot = currentSlot;
         }
 
@@ -117,7 +117,7 @@ public class DynConfig {
         update("binlogOn", binlogOn);
     }
 
-    public DynConfig(byte slot, File dynConfigFile) throws IOException {
+    public DynConfig(short slot, File dynConfigFile) throws IOException {
         this.slot = slot;
         this.dynConfigFile = dynConfigFile;
         this.afterUpdateCallback = new AfterUpdateCallbackInner(slot);

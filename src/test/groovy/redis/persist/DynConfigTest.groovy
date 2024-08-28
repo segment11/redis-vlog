@@ -6,7 +6,7 @@ import redis.TrainSampleJob
 import spock.lang.Specification
 
 class DynConfigTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     static File tmpFile = new File('/tmp/dyn-config.json')
     static File tmpFile2 = new File('/tmp/dyn-config2.json')

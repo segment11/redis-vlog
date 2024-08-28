@@ -109,7 +109,7 @@ class EGroupTest extends Specification {
 
     def 'test exists'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -187,7 +187,7 @@ class EGroupTest extends Specification {
 
     def 'test expire'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data1 = new byte[1][]
 
@@ -334,7 +334,7 @@ class EGroupTest extends Specification {
 
     def 'test expiretime'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes

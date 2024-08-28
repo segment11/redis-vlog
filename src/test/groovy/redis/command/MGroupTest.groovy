@@ -2,6 +2,8 @@ package redis.command
 
 import io.activej.eventloop.Eventloop
 import redis.BaseCommand
+import redis.Utils
+import redis.dyn.CachedGroovyClassLoader
 import redis.mock.InMemoryGetSet
 import redis.persist.LocalPersist
 import redis.persist.Mock
@@ -31,32 +33,14 @@ class MGroupTest extends Specification {
         sMsetList.size() == 2
         s.size() == 0
 
-        when:
-        def data4 = new byte[4][]
-        data4[1] = 'view-persist-key-count'.bytes
-        data4[2] = '0'.bytes
-        def sManageList = MGroup.parseSlots('manage', data4, slotNumber)
-        then:
-        sManageList.size() == 1
 
         when:
-        data4[1] = 'view-slot-bucket-keys'.bytes
-        data4[2] = '0'.bytes
-        sManageList = MGroup.parseSlots('manage', data4, slotNumber)
-        then:
-        sManageList.size() == 1
-
-        when:
-        data4[2] = 'a'.bytes
-        sManageList = MGroup.parseSlots('manage', data4, slotNumber)
-        then:
-        sManageList.size() == 0
-
-        when:
-        data4[1] = 'output-dict-bytes'.bytes
-        data4[2] = '100'.bytes
-        data4[3] = 'key:000000000001'.bytes
-        sManageList = MGroup.parseSlots('manage', data4, slotNumber)
+        def classpath = Utils.projectPath("/dyn/src")
+        CachedGroovyClassLoader.instance.init(GroovyClassLoader.getClass().classLoader, classpath, null)
+        data5[1] = 'slot'.bytes
+        data5[2] = '0'.bytes
+        data5[3] = 'view-persist-key-count'.bytes
+        def sManageList = MGroup.parseSlots('manage', data5, slotNumber)
         then:
         sManageList.size() == 1
 
@@ -72,14 +56,20 @@ class MGroupTest extends Specification {
         sList.size() == 0
 
         when:
+        def data4 = new byte[4][]
+        sMsetList = MGroup.parseSlots('mset', data4, slotNumber)
+        then:
+        sMsetList.size() == 0
+
+        when:
         sList = MGroup.parseSlots('manage', data1, slotNumber)
         then:
         sList.size() == 0
 
         when:
-        sList = MGroup.parseSlots('mset', data4, slotNumber)
+        sList = MGroup.parseSlots('mset', data5, slotNumber)
         then:
-        sList.size() == 0
+        sList.size() == 2
 
         when:
         data5[1] = 'view-persist-key-count'.bytes
@@ -126,6 +116,8 @@ class MGroupTest extends Specification {
         reply == ErrorReply.FORMAT
 
         when:
+        def classpath = Utils.projectPath("/dyn/src")
+        CachedGroovyClassLoader.getInstance().init(GroovyClassLoader.getClass().classLoader, classpath, null)
         mGroup.cmd = 'manage'
         reply = mGroup.handle()
         then:
@@ -140,7 +132,7 @@ class MGroupTest extends Specification {
 
     def 'test mget'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
@@ -202,7 +194,7 @@ class MGroupTest extends Specification {
 
     def 'test mset'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data5 = new byte[5][]
         data5[1] = 'a'.bytes

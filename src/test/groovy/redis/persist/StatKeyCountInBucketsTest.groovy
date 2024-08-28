@@ -9,7 +9,7 @@ import java.nio.ByteBuffer
 import static redis.persist.Consts.getSlotDir
 
 class StatKeyCountInBucketsTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'test for repl'() {
         given:

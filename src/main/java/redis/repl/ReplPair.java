@@ -12,14 +12,14 @@ import redis.repl.content.Hello;
 import java.util.LinkedList;
 
 public class ReplPair {
-    public ReplPair(byte slot, boolean asMaster, String host, int port) {
+    public ReplPair(short slot, boolean asMaster, String host, int port) {
         this.slot = slot;
         this.asMaster = asMaster;
         this.host = host;
         this.port = port;
     }
 
-    private final byte slot;
+    private final short slot;
     private final boolean asMaster;
 
     public String getHost() {
@@ -47,7 +47,7 @@ public class ReplPair {
 
     private final Logger log = LoggerFactory.getLogger(ReplPair.class);
 
-    public byte getSlot() {
+    public short getSlot() {
         return slot;
     }
 

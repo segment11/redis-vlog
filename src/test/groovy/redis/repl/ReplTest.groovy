@@ -9,7 +9,7 @@ import java.nio.ByteBuffer
 class ReplTest extends Specification {
     def 'test all'() {
         given:
-        final byte slot = 0
+        final short slot = 0
         final ReplPair replPair = ReplPairTest.mockAsSlave()
 
         Repl.test(slot, replPair, 'test')
@@ -57,8 +57,8 @@ class ReplTest extends Specification {
         exception
 
         when:
-        pingBytes[Repl.PROTOCOL_KEYWORD_BYTES.length + 8] = 0
-        pingBytes[Repl.PROTOCOL_KEYWORD_BYTES.length + 8 + 1] = -10
+        ByteBuffer.wrap(pingBytes).putShort(Repl.PROTOCOL_KEYWORD_BYTES.length + 8, (short) 0)
+        ByteBuffer.wrap(pingBytes).putShort(Repl.PROTOCOL_KEYWORD_BYTES.length + 8 + 2, (short) -10)
         nettyBuf.readerIndex(0)
         data = Repl.decode(nettyBuf)
         then:

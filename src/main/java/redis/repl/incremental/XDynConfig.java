@@ -26,7 +26,7 @@ public class XDynConfig implements BinlogContent {
     }
 
     @Override
-    public void apply(byte slot, ReplPair replPair) {
+    public void apply(short slot, ReplPair replPair) {
 
     }
 }

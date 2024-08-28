@@ -88,7 +88,7 @@ public class Request {
 
     public static final byte SLOT_CAN_HANDLE_BY_ANY_WORKER = -1;
 
-    public byte getSingleSlot() {
+    public short getSingleSlot() {
         if (isRepl) {
             // refer to Repl.decode
             return data[1][0];

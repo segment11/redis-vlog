@@ -22,7 +22,7 @@ import java.nio.channels.SocketChannel
 import java.time.Duration
 
 class ReplPairTest extends Specification {
-    static ReplPair mockOne(byte slot = 0, boolean asMaster = true, String host = 'localhost', int port = 6379) {
+    static ReplPair mockOne(short slot = 0, boolean asMaster = true, String host = 'localhost', int port = 6379) {
         def replPair = new ReplPair(slot, asMaster, host, port)
         replPair
     }
@@ -40,7 +40,7 @@ class ReplPairTest extends Specification {
         replPair
     }
 
-    final byte slot = 0
+    final short slot = 0
 
     def 'test base'() {
         given:

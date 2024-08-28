@@ -5,12 +5,12 @@ import spock.lang.Specification
 class ReplTypeTest extends Specification {
     def 'test all'() {
         given:
-//        final byte slot = 0
+//        final short slot = 0
 
         def types = ReplType.values()
 
         expect:
-        types.length == 26
+        types.length == 28
 
         ReplType.fromCode(ReplType.ping.code) == ReplType.ping
         ReplType.fromCode((byte) -10) == null

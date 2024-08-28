@@ -26,7 +26,7 @@ public class IterateChunkSegments {
     public static void main(String[] args) throws IOException {
         confChunk = ConfForSlot.c100m.confChunk;
 
-        byte slot = 0;
+        short slot = 0;
         int[] sumArray = new int[confChunk.maxSegmentNumber()];
 
         var slotDir = new File(persistDir + "/slot-" + slot);
@@ -43,7 +43,7 @@ public class IterateChunkSegments {
         System.out.println("sum total: " + sumTotal);
     }
 
-    public static void iterateOneChunkFile(byte slot, byte index, File chunkFile, int[] sumArray) throws IOException {
+    public static void iterateOneChunkFile(short slot, byte index, File chunkFile, int[] sumArray) throws IOException {
         if (chunkFile.length() == 0) {
             return;
         }

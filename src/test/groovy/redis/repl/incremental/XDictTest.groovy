@@ -10,7 +10,7 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class XDictTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'test encode and decode'() {
         given:

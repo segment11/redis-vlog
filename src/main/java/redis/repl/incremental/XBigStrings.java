@@ -92,7 +92,7 @@ public class XBigStrings implements BinlogContent {
     private final LocalPersist localPersist = LocalPersist.getInstance();
 
     @Override
-    public void apply(byte slot, ReplPair replPair) {
+    public void apply(short slot, ReplPair replPair) {
         var keyHash = KeyHash.hash(key.getBytes());
         var bucketIndex = KeyHash.bucketIndex(keyHash, ConfForSlot.global.confBucket.bucketsPerSlot);
         var cv = CompressedValue.decode(Unpooled.wrappedBuffer(cvEncoded), key.getBytes(), keyHash);

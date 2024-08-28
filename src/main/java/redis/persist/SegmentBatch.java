@@ -21,7 +21,7 @@ import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 public class SegmentBatch {
     private final byte[] bytes;
     private final ByteBuffer buffer;
-    private final byte slot;
+    private final short slot;
     private final String slotStr;
 
     private final int chunkSegmentLength;
@@ -41,7 +41,7 @@ public class SegmentBatch {
 
     private final Logger log = LoggerFactory.getLogger(SegmentBatch.class);
 
-    public SegmentBatch(byte slot, SnowFlake snowFlake) {
+    public SegmentBatch(short slot, SnowFlake snowFlake) {
         this.chunkSegmentLength = ConfForSlot.global.confChunk.segmentLength;
         this.slot = slot;
         this.slotStr = String.valueOf(slot);

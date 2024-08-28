@@ -55,7 +55,7 @@ public class MetaKeyBucketSplitNumber implements InMemoryEstimate, NeedCleanUp {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public MetaKeyBucketSplitNumber(byte slot, File slotDir) throws IOException {
+    public MetaKeyBucketSplitNumber(short slot, File slotDir) throws IOException {
         this.allCapacity = ConfForSlot.global.confBucket.bucketsPerSlot;
         this.initialSplitNumber = ConfForSlot.global.confBucket.initialSplitNumber;
         log.info("Meta key bucket initial split number: {}", initialSplitNumber);

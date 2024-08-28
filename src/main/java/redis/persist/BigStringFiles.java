@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 
 public class BigStringFiles implements InMemoryEstimate {
-    private final byte slot;
+    private final short slot;
     private final String slotStr;
     final File bigStringDir;
 
@@ -36,7 +36,7 @@ public class BigStringFiles implements InMemoryEstimate {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public BigStringFiles(byte slot, File slotDir) throws IOException {
+    public BigStringFiles(short slot, File slotDir) throws IOException {
         this.slot = slot;
         if (ConfForGlobal.pureMemory) {
             log.warn("Pure memory mode, big string files will not be used, slot: {}", slot);

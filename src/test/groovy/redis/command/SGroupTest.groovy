@@ -43,7 +43,7 @@ sunion
 sunionstore
 '''.readLines().collect { it.trim() }.findAll { it }
 
-    final byte slot = 0
+    final short slot = 0
 
     def 'test parse slot'() {
         given:

@@ -239,7 +239,7 @@ zunionstore
         sZintercardList.size() == 0
     }
 
-    final byte slot = 0
+    final short slot = 0
 
     def 'test handle'() {
         given:
@@ -275,7 +275,7 @@ zunionstore
 
     def 'test zadd'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data6 = new byte[6][]
         data6[1] = 'a'.bytes
@@ -478,7 +478,7 @@ zunionstore
 
     def 'test zcard'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
@@ -517,7 +517,7 @@ zunionstore
 
     def 'test zcount'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -647,7 +647,7 @@ zunionstore
 
     def 'test zdiff'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data5 = new byte[5][]
         data5[1] = '2'.bytes
@@ -1250,7 +1250,7 @@ zunionstore
 
     def 'test zincrby'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -1313,7 +1313,7 @@ zunionstore
     def 'test zintercard'() {
         // todo
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data6 = new byte[6][]
         data6[1] = '2'.bytes
@@ -1543,7 +1543,7 @@ zunionstore
 
     def 'test zmscore'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -1607,7 +1607,7 @@ zunionstore
 
     def 'test zpopmax'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes
@@ -1695,7 +1695,7 @@ zunionstore
 
     def 'test zrandmember'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -1837,7 +1837,7 @@ zunionstore
 
     def 'test zrange'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data10 = new byte[10][]
         data10[1] = 'a'.bytes
@@ -2444,7 +2444,7 @@ zunionstore
 
     def 'test zrangebylex'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data7 = new byte[7][]
         data7[1] = 'a'.bytes
@@ -2487,7 +2487,7 @@ zunionstore
 
     def 'test zrangebyscore'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data7 = new byte[7][]
         data7[1] = 'a'.bytes
@@ -2523,7 +2523,7 @@ zunionstore
 
     def 'test zrangestore'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data8 = new byte[8][]
         data8[1] = 'dst'.bytes
@@ -2550,7 +2550,7 @@ zunionstore
 
     def 'test zrevrange'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data5 = new byte[5][]
         data5[1] = 'a'.bytes
@@ -2574,7 +2574,7 @@ zunionstore
 
     def 'test zrevrangebylex'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data7 = new byte[7][]
         data7[1] = 'a'.bytes
@@ -2600,7 +2600,7 @@ zunionstore
 
     def 'test zrevrangebyscore'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data7 = new byte[7][]
         data7[1] = 'a'.bytes
@@ -2626,7 +2626,7 @@ zunionstore
 
     def 'test zrank'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -2725,7 +2725,7 @@ zunionstore
 
     def 'test zrem'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -2787,7 +2787,7 @@ zunionstore
 
     def 'test zremrangebyscore'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -3014,7 +3014,7 @@ zunionstore
 
     def 'test zscore'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes

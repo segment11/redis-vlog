@@ -79,7 +79,7 @@ class GGroupTest extends Specification {
 
     def 'test getdel'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
@@ -107,7 +107,7 @@ class GGroupTest extends Specification {
 
     def 'test getex'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data2 = new byte[2][]
         data2[1] = 'a'.bytes
@@ -223,7 +223,7 @@ class GGroupTest extends Specification {
 
     def 'test getrange'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data4 = new byte[4][]
         data4[1] = 'a'.bytes
@@ -315,7 +315,7 @@ class GGroupTest extends Specification {
 
     def 'test getset'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         def data3 = new byte[3][]
         data3[1] = 'a'.bytes

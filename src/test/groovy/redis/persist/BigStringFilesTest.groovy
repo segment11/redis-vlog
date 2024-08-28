@@ -8,7 +8,7 @@ import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
 
 class BigStringFilesTest extends Specification {
-    final byte slot = 0
+    final short slot = 0
 
     def 'test write and read'() {
         given:

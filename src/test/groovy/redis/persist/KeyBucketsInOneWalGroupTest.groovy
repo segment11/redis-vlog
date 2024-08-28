@@ -10,7 +10,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
     def 'test put all'() {
         given:
         ConfForSlot.global.confBucket.initialSplitNumber = 1
-        final byte slot = 0
+        final short slot = 0
 
         def keyLoader = KeyLoaderTest.prepareKeyLoader()
 
@@ -71,7 +71,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
     def 'test check if need split'() {
         given:
-        final byte slot = 0
+        final short slot = 0
         ConfForSlot.global.confBucket.initialSplitNumber = 1
 
         def inner = new KeyBucketsInOneWalGroup(slot, 0, null)
@@ -203,7 +203,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
     def 'test some branches'() {
         given:
-        final byte slot = 0
+        final short slot = 0
         ConfForSlot.global.confBucket.initialSplitNumber = 1
 
         def keyLoader = KeyLoaderTest.prepareKeyLoader()
@@ -266,7 +266,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
     def 'test write after put batch'() {
         given:
-        final byte slot = 0
+        final short slot = 0
         ConfForSlot.global.confBucket.initialSplitNumber = 1
         def oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
 
@@ -298,7 +298,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
     def 'test split max'() {
         given:
-        final byte slot = 0
+        final short slot = 0
 
         ConfForSlot.global.confBucket.initialSplitNumber = KeyLoader.MAX_SPLIT_NUMBER / KeyLoader.SPLIT_MULTI_STEP
 
@@ -356,7 +356,7 @@ class KeyBucketsInOneWalGroupTest extends Specification {
 
     def 'test some corner branches'() {
         given:
-        final byte slot = 0
+        final short slot = 0
         ConfForSlot.global.confBucket.initialSplitNumber = 1
         def oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
 

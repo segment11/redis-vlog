@@ -23,7 +23,7 @@ class KeyLoaderTest extends Specification {
 
         def snowFlake = new SnowFlake(1, 1)
 
-        byte slot = 0
+        short slot = 0
         def keyLoader = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir, snowFlake)
         // do nothing, just for test coverage
         keyLoader.cleanUp()
@@ -34,7 +34,7 @@ class KeyLoaderTest extends Specification {
         keyLoader
     }
 
-    final byte slot = 0
+    final short slot = 0
     final byte splitIndex = 0
 
     def 'test base'() {
@@ -402,7 +402,7 @@ class KeyLoaderTest extends Specification {
         }
 
         when:
-        final byte slot = 0
+        final short slot = 0
         def oneSlot = new OneSlot(slot, Consts.slotDir, null, null)
         def keyLoader2 = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir2, keyLoader.snowFlake, oneSlot)
         keyLoader2.initFds(keyLoader.libC)
@@ -449,7 +449,7 @@ class KeyLoaderTest extends Specification {
         }
 
         when:
-        final byte slot = 0
+        final short slot = 0
         def oneSlot = new OneSlot(slot, Consts.slotDir, null, null)
         def keyLoader2 = new KeyLoader(slot, ConfForSlot.global.confBucket.bucketsPerSlot, Consts.slotDir2, keyLoader.snowFlake, oneSlot)
         keyLoader2.initFds(keyLoader.libC)
