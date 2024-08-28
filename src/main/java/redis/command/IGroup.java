@@ -41,6 +41,8 @@ public class IGroup extends BaseCommand {
 
             var dGroup = new DGroup(cmd, data, socket);
             dGroup.from(this);
+            dGroup.setSlotWithKeyHashListParsed(this.slotWithKeyHashListParsed);
+
             return dGroup.decrBy(-1, 0);
         }
 
@@ -58,6 +60,8 @@ public class IGroup extends BaseCommand {
 
             var dGroup = new DGroup(cmd, data, socket);
             dGroup.from(this);
+            dGroup.setSlotWithKeyHashListParsed(this.slotWithKeyHashListParsed);
+
             return dGroup.decrBy(-by, 0);
         }
 
@@ -75,6 +79,8 @@ public class IGroup extends BaseCommand {
 
             var dGroup = new DGroup(cmd, data, socket);
             dGroup.from(this);
+            dGroup.setSlotWithKeyHashListParsed(this.slotWithKeyHashListParsed);
+
             return dGroup.decrBy(0, -by);
         }
 
