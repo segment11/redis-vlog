@@ -152,8 +152,8 @@ public class TrainSampleJob {
         }
 
         var groupByKeyPrefixOrSuffixMap = sampleToTrainListCopy.stream().collect(Collectors.groupingBy(one -> {
-            if (one.keyPrefixGiven != null) {
-                return one.keyPrefixGiven;
+            if (one.keyPrefixOrSuffixGiven != null) {
+                return one.keyPrefixOrSuffixGiven;
             }
 
             var key = one.key();
@@ -197,6 +197,6 @@ public class TrainSampleJob {
     public record TrainSampleResult(HashMap<String, Dict> cacheDict, ArrayList<Long> removedSampleKVSeqList) {
     }
 
-    public record TrainSampleKV(String key, String keyPrefixGiven, Long seq, byte[] valueBytes) {
+    public record TrainSampleKV(String key, String keyPrefixOrSuffixGiven, Long seq, byte[] valueBytes) {
     }
 }

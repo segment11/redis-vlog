@@ -291,11 +291,11 @@ class ManageCommand extends BaseCommand {
                 return new ErrorReply('Train sample value count too small')
             }
 
-            def keyPrefixGiven = new String(data[3])
+            def keyPrefixOrSuffixGiven = new String(data[3])
 
             List<TrainSampleJob.TrainSampleKV> sampleToTrainList = []
             for (int i = 4; i < data.length; i++) {
-                sampleToTrainList << new TrainSampleJob.TrainSampleKV(null, keyPrefixGiven, 0L, data[i])
+                sampleToTrainList << new TrainSampleJob.TrainSampleKV(null, keyPrefixOrSuffixGiven, 0L, data[i])
             }
 
             def trainSampleJob = new TrainSampleJob(workerId)
@@ -304,16 +304,16 @@ class ManageCommand extends BaseCommand {
 
             // only one key prefix given, only one dict after train
             def trainSampleCacheDict = trainSampleResult.cacheDict()
-            def onlyOneDict = trainSampleCacheDict.get(keyPrefixGiven)
+            def onlyOneDict = trainSampleCacheDict.get(keyPrefixOrSuffixGiven)
             log.warn 'Train new dict result, sample value count: {}, dict count: {}', data.length - 4, trainSampleCacheDict.size()
             // will overwrite same key prefix dict exists
-            dictMap.putDict(keyPrefixGiven, onlyOneDict)
+            dictMap.putDict(keyPrefixOrSuffixGiven, onlyOneDict)
 
-//            def oldDict = dictMap.putDict(keyPrefixGiven, onlyOneDict)
+//            def oldDict = dictMap.putDict(keyPrefixOrSuffixGiven, onlyOneDict)
 //            if (oldDict != null) {
 //                // keep old dict in persist, because may be used by other worker
 //                // when start server, early dict will be overwritten by new dict with same key prefix, need not persist again?
-//                dictMap.putDict(keyPrefixGiven + '_' + new Random().nextInt(10000), oldDict)
+//                dictMap.putDict(keyPrefixOrSuffixGiven + '_' + new Random().nextInt(10000), oldDict)
 //            }
 
             // show compress ratio use dict just trained
