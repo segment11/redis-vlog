@@ -6,6 +6,7 @@ import redis.mock.InMemoryGetSet
 import redis.persist.LocalPersist
 import redis.persist.Mock
 import redis.reply.*
+import redis.type.RedisHH
 import redis.type.RedisHashKeys
 import spock.lang.Specification
 
@@ -186,6 +187,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hdel', data3, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hdel()
@@ -214,7 +216,12 @@ class HGroupTest extends Specification {
 
         when:
         LocalPersist.instance.hashSaveMemberTogether = true
-        inMemoryGetSet.put(slot, 'a', 0, cvKeys)
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        rhh.put('field', ' '.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
         reply = hGroup.hdel()
         then:
         reply instanceof IntegerReply
@@ -249,7 +256,12 @@ class HGroupTest extends Specification {
 
         when:
         LocalPersist.instance.hashSaveMemberTogether = true
-        inMemoryGetSet.put(slot, 'a', 0, cvKeys)
+        rhh.remove('field')
+        100.times {
+            rhh.put('field' + it, ' '.bytes)
+        }
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
         reply = hGroup.hdel()
         then:
         reply instanceof IntegerReply
@@ -284,6 +296,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hexists', data3, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.fieldKey('a', 'field'))
         def reply = hGroup.hexists()
@@ -291,11 +304,37 @@ class HGroupTest extends Specification {
         reply == IntegerReply.REPLY_0
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hexists()
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvField = Mock.prepareCompressedValueList(1)[0]
         inMemoryGetSet.put(slot, RedisHashKeys.fieldKey('a', 'field'), 0, cvField)
         reply = hGroup.hexists()
         then:
         reply == IntegerReply.REPLY_1
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        rhh.put('field', ' '.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hexists()
+        then:
+        reply == IntegerReply.REPLY_1
+
+        when:
+        data3[2] = 'field1'.bytes
+        reply = hGroup.hexists()
+        then:
+        reply == IntegerReply.REPLY_0
 
         when:
         data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -326,6 +365,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hget', data3, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.fieldKey('a', 'field'))
         def reply = hGroup.hget(true)
@@ -333,11 +373,26 @@ class HGroupTest extends Specification {
         reply == IntegerReply.REPLY_0
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hget(true)
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         reply = hGroup.hget(false)
         then:
         reply == NilReply.INSTANCE
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hget(false)
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvField = Mock.prepareCompressedValueList(1)[0]
         inMemoryGetSet.put(slot, RedisHashKeys.fieldKey('a', 'field'), 0, cvField)
         reply = hGroup.hget(true)
@@ -346,10 +401,42 @@ class HGroupTest extends Specification {
         ((IntegerReply) reply).integer == cvField.compressedData.length
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        rhh.put('field', ' '.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hget(true)
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         reply = hGroup.hget(false)
         then:
         reply instanceof BulkReply
         ((BulkReply) reply).raw == cvField.compressedData
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hget(false)
+        then:
+        reply instanceof BulkReply
+        ((BulkReply) reply).raw == ' '.bytes
+
+        when:
+        data3[2] = 'field1'.bytes
+        reply = hGroup.hget(true)
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        reply = hGroup.hget(false)
+        then:
+        reply == NilReply.INSTANCE
 
         when:
         data3[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -379,6 +466,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hgetall', data2, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hgetall()
@@ -386,6 +474,14 @@ class HGroupTest extends Specification {
         reply == MultiBulkReply.EMPTY
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hgetall()
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvList = Mock.prepareCompressedValueList(2)
         def cvKeys = cvList[0]
         cvKeys.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
@@ -405,6 +501,32 @@ class HGroupTest extends Specification {
         ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == cvField.compressedData
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        rhh.put('field', ' '.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hgetall()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+        ((MultiBulkReply) reply).replies[0] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == 'field'.bytes
+        ((MultiBulkReply) reply).replies[1] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == ' '.bytes
+
+        when:
+        rhh.remove('field')
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hgetall()
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         inMemoryGetSet.remove(slot, RedisHashKeys.fieldKey('a', 'field'))
         reply = hGroup.hgetall()
         then:
@@ -415,6 +537,7 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[1] instanceof NilReply
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         rhk.remove('field')
         cvKeys.compressedData = rhk.encode()
         inMemoryGetSet.put(slot, RedisHashKeys.keysKey('a'), 0, cvKeys)
@@ -445,24 +568,45 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hincrby', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.fieldKey('a', 'field'))
         def reply = hGroup.hincrby(false)
         then:
-        reply == ErrorReply.NOT_INTEGER
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hincrby(false)
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         reply = hGroup.hincrby(true)
         then:
-        reply == ErrorReply.NOT_FLOAT
+        reply instanceof BulkReply
+        ((BulkReply) reply).raw == '2.00'.bytes
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hincrby(true)
+        then:
+        reply instanceof BulkReply
+        ((BulkReply) reply).raw == '2.00'.bytes
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data4[3] = 'a'.bytes
         reply = hGroup.hincrby(false)
         then:
         reply == ErrorReply.NOT_INTEGER
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         reply = hGroup.hincrby(true)
         then:
         reply == ErrorReply.NOT_FLOAT
@@ -479,6 +623,48 @@ class HGroupTest extends Specification {
         reply = hGroup.hincrby(false)
         then:
         reply == ErrorReply.KEY_TOO_LONG
+
+        when:
+        data4[1] = 'a'.bytes
+        data4[2] = 'field'.bytes
+        data4[3] = '1'.bytes
+        LocalPersist.instance.hashSaveMemberTogether = true
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        rhh.put('field', '0'.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hincrby(false)
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        rhh.put('field', '1.1'.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hincrby(true)
+        then:
+        reply instanceof BulkReply
+        ((BulkReply) reply).raw == '2.10'.bytes
+
+        when:
+        rhh.remove('field')
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hincrby(true)
+        then:
+        reply instanceof BulkReply
+        ((BulkReply) reply).raw == '1.00'.bytes
+
+        when:
+        rhh.put('field', 'a'.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hincrby(true)
+        then:
+        reply == ErrorReply.NOT_FLOAT
     }
 
     def 'test hkeys'() {
@@ -495,6 +681,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hkeys', data2, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hkeys(false)
@@ -502,11 +689,26 @@ class HGroupTest extends Specification {
         reply == MultiBulkReply.EMPTY
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hkeys(false)
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         reply = hGroup.hkeys(true)
         then:
         reply == IntegerReply.REPLY_0
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hkeys(true)
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvKeys = Mock.prepareCompressedValueList(1)[0]
         cvKeys.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
         def rhk = new RedisHashKeys()
@@ -521,12 +723,36 @@ class HGroupTest extends Specification {
         ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == 'field'.bytes
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        rhh.put('field', ' '.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hkeys(false)
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+        ((MultiBulkReply) reply).replies[0] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == 'field'.bytes
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         reply = hGroup.hkeys(true)
         then:
         reply instanceof IntegerReply
         ((IntegerReply) reply).integer == 1
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hkeys(true)
+        then:
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == 1
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         rhk.remove('field')
         cvKeys.compressedData = rhk.encode()
         inMemoryGetSet.put(slot, RedisHashKeys.keysKey('a'), 0, cvKeys)
@@ -535,6 +761,21 @@ class HGroupTest extends Specification {
         reply == MultiBulkReply.EMPTY
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        rhh.remove('field')
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hkeys(false)
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        reply = hGroup.hkeys(true)
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data2[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hkeys(false)
         then:
@@ -557,6 +798,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hmget', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hmget()
@@ -567,6 +809,17 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[1] == NilReply.INSTANCE
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hmget()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+        ((MultiBulkReply) reply).replies[0] == NilReply.INSTANCE
+        ((MultiBulkReply) reply).replies[1] == NilReply.INSTANCE
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvList = Mock.prepareCompressedValueList(2)
         def cvField = cvList[0]
         inMemoryGetSet.put(slot, RedisHashKeys.fieldKey('a', 'field'), 0, cvField)
@@ -582,6 +835,25 @@ class HGroupTest extends Specification {
         ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == cvField1.compressedData
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        rhh.put('field', ' '.bytes)
+        rhh.put('field1', ' '.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hmget()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+        ((MultiBulkReply) reply).replies[0] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == ' '.bytes
+        ((MultiBulkReply) reply).replies[1] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == ' '.bytes
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hmget()
         then:
@@ -611,6 +883,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hmset', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hmset()
@@ -618,6 +891,14 @@ class HGroupTest extends Specification {
         reply == OKReply.INSTANCE
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hmset()
+        then:
+        reply == OKReply.INSTANCE
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvKeys = Mock.prepareCompressedValueList(1)[0]
         cvKeys.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
         def rhk = new RedisHashKeys()
@@ -631,6 +912,21 @@ class HGroupTest extends Specification {
         reply == ErrorReply.HASH_SIZE_TO_LONG
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        RedisHashKeys.HASH_MAX_SIZE.times {
+            rhh.put('field' + it, ' '.bytes)
+        }
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hmset()
+        then:
+        reply == ErrorReply.HASH_SIZE_TO_LONG
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         rhk.remove('field0')
         cvKeys.compressedData = rhk.encode()
         inMemoryGetSet.put(slot, RedisHashKeys.keysKey('a'), 0, cvKeys)
@@ -647,6 +943,16 @@ class HGroupTest extends Specification {
         reply == ErrorReply.HASH_SIZE_TO_LONG
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        rhh.remove('field0')
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hmset()
+        then:
+        reply == ErrorReply.HASH_SIZE_TO_LONG
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         10.times {
             rhk.remove('field' + it)
         }
@@ -656,8 +962,20 @@ class HGroupTest extends Specification {
         then:
         reply == OKReply.INSTANCE
 
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        10.times {
+            rhh.remove('field' + it)
+        }
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hmset()
+        then:
+        reply == OKReply.INSTANCE
+
         // get and compare
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data4[1] = 'a'.bytes
         data4[2] = 'field'.bytes
         data4[3] = 'field0'.bytes
@@ -673,6 +991,18 @@ class HGroupTest extends Specification {
         ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == 'value0'.bytes
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hmget()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+        ((MultiBulkReply) reply).replies[0] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == 'value'.bytes
+        ((MultiBulkReply) reply).replies[1] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[1]).raw == 'value0'.bytes
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.data = data4
         hGroup.cmd = 'hmset'
         data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
@@ -711,6 +1041,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hrandfield', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hrandfield()
@@ -718,12 +1049,27 @@ class HGroupTest extends Specification {
         reply == NilReply.INSTANCE
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hrandfield()
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data4[3] = 'withvalues'.bytes
         reply = hGroup.hrandfield()
         then:
         reply == MultiBulkReply.EMPTY
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hrandfield()
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvKeys = Mock.prepareCompressedValueList(1)[0]
         cvKeys.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
         def rhk = new RedisHashKeys()
@@ -735,12 +1081,31 @@ class HGroupTest extends Specification {
         reply == NilReply.INSTANCE
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hrandfield()
+        then:
+        reply == NilReply.INSTANCE
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data4[3] = 'withvalues'.bytes
         reply = hGroup.hrandfield()
         then:
         reply == MultiBulkReply.EMPTY
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hrandfield()
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         10.times {
             rhk.add('field' + it)
         }
@@ -753,6 +1118,19 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies.length == 1
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        10.times {
+            rhh.put('field' + it, ' '.bytes)
+        }
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hrandfield()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         // > rhk size
         data4[3] = (rhk.size() + 1).toString().bytes
         reply = hGroup.hrandfield()
@@ -761,6 +1139,15 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies.length == rhk.size()
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        data4[3] = (rhh.size() + 1).toString().bytes
+        reply = hGroup.hrandfield()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == rhh.size()
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data4[2] = '1'.bytes
         data4[3] = 'withvalues'.bytes
         reply = hGroup.hrandfield()
@@ -771,6 +1158,16 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[1] == NilReply.INSTANCE
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hrandfield()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+        ((MultiBulkReply) reply).replies[0] instanceof BulkReply
+        ((MultiBulkReply) reply).replies[1] instanceof BulkReply
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvList = Mock.prepareCompressedValueList(rhk.size())
         rhk.size().times {
             inMemoryGetSet.put(slot, RedisHashKeys.fieldKey('a', 'field' + it), 0, cvList[it])
@@ -783,6 +1180,7 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[1] instanceof BulkReply
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data4[2] = '-1'.bytes
         reply = hGroup.hrandfield()
         then:
@@ -792,6 +1190,16 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[1] instanceof BulkReply
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hrandfield()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 2
+        ((MultiBulkReply) reply).replies[0] instanceof BulkReply
+        ((MultiBulkReply) reply).replies[1] instanceof BulkReply
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data4[2] = '5'.bytes
         data4[3] = '5'.bytes
         reply = hGroup.hrandfield()
@@ -837,6 +1245,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hsetnx', data4, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hsetnx()
@@ -844,11 +1253,26 @@ class HGroupTest extends Specification {
         reply == IntegerReply.REPLY_1
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hsetnx()
+        then:
+        reply == IntegerReply.REPLY_1
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         reply = hGroup.hsetnx()
         then:
         reply == IntegerReply.REPLY_0
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        reply = hGroup.hsetnx()
+        then:
+        reply == IntegerReply.REPLY_0
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         data4[1] = new byte[CompressedValue.KEY_MAX_LENGTH + 1]
         reply = hGroup.hsetnx()
         then:
@@ -883,6 +1307,7 @@ class HGroupTest extends Specification {
         hGroup.from(BaseCommand.mockAGroup())
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         hGroup.slotWithKeyHashListParsed = HGroup.parseSlots('hvals', data2, hGroup.slotNumber)
         inMemoryGetSet.remove(slot, RedisHashKeys.keysKey('a'))
         def reply = hGroup.hvals()
@@ -890,6 +1315,14 @@ class HGroupTest extends Specification {
         reply == MultiBulkReply.EMPTY
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        inMemoryGetSet.remove(slot, 'a')
+        reply = hGroup.hvals()
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvKeys = Mock.prepareCompressedValueList(1)[0]
         cvKeys.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH
         def rhk = new RedisHashKeys()
@@ -900,6 +1333,18 @@ class HGroupTest extends Specification {
         reply == MultiBulkReply.EMPTY
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        def cvRhh = Mock.prepareCompressedValueList(1)[0]
+        cvRhh.dictSeqOrSpType = CompressedValue.SP_TYPE_HH
+        def rhh = new RedisHH()
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hvals()
+        then:
+        reply == MultiBulkReply.EMPTY
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         rhk.add('field')
         cvKeys.compressedData = rhk.encode()
         inMemoryGetSet.put(slot, RedisHashKeys.keysKey('a'), 0, cvKeys)
@@ -910,6 +1355,19 @@ class HGroupTest extends Specification {
         ((MultiBulkReply) reply).replies[0] == NilReply.INSTANCE
 
         when:
+        LocalPersist.instance.hashSaveMemberTogether = true
+        rhh.put('field', ' '.bytes)
+        cvRhh.compressedData = rhh.encode()
+        inMemoryGetSet.put(slot, 'a', 0, cvRhh)
+        reply = hGroup.hvals()
+        then:
+        reply instanceof MultiBulkReply
+        ((MultiBulkReply) reply).replies.length == 1
+        ((MultiBulkReply) reply).replies[0] instanceof BulkReply
+        ((BulkReply) ((MultiBulkReply) reply).replies[0]).raw == ' '.bytes
+
+        when:
+        LocalPersist.instance.hashSaveMemberTogether = false
         def cvField = Mock.prepareCompressedValueList(1)[0]
         inMemoryGetSet.put(slot, RedisHashKeys.fieldKey('a', 'field'), 0, cvField)
         reply = hGroup.hvals()

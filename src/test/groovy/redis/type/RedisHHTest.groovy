@@ -42,8 +42,22 @@ class RedisHHTest extends Specification {
         rh2.get('name') == 'zhangsan'.bytes
         rh2.get('age') == '20'.bytes
         rh2.size() == 2
+        RedisHH.getSizeWithoutDecode(encoded) == 2
         rh2.map.containsKey('name')
         rh2.map.containsKey('age')
+
+        when:
+        int countOnlyFindName = 0
+        RedisHH.iterate(encoded, true) { key, value ->
+            countOnlyFindName++
+            if (key == 'name') {
+                return true
+            } else {
+                return false
+            }
+        }
+        then:
+        countOnlyFindName == 1
     }
 
     def 'decode crc32 not match'() {

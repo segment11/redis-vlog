@@ -16,6 +16,7 @@ import redis.reply.Reply;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static redis.CompressedValue.NO_EXPIRE;
@@ -436,13 +437,25 @@ public abstract class BaseCommand {
         return get(keyBytes, slotWithKeyHashReuse, false);
     }
 
-    public byte[] get(byte[] keyBytes, SlotWithKeyHash slotWithKeyHashReuse, boolean expectTypeString) {
+    private static boolean contain(Integer[] expectSpTypeArray, int spType) {
+        for (var expectSpType : expectSpTypeArray) {
+            if (expectSpType == spType) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public byte[] get(byte[] keyBytes, SlotWithKeyHash slotWithKeyHashReuse, boolean expectTypeString, Integer... expectSpTypeArray) {
         var cv = getCv(keyBytes, slotWithKeyHashReuse);
         if (cv == null) {
             return null;
         }
         if (expectTypeString && !cv.isTypeString()) {
             throw new TypeMismatchException("Expect type string, but got sp type: " + cv.getDictSeqOrSpType());
+        }
+        if (expectSpTypeArray.length > 0 && !contain(expectSpTypeArray, cv.dictSeqOrSpType)) {
+            throw new TypeMismatchException("Expect sp type array: " + Arrays.toString(expectSpTypeArray) + ", but got sp type: " + cv.getDictSeqOrSpType());
         }
         return getValueBytesByCv(cv);
     }

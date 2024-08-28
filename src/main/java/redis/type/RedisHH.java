@@ -82,6 +82,24 @@ public class RedisHH {
     }
 
     public static RedisHH decode(byte[] data, boolean doCheckCrc32) {
+        var r = new RedisHH();
+        iterate(data, doCheckCrc32, (field, valueBytes) -> {
+            r.map.put(field, valueBytes);
+            return false;
+        });
+        return r;
+    }
+
+    public static int getSizeWithoutDecode(byte[] data) {
+        var buffer = ByteBuffer.wrap(data);
+        return buffer.getShort();
+    }
+
+    public interface IterateCallback {
+        boolean onField(String field, byte[] valueBytes);
+    }
+
+    public static void iterate(byte[] data, boolean doCheckCrc32, IterateCallback callback) {
         var buffer = ByteBuffer.wrap(data);
         int size = buffer.getShort();
         int crc = buffer.getInt();
@@ -94,7 +112,6 @@ public class RedisHH {
             }
         }
 
-        var r = new RedisHH();
         for (int i = 0; i < size; i++) {
             int keyLength = buffer.getShort();
             if (keyLength > CompressedValue.KEY_MAX_LENGTH || keyLength <= 0) {
@@ -110,8 +127,10 @@ public class RedisHH {
 
             var valueBytes = new byte[valueLength];
             buffer.get(valueBytes);
-            r.map.put(new String(keyBytes), valueBytes);
+            var isBreak = callback.onField(new String(keyBytes), valueBytes);
+            if (isBreak) {
+                break;
+            }
         }
-        return r;
     }
 }

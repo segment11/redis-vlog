@@ -78,6 +78,11 @@ class BaseCommandTest extends Specification {
         def c = new SubCommand('get', data2, null)
         c.crossRequestWorker = false
         c.slotWithKeyHashListParsed = null
+        c.cmd = 'get'
+        c.data = data2
+        c.socket = null
+        c.localTest = false
+        c.localTestRandomValueList = null
 
         expect:
         c.cmd == 'get'
@@ -256,6 +261,18 @@ class BaseCommandTest extends Specification {
         inMemoryGetSet.put(slot, keyForTypeList, sKeyForTypeList.bucketIndex(), cvForTypeList)
         then:
         c.get(keyForTypeList.bytes, sKeyForTypeList, true) != null
+        c.get(keyForTypeList.bytes, sKeyForTypeList, true, 0) != null
+
+        when:
+        exception = false
+        try {
+            c.get(keyForTypeList.bytes, sKeyForTypeList, true, CompressedValue.SP_TYPE_HASH, CompressedValue.SP_TYPE_HH_COMPRESSED)
+        } catch (TypeMismatchException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
 
         cleanup:
         localPersist.cleanUp()

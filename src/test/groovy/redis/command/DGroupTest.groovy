@@ -272,7 +272,8 @@ class DGroupTest extends Specification {
         inMemoryGetSet.remove(slot, 'a')
         reply = dGroup.decrBy(1, 0)
         then:
-        reply == ErrorReply.NOT_INTEGER
+        reply instanceof IntegerReply
+        ((IntegerReply) reply).integer == -1
 
         when:
         cv.dictSeqOrSpType = CompressedValue.SP_TYPE_HASH_COMPRESSED
