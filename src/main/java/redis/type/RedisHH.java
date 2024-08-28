@@ -1,17 +1,21 @@
 package redis.type;
 
-import redis.CompressedValue;
-import redis.KeyHash;
+import com.github.luben.zstd.Zstd;
+import org.jetbrains.annotations.VisibleForTesting;
+import redis.*;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+
+import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 // key / value save together
 public class RedisHH {
     public static final byte[] PREFER_MEMBER_NOT_TOGETHER_KEY_PREFIX = "h_not_hh_".getBytes();
 
-    // hash size short + crc int
-    private static final int HEADER_LENGTH = 2 + 4;
+    @VisibleForTesting
+    // hash size short + dict seq int + raw bytes length int + crc int
+    static final int HEADER_LENGTH = 2 + 4 + 4 + 4;
 
     private final HashMap<String, byte[]> map = new HashMap<>();
 
@@ -46,6 +50,10 @@ public class RedisHH {
     }
 
     public byte[] encode() {
+        return encode(null);
+    }
+
+    public byte[] encode(Dict dict) {
         int len = 0;
         for (var entry : map.entrySet()) {
             // key / value length use 2 bytes
@@ -56,6 +64,9 @@ public class RedisHH {
 
         var buffer = ByteBuffer.allocate(len + HEADER_LENGTH);
         buffer.putShort((short) map.size());
+        // tmp no dict seq
+        buffer.putInt(0);
+        buffer.putInt(len);
         // tmp crc
         buffer.putInt(0);
         for (var entry : map.entrySet()) {
@@ -68,13 +79,37 @@ public class RedisHH {
         }
 
         // crc
+        int crc = 0;
         if (len > 0) {
             var hb = buffer.array();
-            int crc = KeyHash.hash32Offset(hb, HEADER_LENGTH, hb.length - HEADER_LENGTH);
-            buffer.putInt(2, crc);
+            crc = KeyHash.hash32Offset(hb, HEADER_LENGTH, hb.length - HEADER_LENGTH);
+            buffer.putInt(HEADER_LENGTH - 4, crc);
         }
 
-        return buffer.array();
+        var rawBytes = buffer.array();
+        if (rawBytes.length > TO_COMPRESS_MIN_DATA_LENGTH) {
+            var dictSeq = dict == null ? Dict.SELF_ZSTD_DICT_SEQ : dict.getSeq();
+
+            var dst = new byte[((int) Zstd.compressBound(len))];
+            int compressedSize;
+            if (dict == null) {
+                compressedSize = (int) Zstd.compressByteArray(dst, 0, dst.length, rawBytes, HEADER_LENGTH, len, Zstd.defaultCompressionLevel());
+            } else {
+                compressedSize = (int) Zstd.compressUsingDict(dst, 0, rawBytes, HEADER_LENGTH, len, dict.getDictBytes(), Zstd.defaultCompressionLevel());
+            }
+
+            if (compressedSize < len * 0.9) {
+                var compressedBytes = new byte[compressedSize + HEADER_LENGTH];
+                System.arraycopy(dst, 0, compressedBytes, HEADER_LENGTH, compressedSize);
+                ByteBuffer buffer1 = ByteBuffer.wrap(compressedBytes);
+                buffer1.putShort((short) map.size());
+                buffer1.putInt(dictSeq);
+                buffer1.putInt(len);
+                buffer1.putInt(crc);
+                return compressedBytes;
+            }
+        }
+        return rawBytes;
     }
 
     public static RedisHH decode(byte[] data) {
@@ -101,8 +136,42 @@ public class RedisHH {
 
     public static void iterate(byte[] data, boolean doCheckCrc32, IterateCallback callback) {
         var buffer = ByteBuffer.wrap(data);
-        int size = buffer.getShort();
-        int crc = buffer.getInt();
+        var size = buffer.getShort();
+        var dictSeq = buffer.getInt();
+        var rawBytesLength = buffer.getInt();
+        var crc = buffer.getInt();
+
+        if (dictSeq > 0) {
+            // decompress first
+            if (dictSeq == Dict.SELF_ZSTD_DICT_SEQ) {
+                var rawBytes = new byte[rawBytesLength];
+                int decompressedSize = (int) Zstd.decompressByteArray(rawBytes, 0, rawBytes.length, data, HEADER_LENGTH, data.length - HEADER_LENGTH);
+                if (decompressedSize <= 0) {
+                    throw new IllegalStateException("Decompress error");
+                }
+
+                data = new byte[decompressedSize + HEADER_LENGTH];
+                System.arraycopy(rawBytes, 0, data, HEADER_LENGTH, decompressedSize);
+                buffer = ByteBuffer.wrap(data);
+                buffer.position(HEADER_LENGTH);
+            } else {
+                var dict = DictMap.getInstance().getDictBySeq(dictSeq);
+                if (dict == null) {
+                    throw new DictMissingException("Dict not found, dict seq: " + dictSeq);
+                }
+
+                var rawBytes = new byte[rawBytesLength];
+                int decompressedSize = (int) Zstd.decompressUsingDict(rawBytes, 0, data, HEADER_LENGTH, data.length - HEADER_LENGTH, dict.getDictBytes());
+                if (decompressedSize <= 0) {
+                    throw new IllegalStateException("Decompress error");
+                }
+
+                data = new byte[decompressedSize + HEADER_LENGTH];
+                System.arraycopy(rawBytes, 0, data, HEADER_LENGTH, decompressedSize);
+                buffer = ByteBuffer.wrap(data);
+                buffer.position(HEADER_LENGTH);
+            }
+        }
 
         // check crc
         if (size > 0 && doCheckCrc32) {

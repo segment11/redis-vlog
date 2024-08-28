@@ -1,6 +1,7 @@
 package redis.type
 
-import redis.CompressedValue
+import redis.*
+import redis.persist.Consts
 import spock.lang.Specification
 
 import java.nio.ByteBuffer
@@ -68,7 +69,7 @@ class RedisHHTest extends Specification {
         rh.put('name', 'zhangsan'.bytes)
         rh.put('age', '20'.bytes)
         def encoded = rh.encode()
-        encoded[2] = 0
+        encoded[RedisHH.HEADER_LENGTH - 4] = 0
         boolean exception = false
         try {
             RedisHH.decode(encoded)
@@ -132,8 +133,8 @@ class RedisHHTest extends Specification {
         rh.put(key, value.bytes)
         def encoded = rh.encode()
         def buffer = ByteBuffer.wrap(encoded)
-        // 6 -> header size short + crc32 int
-        buffer.putShort(6, (short) (CompressedValue.KEY_MAX_LENGTH + 1))
+        // first key length
+        buffer.putShort(RedisHH.HEADER_LENGTH, (short) (CompressedValue.KEY_MAX_LENGTH + 1))
         boolean exception = false
         try {
             RedisHH.decode(encoded, false)
@@ -145,7 +146,7 @@ class RedisHHTest extends Specification {
         exception
 
         when:
-        buffer.putShort(6, (short) -1)
+        buffer.putShort(RedisHH.HEADER_LENGTH, (short) -1)
         exception = false
         try {
             RedisHH.decode(encoded, false)
@@ -157,8 +158,8 @@ class RedisHHTest extends Specification {
         exception
 
         when:
-        buffer.putShort(6, (short) 1)
-        buffer.putShort(6 + 2 + 1, (short) (CompressedValue.VALUE_MAX_LENGTH + 1))
+        buffer.putShort(RedisHH.HEADER_LENGTH, (short) 1)
+        buffer.putShort(RedisHH.HEADER_LENGTH + 2 + 1, (short) (CompressedValue.VALUE_MAX_LENGTH + 1))
         boolean exception2 = false
         try {
             RedisHH.decode(encoded, false)
@@ -170,7 +171,7 @@ class RedisHHTest extends Specification {
         exception2
 
         when:
-        buffer.putShort(6 + 2 + 1, (short) -1)
+        buffer.putShort(RedisHH.HEADER_LENGTH + 2 + 1, (short) -1)
         exception2 = false
         try {
             RedisHH.decode(encoded, false)
@@ -180,5 +181,68 @@ class RedisHHTest extends Specification {
         }
         then:
         exception2
+    }
+
+    def 'test compress'() {
+        given:
+        def rh = new RedisHH()
+        def longStringBytes = ('aaaaabbbbbccccc' * 10).bytes
+
+        when:
+        10.times {
+            rh.put('field' + it, longStringBytes)
+        }
+        def encoded = rh.encode()
+        def rh2 = RedisHH.decode(encoded)
+        then:
+        rh2.size() == 10
+        (0..<10).every {
+            rh2.get('field' + it) == longStringBytes
+        }
+
+        when:
+        def job = new TrainSampleJob((byte) 0)
+        job.dictSize = 512
+        job.trainSampleMinBodyLength = 1024
+
+        def snowFlake = new SnowFlake(0, 0)
+
+        TrainSampleJob.keyPrefixGroupList = ['key:']
+        List<TrainSampleJob.TrainSampleKV> sampleToTrainList = []
+        11.times {
+            sampleToTrainList << new TrainSampleJob.TrainSampleKV("key:$it", null, snowFlake.nextId(), longStringBytes)
+        }
+
+        job.resetSampleToTrainList(sampleToTrainList)
+        def result = job.train()
+        def dictTrained = result.cacheDict().get('key:')
+
+        def dictMap = DictMap.instance
+        dictMap.initDictMap(Consts.testDir)
+        dictMap.putDict('key:', dictTrained)
+
+        def encoded2 = rh.encode(dictTrained)
+        def rh3 = RedisHH.decode(encoded2, false)
+        then:
+        rh3.size() == 10
+        (0..<10).every {
+            rh3.get('field' + it) == longStringBytes
+        }
+
+        when:
+        boolean exception = false
+        dictMap.clearAll()
+        try {
+            RedisHH.decode(encoded2, false)
+        } catch (DictMissingException e) {
+            println e.message
+            exception = true
+        }
+        then:
+        exception
+
+        cleanup:
+        dictMap.cleanUp()
+        Consts.testDir.deleteDir()
     }
 }

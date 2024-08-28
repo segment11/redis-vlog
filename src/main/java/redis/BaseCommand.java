@@ -404,13 +404,13 @@ public abstract class BaseCommand {
                     dict = Dict.SELF_ZSTD_DICT;
                 } else if (cv.dictSeqOrSpType == Dict.GLOBAL_ZSTD_DICT_SEQ) {
                     if (!Dict.GLOBAL_ZSTD_DICT.hasDictBytes()) {
-                        throw new DictMissingException();
+                        throw new DictMissingException("Global dict bytes not set");
                     }
                     dict = Dict.GLOBAL_ZSTD_DICT;
                 } else {
                     dict = dictMap.getDictBySeq(cv.dictSeqOrSpType);
                     if (dict == null) {
-                        throw new DictMissingException();
+                        throw new DictMissingException("Dict not found, dict seq: " + cv.dictSeqOrSpType);
                     }
                 }
             }
