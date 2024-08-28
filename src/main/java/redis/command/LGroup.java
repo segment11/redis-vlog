@@ -160,7 +160,6 @@ public class LGroup extends BaseCommand {
                             boolean considerBeforeOrAfter, boolean isBefore, byte[] pivotBytes, boolean needKeyExist) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_LIST, CompressedValue.SP_TYPE_LIST_COMPRESSED);
-
         // lpushx / rpushx
         if (encodedBytes == null && needKeyExist) {
             return IntegerReply.REPLY_0;
@@ -553,7 +552,6 @@ public class LGroup extends BaseCommand {
         }
 
         var rl = RedisList.decode(encodedBytes);
-
         int size = rl.size();
         if (start < 0) {
             start = size + start;

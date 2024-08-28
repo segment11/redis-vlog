@@ -57,7 +57,7 @@ class RedisHashKeysTest extends Specification {
         rhk2.contains('field1')
         rhk2.contains('field2')
         rhk2.size() == 2
-        RedisHashKeys.setSize(encoded) == 2
+        RedisHashKeys.getSizeWithoutDecode(encoded) == 2
     }
 
     def 'decode crc32 not match'() {

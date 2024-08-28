@@ -576,7 +576,7 @@ public class SGroup extends BaseCommand {
         }
 
         var setValueBytes = getValueBytesByCv(setCv);
-        var size = RedisHashKeys.setSize(setValueBytes);
+        var size = RedisHashKeys.getSizeWithoutDecode(setValueBytes);
         return new IntegerReply(size);
     }
 

@@ -11,7 +11,6 @@ import redis.type.RedisHashKeys;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Random;
@@ -161,12 +160,12 @@ public class HGroup extends BaseCommand {
     }
 
     private RedisHH getHH(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
-        var valueBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
-        if (valueBytes == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
+        if (encodedBytes == null) {
             return null;
         }
 
-        return RedisHH.decode(valueBytes);
+        return RedisHH.decode(encodedBytes);
     }
 
     private void setHH(byte[] keyBytes, RedisHH rhh, SlotWithKeyHash slotWithKeyHash) {
@@ -235,14 +234,14 @@ public class HGroup extends BaseCommand {
 
     Reply hexists2(byte[] keyBytes, byte[] fieldBytes) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var valueBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
-        if (valueBytes == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
+        if (encodedBytes == null) {
             return IntegerReply.REPLY_0;
         }
 
         final String[] fieldToFind = {new String(fieldBytes)};
         final boolean[] isFind = {false};
-        RedisHH.iterate(valueBytes, true, (field, value) -> {
+        RedisHH.iterate(encodedBytes, true, (field, value) -> {
             if (field.equals(fieldToFind[0])) {
                 isFind[0] = true;
                 return true;
@@ -287,14 +286,14 @@ public class HGroup extends BaseCommand {
 
     Reply hget2(byte[] keyBytes, byte[] fieldBytes, boolean onlyReturnLength) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var valueBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
-        if (valueBytes == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
+        if (encodedBytes == null) {
             return onlyReturnLength ? IntegerReply.REPLY_0 : NilReply.INSTANCE;
         }
 
         final String[][] fieldToFind = {{new String(fieldBytes)}};
         final byte[][] fieldValueBytes = {null};
-        RedisHH.iterate(valueBytes, true, (field, value) -> {
+        RedisHH.iterate(encodedBytes, true, (field, value) -> {
             if (field.equals(fieldToFind[0][0])) {
                 fieldValueBytes[0] = value;
                 return true;
@@ -505,9 +504,8 @@ public class HGroup extends BaseCommand {
             return onlyReturnSize ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
         }
 
-        // need not decode, just return size
         if (onlyReturnSize) {
-            var size = ByteBuffer.wrap(keysValueBytes).getShort();
+            var size = RedisHashKeys.getSizeWithoutDecode(keysValueBytes);
             return new IntegerReply(size);
         }
 
@@ -527,12 +525,12 @@ public class HGroup extends BaseCommand {
 
     Reply hkeys2(byte[] keyBytes, boolean onlyReturnSize) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var valueBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
-        if (valueBytes == null) {
+        var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH, CompressedValue.SP_TYPE_HH_COMPRESSED);
+        if (encodedBytes == null) {
             return onlyReturnSize ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
         }
 
-        var size = RedisHH.getSizeWithoutDecode(valueBytes);
+        var size = RedisHH.getSizeWithoutDecode(encodedBytes);
         if (size == 0) {
             return onlyReturnSize ? IntegerReply.REPLY_0 : MultiBulkReply.EMPTY;
         }
@@ -543,7 +541,7 @@ public class HGroup extends BaseCommand {
 
         var replies = new Reply[size];
         final int[] i = {0};
-        RedisHH.iterate(valueBytes, true, (field, value) -> {
+        RedisHH.iterate(encodedBytes, true, (field, value) -> {
             replies[i[0]++] = new BulkReply(field.getBytes());
             return false;
         });
