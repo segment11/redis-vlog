@@ -204,33 +204,34 @@ public class DGroup extends BaseCommand {
         boolean isByFloat = byFloat != 0;
         final var NOT_NUMBER_REPLY = isByFloat ? ErrorReply.NOT_FLOAT : ErrorReply.NOT_INTEGER;
 
-        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
-        var cv = getCv(keyBytes, slotWithKeyHash);
-        if (cv == null) {
-            return NOT_NUMBER_REPLY;
-        }
-
         long longValue = 0;
         double doubleValue = 0;
-        if (cv.isTypeNumber()) {
+
+        var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
+        var cv = getCv(keyBytes, slotWithKeyHash);
+
+        if (cv != null && cv.isTypeNumber()) {
             if (isByFloat) {
                 doubleValue = cv.numberValue().doubleValue();
             } else {
                 longValue = cv.numberValue().longValue();
             }
         } else {
-            if (cv.isCompressed()) {
+            if (cv != null && cv.isCompressed()) {
                 return NOT_NUMBER_REPLY;
             }
-            try {
-                var numberStr = new String(cv.getCompressedData());
-                if (isByFloat) {
-                    doubleValue = Double.parseDouble(numberStr);
-                } else {
-                    longValue = Long.parseLong(numberStr);
+
+            if (cv != null) {
+                try {
+                    var numberStr = new String(cv.getCompressedData());
+                    if (isByFloat) {
+                        doubleValue = Double.parseDouble(numberStr);
+                    } else {
+                        longValue = Long.parseLong(numberStr);
+                    }
+                } catch (NumberFormatException e) {
+                    return NOT_NUMBER_REPLY;
                 }
-            } catch (NumberFormatException e) {
-                return NOT_NUMBER_REPLY;
             }
         }
 
