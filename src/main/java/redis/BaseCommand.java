@@ -314,13 +314,13 @@ public abstract class BaseCommand {
             var slotPositive = slotNumber == 1 ? 0 : Math.abs((tagHash / x) % halfSlotNumber);
             var slot = tagHash > 0 ? slotPositive : halfSlotNumber + slotPositive;
             var bucketIndex = Math.abs(keyHash % bucketsPerSlot);
-            return new SlotWithKeyHash((byte) slot, (int) bucketIndex, keyHash);
+            return new SlotWithKeyHash((short) slot, (int) bucketIndex, keyHash);
         }
 
         var slotPositive = slotNumber == 1 ? 0 : Math.abs((keyHash / x) % halfSlotNumber);
         var slot = keyHash > 0 ? slotPositive : halfSlotNumber + slotPositive;
         var bucketIndex = Math.abs(keyHash % bucketsPerSlot);
-        return new SlotWithKeyHash((byte) slot, (int) bucketIndex, keyHash);
+        return new SlotWithKeyHash((short) slot, (int) bucketIndex, keyHash);
     }
 
     protected SlotWithKeyHash slot(byte[] keyBytes) {

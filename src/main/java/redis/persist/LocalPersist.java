@@ -91,7 +91,7 @@ public class LocalPersist implements NeedCleanUp {
         this.oneSlots = new OneSlot[slotNumber];
         for (short slot = 0; slot < slotNumber; slot++) {
             var i = slot % netWorkers;
-            var oneSlot = new OneSlot((byte) slot, slotNumber, snowFlakes[i], persistDir, persistConfig);
+            var oneSlot = new OneSlot(slot, slotNumber, snowFlakes[i], persistDir, persistConfig);
             oneSlot.initFds(libC);
 
             oneSlots[slot] = oneSlot;

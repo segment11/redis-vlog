@@ -479,9 +479,9 @@ public class MultiWorkerServer extends Launcher {
 
         // fix slot thread id
         int slotNumber = configInject.get(ofInteger(), "slotNumber", (int) LocalPersist.DEFAULT_SLOT_NUMBER);
-        for (int slot = 0; slot < slotNumber; slot++) {
+        for (short slot = 0; slot < slotNumber; slot++) {
             int i = slot % requestHandlerArray.length;
-            localPersist.fixSlotThreadId((byte) slot, netWorkerThreadIds[i]);
+            localPersist.fixSlotThreadId(slot, netWorkerThreadIds[i]);
         }
 
         socketInspector.netWorkerEventloopArray = netWorkerEventloopArray;
