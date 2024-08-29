@@ -1325,7 +1325,9 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
             return;
         }
 
+        var delayToKeyBucketShortValues = targetWal.delayToKeyBucketShortValues;
         var delayToKeyBucketValues = targetWal.delayToKeyBucketValues;
+
         var list = new ArrayList<>(delayToKeyBucketValues.values());
         // sort by bucket index for future merge better
         list.sort(Comparator.comparingInt(Wal.V::bucketIndex));
@@ -1336,7 +1338,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         // remove those wal exist
         if (ext != null) {
             var cvList = ext.cvList;
-            cvList.removeIf(one -> delayToKeyBucketValues.containsKey(one.key));
+            cvList.removeIf(one -> delayToKeyBucketShortValues.containsKey(one.key) || delayToKeyBucketValues.containsKey(one.key));
             if (!cvList.isEmpty()) {
                 for (var one : cvList) {
                     var cv = one.cv;
@@ -1353,7 +1355,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
 
         if (ext2 != null) {
             var vList = ext2.vList;
-            vList.removeIf(one -> delayToKeyBucketValues.containsKey(one.key()));
+            vList.removeIf(one -> delayToKeyBucketShortValues.containsKey(one.key()) || delayToKeyBucketValues.containsKey(one.key()));
             if (!vList.isEmpty()) {
                 list.addAll(vList);
             }
@@ -1715,7 +1717,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
             map.put("slot_last_seq", (double) snowFlake.getLastNextId());
         }
 
-        if(walArray != null && walArray.length > 0){
+        if (walArray != null && walArray.length > 0) {
             map.put("wal_key_count", (double) getWalKeyCount());
 
             // only show first wal group
