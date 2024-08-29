@@ -1711,7 +1711,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
 
     @Override
     public Map<String, Double> collect() {
-        var map = new HashMap<String, Double>();
+        var map = new TreeMap<String, Double>();
 
         if (snowFlake != null) {
             map.put("slot_last_seq", (double) snowFlake.getLastNextId());
