@@ -5,7 +5,7 @@ import redis.Dict;
 import redis.KeyHash;
 
 import java.nio.ByteBuffer;
-import java.util.HashSet;
+import java.util.TreeSet;
 
 import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
@@ -35,9 +35,10 @@ public class RedisHashKeys {
         return "h_f_" + "{" + key + "}." + field;
     }
 
-    private final HashSet<String> set = new HashSet<>();
+    // sorted fields
+    private final TreeSet<String> set = new TreeSet<>();
 
-    public HashSet<String> getSet() {
+    public TreeSet<String> getSet() {
         return set;
     }
 

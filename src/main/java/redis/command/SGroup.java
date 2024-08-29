@@ -15,12 +15,11 @@ import redis.type.RedisHashKeys;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Random;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 import static redis.CompressedValue.NO_EXPIRE;
-import static redis.DictMap.TO_COMPRESS_MIN_DATA_LENGTH;
 
 public class SGroup extends BaseCommand {
     public SGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -594,7 +593,7 @@ public class SGroup extends BaseCommand {
         return new IntegerReply(size);
     }
 
-    private void operateSet(HashSet<String> set, ArrayList<RedisHashKeys> otherRhkList, boolean isInter, boolean isUnion) {
+    private void operateSet(TreeSet<String> set, ArrayList<RedisHashKeys> otherRhkList, boolean isInter, boolean isUnion) {
         for (var otherRhk : otherRhkList) {
             if (otherRhk != null) {
                 var otherSet = otherRhk.getSet();
