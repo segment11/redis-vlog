@@ -41,8 +41,8 @@ public class TcpClient implements NeedCleanUp {
         return sock != null && !sock.isClosed();
     }
 
-    long writeErrorCount = 0;
-    long notConnectedErrorCount = 0;
+    private long writeErrorCount = 0;
+    private long notConnectedErrorCount = 0;
 
     boolean write(ReplType type, ReplContent content) {
         if (isSocketConnected()) {

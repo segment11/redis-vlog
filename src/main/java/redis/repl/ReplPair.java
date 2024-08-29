@@ -3,6 +3,7 @@ package redis.repl;
 import io.activej.eventloop.Eventloop;
 import io.activej.net.socket.tcp.TcpSocket;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
@@ -360,6 +361,7 @@ public class ReplPair {
     }
 
     // as both master and slave field
+    @VisibleForTesting
     boolean isSendBye = false;
 
     public boolean isSendBye() {

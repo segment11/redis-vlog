@@ -4,6 +4,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForSlot;
@@ -35,6 +36,7 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
 
     private static final String BINLOG_DIR_NAME = "binlog";
 
+    @VisibleForTesting
     record BytesWithFileIndexAndOffset(byte[] bytes, int fileIndex,
                                        long offset) implements Comparable<BytesWithFileIndexAndOffset> {
         @Override
@@ -174,6 +176,7 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
         this.tempAppendSegmentBuffer.position((int) (offset % ConfForSlot.global.confRepl.binlogOneSegmentLength));
     }
 
+    @VisibleForTesting
     static class PaddingBinlogContent implements BinlogContent {
         private final byte[] paddingBytes;
 
@@ -457,11 +460,12 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
         }
     }
 
+    @VisibleForTesting
     RandomAccessFile prevRaf(int fileIndex) {
         return prevRaf(fileIndex, false);
     }
 
-    RandomAccessFile prevRaf(int fileIndex, boolean createIfNotExists) {
+    private RandomAccessFile prevRaf(int fileIndex, boolean createIfNotExists) {
         if (fileIndex < 0) {
             throw new IllegalArgumentException("Repl read binlog prev raf, file index must be >= 0");
         }
@@ -489,7 +493,7 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
         });
     }
 
-    byte[] getLatestAppendForReadCacheSegmentBytes(int fileIndex, long offset) {
+    private byte[] getLatestAppendForReadCacheSegmentBytes(int fileIndex, long offset) {
         var one = Collections.binarySearch(latestAppendForReadCacheSegmentBytesSet,
                 new BytesWithFileIndexAndOffset(null, fileIndex, offset));
         return one >= 0 ? latestAppendForReadCacheSegmentBytesSet.get(one).bytes : null;
@@ -542,6 +546,8 @@ public class Binlog implements InMemoryEstimate, NeedCleanUp {
         return bytes;
     }
 
+    @TestOnly
+    @Deprecated
     byte[] readCurrentRafOneSegment(long offset) throws IOException {
         if (raf.length() <= offset) {
             return null;
