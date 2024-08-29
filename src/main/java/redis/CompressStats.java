@@ -1,5 +1,6 @@
 package redis;
 
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.metric.SimpleGauge;
 
 import java.util.HashMap;
@@ -42,6 +43,7 @@ public class CompressStats {
         });
     }
 
+    @VisibleForTesting
     final static SimpleGauge compressStatsGauge = new SimpleGauge("compress_stats", "compress stats",
             "name");
 

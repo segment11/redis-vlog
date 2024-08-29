@@ -38,17 +38,24 @@ public class RequestHandler {
     private static final String ERROR_FOR_STAT_AS_COMMAND = "x_error";
     private static final String READONLY_FOR_STAT_AS_COMMAND = "x_readonly";
 
+    @VisibleForTesting
     final byte workerId;
-    final String workerIdStr;
+    private final String workerIdStr;
+    @VisibleForTesting
     final byte netWorkers;
+    @VisibleForTesting
     final short slotNumber;
+    @VisibleForTesting
     final SnowFlake snowFlake;
 
     @VisibleForTesting
     String password;
 
+    @TestOnly
     final boolean localTest;
+    @TestOnly
     final int localTestRandomValueListSize;
+    @TestOnly
     final ArrayList<byte[]> localTestRandomValueList;
 
     int compressLevel;
@@ -632,6 +639,7 @@ public class RequestHandler {
         return ErrorReply.FORMAT;
     }
 
+    @VisibleForTesting
     final static SimpleGauge requestHandlerGauge = new SimpleGauge("request_handler", "request handler",
             "worker_id");
 

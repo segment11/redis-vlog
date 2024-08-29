@@ -25,7 +25,7 @@ public class Dict implements Serializable {
 
     static final String GLOBAL_DICT_FILE_NAME = "dict-global-raw.dat";
     // for latency
-    static final int GLOBAL_DICT_BYTES_MAX_LENGTH = 1024 * 16;
+    private static final int GLOBAL_DICT_BYTES_MAX_LENGTH = 1024 * 16;
 
     private static final Logger log = LoggerFactory.getLogger(Dict.class);
 
@@ -77,7 +77,7 @@ public class Dict implements Serializable {
         }
     }
 
-    int seq;
+    private int seq;
 
     public int getSeq() {
         return seq;
@@ -87,8 +87,7 @@ public class Dict implements Serializable {
         this.seq = seq;
     }
 
-    long createdTime;
-
+    private long createdTime;
 
     public long getCreatedTime() {
         return createdTime;
@@ -98,7 +97,7 @@ public class Dict implements Serializable {
         this.createdTime = createdTime;
     }
 
-    byte[] dictBytes;
+    private byte[] dictBytes;
 
     public byte[] getDictBytes() {
         return dictBytes;

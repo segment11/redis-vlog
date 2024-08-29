@@ -1,5 +1,7 @@
 package redis;
 
+import org.jetbrains.annotations.VisibleForTesting;
+
 public class SnowFlake {
     private final static long START_STAMP = 1701354128058L;
 
@@ -18,6 +20,7 @@ public class SnowFlake {
     private final long datacenterId;
     private final long machineId;
     private long sequence = 0L;
+    @VisibleForTesting
     long lastStamp = -1L;
 
     public SnowFlake(long datacenterId, long machineId) {

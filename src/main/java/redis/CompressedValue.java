@@ -46,6 +46,8 @@ public class CompressedValue {
     // key length use short
     public static final int KEY_HEADER_LENGTH = 2;
 
+    private long seq;
+
     public long getSeq() {
         return seq;
     }
@@ -54,13 +56,7 @@ public class CompressedValue {
         this.seq = seq;
     }
 
-    public long getExpireAt() {
-        return expireAt;
-    }
-
-    public void setExpireAt(long expireAt) {
-        this.expireAt = expireAt;
-    }
+    private long keyHash;
 
     public long getKeyHash() {
         return keyHash;
@@ -70,11 +66,19 @@ public class CompressedValue {
         this.keyHash = keyHash;
     }
 
-    long seq;
     // milliseconds
-    long expireAt = NO_EXPIRE;
+    private long expireAt = NO_EXPIRE;
+
+    public long getExpireAt() {
+        return expireAt;
+    }
+
+    public void setExpireAt(long expireAt) {
+        this.expireAt = expireAt;
+    }
+
     // dict seq or special type, is a union
-    int dictSeqOrSpType = NULL_DICT_SEQ;
+    private int dictSeqOrSpType = NULL_DICT_SEQ;
 
     public int getDictSeqOrSpType() {
         return dictSeqOrSpType;
@@ -84,9 +88,7 @@ public class CompressedValue {
         this.dictSeqOrSpType = dictSeqOrSpType;
     }
 
-    long keyHash;
-
-    int uncompressedLength;
+    private int uncompressedLength;
 
     public int getUncompressedLength() {
         return uncompressedLength;
@@ -96,7 +98,7 @@ public class CompressedValue {
         this.uncompressedLength = uncompressedLength;
     }
 
-    int compressedLength;
+    private int compressedLength;
 
     public int getCompressedLength() {
         return compressedLength;
@@ -213,7 +215,7 @@ public class CompressedValue {
                 '}';
     }
 
-    byte[] compressedData;
+    private byte[] compressedData;
 
     public byte[] getCompressedData() {
         return compressedData;
@@ -266,7 +268,7 @@ public class CompressedValue {
         if (dict == null || dict == Dict.SELF_ZSTD_DICT) {
             Zstd.decompress(dst, compressedData);
         } else {
-            Zstd.decompressUsingDict(dst, 0, compressedData, 0, compressedData.length, dict.dictBytes);
+            Zstd.decompressUsingDict(dst, 0, compressedData, 0, compressedData.length, dict.getDictBytes());
         }
         return dst;
     }
@@ -280,7 +282,7 @@ public class CompressedValue {
         if (dict == null || dict == Dict.SELF_ZSTD_DICT) {
             compressedSize = (int) Zstd.compress(dst, data, level);
         } else {
-            compressedSize = (int) Zstd.compressUsingDict(dst, 0, data, 0, data.length, dict.dictBytes, level);
+            compressedSize = (int) Zstd.compressUsingDict(dst, 0, data, 0, data.length, dict.getDictBytes(), level);
         }
 
         if (compressedSize > data.length) {

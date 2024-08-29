@@ -2,6 +2,7 @@ package redis;
 
 import com.github.luben.zstd.ZstdDictTrainer;
 import com.github.luben.zstd.ZstdException;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ import java.util.stream.Collectors;
 public class TrainSampleJob {
     private final byte workerId;
 
+    @VisibleForTesting
     int trainCount = 0;
 
     public TrainSampleJob(byte workerId) {
@@ -186,7 +188,7 @@ public class TrainSampleJob {
                     removedSampleKVSeqList.add(one.seq());
                 }
                 log.info("Train sample, worker {} train dict ok, key prefix: {}, dict size: {}, removed sample size: {}",
-                        workerId, keyPrefixOrSuffix, dict.dictBytes.length, list.size());
+                        workerId, keyPrefixOrSuffix, dict.getDictBytes().length, list.size());
 
                 // need persist immediately, todo
             }

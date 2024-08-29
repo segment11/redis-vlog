@@ -1,5 +1,7 @@
 package redis;
 
+import org.jetbrains.annotations.VisibleForTesting;
+
 import java.util.ArrayList;
 
 public class StaticMemoryPrepareBytesStats {
@@ -13,6 +15,7 @@ public class StaticMemoryPrepareBytesStats {
     public record One(Type type, int staticMemoryRequireMB, boolean isExact) {
     }
 
+    @VisibleForTesting
     static ArrayList<One> list = new ArrayList<>();
 
     public static void add(Type type, int staticMemoryRequireMB, boolean isExact) {

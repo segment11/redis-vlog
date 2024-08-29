@@ -46,14 +46,14 @@ public class DictMap implements NeedCleanUp {
     @SlaveReplay
     public synchronized Dict putDict(String keyPrefixOrSuffix, Dict dict) {
         // check dict seq is already in cache
-        var existDict = cacheDictBySeq.get(dict.seq);
+        var existDict = cacheDictBySeq.get(dict.getSeq());
         if (existDict != null) {
             // generate new seq
-            dict.seq = Dict.generateRandomSeq();
+            dict.setSeq(Dict.generateRandomSeq());
             // check again
-            var existDict2 = cacheDictBySeq.get(dict.seq);
+            var existDict2 = cacheDictBySeq.get(dict.getSeq());
             if (existDict2 != null) {
-                throw new RuntimeException("Dict seq conflict, dict seq: " + dict.seq);
+                throw new RuntimeException("Dict seq conflict, dict seq: " + dict.getSeq());
             }
         }
 
@@ -75,7 +75,7 @@ public class DictMap implements NeedCleanUp {
 
         TrainSampleJob.addKeyPrefixGroupIfNotExist(keyPrefixOrSuffix);
 
-        cacheDictBySeq.put(dict.seq, dict);
+        cacheDictBySeq.put(dict.getSeq(), dict);
         return cacheDict.put(keyPrefixOrSuffix, dict);
     }
 
@@ -154,9 +154,9 @@ public class DictMap implements NeedCleanUp {
 
                 var dict = dictWithKey.dict();
                 cacheDict.put(dictWithKey.keyPrefixOrSuffix(), dict);
-                cacheDictBySeq.put(dict.seq, dict);
+                cacheDictBySeq.put(dict.getSeq(), dict);
 
-                loadedSeqList.add(dict.seq);
+                loadedSeqList.add(dict.getSeq());
                 n++;
             }
         }

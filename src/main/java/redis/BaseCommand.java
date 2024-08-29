@@ -160,8 +160,11 @@ public abstract class BaseCommand {
         return localTestRandomValueList;
     }
 
+    @TestOnly
     protected boolean localTest;
+    @TestOnly
     protected int localTestRandomValueListSize;
+    @TestOnly
     protected ArrayList<byte[]> localTestRandomValueList;
 
     protected ArrayList<SlotWithKeyHash> slotWithKeyHashListParsed;
@@ -340,7 +343,7 @@ public abstract class BaseCommand {
             if (cv == null) {
                 return null;
             }
-            return cv.expireAt;
+            return cv.getExpireAt();
         } else {
             var slot = slotWithKeyHash.slot();
             var oneSlot = localPersist.oneSlot(slot);
@@ -377,16 +380,18 @@ public abstract class BaseCommand {
         if (cv.isBigString()) {
             var oneSlot = localPersist.oneSlot(slot);
 
-            var buffer = ByteBuffer.wrap(cv.compressedData);
+            var buffer = ByteBuffer.wrap(cv.getCompressedData());
             var uuid = buffer.getLong();
             var realDictSeq = buffer.getInt();
 
-            cv.compressedData = oneSlot.getBigStringFiles().getBigStringBytes(uuid, true);
-            if (cv.compressedData == null) {
+            var bigStringBytes = oneSlot.getBigStringFiles().getBigStringBytes(uuid, true);
+            if (bigStringBytes == null) {
                 return null;
             }
-            cv.compressedLength = cv.compressedData.length;
-            cv.dictSeqOrSpType = realDictSeq;
+
+            cv.setCompressedData(bigStringBytes);
+            cv.setCompressedLength(bigStringBytes.length);
+            cv.setDictSeqOrSpType(realDictSeq);
         }
 
         return cv;
@@ -400,17 +405,18 @@ public abstract class BaseCommand {
         if (cv.isCompressed()) {
             Dict dict = null;
             if (cv.isUseDict()) {
-                if (cv.dictSeqOrSpType == Dict.SELF_ZSTD_DICT_SEQ) {
+                var dictSeqOrSpType = cv.getDictSeqOrSpType();
+                if (dictSeqOrSpType == Dict.SELF_ZSTD_DICT_SEQ) {
                     dict = Dict.SELF_ZSTD_DICT;
-                } else if (cv.dictSeqOrSpType == Dict.GLOBAL_ZSTD_DICT_SEQ) {
+                } else if (dictSeqOrSpType == Dict.GLOBAL_ZSTD_DICT_SEQ) {
                     if (!Dict.GLOBAL_ZSTD_DICT.hasDictBytes()) {
                         throw new DictMissingException("Global dict bytes not set");
                     }
                     dict = Dict.GLOBAL_ZSTD_DICT;
                 } else {
-                    dict = dictMap.getDictBySeq(cv.dictSeqOrSpType);
+                    dict = dictMap.getDictBySeq(dictSeqOrSpType);
                     if (dict == null) {
-                        throw new DictMissingException("Dict not found, dict seq: " + cv.dictSeqOrSpType);
+                        throw new DictMissingException("Dict not found, dict seq: " + dictSeqOrSpType);
                     }
                 }
             }
@@ -425,7 +431,7 @@ public abstract class BaseCommand {
 
             return decompressed;
         } else {
-            return cv.compressedData;
+            return cv.getCompressedData();
         }
     }
 
@@ -454,7 +460,7 @@ public abstract class BaseCommand {
         if (expectTypeString && !cv.isTypeString()) {
             throw new TypeMismatchException("Expect type string, but got sp type: " + cv.getDictSeqOrSpType());
         }
-        if (expectSpTypeArray.length > 0 && !contain(expectSpTypeArray, cv.dictSeqOrSpType)) {
+        if (expectSpTypeArray.length > 0 && !contain(expectSpTypeArray, cv.getDictSeqOrSpType())) {
             throw new TypeMismatchException("Expect sp type array: " + Arrays.toString(expectSpTypeArray) + ", but got sp type: " + cv.getDictSeqOrSpType());
         }
         return getValueBytesByCv(cv);
@@ -624,14 +630,14 @@ public abstract class BaseCommand {
             // dict may be null
             var cv = CompressedValue.compress(valueBytes, dict, compressLevel);
             var costT = (System.nanoTime() - beginT) / 1000;
-            cv.seq = snowFlake.nextId();
+            cv.setSeq(snowFlake.nextId());
             if (cv.isIgnoreCompression(valueBytes)) {
-                cv.dictSeqOrSpType = NULL_DICT_SEQ;
+                cv.setDictSeqOrSpType(NULL_DICT_SEQ);
             } else {
-                cv.dictSeqOrSpType = dict != null ? dict.seq : spType;
+                cv.setDictSeqOrSpType(dict != null ? dict.getSeq() : spType);
             }
-            cv.keyHash = slotWithKeyHash.keyHash;
-            cv.expireAt = expireAt;
+            cv.setKeyHash(slotWithKeyHash.keyHash);
+            cv.setExpireAt(expireAt);
 
             if (byPassGetSet != null) {
                 byPassGetSet.put(slot, key, slotWithKeyHash.bucketIndex, cv);
@@ -651,14 +657,14 @@ public abstract class BaseCommand {
 
             // stats
             compressStats.compressedCount++;
-            compressStats.compressedTotalLength += cv.compressedLength;
+            compressStats.compressedTotalLength += cv.getCompressedLength();
             compressStats.compressedCostTimeTotalUs += costT;
 
             if (ConfForGlobal.isOnDynTrainDictForCompression) {
                 if (dict == Dict.SELF_ZSTD_DICT) {
                     // add train sample list
                     if (sampleToTrainList.size() < trainSampleListMaxSize) {
-                        var kv = new TrainSampleJob.TrainSampleKV(key, null, cv.seq, valueBytes);
+                        var kv = new TrainSampleJob.TrainSampleKV(key, null, cv.getSeq(), valueBytes);
                         sampleToTrainList.add(kv);
                     } else {
                         // no async train, latency sensitive
@@ -669,13 +675,13 @@ public abstract class BaseCommand {
             }
         } else {
             var cvRaw = new CompressedValue();
-            cvRaw.seq = snowFlake.nextId();
-            cvRaw.dictSeqOrSpType = spType;
-            cvRaw.keyHash = slotWithKeyHash.keyHash;
-            cvRaw.expireAt = expireAt;
-            cvRaw.uncompressedLength = valueBytes.length;
-            cvRaw.compressedLength = valueBytes.length;
-            cvRaw.compressedData = valueBytes;
+            cvRaw.setSeq(snowFlake.nextId());
+            cvRaw.setDictSeqOrSpType(spType);
+            cvRaw.setKeyHash(slotWithKeyHash.keyHash);
+            cvRaw.setExpireAt(expireAt);
+            cvRaw.setUncompressedLength(valueBytes.length);
+            cvRaw.setCompressedLength(valueBytes.length);
+            cvRaw.setCompressedData(valueBytes);
 
             if (byPassGetSet != null) {
                 byPassGetSet.put(slot, key, slotWithKeyHash.bucketIndex, cvRaw);
@@ -698,7 +704,7 @@ public abstract class BaseCommand {
                 // add train sample list
                 if (sampleToTrainList.size() < trainSampleListMaxSize) {
                     if (valueBytes.length >= DictMap.TO_COMPRESS_MIN_DATA_LENGTH) {
-                        var kv = new TrainSampleJob.TrainSampleKV(key, null, cvRaw.seq, valueBytes);
+                        var kv = new TrainSampleJob.TrainSampleKV(key, null, cvRaw.getSeq(), valueBytes);
                         sampleToTrainList.add(kv);
                     }
                 } else {

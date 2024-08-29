@@ -78,7 +78,7 @@ public class SocketInspector implements TcpSocket.Inspector {
     }
 
     // inject, singleton, need not static
-    static final Gauge connectedCountGauge = Gauge.build()
+    private static final Gauge connectedCountGauge = Gauge.build()
             .name("connected_client_count")
             .help("connected client count")
             .register();

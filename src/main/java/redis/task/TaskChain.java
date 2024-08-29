@@ -1,5 +1,6 @@
 package redis.task;
 
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,7 +12,8 @@ public class TaskChain {
     // need not thread safe
     final ArrayList<ITask> list = new ArrayList<>();
 
-    public ArrayList<ITask> getList() {
+    @VisibleForTesting
+    ArrayList<ITask> getList() {
         return list;
     }
 

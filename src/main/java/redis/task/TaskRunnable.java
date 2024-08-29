@@ -1,6 +1,7 @@
 package redis.task;
 
 import io.activej.eventloop.Eventloop;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.RequestHandler;
 import redis.persist.OneSlot;
 
@@ -15,6 +16,7 @@ public class TaskRunnable implements Runnable {
         this.netWorkers = netWorkers;
     }
 
+    @VisibleForTesting
     final ArrayList<OneSlot> oneSlots = new ArrayList<>();
 
     public void chargeOneSlots(OneSlot[] oneSlots) {
