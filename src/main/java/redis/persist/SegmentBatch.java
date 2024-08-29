@@ -8,17 +8,17 @@ import redis.CompressedValue;
 import redis.ConfForSlot;
 import redis.KeyHash;
 import redis.SnowFlake;
-import redis.metric.SimpleGauge;
+import redis.metric.InSlotMetricCollector;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
+import java.util.Map;
 
 import static redis.persist.Chunk.SEGMENT_HEADER_LENGTH;
 
-public class SegmentBatch {
+public class SegmentBatch implements InSlotMetricCollector {
     private final byte[] bytes;
     private final ByteBuffer buffer;
     private final short slot;
@@ -50,48 +50,37 @@ public class SegmentBatch {
         this.buffer = ByteBuffer.wrap(bytes);
 
         this.snowFlake = snowFlake;
-
-        this.initMetricsCollect();
     }
 
-    final static SimpleGauge segmentBatchGauge = new SimpleGauge("segment_batch", "segment batch",
-            "slot");
+    @Override
+    public Map<String, Double> collect() {
+        var map = new HashMap<String, Double>();
 
-    static {
-        segmentBatchGauge.register();
-    }
+        if (compressCountTotal > 0) {
+            map.put("segment_compress_time_total_us", (double) compressTimeTotalUs);
+            map.put("segment_compress_count_total", (double) compressCountTotal);
+            map.put("segment_compress_time_avg_us", (double) compressTimeTotalUs / compressCountTotal);
+        }
 
-    private void initMetricsCollect() {
-        segmentBatchGauge.addRawGetter(() -> {
-            var labelValues = List.of(slotStr);
+        if (compressBytesTotal > 0) {
+            map.put("segment_compress_bytes_total", (double) compressBytesTotal);
+            map.put("segment_compressed_bytes_total", (double) compressedBytesTotal);
+            map.put("segment_compress_ratio", (double) compressedBytesTotal / compressBytesTotal);
+        }
 
-            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            if (compressCountTotal > 0) {
-                map.put("segment_compress_time_total_us", new SimpleGauge.ValueWithLabelValues((double) compressTimeTotalUs, labelValues));
-                map.put("segment_compress_count_total", new SimpleGauge.ValueWithLabelValues((double) compressCountTotal, labelValues));
-                map.put("segment_compress_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) compressTimeTotalUs / compressCountTotal, labelValues));
-            }
+        if (batchCountTotal > 0) {
+            map.put("segment_batch_count_total", (double) batchCountTotal);
+            map.put("segment_batch_kv_count_total", (double) batchKvCountTotal);
+            map.put("segment_batch_kv_count_avg", (double) batchKvCountTotal / batchCountTotal);
+        }
 
-            if (compressBytesTotal > 0) {
-                map.put("segment_compress_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressBytesTotal, labelValues));
-                map.put("segment_compressed_bytes_total", new SimpleGauge.ValueWithLabelValues((double) compressedBytesTotal, labelValues));
-                map.put("segment_compress_ratio", new SimpleGauge.ValueWithLabelValues((double) compressedBytesTotal / compressBytesTotal, labelValues));
-            }
+        if (afterTightSegmentCountTotal > 0) {
+            map.put("segment_before_tight_segment_count_total", (double) beforeTightSegmentCountTotal);
+            map.put("segment_after_tight_segment_count_total", (double) afterTightSegmentCountTotal);
+            map.put("segment_tight_segment_ratio", (double) afterTightSegmentCountTotal / beforeTightSegmentCountTotal);
+        }
 
-            if (batchCountTotal > 0) {
-                map.put("segment_batch_count_total", new SimpleGauge.ValueWithLabelValues((double) batchCountTotal, labelValues));
-                map.put("segment_batch_kv_count_total", new SimpleGauge.ValueWithLabelValues((double) batchKvCountTotal, labelValues));
-                map.put("segment_batch_kv_count_avg", new SimpleGauge.ValueWithLabelValues((double) batchKvCountTotal / batchCountTotal, labelValues));
-            }
-
-            if (afterTightSegmentCountTotal > 0) {
-                map.put("segment_before_tight_segment_count_total", new SimpleGauge.ValueWithLabelValues((double) beforeTightSegmentCountTotal, labelValues));
-                map.put("segment_after_tight_segment_count_total", new SimpleGauge.ValueWithLabelValues((double) afterTightSegmentCountTotal, labelValues));
-                map.put("segment_tight_segment_ratio", new SimpleGauge.ValueWithLabelValues((double) afterTightSegmentCountTotal / beforeTightSegmentCountTotal, labelValues));
-            }
-
-            return map;
-        });
+        return map;
     }
 
     record SegmentCompressedBytesWithIndex(byte[] compressedBytes, int segmentIndex, long segmentSeq) {

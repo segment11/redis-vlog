@@ -12,7 +12,6 @@ import redis.ConfForSlot
 import redis.Debug
 import redis.TrainSampleJob
 import redis.persist.Chunk
-import redis.persist.OneSlot
 import redis.repl.support.JedisPoolHolder
 import redis.reply.*
 import redis.type.RedisHH
@@ -135,14 +134,12 @@ class ManageCommand extends BaseCommand {
         def subSubCmd = new String(data[subSubCmdIndex])
         if (subSubCmd == 'view-metrics') {
             // http url: ?manage&slot&0&view-metrics
-            def metricsCollectedMap = OneSlot.oneSlotGauge.rawGetterList.find {
-                it.slot() == slot
-            }.get2()
+            def all = oneSlot.collect()
 
             // prometheus format
             def sb = new StringBuilder()
-            metricsCollectedMap.each { k, v ->
-                sb << k << '{slot="' << slot << '",} ' << v.value() << '\n'
+            all.each { k, v ->
+                sb << k << '{slot="' << slot << '",} ' << v << '\n'
             }
             return new BulkReply(sb.toString().bytes)
         } else if (subSubCmd == 'view-bucket-key-count') {
@@ -383,17 +380,6 @@ class ManageCommand extends BaseCommand {
                     log.info("Manage train dict, remove redis server: {}:{} pong: {}", host, port, pong);
                 })
 
-                /*
-                set a aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
-                hset b f1 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
-                hset b f2 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
-                hset b f3 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
-                lpush c aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
-                lpush c aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
-                lpush c aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd
-                sadd d aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd0 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd1 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd2
-                zadd e 1 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd0 2 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd1 3 aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd2
-                 */
                 JedisPoolHolder.exe(jedisPool, jedis -> {
                     for (i in 6..<data.length) {
                         def key = new String(data[i])

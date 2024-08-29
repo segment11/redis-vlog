@@ -3,21 +3,19 @@ package redis.persist;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
 import redis.Debug;
-import redis.metric.SimpleGauge;
+import redis.metric.InSlotMetricCollector;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.incremental.XOneWalGroupPersist;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.stream.Collectors;
 
-public class ChunkMergeWorker implements InMemoryEstimate {
+public class ChunkMergeWorker implements InMemoryEstimate, InSlotMetricCollector {
     private final short slot;
     private final String slotStr;
     final OneSlot oneSlot;
@@ -266,8 +264,6 @@ public class ChunkMergeWorker implements InMemoryEstimate {
         this.slot = slot;
         this.slotStr = String.valueOf(slot);
         this.oneSlot = oneSlot;
-
-        this.initMetricsCollect();
     }
 
     @Override
@@ -278,39 +274,29 @@ public class ChunkMergeWorker implements InMemoryEstimate {
         return size;
     }
 
-    final static SimpleGauge mergedGauge = new SimpleGauge("chunk_merge_worker", "chunk merge worker",
-            "slot");
+    @Override
+    public Map<String, Double> collect() {
+        var map = new HashMap<String, Double>();
 
-    static {
-        mergedGauge.register();
-    }
+        if (mergedSegmentCount > 0) {
+            map.put("merged_segment_count", (double) mergedSegmentCount);
+            double mergedSegmentCostTAvg = (double) mergedSegmentCostTimeTotalUs / mergedSegmentCount;
+            map.put("merged_segment_cost_time_avg_us", mergedSegmentCostTAvg);
 
-    private void initMetricsCollect() {
-        mergedGauge.addRawGetter(() -> {
-            var labelValues = List.of(slotStr);
+            map.put("merged_valid_cv_count_total", (double) validCvCountTotal);
+            map.put("merged_invalid_cv_count_total", (double) invalidCvCountTotal);
 
-            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            double validCvCountAvg = (double) validCvCountTotal / mergedSegmentCount;
+            map.put("merged_valid_cv_count_avg", validCvCountAvg);
 
-            if (mergedSegmentCount > 0) {
-                map.put("merged_segment_count", new SimpleGauge.ValueWithLabelValues((double) mergedSegmentCount, labelValues));
-                double mergedSegmentCostTAvg = (double) mergedSegmentCostTimeTotalUs / mergedSegmentCount;
-                map.put("merged_segment_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues(mergedSegmentCostTAvg, labelValues));
+            double validCvRate = (double) validCvCountTotal / (validCvCountTotal + invalidCvCountTotal);
+            map.put("merged_valid_cv_ratio", validCvRate);
+        }
 
-                map.put("merged_valid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) validCvCountTotal, labelValues));
-                map.put("merged_invalid_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) invalidCvCountTotal, labelValues));
+        map.put("merged_last_merged_segment_index", (double) lastMergedSegmentIndex);
+        map.put("merged_but_not_persisted_segment_count", (double) mergedSegmentSet.size());
+        map.put("merged_but_not_persisted_cv_count", (double) mergedCvList.size());
 
-                double validCvCountAvg = (double) validCvCountTotal / mergedSegmentCount;
-                map.put("merged_valid_cv_count_avg", new SimpleGauge.ValueWithLabelValues(validCvCountAvg, labelValues));
-
-                double validCvRate = (double) validCvCountTotal / (validCvCountTotal + invalidCvCountTotal);
-                map.put("merged_valid_cv_ratio", new SimpleGauge.ValueWithLabelValues(validCvRate, labelValues));
-            }
-
-            map.put("merged_last_merged_segment_index", new SimpleGauge.ValueWithLabelValues((double) lastMergedSegmentIndex, labelValues));
-            map.put("merged_but_not_persisted_segment_count", new SimpleGauge.ValueWithLabelValues((double) mergedSegmentSet.size(), labelValues));
-            map.put("merged_but_not_persisted_cv_count", new SimpleGauge.ValueWithLabelValues((double) mergedCvList.size(), labelValues));
-
-            return map;
-        });
+        return map;
     }
 }

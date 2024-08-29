@@ -1,10 +1,11 @@
 package redis.persist;
 
 import jnr.posix.LibC;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
-import redis.metric.SimpleGauge;
+import redis.metric.InSlotMetricCollector;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
 import redis.repl.incremental.XOneWalGroupPersist;
@@ -17,7 +18,7 @@ import java.util.*;
 import static redis.persist.FdReadWrite.BATCH_ONCE_SEGMENT_COUNT_PWRITE;
 import static redis.persist.FdReadWrite.REPL_ONCE_SEGMENT_COUNT_PREAD;
 
-public class Chunk implements InMemoryEstimate, NeedCleanUp {
+public class Chunk implements InMemoryEstimate, InSlotMetricCollector, NeedCleanUp {
     private final int segmentNumberPerFd;
     private final byte fdPerChunk;
     final int maxSegmentIndex;
@@ -48,8 +49,11 @@ public class Chunk implements InMemoryEstimate, NeedCleanUp {
                 '}';
     }
 
+    @VisibleForTesting
     long persistCountTotal;
+    @VisibleForTesting
     long persistCvCountTotal;
+    @VisibleForTesting
     long updatePvmBatchCostTimeTotalUs;
 
     final OneSlot oneSlot;
@@ -81,8 +85,6 @@ public class Chunk implements InMemoryEstimate, NeedCleanUp {
         this.oneSlot = oneSlot;
         this.keyLoader = keyLoader;
         this.segmentBatch = new SegmentBatch(slot, snowFlake);
-
-        this.initMetricsCollect();
     }
 
     @Override
@@ -105,7 +107,7 @@ public class Chunk implements InMemoryEstimate, NeedCleanUp {
             var file = new File(slotDir, "chunk-data-" + i);
             fdLengths[i] = (int) file.length();
 
-            var fdReadWrite = new FdReadWrite(name, libC, file);
+            var fdReadWrite = new FdReadWrite(slot, name, libC, file);
             fdReadWrite.initByteBuffers(true);
 
             this.fdReadWriteArray[i] = fdReadWrite;
@@ -617,7 +619,8 @@ public class Chunk implements InMemoryEstimate, NeedCleanUp {
 
     private long logMergeCount = 0;
 
-    private void moveSegmentIndexForPrepare() {
+    @VisibleForTesting
+    void moveSegmentIndexForPrepare() {
         int leftSegmentCountThisFd = segmentNumberPerFd - segmentIndex % segmentNumberPerFd;
         if (leftSegmentCountThisFd < ONCE_PREPARE_SEGMENT_COUNT) {
             // begin with next fd
@@ -743,29 +746,33 @@ public class Chunk implements InMemoryEstimate, NeedCleanUp {
         }
     }
 
-    final static SimpleGauge chunkGauge = new SimpleGauge("chunk", "chunk",
-            "slot");
+    @Override
+    public Map<String, Double> collect() {
+        var map = new HashMap<String, Double>();
 
-    static {
-        chunkGauge.register();
-    }
+        map.put("chunk_current_segment_index", (double) segmentIndex);
+        map.put("chunk_merged_segment_index_end_last_time", (double) mergedSegmentIndexEndLastTime);
+        map.put("chunk_max_segment_index", (double) maxSegmentIndex);
 
-    private void initMetricsCollect() {
-        chunkGauge.addRawGetter(() -> {
-            var labelValues = List.of(slotStr);
+        if (persistCountTotal > 0) {
+            map.put("chunk_persist_count_total", (double) persistCountTotal);
+            map.put("chunk_persist_cv_count_total", (double) persistCvCountTotal);
+            map.put("chunk_persist_cv_count_avg", (double) persistCvCountTotal / persistCountTotal);
 
-            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
+            map.put("chunk_update_pvm_batch_cost_time_total_us", (double) updatePvmBatchCostTimeTotalUs);
+            map.put("chunk_update_pvm_batch_cost_time_avg_us", (double) updatePvmBatchCostTimeTotalUs / persistCountTotal);
+        }
 
-            if (persistCountTotal > 0) {
-                map.put("chunk_persist_count_total", new SimpleGauge.ValueWithLabelValues((double) persistCountTotal, labelValues));
-                map.put("chunk_persist_cv_count_total", new SimpleGauge.ValueWithLabelValues((double) persistCvCountTotal, labelValues));
-                map.put("chunk_persist_cv_count_avg", new SimpleGauge.ValueWithLabelValues((double) persistCvCountTotal / persistCountTotal, labelValues));
+        map.putAll(segmentBatch.collect());
 
-                map.put("chunk_update_pvm_batch_cost_time_total_us", new SimpleGauge.ValueWithLabelValues((double) updatePvmBatchCostTimeTotalUs, labelValues));
-                map.put("chunk_update_pvm_batch_cost_time_avg_us", new SimpleGauge.ValueWithLabelValues((double) updatePvmBatchCostTimeTotalUs / persistCountTotal, labelValues));
+        if (fdReadWriteArray != null) {
+            for (var fdReadWrite : fdReadWriteArray) {
+                if (fdReadWrite != null) {
+                    map.putAll(fdReadWrite.collect());
+                }
             }
+        }
 
-            return map;
-        });
+        return map;
     }
 }

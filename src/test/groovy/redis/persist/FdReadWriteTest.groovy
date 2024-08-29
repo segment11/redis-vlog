@@ -10,6 +10,8 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 
 class FdReadWriteTest extends Specification {
+    final short slot = 0
+
     def 'test write and read'() {
         given:
         System.setProperty('jnr.ffi.asm.enabled', 'false')
@@ -38,12 +40,12 @@ class FdReadWriteTest extends Specification {
         ConfForSlot.global.confBucket.lruPerFd.maxSize = 10
 
         and:
-        def fdChunk = new FdReadWrite('test', libC, oneFile1)
+        def fdChunk = new FdReadWrite(slot, 'test', libC, oneFile1)
         fdChunk.initByteBuffers(true)
         println fdChunk
         println 'in memory size estimate: ' + fdChunk.estimate()
 
-        def fdKeyBucket = new FdReadWrite('test2', libC, oneFile2)
+        def fdKeyBucket = new FdReadWrite(slot, 'test2', libC, oneFile2)
         fdKeyBucket.initByteBuffers(false)
         def walGroupNumber = Wal.calcWalGroupNumber()
         fdKeyBucket.resetAllBytesByOneWalGroupIndexForKeyBucketOneSplitIndex(walGroupNumber)
@@ -51,6 +53,8 @@ class FdReadWriteTest extends Specification {
         println fdKeyBucket
         println 'in memory size estimate: ' + fdKeyBucket.estimate()
 
+        fdChunk.collect()
+        fdKeyBucket.collect()
         fdChunk.afterPreadCompressCountTotal = 1
         fdChunk.afterPreadCompressBytesTotalLength = 100
         fdChunk.afterPreadCompressedBytesTotalLength = 50
@@ -62,7 +66,8 @@ class FdReadWriteTest extends Specification {
         fdKeyBucket.keyBucketSharedBytesDecompressCountTotal = 1
         fdKeyBucket.keyBucketSharedBytesBeforeCompressedBytesTotal = 1000
         fdKeyBucket.keyBucketSharedBytesAfterCompressedBytesTotal = 100
-        FdReadWrite.fdReadWriteGauge.collect()
+        fdChunk.collect()
+        fdKeyBucket.collect()
 
         def segmentLength = ConfForSlot.global.confChunk.segmentLength
         def oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
@@ -71,8 +76,8 @@ class FdReadWriteTest extends Specification {
         // lru off
         ConfForSlot.global.confChunk.lruPerFd.maxSize = 0
         ConfForSlot.global.confBucket.lruPerFd.maxSize = 0
-        def fdChunk11 = new FdReadWrite('test11', libC, oneFile11)
-        def fdKeyBucket22 = new FdReadWrite('test22', libC, oneFile22)
+        def fdChunk11 = new FdReadWrite(slot, 'test11', libC, oneFile11)
+        def fdKeyBucket22 = new FdReadWrite(slot, 'test22', libC, oneFile22)
         fdChunk11.initByteBuffers(true)
         fdKeyBucket22.initByteBuffers(false)
         then:
@@ -223,10 +228,10 @@ class FdReadWriteTest extends Specification {
         fdKeyBucket.cleanUp()
 
         ConfForGlobal.pureMemory = true
-        fdChunk = new FdReadWrite('test', libC, oneFile1)
+        fdChunk = new FdReadWrite(slot, 'test', libC, oneFile1)
         fdChunk.initByteBuffers(true)
         println 'in memory size estimate: ' + fdChunk.estimate()
-        fdKeyBucket = new FdReadWrite('test2', libC, oneFile2)
+        fdKeyBucket = new FdReadWrite(slot, 'test2', libC, oneFile2)
         fdKeyBucket.initByteBuffers(false)
         println 'in memory size estimate: ' + fdKeyBucket.estimate()
         then:

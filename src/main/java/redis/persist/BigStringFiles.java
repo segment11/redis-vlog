@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
 import redis.ConfForSlot;
-import redis.metric.SimpleGauge;
+import redis.metric.InSlotMetricCollector;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
 
@@ -16,8 +16,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-public class BigStringFiles implements InMemoryEstimate {
+public class BigStringFiles implements InMemoryEstimate, InSlotMetricCollector {
     private final short slot;
     private final String slotStr;
     final File bigStringDir;
@@ -28,22 +29,12 @@ public class BigStringFiles implements InMemoryEstimate {
 
     private final HashMap<Long, byte[]> allBytesByUuid = new HashMap<>();
 
-    final static SimpleGauge bigStringFilesCountGauge = new SimpleGauge("big_string_files_count", "big string files count",
-            "slot");
-
-    static {
-        bigStringFilesCountGauge.register();
-    }
-
     private int bigStringFilesCount = 0;
 
-    private void initMetricsCollect() {
-        bigStringFilesCountGauge.addRawGetter(() -> {
-            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            map.put("big_string_files_count", new SimpleGauge.ValueWithLabelValues((double) bigStringFilesCount,
-                    List.of(slotStr)));
-            return map;
-        });
+    public Map<String, Double> collect() {
+        var map = new HashMap<String, Double>();
+        map.put("big_string_files_count", (double) bigStringFilesCount);
+        return map;
     }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -81,7 +72,6 @@ public class BigStringFiles implements InMemoryEstimate {
 
         var files = bigStringDir.listFiles();
         bigStringFilesCount = files.length;
-        initMetricsCollect();
     }
 
     @Override

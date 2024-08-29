@@ -4,7 +4,7 @@ import jnr.posix.LibC;
 import org.jetbrains.annotations.TestOnly;
 import org.slf4j.Logger;
 import redis.*;
-import redis.metric.SimpleGauge;
+import redis.metric.InSlotMetricCollector;
 import redis.repl.SlaveNeedReplay;
 import redis.repl.SlaveReplay;
 import redis.repl.incremental.XOneWalGroupPersist;
@@ -16,7 +16,7 @@ import java.util.*;
 
 import static redis.persist.LocalPersist.PAGE_SIZE;
 
-public class KeyLoader implements InMemoryEstimate, NeedCleanUp {
+public class KeyLoader implements InMemoryEstimate, InSlotMetricCollector, NeedCleanUp {
     private static final int PAGE_NUMBER_PER_BUCKET = 1;
     public static final int KEY_BUCKET_ONE_COST_SIZE = PAGE_NUMBER_PER_BUCKET * PAGE_SIZE;
 
@@ -52,8 +52,6 @@ public class KeyLoader implements InMemoryEstimate, NeedCleanUp {
                 }
             }
         };
-
-        this.initMetricsCollect();
     }
 
     @Override
@@ -235,7 +233,7 @@ public class KeyLoader implements InMemoryEstimate, NeedCleanUp {
             var name = "key_bucket_split_" + splitIndex + "_slot_" + slot;
             FdReadWrite fdReadWrite;
             try {
-                fdReadWrite = new FdReadWrite(name, libC, file);
+                fdReadWrite = new FdReadWrite(slot, name, libC, file);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -516,21 +514,22 @@ public class KeyLoader implements InMemoryEstimate, NeedCleanUp {
         }
     }
 
-    final static SimpleGauge keyLoaderGauge = new SimpleGauge("key_loader", "key loader",
-            "slot");
+    @Override
+    public Map<String, Double> collect() {
+        var map = new HashMap<String, Double>();
 
-    static {
-        keyLoaderGauge.register();
-    }
+        map.put("key_loader_bucket_count", (double) bucketsPerSlot);
+        map.put("persist_key_count", (double) getKeyCount());
 
-    private void initMetricsCollect() {
-        keyLoaderGauge.addRawGetter(() -> {
-            var labelValues = List.of(slotStr);
+        if (fdReadWriteArray != null) {
+            for (var fdReadWrite : fdReadWriteArray) {
+                if (fdReadWrite == null) {
+                    continue;
+                }
+                map.putAll(fdReadWrite.collect());
+            }
+        }
 
-            var map = new HashMap<String, SimpleGauge.ValueWithLabelValues>();
-            map.put("key_loader_bucket_count", new SimpleGauge.ValueWithLabelValues((double) bucketsPerSlot, labelValues));
-            map.put("persist_key_count", new SimpleGauge.ValueWithLabelValues((double) getKeyCount(), labelValues));
-            return map;
-        });
+        return map;
     }
 }

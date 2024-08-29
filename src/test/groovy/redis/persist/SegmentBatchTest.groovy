@@ -15,12 +15,12 @@ class SegmentBatchTest extends Specification {
         def snowFlake = new SnowFlake(1, 1)
         def segmentBatch = new SegmentBatch(slot, snowFlake)
 
-        segmentBatch.segmentBatchGauge.collect()
+        segmentBatch.collect()
         segmentBatch.compressCountTotal = 1
         segmentBatch.compressBytesTotal = 1
         segmentBatch.batchCountTotal = 1
         segmentBatch.afterTightSegmentCountTotal = 1
-        segmentBatch.segmentBatchGauge.collect()
+        segmentBatch.collect()
 
         println new SegmentBatch.SegmentCompressedBytesWithIndex(new byte[10], 0, 10L)
         new SegmentBatch.ForDebugCvCallback().callback('a', new CompressedValue(), 0)

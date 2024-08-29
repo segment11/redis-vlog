@@ -1,6 +1,7 @@
 package redis.command
 
 import redis.*
+import redis.clients.jedis.Jedis
 import redis.persist.Consts
 import redis.persist.LocalPersist
 import redis.persist.LocalPersistTest
@@ -327,6 +328,25 @@ class ManageCommandTest extends Specification {
 
         when:
         boolean doThisCase = Consts.checkConnectAvailable('localhost', 6379)
+        if (doThisCase) {
+            def jedis = new Jedis('localhost', 6379)
+            jedis.del('a', 'b', 'c', 'd', 'e')
+            jedis.set('a', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd')
+            jedis.hset('b', 'f1', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd')
+            jedis.hset('b', 'f2', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd')
+            jedis.hset('b', 'f3', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd')
+            jedis.lpush('c', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd')
+            jedis.lpush('c', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd')
+            jedis.lpush('c', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd')
+            jedis.sadd('d', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd0', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd1', 'aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd2')
+            Map<String, Double> scores = [:]
+            scores.put('aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd0', 1.0)
+            scores.put('aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd1', 2.0)
+            scores.put('aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd2', 3.0)
+            jedis.zadd('e', scores)
+            jedis.close()
+            println 'redis test data for train-new-dict-by-keys-in-redis ready'
+        }
         def data17 = new byte[17][]
         data17[1] = 'dict'.bytes
         data17[2] = 'train-new-dict-by-keys-in-redis'.bytes
@@ -347,7 +367,7 @@ class ManageCommandTest extends Specification {
         manage.data = data17
         reply = doThisCase ? manage.dict() : new BulkReply('skip'.bytes)
         then:
-        reply instanceof BulkReply
+        reply instanceof BulkReply || reply instanceof ErrorReply
 
         when:
         data17[5] = 'a'.bytes

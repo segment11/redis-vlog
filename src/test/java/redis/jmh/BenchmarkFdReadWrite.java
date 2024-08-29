@@ -58,7 +58,7 @@ public class BenchmarkFdReadWrite {
             var file = new File(targetDir, "/test_fd_read_write_jmh_" + i);
             FileInit.append2GBFile(file, false);
 
-            var fdReadWrite = new FdReadWrite("test" + i, libC, file);
+            var fdReadWrite = new FdReadWrite((short) 0, "test" + i, libC, file);
             fdReadWrite.initByteBuffers(false);
             fdReadWriteList.add(fdReadWrite);
         }

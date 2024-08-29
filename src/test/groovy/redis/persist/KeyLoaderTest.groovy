@@ -46,7 +46,7 @@ class KeyLoaderTest extends Specification {
         def oneChargeBucketNumber = ConfForSlot.global.confWal.oneChargeBucketNumber
         println keyLoader
         println 'in memory size estimate: ' + keyLoader.estimate()
-        keyLoader.keyLoaderGauge.collect()
+        keyLoader.collect()
 
         expect:
         !keyLoader.isBytesValidAsKeyBucket(null, 0)

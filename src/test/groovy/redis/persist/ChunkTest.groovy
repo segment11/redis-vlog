@@ -62,10 +62,12 @@ class ChunkTest extends Specification {
         println chunk
 
         when:
+        chunk.collect()
         chunk.persistCountTotal = 1
         chunk.persistCvCountTotal = 100
         chunk.updatePvmBatchCostTimeTotalUs = 100
-        Chunk.chunkGauge.collect()
+        chunk.collect()
+
         def segmentNumberPerFd = confChunk.segmentNumberPerFd
         int halfSegmentNumber = (confChunk.maxSegmentNumber() / 2).intValue()
         chunk.cleanUp()
@@ -109,6 +111,23 @@ class ChunkTest extends Specification {
         }
         then:
         isMoveOverflow
+
+        when:
+        chunk.segmentIndex = confChunk.segmentNumberPerFd - 1
+        chunk.moveSegmentIndexForPrepare()
+        then:
+        chunk.segmentIndex == confChunk.segmentNumberPerFd
+
+        when:
+        chunk.moveSegmentIndexForPrepare()
+        then:
+        chunk.segmentIndex == confChunk.segmentNumberPerFd
+
+        when:
+        chunk.segmentIndex = chunk.maxSegmentIndex - 1
+        chunk.moveSegmentIndexForPrepare()
+        then:
+        chunk.segmentIndex == 0
 
         when:
         chunk.segmentIndex = confChunk.maxSegmentNumber() - 1
@@ -298,6 +317,7 @@ class ChunkTest extends Specification {
         System.setProperty('jnr.ffi.asm.enabled', 'false')
         def libC = LibraryLoader.create(LibC.class).load('c')
         chunk.initFds(libC)
+        chunk.collect()
 
         def xForBinlog = new XOneWalGroupPersist(true, false, 0)
 

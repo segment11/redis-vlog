@@ -12,17 +12,7 @@ public class SimpleGauge extends Collector {
     }
 
     public interface RawGetter {
-        default short slot() {
-            return (short) -1;
-        }
-
-        // for global metrics collect
-        default Map<String, ValueWithLabelValues> get() {
-            return null;
-        }
-
-        // for target one slot metrics collect
-        Map<String, ValueWithLabelValues> get2();
+        Map<String, ValueWithLabelValues> get();
     }
 
     private final ArrayList<RawGetter> rawGetterList = new ArrayList<>();

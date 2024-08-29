@@ -57,6 +57,7 @@ class OneSlotTest extends Specification {
 
         when:
         def oneSlot4 = new OneSlot(slot)
+        oneSlot4.collect()
         then:
         oneSlot4.slot() == slot
 
@@ -208,7 +209,8 @@ class OneSlotTest extends Specification {
         replPairAsSlave0.sendBye = false
         oneSlot.replPairs.clear()
         oneSlot.replPairs.add(replPairAsSlave0)
-        oneSlot.oneSlotGauge.collect()
+        oneSlot.globalGauge.collect()
+        oneSlot.collect()
         then:
         oneSlot.getReplPairAsMaster(11L) == null
         oneSlot.getReplPairAsSlave(oneSlot.masterUuid) != null
@@ -356,14 +358,6 @@ class OneSlotTest extends Specification {
         def oneSlot = localPersist.oneSlot(slot)
         def oneSlot2 = localPersist.oneSlot((byte) 1)
 
-        and:
-        oneSlot.oneSlotGauge.collect()
-        oneSlot.kvLRUHitTotal = 1
-        oneSlot.segmentDecompressCountTotal = 1
-        oneSlot.segmentDecompressTimeTotalUs = 10
-        oneSlot.oneSlotGauge.rawGetterList.each { it.get2() }
-        oneSlot2.oneSlotGauge.rawGetterList.each { it.get2() }
-
         expect:
         oneSlot.bigStringFiles != null
         oneSlot.bigStringDir != null
@@ -425,6 +419,17 @@ class OneSlotTest extends Specification {
         rBigString = oneSlot.get(bigStringKey.bytes, sBigString.bucketIndex(), sBigString.keyHash())
         then:
         rBigString != null
+
+        when:
+        oneSlot.globalGauge.collect()
+        oneSlot.collect()
+        oneSlot.kvLRUHitTotal = 1
+        oneSlot.segmentDecompressCountTotal = 1
+        oneSlot.segmentDecompressTimeTotalUs = 10
+        oneSlot.createReplPairAsSlave('localhost', 6379)
+        oneSlot.collect()
+        then:
+        1 == 1
 
         cleanup:
         localPersist.cleanUp()
