@@ -170,9 +170,6 @@ public class Wal implements InMemoryEstimate {
     public static int ONE_GROUP_BUFFER_SIZE = PAGE_SIZE * 16;
     // readonly
     public static byte[] EMPTY_BYTES_FOR_ONE_GROUP = new byte[ONE_GROUP_BUFFER_SIZE];
-    // for init prepend wal file
-    static final byte[] INIT_M4 = new byte[1024 * 1024 * 4];
-    public static int GROUP_COUNT_IN_M4 = 1024 * 1024 * 4 / ONE_GROUP_BUFFER_SIZE;
 
     // for latency, do not configure too large
     public static final List<Integer> VALID_ONE_CHARGE_BUCKET_NUMBER_LIST = List.of(16, 32, 64);

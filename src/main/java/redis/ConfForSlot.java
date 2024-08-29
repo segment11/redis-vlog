@@ -280,7 +280,6 @@ public enum ConfForSlot {
             if (Wal.ONE_GROUP_BUFFER_SIZE != oneGroupBufferSize) {
                 Wal.ONE_GROUP_BUFFER_SIZE = oneGroupBufferSize;
                 Wal.EMPTY_BYTES_FOR_ONE_GROUP = new byte[Wal.ONE_GROUP_BUFFER_SIZE];
-                Wal.GROUP_COUNT_IN_M4 = 4 * 1024 * 1024 / Wal.ONE_GROUP_BUFFER_SIZE;
 
                 int groupNumber = Wal.calcWalGroupNumber();
                 var sum = oneGroupBufferSize * groupNumber / 1024 / 1024;

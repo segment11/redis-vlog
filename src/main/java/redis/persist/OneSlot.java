@@ -151,11 +151,6 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         var walSharedFile = new File(slotDir, "wal.dat");
         if (!walSharedFile.exists()) {
             FileUtils.touch(walSharedFile);
-
-            var initTimes = walGroupNumber / Wal.GROUP_COUNT_IN_M4;
-            for (int j = 0; j < initTimes; j++) {
-                FileUtils.writeByteArrayToFile(walSharedFile, Wal.INIT_M4, true);
-            }
         }
         this.raf = new RandomAccessFile(walSharedFile, "rw");
         var lruMemoryRequireMBWriteInWal = walSharedFile.length() / 1024 / 1024;
@@ -165,11 +160,6 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         var walSharedFileShortValue = new File(slotDir, "wal-short-value.dat");
         if (!walSharedFileShortValue.exists()) {
             FileUtils.touch(walSharedFileShortValue);
-
-            var initTimes = walGroupNumber / Wal.GROUP_COUNT_IN_M4;
-            for (int j = 0; j < initTimes; j++) {
-                FileUtils.writeByteArrayToFile(walSharedFileShortValue, Wal.INIT_M4, true);
-            }
         }
         this.rafShortValue = new RandomAccessFile(walSharedFileShortValue, "rw");
         var lruMemoryRequireMBWriteInWal2 = walSharedFileShortValue.length() / 1024 / 1024;
