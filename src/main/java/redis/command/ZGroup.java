@@ -14,7 +14,6 @@ import redis.type.RedisZSet;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Random;
 
 public class ZGroup extends BaseCommand {
     public ZGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -1343,23 +1342,7 @@ public class ZGroup extends BaseCommand {
 
         int absCount = Math.abs(count);
 
-        ArrayList<Integer> indexes = new ArrayList<>();
-        if (count == size) {
-            // need not random, return all members
-            for (int i = 0; i < size; i++) {
-                indexes.add(i);
-            }
-        } else {
-            boolean canUseSameField = count < 0;
-            var rand = new Random();
-            for (int i = 0; i < absCount; i++) {
-                int index;
-                do {
-                    index = rand.nextInt(size);
-                } while (!canUseSameField && indexes.contains(index));
-                indexes.add(index);
-            }
-        }
+        ArrayList<Integer> indexes = HGroup.getRandIndex(count, size, absCount);
 
         var replies = new Reply[absCount * (withScores ? 2 : 1)];
 
