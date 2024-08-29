@@ -61,21 +61,6 @@ public class Request {
         this.httpHeaders = httpHeaders;
     }
 
-    public static final ArrayList<String> crossRequestWorkerCmdList = new ArrayList<>();
-
-    // todo: add more commands
-    static {
-        crossRequestWorkerCmdList.add("dbsize");
-        crossRequestWorkerCmdList.add("flushdb");
-        crossRequestWorkerCmdList.add("flushall");
-    }
-
-    public void checkCmdIfCrossRequestWorker() {
-        if (crossRequestWorkerCmdList.contains(cmd())) {
-            isCrossRequestWorker = true;
-        }
-    }
-
     private ArrayList<BaseCommand.SlotWithKeyHash> slotWithKeyHashList;
 
     public ArrayList<BaseCommand.SlotWithKeyHash> getSlotWithKeyHashList() {

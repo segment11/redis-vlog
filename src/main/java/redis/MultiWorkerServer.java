@@ -295,8 +295,6 @@ public class MultiWorkerServer extends Launcher {
         for (var request : pipeline) {
             request.setSlotNumber(slotNumber);
             RequestHandler.parseSlots(request);
-
-            request.checkCmdIfCrossRequestWorker();
         }
 
         if (pipeline.size() == 1) {

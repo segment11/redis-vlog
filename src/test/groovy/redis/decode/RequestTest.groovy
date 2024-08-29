@@ -65,28 +65,6 @@ class RequestTest extends Specification {
 
         when:
         def data1 = new byte[1][]
-        data1[0] = 'dbsize'.bytes
-        def request3 = new Request(data1, false, false)
-        request3.checkCmdIfCrossRequestWorker()
-        then:
-        request3.isCrossRequestWorker()
-
-        when:
-        data1[0] = 'xxxx'.bytes
-        def request33 = new Request(data1, false, false)
-        request33.checkCmdIfCrossRequestWorker()
-        then:
-        !request33.isCrossRequestWorker()
-
-        when:
-        Request.crossRequestWorkerCmdList << 'xxxx'
-        data1[0] = 'xxxx'.bytes
-        def request4 = new Request(data1, false, false)
-        request4.checkCmdIfCrossRequestWorker()
-        then:
-        request4.isCrossRequestWorker()
-
-        when:
         def httpRequest = new Request(data1, true, false)
         then:
         httpRequest.isHttp()
