@@ -2,6 +2,7 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
@@ -110,6 +111,7 @@ public class LGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply lindex() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
@@ -220,6 +222,7 @@ public class LGroup extends BaseCommand {
         set(keyBytes, rl.encode(), slotWithKeyHash, CompressedValue.SP_TYPE_LIST);
     }
 
+    @VisibleForTesting
     Reply linsert() {
         if (data.length != 5) {
             return ErrorReply.FORMAT;
@@ -252,6 +255,7 @@ public class LGroup extends BaseCommand {
         return addToList(keyBytes, valueBytesArr, false, true, isBefore, pivotBytes, false);
     }
 
+    @VisibleForTesting
     Reply llen() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
@@ -273,6 +277,7 @@ public class LGroup extends BaseCommand {
         return new IntegerReply(size);
     }
 
+    @VisibleForTesting
     Reply lmove() {
         if (data.length != 5) {
             return ErrorReply.FORMAT;
@@ -314,6 +319,7 @@ public class LGroup extends BaseCommand {
         return rGroup.move(srcKeyBytes, srcSlotWithKeyHash, dstKeyBytes, dstSlotWithKeyHash, isSrcLeft, isDstLeft);
     }
 
+    @VisibleForTesting
     Reply lpop(boolean popFirst) {
         if (data.length != 2 && data.length != 3) {
             return ErrorReply.FORMAT;
@@ -376,6 +382,7 @@ public class LGroup extends BaseCommand {
         return new MultiBulkReply(arr);
     }
 
+    @VisibleForTesting
     Reply lpos() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
@@ -504,6 +511,7 @@ public class LGroup extends BaseCommand {
         return new MultiBulkReply(arr);
     }
 
+    @VisibleForTesting
     Reply lpush(boolean addFirst, boolean needKeyExist) {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
@@ -526,6 +534,7 @@ public class LGroup extends BaseCommand {
         return addToList(keyBytes, valueBytesArr, addFirst, false, false, null, needKeyExist);
     }
 
+    @VisibleForTesting
     Reply lrange() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
@@ -584,6 +593,7 @@ public class LGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply lrem() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
@@ -638,6 +648,7 @@ public class LGroup extends BaseCommand {
         return new IntegerReply(removed);
     }
 
+    @VisibleForTesting
     Reply lset() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
@@ -689,6 +700,7 @@ public class LGroup extends BaseCommand {
         return OKReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply ltrim() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;

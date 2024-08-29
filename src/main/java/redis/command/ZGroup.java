@@ -6,6 +6,7 @@ import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
@@ -365,6 +366,7 @@ public class ZGroup extends BaseCommand {
     private record Member(double score, String e) {
     }
 
+    @VisibleForTesting
     Reply zadd() {
         if (data.length < 4) {
             return ErrorReply.FORMAT;
@@ -512,6 +514,7 @@ public class ZGroup extends BaseCommand {
         return new IntegerReply(isIncludeCh ? changed + added : added);
     }
 
+    @VisibleForTesting
     Reply zcard() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
@@ -536,6 +539,7 @@ public class ZGroup extends BaseCommand {
 
     private final static String negInf = "-inf";
 
+    @VisibleForTesting
     Reply zcount(boolean byLex) {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
@@ -749,6 +753,7 @@ public class ZGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Reply zdiff(boolean isInter, boolean isUnion) {
         return zdiff(data, isInter, isUnion, null);
     }
@@ -765,6 +770,7 @@ public class ZGroup extends BaseCommand {
         this.data = data2;
     }
 
+    @VisibleForTesting
     Reply zdiffstore(boolean isInter, boolean isUnion) {
         if (data.length < 5) {
             return ErrorReply.FORMAT;
@@ -784,6 +790,7 @@ public class ZGroup extends BaseCommand {
         return zdiff(dd, isInter, isUnion, dstKeyBytes);
     }
 
+    @VisibleForTesting
     Reply zdiff(byte[][] dd, boolean isInter, boolean isUnion, byte[] dstKeyBytes) {
         if (dd.length < 4) {
             return ErrorReply.FORMAT;
@@ -1041,6 +1048,7 @@ public class ZGroup extends BaseCommand {
         return new BulkReply(String.valueOf(score).getBytes());
     }
 
+    @VisibleForTesting
     Reply zintercard() {
         if (data.length < 4) {
             return ErrorReply.FORMAT;
@@ -1199,6 +1207,7 @@ public class ZGroup extends BaseCommand {
         return asyncReply;
     }
 
+    @VisibleForTesting
     Reply zmscore() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
@@ -1240,6 +1249,7 @@ public class ZGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply zpopmax(boolean isMin) {
         if (data.length != 2 && data.length != 3) {
             return ErrorReply.FORMAT;
@@ -1282,6 +1292,7 @@ public class ZGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply zrandmember() {
         if (data.length < 2 || data.length > 4) {
             return ErrorReply.FORMAT;
@@ -1382,10 +1393,12 @@ public class ZGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply zrange(byte[][] dd) {
         return zrange(dd, null);
     }
 
+    @VisibleForTesting
     Reply zrange(byte[][] dd, byte[] dstKeyBytes) {
         if (dd.length < 4) {
             return ErrorReply.FORMAT;
@@ -1789,6 +1802,7 @@ public class ZGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Reply zrank(boolean isReverse) {
         if (data.length != 3 && data.length != 4) {
             return ErrorReply.FORMAT;
@@ -1832,6 +1846,7 @@ public class ZGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply zrem() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
@@ -1871,6 +1886,7 @@ public class ZGroup extends BaseCommand {
         return removedCount == 0 ? IntegerReply.REPLY_0 : new IntegerReply(removedCount);
     }
 
+    @VisibleForTesting
     Reply zremrangebyscore(boolean byScore, boolean byLex, boolean byRank) {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
@@ -2050,6 +2066,7 @@ public class ZGroup extends BaseCommand {
         return removed == 0 ? IntegerReply.REPLY_0 : new IntegerReply(removed);
     }
 
+    @VisibleForTesting
     Reply zscore() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;

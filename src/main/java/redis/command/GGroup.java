@@ -2,6 +2,7 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.BulkReply;
@@ -55,6 +56,7 @@ public class GGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply getdel() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
@@ -71,6 +73,7 @@ public class GGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Reply getex() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
@@ -151,8 +154,9 @@ public class GGroup extends BaseCommand {
         return new BulkReply(valueBytes);
     }
 
-    final static Reply BLANK_REPLY = new BulkReply(new byte[0]);
+    private final static Reply BLANK_REPLY = new BulkReply(new byte[0]);
 
+    @VisibleForTesting
     Reply getrange() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
@@ -207,6 +211,7 @@ public class GGroup extends BaseCommand {
         return new BulkReply(subBytes);
     }
 
+    @VisibleForTesting
     Reply getset() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;

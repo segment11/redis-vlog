@@ -5,6 +5,7 @@ import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
@@ -80,6 +81,7 @@ public class DGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply del() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
@@ -162,6 +164,7 @@ public class DGroup extends BaseCommand {
         return asyncReply;
     }
 
+    @VisibleForTesting
     Reply dbsize() {
         // skip
         if (data.length == 2) {
@@ -195,6 +198,7 @@ public class DGroup extends BaseCommand {
         return asyncReply;
     }
 
+    @VisibleForTesting
     Reply decrBy(int by, double byFloat) {
         var keyBytes = data[1];
         if (keyBytes.length > CompressedValue.KEY_MAX_LENGTH) {

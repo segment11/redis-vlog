@@ -5,6 +5,7 @@ import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
@@ -75,6 +76,7 @@ public class EGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply exists() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
@@ -157,6 +159,7 @@ public class EGroup extends BaseCommand {
         return asyncReply;
     }
 
+    @VisibleForTesting
     Reply expire(boolean isAt, boolean isMilliseconds) {
         if (data.length != 3 && data.length != 4) {
             return ErrorReply.FORMAT;
@@ -221,6 +224,7 @@ public class EGroup extends BaseCommand {
         return IntegerReply.REPLY_1;
     }
 
+    @VisibleForTesting
     Reply expiretime(boolean isMilliseconds) {
         if (data.length != 2) {
             return ErrorReply.FORMAT;

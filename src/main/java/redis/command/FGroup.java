@@ -5,6 +5,7 @@ import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.ConfForGlobal;
 import redis.repl.LeaderSelector;
@@ -34,6 +35,7 @@ public class FGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply failover() {
         // skip for test
         if (data.length == 2) {
@@ -102,6 +104,7 @@ public class FGroup extends BaseCommand {
         return asyncReply;
     }
 
+    @VisibleForTesting
     Reply flushdb() {
         // skip for test
         if (data.length == 2) {

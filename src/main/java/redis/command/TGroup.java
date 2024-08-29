@@ -2,6 +2,7 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.reply.*;
@@ -12,11 +13,17 @@ import java.util.ArrayList;
 import static redis.CompressedValue.NO_EXPIRE;
 
 public class TGroup extends BaseCommand {
+    @VisibleForTesting
     static final BulkReply TYPE_STRING = new BulkReply("string".getBytes());
+    @VisibleForTesting
     static final BulkReply TYPE_HASH = new BulkReply("hash".getBytes());
+    @VisibleForTesting
     static final BulkReply TYPE_LIST = new BulkReply("list".getBytes());
+    @VisibleForTesting
     static final BulkReply TYPE_SET = new BulkReply("set".getBytes());
+    @VisibleForTesting
     static final BulkReply TYPE_ZSET = new BulkReply("zset".getBytes());
+    @VisibleForTesting
     static final BulkReply TYPE_STREAM = new BulkReply("stream".getBytes());
 
     public TGroup(String cmd, byte[][] data, ITcpSocket socket) {
@@ -51,6 +58,7 @@ public class TGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply type() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
@@ -93,6 +101,7 @@ public class TGroup extends BaseCommand {
         return TYPE_STRING;
     }
 
+    @VisibleForTesting
     Reply ttl(boolean isMilliseconds) {
         if (data.length != 2) {
             return ErrorReply.FORMAT;

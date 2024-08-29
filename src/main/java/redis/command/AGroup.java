@@ -2,6 +2,7 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.reply.ErrorReply;
 import redis.reply.IntegerReply;
@@ -40,6 +41,7 @@ public class AGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply append() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;

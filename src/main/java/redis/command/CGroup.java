@@ -3,6 +3,7 @@ package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.SettablePromise;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.dyn.CachedGroovyClassLoader;
 import redis.dyn.RefreshLoader;
@@ -61,6 +62,7 @@ public class CGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply client() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
@@ -79,6 +81,7 @@ public class CGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply config() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
@@ -91,6 +94,7 @@ public class CGroup extends BaseCommand {
         return (Reply) CachedGroovyClassLoader.getInstance().eval(scriptText, variables);
     }
 
+    @VisibleForTesting
     Reply copy() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;

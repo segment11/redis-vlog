@@ -2,6 +2,7 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.reply.*;
 
@@ -25,6 +26,7 @@ public class UGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply unsubscribe() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;

@@ -8,6 +8,7 @@ import io.activej.net.socket.tcp.TcpSocket;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.LoggerFactory;
 import redis.*;
 import redis.persist.*;
@@ -187,7 +188,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
-    public Repl.ReplReply handleReplInner(short slot, ReplType replType, long slaveUuid) {
+    private Repl.ReplReply handleReplInner(short slot, ReplType replType, long slaveUuid) {
         var contentBytes = data[3];
 
         var oneSlot = localPersist.oneSlot(slot);
@@ -305,6 +306,7 @@ public class XGroup extends BaseCommand {
         };
     }
 
+    @VisibleForTesting
     Repl.ReplReply hello(short slot, byte[] contentBytes) {
         // server received hello from client
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -357,6 +359,7 @@ public class XGroup extends BaseCommand {
         return requestBytes;
     }
 
+    @VisibleForTesting
     Repl.ReplReply hi(short slot, byte[] contentBytes) {
         // client received hi from server
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -451,6 +454,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Repl.ReplReply exists_wal(short slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -493,6 +497,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Repl.ReplReply s_exists_wal(short slot, byte[] contentBytes) {
         // client received from server
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -545,6 +550,7 @@ public class XGroup extends BaseCommand {
         return new RawBytesContent(requestBytes);
     }
 
+    @VisibleForTesting
     Repl.ReplReply exists_chunk_segments(short slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -585,6 +591,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_chunk_segments, new RawBytesContent(responseBytes));
     }
 
+    @VisibleForTesting
     Repl.ReplReply s_exists_chunk_segments(short slot, byte[] contentBytes) {
         // client received from server
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -642,6 +649,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Repl.ReplReply exists_key_buckets(short slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -682,6 +690,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_key_buckets, new RawBytesContent(responseBytes));
     }
 
+    @VisibleForTesting
     Repl.ReplReply s_exists_key_buckets(short slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
@@ -749,6 +758,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Repl.ReplReply stat_key_count_in_buckets(short slot, byte[] contentBytes) {
         // server received from client
         // ignore content bytes, send all
@@ -758,6 +768,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_stat_key_count_in_buckets, new RawBytesContent(bytes));
     }
 
+    @VisibleForTesting
     Repl.ReplReply s_stat_key_count_in_buckets(short slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
@@ -774,6 +785,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.exists_key_buckets, new RawBytesContent(requestBytes));
     }
 
+    @VisibleForTesting
     Repl.ReplReply meta_key_bucket_split_number(short slot, byte[] contentBytes) {
         // server received from client
         // ignore content bytes, send all
@@ -783,6 +795,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_meta_key_bucket_split_number, new RawBytesContent(bytes));
     }
 
+    @VisibleForTesting
     Repl.ReplReply s_meta_key_bucket_split_number(short slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
@@ -793,6 +806,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.stat_key_count_in_buckets, NextStepContent.INSTANCE);
     }
 
+    @VisibleForTesting
     Repl.ReplReply incremental_big_string(short slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -815,6 +829,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_incremental_big_string, new RawBytesContent(responseBytes));
     }
 
+    @VisibleForTesting
     Repl.ReplReply s_incremental_big_string(short slot, byte[] contentBytes) {
         // client received from server
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -834,6 +849,7 @@ public class XGroup extends BaseCommand {
         return Repl.emptyReply();
     }
 
+    @VisibleForTesting
     Repl.ReplReply exists_big_string(short slot, byte[] contentBytes) {
         // server received from client
         // send back exists big string to client, with flag can do next step
@@ -859,6 +875,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_big_string, toSlaveExistsBigString);
     }
 
+    @VisibleForTesting
     // need delete local big string file if not exists in master, todo
     Repl.ReplReply s_exists_big_string(short slot, byte[] contentBytes) {
         // client received from server
@@ -905,6 +922,7 @@ public class XGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Repl.ReplReply fetchExistsBigString(short slot, OneSlot oneSlot) {
         var uuidListLocal = oneSlot.getBigStringFiles().getBigStringFileUuidList();
         if (uuidListLocal.isEmpty()) {
@@ -920,6 +938,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.exists_big_string, new RawBytesContent(rawBytes));
     }
 
+    @VisibleForTesting
     Repl.ReplReply exists_dict(short slot, byte[] contentBytes) {
         // client already persisted dict seq, send to client exclude sent dict
         ArrayList<Integer> sentDictSeqList = new ArrayList<>();
@@ -944,6 +963,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_dict, content);
     }
 
+    @VisibleForTesting
     Repl.ReplReply s_exists_dict(short slot, byte[] contentBytes) {
         // client received from server
         var oneSlot = localPersist.oneSlot(slot);
@@ -984,6 +1004,7 @@ public class XGroup extends BaseCommand {
         return fetchExistsBigString(slot, oneSlot);
     }
 
+    @VisibleForTesting
     Repl.ReplReply exists_all_done(short slot, byte[] contentBytes) {
         // server received from client
         log.warn("Repl slave exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
@@ -991,6 +1012,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_exists_all_done, NextStepContent.INSTANCE);
     }
 
+    @VisibleForTesting
     Repl.ReplReply s_exists_all_done(short slot, byte[] contentBytes) {
         // client received from server
         log.warn("Repl master reply exists/meta fetch all done, slot={}, slave uuid={}, {}", slot,
@@ -1017,6 +1039,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.catch_up, content);
     }
 
+    @VisibleForTesting
     Repl.ReplReply catch_up(short slot, byte[] contentBytes) {
         // server received from client
         var buffer = ByteBuffer.wrap(contentBytes);
@@ -1092,6 +1115,7 @@ public class XGroup extends BaseCommand {
         return Repl.reply(slot, replPair, ReplType.s_catch_up, new RawBytesContent(responseBytes));
     }
 
+    @VisibleForTesting
     Repl.ReplReply s_catch_up(short slot, byte[] contentBytes) {
         // client received from server
         replPair.setLastGetCatchUpResponseMillis(System.currentTimeMillis());

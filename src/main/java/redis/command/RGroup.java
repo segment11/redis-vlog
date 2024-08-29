@@ -3,6 +3,7 @@ package redis.command;
 import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.SettablePromise;
 import io.netty.buffer.Unpooled;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
 import redis.Debug;
@@ -105,6 +106,7 @@ public class RGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply rename() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
@@ -149,11 +151,12 @@ public class RGroup extends BaseCommand {
         return asyncReply;
     }
 
-    final static String REPLACE = "replace";
-    final static String ABSTTL = "absttl";
-    final static String IDLETIME = "idletime";
-    final static String FREQ = "freq";
+    private final static String REPLACE = "replace";
+    private final static String ABSTTL = "absttl";
+    private final static String IDLETIME = "idletime";
+    private final static String FREQ = "freq";
 
+    @VisibleForTesting
     Reply restore() {
         if (data.length < 4) {
             return ErrorReply.FORMAT;
@@ -279,8 +282,8 @@ public class RGroup extends BaseCommand {
         }
     }
 
-    void moveDstCallback(byte[] dstKeyBytes, SlotWithKeyHash dstSlotWithKeyHash, boolean dstLeft, byte[] memberValueBytes,
-                         Consumer<Reply> consumer) {
+    private void moveDstCallback(byte[] dstKeyBytes, SlotWithKeyHash dstSlotWithKeyHash, boolean dstLeft, byte[] memberValueBytes,
+                                 Consumer<Reply> consumer) {
         var cvDst = getCv(dstKeyBytes, dstSlotWithKeyHash);
 
         RedisList rlDst;
@@ -344,6 +347,7 @@ public class RGroup extends BaseCommand {
         return asyncReply;
     }
 
+    @VisibleForTesting
     Reply rpoplpush() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;

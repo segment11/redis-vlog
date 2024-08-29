@@ -159,6 +159,7 @@ public class HGroup extends BaseCommand {
         return localPersist.getIsHashSaveMemberTogether();
     }
 
+    @VisibleForTesting
     Reply hdel() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
@@ -207,6 +208,7 @@ public class HGroup extends BaseCommand {
         return new IntegerReply(removed);
     }
 
+    @VisibleForTesting
     Reply hdel2(byte[] keyBytes, ArrayList<String> fields) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhh = getRedisHH(keyBytes, slotWithKeyHash);
@@ -225,6 +227,7 @@ public class HGroup extends BaseCommand {
         return new IntegerReply(removed);
     }
 
+    @VisibleForTesting
     Reply hexists() {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
@@ -258,6 +261,7 @@ public class HGroup extends BaseCommand {
 //        return rhk.contains(new String(fieldBytes)) ? IntegerReply.REPLY_1 : IntegerReply.REPLY_0;
     }
 
+    @VisibleForTesting
     Reply hexists2(byte[] keyBytes, byte[] fieldBytes) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH);
@@ -278,6 +282,7 @@ public class HGroup extends BaseCommand {
         return isFind[0] ? IntegerReply.REPLY_1 : IntegerReply.REPLY_0;
     }
 
+    @VisibleForTesting
     Reply hget(boolean onlyReturnLength) {
         if (data.length != 3) {
             return ErrorReply.FORMAT;
@@ -310,6 +315,7 @@ public class HGroup extends BaseCommand {
         return onlyReturnLength ? new IntegerReply(fieldValueBytes.length) : new BulkReply(fieldValueBytes);
     }
 
+    @VisibleForTesting
     Reply hget2(byte[] keyBytes, byte[] fieldBytes, boolean onlyReturnLength) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH);
@@ -334,6 +340,7 @@ public class HGroup extends BaseCommand {
         return onlyReturnLength ? new IntegerReply(fieldValueByte.length) : new BulkReply(fieldValueByte);
     }
 
+    @VisibleForTesting
     Reply hgetall() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
@@ -370,6 +377,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply hgetall2(byte[] keyBytes) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhh = getRedisHH(keyBytes, slotWithKeyHash);
@@ -391,6 +399,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply hincrby(boolean isFloat) {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
@@ -443,6 +452,7 @@ public class HGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Reply hincrby2(byte[] keyBytes, byte[] fieldBytes, int by, double byFloat, boolean isByFloat) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhh = getRedisHH(keyBytes, slotWithKeyHash);
@@ -503,6 +513,7 @@ public class HGroup extends BaseCommand {
         }
     }
 
+    @VisibleForTesting
     Reply hkeys(boolean onlyReturnSize) {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
@@ -545,6 +556,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply hkeys2(byte[] keyBytes, boolean onlyReturnSize) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var encodedBytes = get(keyBytes, slotWithKeyHash, false, CompressedValue.SP_TYPE_HH);
@@ -570,6 +582,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply hmget() {
         if (data.length < 3) {
             return ErrorReply.FORMAT;
@@ -606,6 +619,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply hmget2(byte[] keyBytes, ArrayList<String> fields) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhh = getRedisHH(keyBytes, slotWithKeyHash);
@@ -619,6 +633,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply hmset() {
         if (data.length < 4 || data.length % 2 != 0) {
             return ErrorReply.FORMAT;
@@ -671,6 +686,7 @@ public class HGroup extends BaseCommand {
         return OKReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply hmset2(byte[] keyBytes, LinkedHashMap<String, byte[]> fieldValues) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhh = getRedisHH(keyBytes, slotWithKeyHash);
@@ -690,6 +706,7 @@ public class HGroup extends BaseCommand {
         return OKReply.INSTANCE;
     }
 
+    @VisibleForTesting
     Reply hrandfield() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
@@ -755,6 +772,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply hrandfield2(byte[] keyBytes, int count, boolean withValues) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhh = getRedisHH(keyBytes, slotWithKeyHash);
@@ -814,6 +832,7 @@ public class HGroup extends BaseCommand {
         return indexes;
     }
 
+    @VisibleForTesting
     Reply hsetnx() {
         if (data.length != 4) {
             return ErrorReply.FORMAT;
@@ -865,6 +884,7 @@ public class HGroup extends BaseCommand {
         return IntegerReply.REPLY_1;
     }
 
+    @VisibleForTesting
     Reply hsetnx2(byte[] keyBytes, byte[] fieldBytes, byte[] fieldValueBytes) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhh = getRedisHH(keyBytes, slotWithKeyHash);
@@ -882,6 +902,7 @@ public class HGroup extends BaseCommand {
         return IntegerReply.REPLY_1;
     }
 
+    @VisibleForTesting
     Reply hvals() {
         if (data.length != 2) {
             return ErrorReply.FORMAT;
@@ -917,6 +938,7 @@ public class HGroup extends BaseCommand {
         return new MultiBulkReply(replies);
     }
 
+    @VisibleForTesting
     Reply hvals2(byte[] keyBytes) {
         var slotWithKeyHash = slotWithKeyHashListParsed.getFirst();
         var rhh = getRedisHH(keyBytes, slotWithKeyHash);

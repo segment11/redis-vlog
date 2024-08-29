@@ -5,6 +5,7 @@ import io.activej.net.socket.tcp.ITcpSocket;
 import io.activej.promise.Promise;
 import io.activej.promise.Promises;
 import io.activej.promise.SettablePromise;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.dyn.CachedGroovyClassLoader;
 import redis.dyn.RefreshLoader;
@@ -84,9 +85,10 @@ public class MGroup extends BaseCommand {
     record KeyValueBytesAndSlotWithKeyHash(byte[] keyBytes, byte[] valueBytes, SlotWithKeyHash slotWithKeyHash) {
     }
 
-    record ValueBytesAndIndex(byte[] valueBytes, int index) {
+    private record ValueBytesAndIndex(byte[] valueBytes, int index) {
     }
 
+    @VisibleForTesting
     Reply mget() {
         if (data.length < 2) {
             return ErrorReply.FORMAT;
@@ -163,6 +165,7 @@ public class MGroup extends BaseCommand {
         return asyncReply;
     }
 
+    @VisibleForTesting
     Reply mset() {
         if (data.length < 3 || data.length % 2 == 0) {
             return ErrorReply.FORMAT;

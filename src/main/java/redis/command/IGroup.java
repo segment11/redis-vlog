@@ -2,6 +2,7 @@
 package redis.command;
 
 import io.activej.net.socket.tcp.ITcpSocket;
+import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.dyn.CachedGroovyClassLoader;
 import redis.dyn.RefreshLoader;
@@ -91,7 +92,8 @@ public class IGroup extends BaseCommand {
         return NilReply.INSTANCE;
     }
 
-    private Reply info() {
+    @VisibleForTesting
+    Reply info() {
         if (data.length != 1 && data.length != 2) {
             return ErrorReply.FORMAT;
         }
