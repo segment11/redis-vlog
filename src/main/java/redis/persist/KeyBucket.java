@@ -1,6 +1,8 @@
 package redis.persist;
 
 import io.netty.buffer.Unpooled;
+import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
@@ -47,8 +49,9 @@ public class KeyBucket {
     short size;
     short cellCost;
 
+    @VisibleForTesting
     long lastUpdateSeq;
-    byte lastUpdateSplitNumber;
+    private byte lastUpdateSplitNumber;
 
     private final SnowFlake snowFlake;
 
@@ -60,8 +63,8 @@ public class KeyBucket {
         return HEADER_LENGTH + cellIndex * ONE_CELL_META_LENGTH;
     }
 
-    static final long NO_KEY = 0;
-    static final long PRE_KEY = -1;
+    private static final long NO_KEY = 0;
+    private static final long PRE_KEY = -1;
 
     private final short slot;
     private final int bucketIndex;
@@ -268,11 +271,12 @@ public class KeyBucket {
 
     ShortValueCvExpiredCallBack shortValueCvExpiredCallBack;
 
+    @VisibleForTesting
     void clearOneExpired(int i) {
         clearOneExpired(i, null);
     }
 
-    void clearOneExpired(int i, KeyBytesAndValueBytes kvBytesAlreadyGet) {
+    private void clearOneExpired(int i, KeyBytesAndValueBytes kvBytesAlreadyGet) {
         if (i >= capacity) {
             throw new IllegalArgumentException("i >= capacity");
         }
@@ -315,6 +319,7 @@ public class KeyBucket {
         }
     }
 
+    @TestOnly
     String allPrint() {
         var sb = new StringBuilder();
         iterate((keyHash, expireAt, seq, keyBytes, valueBytes) -> sb.append("key=").append(new String(keyBytes))
@@ -325,6 +330,7 @@ public class KeyBucket {
         return sb.toString();
     }
 
+    @VisibleForTesting
     void updateSeq() {
         long seq = snowFlake.nextId();
         // last 4 bits for split number for data check, max split number is 8
@@ -392,6 +398,7 @@ public class KeyBucket {
         return new DoPutResult(true, isUpdate);
     }
 
+    @VisibleForTesting
     void rePutAll() {
         ArrayList<PersistValueMeta> tmpList = new ArrayList<>(INIT_CAPACITY);
         iterate((keyHash, expireAt, seq, keyBytes, valueBytes) -> {
@@ -488,6 +495,7 @@ public class KeyBucket {
         }
     }
 
+    @VisibleForTesting
     boolean isCellAvailableN(int cellIndex, int cellCount, boolean isForUpdate) {
         for (int i = 0; i < cellCount; i++) {
             int nextCellIndex = cellIndex + i;

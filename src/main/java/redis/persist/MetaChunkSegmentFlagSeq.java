@@ -29,7 +29,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate, NeedCleanUp {
 
     private final short slot;
     private final int maxSegmentNumber;
-    final int allCapacity;
+    private final int allCapacity;
     private RandomAccessFile raf;
 
     private static void fillSegmentFlagInit(byte[] innerBytes) {
@@ -46,7 +46,7 @@ public class MetaChunkSegmentFlagSeq implements InMemoryEstimate, NeedCleanUp {
         }
     }
 
-    final byte[] inMemoryCachedBytes;
+    private final byte[] inMemoryCachedBytes;
     private final ByteBuffer inMemoryCachedByteBuffer;
 
     public byte[] getOneBatch(int beginBucketIndex, int bucketCount) {

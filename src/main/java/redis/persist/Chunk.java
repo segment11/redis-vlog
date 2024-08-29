@@ -56,11 +56,14 @@ public class Chunk implements InMemoryEstimate, InSlotMetricCollector, NeedClean
     @VisibleForTesting
     long updatePvmBatchCostTimeTotalUs;
 
+    @VisibleForTesting
     final OneSlot oneSlot;
     private final KeyLoader keyLoader;
     private final SegmentBatch segmentBatch;
 
+    @VisibleForTesting
     int[] fdLengths;
+    @VisibleForTesting
     FdReadWrite[] fdReadWriteArray;
 
     public Chunk(short slot, File slotDir, OneSlot oneSlot,
@@ -98,6 +101,7 @@ public class Chunk implements InMemoryEstimate, InSlotMetricCollector, NeedClean
         return size;
     }
 
+    @VisibleForTesting
     void initFds(LibC libC) throws IOException {
         this.fdLengths = new int[fdPerChunk];
         this.fdReadWriteArray = new FdReadWrite[fdPerChunk];
@@ -174,6 +178,7 @@ public class Chunk implements InMemoryEstimate, InSlotMetricCollector, NeedClean
         mergedSegmentIndexEndLastTime = NO_NEED_MERGE_SEGMENT_INDEX;
     }
 
+    @VisibleForTesting
     int targetFdIndex() {
         return segmentIndex / segmentNumberPerFd;
     }
@@ -182,10 +187,12 @@ public class Chunk implements InMemoryEstimate, InSlotMetricCollector, NeedClean
         return targetSegmentIndex / segmentNumberPerFd;
     }
 
+    @VisibleForTesting
     int targetSegmentIndexTargetFd() {
         return segmentIndex % segmentNumberPerFd;
     }
 
+    @VisibleForTesting
     int targetSegmentIndexTargetFd(int targetSegmentIndex) {
         return targetSegmentIndex % segmentNumberPerFd;
     }
@@ -199,6 +206,7 @@ public class Chunk implements InMemoryEstimate, InSlotMetricCollector, NeedClean
         return reuseSegments(true, 1, true);
     }
 
+    @VisibleForTesting
     boolean reuseSegments(boolean isFirstStart, int segmentCount, boolean updateAsReuseFlag) {
         // skip can not reuse segments
         if (!isFirstStart && segmentIndex == 0) {
@@ -515,6 +523,7 @@ public class Chunk implements InMemoryEstimate, InSlotMetricCollector, NeedClean
         return needMergeSegmentIndexList;
     }
 
+    @VisibleForTesting
     void updateLastMergedSegmentIndexEnd(ArrayList<Integer> needMergeSegmentIndexList) {
         TreeSet<Integer> sorted = new TreeSet<>(needMergeSegmentIndexList);
 
@@ -587,6 +596,7 @@ public class Chunk implements InMemoryEstimate, InSlotMetricCollector, NeedClean
         }
     }
 
+    @VisibleForTesting
     void checkNeedMergeSegmentIndexListContinuous(TreeSet<Integer> sortedSet) {
         if (sortedSet.size() == 1) {
             return;
@@ -631,6 +641,7 @@ public class Chunk implements InMemoryEstimate, InSlotMetricCollector, NeedClean
         }
     }
 
+    @VisibleForTesting
     void moveSegmentIndexNext(int segmentCount) {
         if (segmentCount > 1) {
             var newSegmentIndex = segmentIndex + segmentCount;

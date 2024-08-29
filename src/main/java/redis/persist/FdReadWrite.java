@@ -10,6 +10,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
@@ -34,7 +35,7 @@ import static redis.persist.LocalPersist.PROTECTION;
 // need refactor to FdChunkSegments + FdKeyBuckets, todo
 public class FdReadWrite implements InMemoryEstimate, InSlotMetricCollector, NeedCleanUp {
 
-    protected final Logger log = LoggerFactory.getLogger(this.getClass());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     public FdReadWrite(short slot, String name, LibC libC, File file) throws IOException {
         this.slot = slot;
@@ -120,12 +121,14 @@ public class FdReadWrite implements InMemoryEstimate, InSlotMetricCollector, Nee
 
     private final short slot;
 
+    @VisibleForTesting
     final String name;
 
     private final LibC libC;
 
     private final int fd;
 
+    @VisibleForTesting
     long writeIndex;
 
     private boolean isLRUOn = false;
@@ -148,29 +151,39 @@ public class FdReadWrite implements InMemoryEstimate, InSlotMetricCollector, Nee
 
     // avg = this time / after fd pread compress count total
     private long afterPreadCompressTimeTotalUs;
+    @VisibleForTesting
     long afterPreadCompressCountTotal;
+    @VisibleForTesting
     long afterPreadCompressBytesTotalLength;
+    @VisibleForTesting
     long afterPreadCompressedBytesTotalLength;
 
     private long readBytesTotal;
     private long readTimeTotalUs;
+    @VisibleForTesting
     long readCountTotal;
 
     private long writeBytesTotal;
     private long writeTimeTotalUs;
+    @VisibleForTesting
     long writeCountTotal;
 
+    @VisibleForTesting
     long lruHitCounter;
+    @VisibleForTesting
     long lruMissCounter;
 
     // only for pure memory mode stats
     private long keyBucketSharedBytesCompressTimeTotalUs;
+    @VisibleForTesting
     long keyBucketSharedBytesCompressCountTotal;
+    @VisibleForTesting
     long keyBucketSharedBytesBeforeCompressedBytesTotal;
+    @VisibleForTesting
     long keyBucketSharedBytesAfterCompressedBytesTotal;
 
-
     private long keyBucketSharedBytesDecompressTimeTotalUs;
+    @VisibleForTesting
     long keyBucketSharedBytesDecompressCountTotal;
 
     public static final int BATCH_ONCE_SEGMENT_COUNT_PWRITE = 4;
@@ -184,15 +197,15 @@ public class FdReadWrite implements InMemoryEstimate, InSlotMetricCollector, Nee
     private long writeSegmentBatchAddress;
 
     // for chunk segments repl
-    ByteBuffer forReplBuffer;
+    private ByteBuffer forReplBuffer;
     private long forReplAddress;
 
     // for chunk merge
-    ByteBuffer readForMergeBatchBuffer;
+    private ByteBuffer readForMergeBatchBuffer;
     private long readForMergeBatchAddress;
 
     // for key bucket batch read / write
-    ByteBuffer forOneWalGroupBatchBuffer;
+    private ByteBuffer forOneWalGroupBatchBuffer;
     private long forOneWalGroupBatchAddress;
 
     private int oneInnerLength;
@@ -634,6 +647,7 @@ public class FdReadWrite implements InMemoryEstimate, InSlotMetricCollector, Nee
         return n;
     }
 
+    @VisibleForTesting
     byte[] readOneInnerBatchFromMemory(int oneInnerIndex, int oneInnerCount) {
         if (!isChunkFd) {
             // read shared bytes for one wal group
@@ -721,6 +735,7 @@ public class FdReadWrite implements InMemoryEstimate, InSlotMetricCollector, Nee
         setSharedBytesCompressToMemory(null, walGroupIndex);
     }
 
+    @VisibleForTesting
     int writeOneInnerBatchToMemory(int beginOneInnerIndex, byte[] bytes, int position) {
         var isSmallerThanOneInner = bytes.length < oneInnerLength;
         if (!isSmallerThanOneInner && (bytes.length - position) % oneInnerLength != 0) {

@@ -2,6 +2,8 @@ package redis.persist;
 
 import com.github.luben.zstd.Zstd;
 import io.netty.buffer.Unpooled;
+import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
@@ -27,16 +29,20 @@ public class SegmentBatch implements InSlotMetricCollector {
     private final int chunkSegmentLength;
     private final SnowFlake snowFlake;
 
+    @VisibleForTesting
     long compressCountTotal;
     private long compressTimeTotalUs;
 
+    @VisibleForTesting
     long compressBytesTotal;
     private long compressedBytesTotal;
 
+    @VisibleForTesting
     long batchCountTotal;
     private long batchKvCountTotal;
 
     private long beforeTightSegmentCountTotal;
+    @VisibleForTesting
     long afterTightSegmentCountTotal;
 
     private final Logger log = LoggerFactory.getLogger(SegmentBatch.class);
@@ -83,6 +89,7 @@ public class SegmentBatch implements InSlotMetricCollector {
         return map;
     }
 
+    @VisibleForTesting
     record SegmentCompressedBytesWithIndex(byte[] compressedBytes, int segmentIndex, long segmentSeq) {
         @Override
         public String toString() {
@@ -312,6 +319,7 @@ public class SegmentBatch implements InSlotMetricCollector {
         void callback(String key, CompressedValue cv, int offsetInThisSegment);
     }
 
+    @TestOnly
     static class ForDebugCvCallback implements CvCallback {
         @Override
         public void callback(String key, CompressedValue cv, int offsetInThisSegment) {

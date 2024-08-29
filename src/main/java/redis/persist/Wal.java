@@ -2,6 +2,7 @@ package redis.persist;
 
 import org.apache.lucene.util.RamUsageEstimator;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
@@ -186,7 +187,9 @@ public class Wal implements InMemoryEstimate {
     }
 
     // current wal group write position in target group of wal file
+    @VisibleForTesting
     int writePosition;
+    @VisibleForTesting
     int writePositionShortValue;
 
     private final short slot;
@@ -226,6 +229,7 @@ public class Wal implements InMemoryEstimate {
         return delayToKeyBucketValues.size() + delayToKeyBucketShortValues.size();
     }
 
+    @VisibleForTesting
     int readWal(RandomAccessFile fromWalFile, HashMap<String, V> toMap, boolean isShortValue) throws IOException {
         // for unit test
         if (fromWalFile == null) {
@@ -315,7 +319,9 @@ public class Wal implements InMemoryEstimate {
         }
     }
 
+    @VisibleForTesting
     long clearShortValuesCount = 0;
+    @VisibleForTesting
     long clearValuesCount = 0;
 
     @SlaveNeedReplay
@@ -369,6 +375,7 @@ public class Wal implements InMemoryEstimate {
         return put(true, key, v);
     }
 
+    @VisibleForTesting
     boolean exists(String key) {
         var vShort = delayToKeyBucketShortValues.get(key);
         if (vShort != null) {

@@ -1,6 +1,7 @@
 package redis.persist;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
@@ -85,6 +86,7 @@ public class MetaChunkSegmentIndex implements NeedCleanUp {
         log.warn("Repl meta chunk segment index clear master binlog file index and offset done, set 0 from the beginning");
     }
 
+    @VisibleForTesting
     void setAll(int segmentIndex, long masterUuid, boolean isExistsDataAllFetched,
                 int masterBinlogFileIndex, long masterBinlogOffset) {
         if (ConfForGlobal.pureMemory) {

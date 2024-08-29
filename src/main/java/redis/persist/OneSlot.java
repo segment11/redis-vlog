@@ -257,6 +257,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
 
     private final long masterUuid;
 
+    @VisibleForTesting
     final ArrayList<ReplPair> replPairs = new ArrayList<>();
 
     // slave need not top merge
@@ -291,6 +292,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         return list;
     }
 
+    @VisibleForTesting
     final LinkedList<ReplPair> delayNeedCloseReplPairs = new LinkedList<>();
 
     public void addDelayNeedCloseReplPair(ReplPair replPair) {
@@ -504,6 +506,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         return size;
     }
 
+    @VisibleForTesting
     int lruClearedCount = 0;
 
     int clearKvInTargetWalGroupIndexLRU(int walGroupIndex) {
@@ -533,6 +536,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         lru.put(key, cvEncoded);
     }
 
+    @VisibleForTesting
     long kvLRUHitTotal = 0;
     private long kvLRUMissTotal = 0;
     private long kvLRUCvEncodedLengthTotal = 0;
@@ -633,18 +637,19 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         return chunk;
     }
 
-    MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
+    private MetaChunkSegmentFlagSeq metaChunkSegmentFlagSeq;
 
     public MetaChunkSegmentFlagSeq getMetaChunkSegmentFlagSeq() {
         return metaChunkSegmentFlagSeq;
     }
 
-    MetaChunkSegmentIndex metaChunkSegmentIndex;
+    private MetaChunkSegmentIndex metaChunkSegmentIndex;
 
     public MetaChunkSegmentIndex getMetaChunkSegmentIndex() {
         return metaChunkSegmentIndex;
     }
 
+    @VisibleForTesting
     int getChunkWriteSegmentIndex() {
         return metaChunkSegmentIndex.get();
     }
@@ -769,7 +774,10 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
 
             @Override
             public void run() {
-                log.info("Debug task run, slot: {}, loop count: {}", slot, loopCount);
+                // reduce log
+                if (slot == 0) {
+                    log.info("Debug task run, slot: {}, loop count: {}", slot, loopCount);
+                }
             }
 
             @Override
@@ -1237,6 +1245,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         }
     }
 
+    @VisibleForTesting
     record BeforePersistWalExtFromMerge(ArrayList<Integer> segmentIndexList,
                                         ArrayList<ChunkMergeJob.CvWithKeyAndSegmentOffset> cvList) {
         boolean isEmpty() {
@@ -1249,6 +1258,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
     }
 
     // for performance, before persist wal, read some segment in same wal group and  merge immediately
+    @VisibleForTesting
     BeforePersistWalExtFromMerge readSomeSegmentsBeforePersistWal(int walGroupIndex) {
         var currentSegmentIndex = chunk.currentSegmentIndex();
         var needMergeSegmentIndex = chunk.needMergeSegmentIndex(false, currentSegmentIndex);
@@ -1314,6 +1324,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         return new BeforePersistWalExtFromMerge(segmentIndexList, cvList);
     }
 
+    @VisibleForTesting
     long logMergeCount = 0;
 
     @SlaveNeedReplay
@@ -1418,6 +1429,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         checkNotMergedAndPersistedNextRangeSegmentIndexTooNear(false);
     }
 
+    @VisibleForTesting
     void checkFirstMergedButNotPersistedSegmentIndexTooNear() {
         if (chunkMergeWorker.isMergedSegmentSetEmpty()) {
             return;
@@ -1563,11 +1575,13 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
         }
     }
 
+    @VisibleForTesting
     int doMergeJob(ArrayList<Integer> needMergeSegmentIndexList) {
         var job = new ChunkMergeJob(slot, needMergeSegmentIndexList, chunkMergeWorker, snowFlake);
         return job.run();
     }
 
+    @VisibleForTesting
     int doMergeJobWhenServerStart(ArrayList<Integer> needMergeSegmentIndexList) {
         var job = new ChunkMergeJob(slot, needMergeSegmentIndexList, chunkMergeWorker, snowFlake);
         return job.run();

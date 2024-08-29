@@ -6,9 +6,9 @@ import io.netty.util.CharsetUtil;
 
 // reuse decode by netty ByteBuf, copy from camellia-redis-proxy com.netease.nim.camellia.redis.proxy.netty.CommandDecoder
 public class RESP {
-    public static final byte STRING_MARKER = '+';
-    public static final byte BYTES_MARKER = '$';
-    public static final byte ARRAY_MARKER = '*';
+    private static final byte STRING_MARKER = '+';
+    private static final byte BYTES_MARKER = '$';
+    private static final byte ARRAY_MARKER = '*';
 
     private static final int POSITIVE_LONG_MAX_LENGTH = 19; // length of Long.MAX_VALUE
     private static final int EOL_LENGTH = 2;

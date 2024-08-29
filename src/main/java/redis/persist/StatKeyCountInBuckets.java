@@ -1,6 +1,7 @@
 package redis.persist;
 
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.ConfForGlobal;
@@ -20,6 +21,7 @@ public class StatKeyCountInBuckets implements InMemoryEstimate, NeedCleanUp {
     public static final int ONE_LENGTH = 2;
 
     private final int bucketsPerSlot;
+    @VisibleForTesting
     final int allCapacity;
     private RandomAccessFile raf;
 

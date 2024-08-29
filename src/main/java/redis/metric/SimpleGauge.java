@@ -27,7 +27,7 @@ public class SimpleGauge extends Collector {
 
     private final Map<String, ValueWithLabelValues> gauges = new HashMap<>();
 
-    protected final List<String> labels;
+    private final List<String> labels;
 
     private final String familyName;
 

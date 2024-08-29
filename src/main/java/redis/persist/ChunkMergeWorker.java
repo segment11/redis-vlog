@@ -34,8 +34,11 @@ public class ChunkMergeWorker implements InMemoryEstimate, InSlotMetricCollector
     }
 
     // for better latency, because group by wal group, if wal groups is too large, need multi batch persist
+    @VisibleForTesting
     int MERGED_SEGMENT_SIZE_THRESHOLD = 256;
+    @VisibleForTesting
     int MERGED_SEGMENT_SIZE_THRESHOLD_ONCE_PERSIST = 8;
+    @VisibleForTesting
     int MERGED_CV_SIZE_THRESHOLD = 256 * 64;
 
     void resetThreshold(int walGroupNumber) {
@@ -64,6 +67,7 @@ public class ChunkMergeWorker implements InMemoryEstimate, InSlotMetricCollector
         mergedCvList.add(cvWithKeyAndBucketIndexAndSegmentIndex);
     }
 
+    @VisibleForTesting
     int getMergedCvListSize() {
         return mergedCvList.size();
     }
@@ -73,6 +77,7 @@ public class ChunkMergeWorker implements InMemoryEstimate, InSlotMetricCollector
         mergedCvList.clear();
     }
 
+    @VisibleForTesting
     record MergedSegment(int segmentIndex, int validCvCount) implements Comparable<MergedSegment> {
         @Override
         public String toString() {
@@ -98,6 +103,7 @@ public class ChunkMergeWorker implements InMemoryEstimate, InSlotMetricCollector
         return mergedSegmentSet.isEmpty();
     }
 
+    @VisibleForTesting
     int getMergedSegmentSetSize() {
         return mergedSegmentSet.size();
     }

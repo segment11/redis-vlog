@@ -1,6 +1,7 @@
 package redis.persist;
 
 import com.github.luben.zstd.Zstd;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.*;
@@ -21,7 +22,10 @@ public class ChunkMergeJob {
     private final ChunkMergeWorker chunkMergeWorker;
     private final OneSlot oneSlot;
     private final SnowFlake snowFlake;
+
+    @VisibleForTesting
     int validCvCountAfterRun = 0;
+    @VisibleForTesting
     int invalidCvCountAfterRun = 0;
 
     private static final Logger log = LoggerFactory.getLogger(ChunkMergeJob.class);
@@ -125,6 +129,7 @@ public class ChunkMergeJob {
     }
 
     @SlaveNeedReplay
+    @VisibleForTesting
     void mergeSegments(List<Integer> needMergeSegmentIndexList) {
         chunkMergeWorker.logMergeCount++;
         var doLog = Debug.getInstance().logMerge && chunkMergeWorker.logMergeCount % 1000 == 0;

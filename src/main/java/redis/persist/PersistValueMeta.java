@@ -1,6 +1,7 @@
 package redis.persist;
 
 import io.activej.bytebuf.ByteBuf;
+import org.jetbrains.annotations.VisibleForTesting;
 
 import static redis.CompressedValue.NO_EXPIRE;
 
@@ -8,6 +9,7 @@ public class PersistValueMeta {
     // slot short + segment sub block index byte
     // + length int + segment index int + segment offset int
     // may add type or other metadata in the future
+    @VisibleForTesting
     static final int ENCODED_LENGTH = 2 + 2 + 4 + 4 + 4;
 
     // CompressedValue encoded length is much more than PersistValueMeta encoded length

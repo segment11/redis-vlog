@@ -2,6 +2,7 @@ package redis.persist;
 
 import jnr.posix.LibC;
 import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import redis.*;
 import redis.metric.InSlotMetricCollector;
@@ -86,6 +87,7 @@ public class KeyLoader implements InMemoryEstimate, InSlotMetricCollector, NeedC
 
     final KeyBucket.ShortValueCvExpiredCallBack shortValueCvExpiredCallBack;
 
+    @VisibleForTesting
     MetaKeyBucketSplitNumber metaKeyBucketSplitNumber;
 
     byte[] getMetaKeyBucketSplitNumberBatch(int beginBucketIndex, int bucketCount) {
@@ -139,7 +141,7 @@ public class KeyLoader implements InMemoryEstimate, InSlotMetricCollector, NeedC
         metaKeyBucketSplitNumber.set(bucketIndex, splitNumber);
     }
 
-    MetaOneWalGroupSeq metaOneWalGroupSeq;
+    private MetaOneWalGroupSeq metaOneWalGroupSeq;
 
     public long getMetaOneWalGroupSeq(byte splitIndex, int bucketIndex) {
         var walGroupIndex = Wal.calWalGroupIndex(bucketIndex);
@@ -163,13 +165,15 @@ public class KeyLoader implements InMemoryEstimate, InSlotMetricCollector, NeedC
     // compare to KeyBucket.INIT_CAPACITY
     static final int KEY_OR_CELL_COST_TOLERANCE_COUNT_WHEN_CHECK_SPLIT = 0;
 
+    @VisibleForTesting
     LibC libC;
     // index is split index
+    @VisibleForTesting
     FdReadWrite[] fdReadWriteArray;
 
     private final Logger log = org.slf4j.LoggerFactory.getLogger(KeyLoader.class);
 
-    StatKeyCountInBuckets statKeyCountInBuckets;
+    private StatKeyCountInBuckets statKeyCountInBuckets;
 
     public short getKeyCountInBucketIndex(int bucketIndex) {
         if (bucketIndex < 0 || bucketIndex >= bucketsPerSlot) {
@@ -221,6 +225,7 @@ public class KeyLoader implements InMemoryEstimate, InSlotMetricCollector, NeedC
         this.initFds(maxSplitNumber);
     }
 
+    @VisibleForTesting
     void initFds(byte splitNumber) {
         for (int splitIndex = 0; splitIndex < splitNumber; splitIndex++) {
             if (fdReadWriteArray[splitIndex] != null) {
@@ -267,6 +272,7 @@ public class KeyLoader implements InMemoryEstimate, InSlotMetricCollector, NeedC
         }
     }
 
+    @VisibleForTesting
     boolean isBytesValidAsKeyBucket(byte[] bytes, int position) {
         if (bytes == null) {
             return false;
@@ -289,6 +295,7 @@ public class KeyLoader implements InMemoryEstimate, InSlotMetricCollector, NeedC
         return (bucketIndex - firstBucketIndexInTargetWalGroup) * KEY_BUCKET_ONE_COST_SIZE;
     }
 
+    @VisibleForTesting
     KeyBucket readKeyBucketForSingleKey(int bucketIndex, byte splitIndex, byte splitNumber, boolean isRefreshLRUCache) {
         var fdReadWrite = fdReadWriteArray[splitIndex];
         if (fdReadWrite == null) {
@@ -376,6 +383,7 @@ public class KeyLoader implements InMemoryEstimate, InSlotMetricCollector, NeedC
         return keyBuckets;
     }
 
+    @TestOnly
     public String readKeyBucketsToStringForDebug(int bucketIndex) {
         var keyBuckets = readKeyBuckets(bucketIndex);
 

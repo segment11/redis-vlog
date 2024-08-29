@@ -1,5 +1,6 @@
 package redis.persist;
 
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.CompressedValue;
@@ -37,6 +38,7 @@ public class KeyBucketsInOneWalGroup {
     private final Logger log = LoggerFactory.getLogger(KeyBucketsInOneWalGroup.class);
 
     // outer index is split index, inner index is relative (bucket index - begin bucket index)
+    @VisibleForTesting
     ArrayList<ArrayList<KeyBucket>> listList = new ArrayList<>();
 
     private ArrayList<KeyBucket> prepareListInitWithNull() {
@@ -48,6 +50,7 @@ public class KeyBucketsInOneWalGroup {
         return listInitWithNull;
     }
 
+    @VisibleForTesting
     void readBeforePutBatch() {
         // for unit test
         if (keyLoader == null) {
@@ -163,10 +166,13 @@ public class KeyBucketsInOneWalGroup {
         return sharedBytesList;
     }
 
+    @VisibleForTesting
     boolean isSplit = false;
 
+    @VisibleForTesting
     final boolean[] isUpdatedBySplitIndex = new boolean[KeyLoader.MAX_SPLIT_NUMBER];
 
+    @VisibleForTesting
     void putPvmListToTargetBucketAfterClearAllIfSplit(List<PersistValueMeta> needAddNewList,
                                                       List<PersistValueMeta> needUpdateList,
                                                       List<PersistValueMeta> needDeleteList, Integer bucketIndex) {
@@ -222,6 +228,7 @@ public class KeyBucketsInOneWalGroup {
         }
     }
 
+    @VisibleForTesting
     void putPvmListToTargetBucket(List<PersistValueMeta> pvmListThisBucket, Integer bucketIndex) {
         int relativeBucketIndex = bucketIndex - beginBucketIndex;
         var currentSplitNumber = splitNumberTmp[relativeBucketIndex];
@@ -295,6 +302,7 @@ public class KeyBucketsInOneWalGroup {
         putPvmListToTargetBucketAfterClearAllIfSplit(needAddNewList, needUpdateList, needDeleteList, bucketIndex);
     }
 
+    @VisibleForTesting
     int checkIfNeedSplit(List<PersistValueMeta> pvmListThisBucket, List<PersistValueMeta> needAddNewList, List<PersistValueMeta> needUpdateList,
                          List<PersistValueMeta> needDeleteList, int bucketIndex, byte currentSplitNumber) {
         var relativeBucketIndex = bucketIndex - beginBucketIndex;
@@ -451,6 +459,7 @@ public class KeyBucketsInOneWalGroup {
         putAllPvmList(pvmList);
     }
 
+    @VisibleForTesting
     static PersistValueMeta transferWalV(Wal.V v) {
         var pvm = new PersistValueMeta();
         pvm.expireAt = v.expireAt();

@@ -17,8 +17,8 @@ import java.util.Arrays;
 public class MetaOneWalGroupSeq implements InMemoryEstimate, NeedCleanUp {
     private static final String META_ONE_WAL_GROUP_SEQ_FILE = "meta_one_wal_group_seq.dat";
 
-    final int walGroupNumber;
-    final int allCapacity;
+    private final int walGroupNumber;
+    private final int allCapacity;
     private RandomAccessFile raf;
 
     private final byte[] inMemoryCachedBytes;

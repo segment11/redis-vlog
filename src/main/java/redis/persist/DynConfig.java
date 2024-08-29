@@ -2,6 +2,8 @@ package redis.persist;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.FileUtils;
+import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.MultiWorkerServer;
@@ -99,11 +101,13 @@ public class DynConfig {
         update("canWrite", canWrite);
     }
 
+    @TestOnly
     int getTestKey() {
         var obj = get("testKey");
         return obj == null ? 10 : (int) obj;
     }
 
+    @TestOnly
     void setTestKey(int testValueInt) throws IOException {
         update("testKey", testValueInt);
     }

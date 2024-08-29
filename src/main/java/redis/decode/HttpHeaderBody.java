@@ -2,6 +2,7 @@ package redis.decode;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.jetbrains.annotations.VisibleForTesting;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -51,10 +52,15 @@ public class HttpHeaderBody {
         return isOk;
     }
 
+    @VisibleForTesting
     String action;
+    @VisibleForTesting
     String requestType;
+    @VisibleForTesting
     String httpVersion;
+    @VisibleForTesting
     String url;
+    @VisibleForTesting
     boolean isOk = false;
 
     private String lastHeaderName;

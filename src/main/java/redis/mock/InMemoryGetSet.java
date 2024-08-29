@@ -1,10 +1,12 @@
 package redis.mock;
 
+import org.jetbrains.annotations.TestOnly;
 import redis.CompressedValue;
 import redis.persist.OneSlot;
 
 import java.util.HashMap;
 
+@TestOnly
 public class InMemoryGetSet implements ByPassGetSet {
     private final HashMap<String, CompressedValue> map = new HashMap<>();
 
