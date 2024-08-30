@@ -8,6 +8,8 @@ import io.activej.promise.SettablePromise;
 import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
+import redis.Dict;
+import redis.TrainSampleJob;
 import redis.dyn.CachedGroovyClassLoader;
 import redis.dyn.RefreshLoader;
 import redis.repl.LeaderSelector;
@@ -529,12 +531,18 @@ public class SGroup extends BaseCommand {
     }
 
     private void saveRedisSet(RedisHashKeys rhk, byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
+        var key = new String(keyBytes);
         if (rhk.size() == 0) {
-            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
+            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), key, slotWithKeyHash.keyHash());
             return;
         }
 
-        set(keyBytes, rhk.encode(), slotWithKeyHash, CompressedValue.SP_TYPE_SET);
+        var keyPrefixOrSuffix = TrainSampleJob.keyPrefixOrSuffixGroup(key);
+        var preferDict = dictMap.getDict(keyPrefixOrSuffix);
+        if (preferDict == null) {
+            preferDict = Dict.SELF_ZSTD_DICT;
+        }
+        set(keyBytes, rhk.encode(preferDict), slotWithKeyHash, CompressedValue.SP_TYPE_SET);
     }
 
     @VisibleForTesting

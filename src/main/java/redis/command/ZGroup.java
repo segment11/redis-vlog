@@ -9,6 +9,8 @@ import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
+import redis.Dict;
+import redis.TrainSampleJob;
 import redis.reply.*;
 import redis.type.RedisZSet;
 
@@ -354,12 +356,18 @@ public class ZGroup extends BaseCommand {
     }
 
     private void saveRedisZSet(RedisZSet rz, byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
+        var key = new String(keyBytes);
         if (rz.isEmpty()) {
-            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
+            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), key, slotWithKeyHash.keyHash());
             return;
         }
 
-        set(keyBytes, rz.encode(), slotWithKeyHash, CompressedValue.SP_TYPE_ZSET);
+        var keyPrefixOrSuffix = TrainSampleJob.keyPrefixOrSuffixGroup(key);
+        var preferDict = dictMap.getDict(keyPrefixOrSuffix);
+        if (preferDict == null) {
+            preferDict = Dict.SELF_ZSTD_DICT;
+        }
+        set(keyBytes, rz.encode(preferDict), slotWithKeyHash, CompressedValue.SP_TYPE_ZSET);
     }
 
     private record Member(double score, String e) {

@@ -5,6 +5,8 @@ import io.activej.net.socket.tcp.ITcpSocket;
 import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
+import redis.Dict;
+import redis.TrainSampleJob;
 import redis.reply.*;
 import redis.type.RedisList;
 
@@ -214,12 +216,18 @@ public class LGroup extends BaseCommand {
 
 
     private void saveRedisList(RedisList rl, byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
+        var key = new String(keyBytes);
         if (rl.size() == 0) {
-            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
+            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), key, slotWithKeyHash.keyHash());
             return;
         }
 
-        set(keyBytes, rl.encode(), slotWithKeyHash, CompressedValue.SP_TYPE_LIST);
+        var keyPrefixOrSuffix = TrainSampleJob.keyPrefixOrSuffixGroup(key);
+        var preferDict = dictMap.getDict(keyPrefixOrSuffix);
+        if (preferDict == null) {
+            preferDict = Dict.SELF_ZSTD_DICT;
+        }
+        set(keyBytes, rl.encode(preferDict), slotWithKeyHash, CompressedValue.SP_TYPE_LIST);
     }
 
     @VisibleForTesting

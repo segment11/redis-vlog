@@ -6,6 +6,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.VisibleForTesting;
 import redis.BaseCommand;
 import redis.CompressedValue;
+import redis.Dict;
+import redis.TrainSampleJob;
 import redis.reply.*;
 import redis.type.RedisHH;
 import redis.type.RedisHashKeys;
@@ -125,7 +127,12 @@ public class HGroup extends BaseCommand {
             return;
         }
 
-        set(keysKeyBytes, rhk.encode(), slotWithKeyHashForKeys, CompressedValue.SP_TYPE_HASH);
+        var keyPrefixOrSuffix = TrainSampleJob.keyPrefixOrSuffixGroup(key);
+        var preferDict = dictMap.getDict(keyPrefixOrSuffix);
+        if (preferDict == null) {
+            preferDict = Dict.SELF_ZSTD_DICT;
+        }
+        set(keysKeyBytes, rhk.encode(preferDict), slotWithKeyHashForKeys, CompressedValue.SP_TYPE_HASH);
     }
 
     private RedisHH getRedisHH(byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
@@ -138,12 +145,18 @@ public class HGroup extends BaseCommand {
     }
 
     private void saveRedisHH(RedisHH rhh, byte[] keyBytes, SlotWithKeyHash slotWithKeyHash) {
+        var key = new String(keyBytes);
         if (rhh.size() == 0) {
-            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), new String(keyBytes), slotWithKeyHash.keyHash());
+            removeDelay(slotWithKeyHash.slot(), slotWithKeyHash.bucketIndex(), key, slotWithKeyHash.keyHash());
             return;
         }
 
-        set(keyBytes, rhh.encode(), slotWithKeyHash, CompressedValue.SP_TYPE_HH);
+        var keyPrefixOrSuffix = TrainSampleJob.keyPrefixOrSuffixGroup(key);
+        var preferDict = dictMap.getDict(keyPrefixOrSuffix);
+        if (preferDict == null) {
+            preferDict = Dict.SELF_ZSTD_DICT;
+        }
+        set(keyBytes, rhh.encode(preferDict), slotWithKeyHash, CompressedValue.SP_TYPE_HH);
     }
 
     @VisibleForTesting
