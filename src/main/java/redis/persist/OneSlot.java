@@ -1650,7 +1650,7 @@ public class OneSlot implements InMemoryEstimate, InSlotMetricCollector, NeedCle
     }
 
     @VisibleForTesting
-    final static SimpleGauge globalGauge = new SimpleGauge("global", "global metrics");
+    final static SimpleGauge globalGauge = new SimpleGauge("global", "Global metrics.");
 
     static {
         globalGauge.register();
