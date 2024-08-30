@@ -190,7 +190,7 @@ public abstract class BaseCommand {
     }
 
     public static AGroup mockAGroup(byte workerId, byte netWorkers, short slotNumber) {
-        return mockAGroup(workerId, netWorkers, slotNumber, new CompressStats("mock"),
+        return mockAGroup(workerId, netWorkers, slotNumber, new CompressStats("mock", "net_"),
                 Zstd.defaultCompressionLevel(), 100, new SnowFlake(1, 1),
                 new TrainSampleJob(workerId), new ArrayList<>(),
                 false, 0, new ArrayList<>(),
@@ -279,7 +279,7 @@ public abstract class BaseCommand {
 
     protected final LocalPersist localPersist = LocalPersist.getInstance();
 
-    protected final Logger log = LoggerFactory.getLogger(getClass());
+    protected static final Logger log = LoggerFactory.getLogger(BaseCommand.class);
 
     public record SlotWithKeyHash(short slot, int bucketIndex, long keyHash) {
         @Override
