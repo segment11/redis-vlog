@@ -2,6 +2,8 @@
 
 A redis compatible kv store, base on slot and hash buckets.
 
+Project rename to [Velo](https://github.com/segment11/velo).
+
 # Features
 
 - Redis protocol compatible
