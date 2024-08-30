@@ -276,11 +276,17 @@ java -Xmx1g -Xms1g -XX:+UseZGC -XX:+ZGenerational -XX:MaxDirectMemorySize=64m -j
 redis-cli -p 7379
 ```
 
-### View metrics:
+### View global metrics:
 
 - http://localhost:7379/?metrics
 
-### View cmd count metrics:
+### View one slot metrics:
+
+- http://localhost:7379/?manage&slot&0&view-metrics
+
+TIPS: change 0 to the slot number you want to view.
+
+### View cmd count in one thread metrics:
 
 - http://localhost:7379/?cmd_stat_count
 
